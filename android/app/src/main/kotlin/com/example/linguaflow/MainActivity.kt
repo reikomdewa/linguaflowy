@@ -1,0 +1,5 @@
+package com.reikom.linguaflow
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()

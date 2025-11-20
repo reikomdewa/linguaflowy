@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1085234269350",
+    "project_id": "linguaflowy",
+    "storage_bucket": "linguaflowy.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1085234269350:android:0b597fd1819bdbd2e13867",
+        "android_client_info": {
+          "package_name": "com.reikom.linguaflow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBHjU8kTjJRSSrpK1FPm9x3lSMPk4Ji_OY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
