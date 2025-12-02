@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'package:flutter/gestures.dart'; // Added for RichText span handling
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
@@ -21,6 +23,9 @@ class ReaderScreen extends StatefulWidget {
 }
 
 class _ReaderScreenState extends State<ReaderScreen> {
+  // TODO: Secure your API key in a real app
+  final String _geminiApiKey = "AIzaSyAnRFZpp5Cogg-O_YwVS2Ztx19-mElq6q8";
+
   Map<String, VocabularyItem> _vocabulary = {};
 
   // --- VIDEO STATE ---
@@ -35,7 +40,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
   double _ttsSpeed = 0.5;
 
   // --- SYNC & SCROLL STATE ---
-  // FIXED: Renamed to match usage in build method
   int _activeSentenceIndex = -1;
   final List<GlobalKey> _itemKeys = [];
 
@@ -45,15 +49,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
   int _selectionStartIndex = -1;
   int _selectionEndIndex = -1;
 
-  // Maps sentenceIndex -> List of GlobalKeys for each word (For hit testing)
+  // Maps sentenceIndex -> List of GlobalKeys for each word
   final Map<int, List<GlobalKey>> _wordKeys = {};
 
   @override
   void initState() {
     super.initState();
+    try {
+      Gemini.init(apiKey: _geminiApiKey);
+    } catch (e) {
+      // Handle init error if necessary
+    }
+
     _loadVocabulary();
 
-    // Generate Keys for Auto-Scrolling
     final count = widget.lesson.transcript.isNotEmpty
         ? widget.lesson.transcript.length
         : widget.lesson.sentences.length;
@@ -77,7 +86,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.dispose();
   }
 
-  // --- DATA LOADING ---
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final vocabService = context.read<VocabularyService>();
@@ -89,58 +97,53 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- COLOR LOGIC (LingQ Style) ---
+  // --- COLOR LOGIC ---
   Color _getWordColor(VocabularyItem? item) {
-    // 1. New Word (Unknown) -> Blue Highlight
     if (item == null || item.status == 0) {
       return Colors.blue.withOpacity(0.15);
     }
-
-    // 2. Learning Stages -> Yellow/Orange gradients
     switch (item.status) {
       case 1:
-        return Color(0xFFFFF9C4); // Very Light Yellow
+        return Color(0xFFFFF9C4);
       case 2:
-        return Color(0xFFFFF59D); // Light Yellow
+        return Color(0xFFFFF59D);
       case 3:
-        return Color(0xFFFFCC80); // Light Orange
+        return Color(0xFFFFCC80);
       case 4:
-        return Color(0xFFFFB74D); // Orange
-
-      // 3. Known Word -> Transparent (Looks like normal text)
+        return Color(0xFFFFB74D);
       case 5:
         return Colors.transparent;
-
-      // 4. Ignored -> Transparent/Grey
       default:
         return Colors.transparent;
     }
   }
 
-  // --- SELECTION HELPERS ---
+  // --- DRAG SELECTION LOGIC ---
   void _handleDragUpdate(int sentenceIndex, Offset globalPosition) {
     final keys = _wordKeys[sentenceIndex];
     if (keys == null) return;
 
     for (int i = 0; i < keys.length; i++) {
       final key = keys[i];
-      final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
+      final context = key.currentContext;
+      if (context == null) continue;
 
+      final renderBox = context.findRenderObject() as RenderBox?;
       if (renderBox != null) {
         final localPosition = renderBox.globalToLocal(globalPosition);
         final size = renderBox.size;
 
-        if (localPosition.dx >= 0 &&
-            localPosition.dx <= size.width &&
-            localPosition.dy >= 0 &&
-            localPosition.dy <= size.height) {
-          setState(() {
-            if (i < _selectionStartIndex) {
-              _selectionStartIndex = i;
-            } else {
+        // Expanded hit test for easier selection
+        if (localPosition.dx >= -10 &&
+            localPosition.dx <= size.width + 10 &&
+            localPosition.dy >= -10 &&
+            localPosition.dy <= size.height + 10) {
+          if (_selectionEndIndex != i) {
+            setState(() {
+              if (_selectionStartIndex == -1) _selectionStartIndex = i;
               _selectionEndIndex = i;
-            }
-          });
+            });
+          }
           break;
         }
       }
@@ -167,17 +170,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
       return;
     }
 
-    // Reconstruct phrase
     final sublist = words.sublist(start, end + 1);
     final phrase = sublist.join("");
-
     final cleanId = phrase.toLowerCase().trim().replaceAll(
       RegExp(r'[^\w\s]'),
       '',
     );
     final originalText = phrase.trim();
 
-    _showWordDialog(cleanId, originalText);
+    _showCombinedDialog(cleanId, originalText, isPhrase: true);
   }
 
   void _clearSelection() {
@@ -189,7 +190,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     });
   }
 
-  // --- VIDEO LOGIC ---
+  // --- MEDIA CONTROLS ---
   void _initializeVideoPlayer() {
     String? videoId;
     if (widget.lesson.id.startsWith('yt_')) {
@@ -206,7 +207,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
           autoPlay: false,
           mute: false,
           enableCaption: false,
-          forceHD: false,
         ),
       );
       _videoController!.addListener(_videoListener);
@@ -215,13 +215,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _videoListener() {
     if (_videoController == null) return;
-
-    // Sync Play Button UI
     if (_videoController!.value.isPlaying != _isPlaying) {
       setState(() => _isPlaying = _videoController!.value.isPlaying);
     }
 
-    // Sync Transcript Highlight
     if (widget.lesson.transcript.isEmpty) return;
 
     final currentSeconds =
@@ -236,7 +233,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
     }
 
-    // Only scroll if NOT selecting
     if (!_isSelectionMode &&
         newIndex != -1 &&
         newIndex != _activeSentenceIndex) {
@@ -265,30 +261,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- TTS LOGIC ---
   void _initializeTts() async {
     await _flutterTts.setLanguage(widget.lesson.language);
     await _flutterTts.setSpeechRate(_ttsSpeed);
-
-    // Attempt to pick best voice
-    if (Platform.isAndroid) {
-      try {
-        var voices = await _flutterTts.getVoices;
-        var bestVoice = voices.firstWhere(
-          (v) =>
-              v['locale'].toString().startsWith(widget.lesson.language) &&
-              v['name'].toString().toLowerCase().contains('network'),
-          orElse: () => null,
-        );
-        if (bestVoice != null) {
-          await _flutterTts.setVoice({
-            "name": bestVoice["name"],
-            "locale": bestVoice["locale"],
-          });
-        }
-      } catch (e) {}
-    }
-
     _flutterTts.setCompletionHandler(() {
       setState(() {
         _isTtsPlaying = false;
@@ -319,27 +294,21 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  Future<void> _changeTtsSpeed() async {
-    double newSpeed = _ttsSpeed == 0.5 ? 0.75 : (_ttsSpeed == 0.75 ? 1.0 : 0.5);
-    await _flutterTts.setSpeechRate(newSpeed);
-    setState(() => _ttsSpeed = newSpeed);
-  }
-
   @override
   Widget build(BuildContext context) {
     final bool hasTranscript = widget.lesson.transcript.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: Colors.white, // LingQ style white background
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: _isSelectionMode
             ? Text(
-                "Select Phrase",
+                "Release to Translate Phrase",
                 style: TextStyle(color: Colors.white, fontSize: 16),
               )
             : Text(
                 widget.lesson.title,
-                style: TextStyle(fontSize: 16, color: Colors.black),
+                style: TextStyle(color: Colors.black, fontSize: 16),
               ),
         backgroundColor: _isSelectionMode ? Colors.purple : Colors.white,
         elevation: 0,
@@ -355,96 +324,27 @@ class _ReaderScreenState extends State<ReaderScreen> {
               icon: Icon(_isAudioMode ? Icons.videocam : Icons.headphones),
               onPressed: () => setState(() => _isAudioMode = !_isAudioMode),
             ),
-          IconButton(icon: Icon(Icons.settings), onPressed: () {}),
         ],
       ),
       body: Column(
         children: [
           _isVideo ? _buildVideoHeader() : _buildTtsHeader(),
-
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-            ),
-            child: Row(
-              children: [
-                // Text(hasTranscript ? '${widget.lesson.transcript.length} lines' : '${widget.lesson.sentences.length} sentences',
-                //      style: TextStyle(color: Colors.grey[700])),
-            
-
-                Expanded(
-                  child: Text(
-                    widget.lesson.title,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      height: 1.2,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: 16),
-
                   if (hasTranscript)
                     ...widget.lesson.transcript.asMap().entries.map((entry) {
                       final index = entry.key;
                       final line = entry.value;
                       final isActive = index == _activeSentenceIndex;
-
-                      return Container(
-                        key: _itemKeys[index],
-                        margin: EdgeInsets.only(bottom: 12),
-                        // Highlight Active Sentence with subtle grey background
-                        padding: isActive
-                            ? EdgeInsets.all(12)
-                            : EdgeInsets.zero,
-                        decoration: BoxDecoration(
-                          color: isActive
-                              ? Colors.grey[100]
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (_isVideo)
-                              GestureDetector(
-                                onTap: () => _seekToTime(line.start),
-                                child: Padding(
-                                  padding: EdgeInsets.only(top: 4, right: 12),
-                                  child: Icon(
-                                    isActive
-                                        ? Icons.play_arrow
-                                        : Icons.play_arrow_outlined,
-                                    color: isActive
-                                        ? Colors.blue
-                                        : Colors.grey[400],
-                                    size: 24,
-                                  ),
-                                ),
-                              ),
-                            Expanded(
-                              child: GestureDetector(
-                                onDoubleTap: () => !_isSelectionMode && _isVideo
-                                    ? _seekToTime(line.start)
-                                    : null,
-                                child: _buildSentence(line.text, index),
-                              ),
-                            ),
-                          ],
-                        ),
+                      return _buildTranscriptRow(
+                        index,
+                        line.text,
+                        line.start,
+                        isActive,
                       );
                     }).toList()
                   else
@@ -452,29 +352,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       final index = entry.key;
                       final sentence = entry.value;
                       final isActive = index == _activeSentenceIndex;
-
-                      return GestureDetector(
-                        onDoubleTap: () => _speakSentence(sentence, index),
-                        child: Container(
-                          key: _itemKeys[index],
-                          margin: EdgeInsets.only(
-                            bottom: 24,
-                          ), // More spacing for text lessons
-                          padding: isActive
-                              ? EdgeInsets.all(12)
-                              : EdgeInsets.zero,
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? Colors.yellow.withOpacity(0.1)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: _buildSentence(sentence, index),
-                        ),
-                      );
+                      return _buildTextRow(index, sentence, isActive);
                     }).toList(),
-
-                  SizedBox(height: 100), // Bottom padding for FAB/Scroll
+                  SizedBox(height: 100),
                 ],
               ),
             ),
@@ -484,27 +364,86 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  // --- SENTENCE BUILDER (LingQ Style) ---
-  Widget _buildSentence(String sentence, int sentenceIndex) {
-    // 1. Prepare keys for hit testing this specific sentence
-    _wordKeys[sentenceIndex] = [];
+  // Wrapper for Video Transcripts
+  Widget _buildTranscriptRow(
+    int index,
+    String text,
+    double startTime,
+    bool isActive,
+  ) {
+    return Container(
+      key: _itemKeys[index],
+      margin: EdgeInsets.only(bottom: 12),
+      padding: isActive ? EdgeInsets.all(12) : EdgeInsets.zero,
+      decoration: BoxDecoration(
+        color: isActive ? Colors.grey[100] : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_isVideo)
+            GestureDetector(
+              onTap: () => _seekToTime(startTime),
+              child: Padding(
+                padding: EdgeInsets.only(top: 4, right: 12),
+                child: Icon(
+                  isActive ? Icons.play_arrow : Icons.play_arrow_outlined,
+                  color: isActive ? Colors.blue : Colors.grey[400],
+                  size: 24,
+                ),
+              ),
+            ),
+          Expanded(
+            child: GestureDetector(
+              // NEW: Long press the sentence area to translate the WHOLE sentence
+              onLongPress: () =>
+                  _showCombinedDialog("sentence_$index", text, isPhrase: true),
+              onDoubleTap: () =>
+                  !_isSelectionMode && _isVideo ? _seekToTime(startTime) : null,
+              child: _buildSentence(text, index),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-    // Split keeping delimiters to maintain spacing
+  // Wrapper for Text-Only Lessons
+  Widget _buildTextRow(int index, String sentence, bool isActive) {
+    return GestureDetector(
+      // NEW: Long press the sentence area to translate the WHOLE sentence
+      onLongPress: () =>
+          _showCombinedDialog("sentence_$index", sentence, isPhrase: true),
+      onDoubleTap: () => _speakSentence(sentence, index),
+      child: Container(
+        key: _itemKeys[index],
+        margin: EdgeInsets.only(bottom: 24),
+        padding: isActive ? EdgeInsets.all(12) : EdgeInsets.zero,
+        decoration: BoxDecoration(
+          color: isActive ? Colors.yellow.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: _buildSentence(sentence, index),
+      ),
+    );
+  }
+
+  // --- WORD BUILDER ---
+  Widget _buildSentence(String sentence, int sentenceIndex) {
+    _wordKeys[sentenceIndex] = [];
     final words = sentence.split(RegExp(r'(\s+)'));
 
     return Wrap(
-      // LingQ uses tighter spacing, relying on space characters
       spacing: 0,
-      runSpacing: 6, // Line height feel
+      runSpacing: 6,
       children: words.asMap().entries.map((entry) {
         final int wordIndex = entry.key;
         final String word = entry.value;
         final cleanWord = word.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
-
         final GlobalKey wordKey = GlobalKey();
         _wordKeys[sentenceIndex]!.add(wordKey);
 
-        // Render plain text if it's just a space or punctuation
         if (cleanWord.isEmpty || word.trim().isEmpty) {
           return Text(
             word,
@@ -512,7 +451,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
           );
         }
 
-        // Selection Logic
         bool isSelected = false;
         if (_isSelectionMode && _selectionSentenceIndex == sentenceIndex) {
           int start = _selectionStartIndex < _selectionEndIndex
@@ -525,47 +463,44 @@ class _ReaderScreenState extends State<ReaderScreen> {
         }
 
         final vocabItem = _vocabulary[cleanWord];
-
-        // Priority: Selection > Vocab Status > Transparent
         Color bgColor = isSelected
-            ? Colors.purple.withOpacity(0.2)
+            ? Colors.purple.withOpacity(0.3)
             : _getWordColor(vocabItem);
-
-        // Text Color: Known words are black, Unknown might be blue-ish if you want
-        Color textColor = Colors.black87;
 
         return GestureDetector(
           key: wordKey,
+          behavior: HitTestBehavior.translucent,
+          // 1. Start Phrase Selection
           onLongPressStart: (_) => _startSelection(sentenceIndex, wordIndex),
+          // 2. Drag to expand Selection
           onLongPressMoveUpdate: (details) =>
               _handleDragUpdate(sentenceIndex, details.globalPosition),
+          // 3. Finish Phrase Selection
           onLongPressEnd: (_) => _finishSelection(sentence),
+          // 4. Tap single word
           onTap: () {
             if (_isSelectionMode) {
               _clearSelection();
             } else {
-              _onWordTap(cleanWord, word, sentenceIndex);
+              _onWordTap(cleanWord, word);
             }
           },
           child: Container(
             decoration: BoxDecoration(
               color: bgColor,
-              borderRadius: BorderRadius.circular(
-                4,
-              ), // Subtle rounded corners like LingQ
+              borderRadius: BorderRadius.circular(4),
               border: isSelected
-                  ? Border.all(color: Colors.purple, width: 1)
+                  ? Border.all(color: Colors.purple, width: 1.5)
                   : null,
             ),
-            // Padding inside the highlight box
             padding: EdgeInsets.symmetric(horizontal: 1, vertical: 1),
             child: Text(
               word,
               style: TextStyle(
                 fontSize: 18,
-                height: 1.5, // Good reading height
-                color: textColor,
-                fontFamily: 'Roboto', // Or serif if preferred
+                height: 1.5,
+                color: Colors.black87,
+                fontFamily: 'Roboto',
               ),
             ),
           ),
@@ -574,7 +509,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  // --- HEADER WIDGETS ---
   Widget _buildVideoHeader() {
     if (_videoController == null) return SizedBox.shrink();
     return Column(
@@ -596,67 +530,22 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return Container(
       color: Colors.grey[100],
       padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              IconButton(
-                iconSize: 42,
-                icon: Icon(
-                  _isPlaying
-                      ? Icons.pause_circle_filled
-                      : Icons.play_circle_filled,
-                  color: Colors.blue,
-                ),
-                onPressed: () => _isPlaying
-                    ? _videoController!.pause()
-                    : _videoController!.play(),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Audio Mode",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
-                        fontSize: 12,
-                      ),
-                    ),
-                    Text(
-                      widget.lesson.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          StreamBuilder<YoutubePlayerValue>(
-            stream: Stream.periodic(
-              Duration(milliseconds: 200),
-              (_) => _videoController!.value,
+          IconButton(
+            iconSize: 42,
+            icon: Icon(
+              _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+              color: Colors.blue,
             ),
-            builder: (context, snapshot) {
-              final position = _videoController!.value.position.inSeconds
-                  .toDouble();
-              final duration = _videoController!
-                  .value
-                  .metaData
-                  .duration
-                  .inSeconds
-                  .toDouble();
-              return Slider(
-                value: position.clamp(0.0, duration > 0 ? duration : 1.0),
-                min: 0.0,
-                max: duration > 0 ? duration : 1.0,
-                onChanged: (val) =>
-                    _videoController!.seekTo(Duration(seconds: val.toInt())),
-              );
-            },
+            onPressed: () => _isPlaying
+                ? _videoController!.pause()
+                : _videoController!.play(),
+          ),
+          SizedBox(width: 8),
+          Text(
+            "Audio Mode",
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
           ),
         ],
       ),
@@ -694,42 +583,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               Text(
-                "Tap 2x on text to read",
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+                "Long press sentence to translate",
+                style: TextStyle(fontSize: 10, color: Colors.grey),
               ),
             ],
-          ),
-          Spacer(),
-          InkWell(
-            onTap: _changeTtsSpeed,
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                "${_ttsSpeed}x",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue,
-                ),
-              ),
-            ),
           ),
         ],
       ),
     );
   }
 
-  // --- SELECTION STATE ---
   void _startSelection(int sentenceIndex, int wordIndex) {
     if (_isVideo && _videoController != null) _videoController!.pause();
-    if (_isTtsPlaying) {
-      _flutterTts.stop();
-      setState(() => _isTtsPlaying = false);
-    }
+    if (_isTtsPlaying) _flutterTts.stop();
 
     setState(() {
       _isSelectionMode = true;
@@ -739,28 +605,21 @@ class _ReaderScreenState extends State<ReaderScreen> {
     });
   }
 
-  void _onWordTap(String cleanWord, String originalWord, int wordIndex) {
-    if (_isTtsPlaying) {
-      _flutterTts.stop();
-      setState(() => _isTtsPlaying = false);
-    }
-    _showWordDialog(cleanWord, originalWord);
+  void _onWordTap(String cleanWord, String originalWord) {
+    if (_isTtsPlaying) _flutterTts.stop();
+    _showCombinedDialog(cleanWord, originalWord, isPhrase: false);
   }
 
-  // --- DIALOG LOGIC ---
-  void _showWordDialog(String cleanWord, String originalWord) async {
+  // --- DUAL TRANSLATION DIALOG ---
+  void _showCombinedDialog(
+    String cleanId,
+    String originalText, {
+    required bool isPhrase,
+  }) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    final vocabService = context.read<VocabularyService>();
     final translationService = context.read<TranslationService>();
 
-    VocabularyItem? existingItem = _vocabulary[cleanWord];
-    String translation = existingItem?.translation ?? 'Loading...';
-
-    if (existingItem == null) {
-      translationService
-          .translate(cleanWord, user.nativeLanguage, widget.lesson.language)
-          .then((val) {});
-    }
+    VocabularyItem? existingItem = isPhrase ? null : _vocabulary[cleanId];
 
     bool resumeVideoAfter = false;
     if (_isVideo &&
@@ -770,6 +629,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
       resumeVideoAfter = true;
     }
 
+    String standardTranslation = existingItem?.translation ?? 'Loading...';
+    String geminiTranslation = 'Loading...';
+
+    if (existingItem == null) {
+      translationService
+          .translate(originalText, user.nativeLanguage, widget.lesson.language)
+          .then((val) {
+            standardTranslation = val;
+          })
+          .catchError((_) {
+            standardTranslation = "Failed to translate";
+          });
+    }
+
+    // Prompt for Gemini
+    final geminiPrompt = isPhrase
+        ? "Translate this sentence/phrase to ${user.nativeLanguage}. Explain any grammar or idiom nuances briefly. Text: \"$originalText\""
+        : "Translate word '$originalText' to ${user.nativeLanguage}. Give context.";
+
+    Gemini.instance
+        .prompt(parts: [Part.text(geminiPrompt)])
+        .then((value) {
+          geminiTranslation = value?.output ?? "No output from Gemini";
+        })
+        .catchError((e) {
+          geminiTranslation = "Gemini Error: $e";
+        });
+
     if (!mounted) return;
 
     await showModalBottomSheet(
@@ -778,152 +665,186 @@ class _ReaderScreenState extends State<ReaderScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
-          if (existingItem == null && translation == 'Loading...') {
-            translationService
-                .translate(
-                  cleanWord,
-                  user.nativeLanguage,
-                  widget.lesson.language,
-                )
-                .then((val) {
-                  if (mounted) setModalState(() => translation = val);
-                });
-            translation = 'Translating...';
+          if (standardTranslation == 'Loading...' ||
+              geminiTranslation == 'Loading...') {
+            Future.delayed(Duration(milliseconds: 500), () {
+              if (context.mounted) setModalState(() {});
+            });
           }
+
           return Container(
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
             padding: EdgeInsets.all(24),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Row(
                     children: [
                       Expanded(
                         child: Text(
-                          originalWord,
+                          originalText,
                           style: TextStyle(
-                            fontSize: 28,
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                       IconButton(
                         icon: Icon(Icons.volume_up, color: Colors.blue),
-                        onPressed: () => _flutterTts.speak(originalWord),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Translation',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(translation, style: TextStyle(fontSize: 20)),
-                  SizedBox(height: 32),
-                  Text(
-                    'Status',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _StatusButton(
-                        label: 'New',
-                        status: 0,
-                        color: Colors.blue,
-                        onTap: () => _updateWordStatus(
-                          cleanWord,
-                          originalWord,
-                          translation,
-                          0,
-                        ),
-                      ),
-                      _StatusButton(
-                        label: '1',
-                        status: 1,
-                        color: Colors.yellow[700]!,
-                        onTap: () => _updateWordStatus(
-                          cleanWord,
-                          originalWord,
-                          translation,
-                          1,
-                        ),
-                      ),
-                      _StatusButton(
-                        label: '2',
-                        status: 2,
-                        color: Colors.orange[600]!,
-                        onTap: () => _updateWordStatus(
-                          cleanWord,
-                          originalWord,
-                          translation,
-                          2,
-                        ),
-                      ),
-                      _StatusButton(
-                        label: '3',
-                        status: 3,
-                        color: Colors.orange[700]!,
-                        onTap: () => _updateWordStatus(
-                          cleanWord,
-                          originalWord,
-                          translation,
-                          3,
-                        ),
-                      ),
-                      _StatusButton(
-                        label: '4',
-                        status: 4,
-                        color: Colors.orange[800]!,
-                        onTap: () => _updateWordStatus(
-                          cleanWord,
-                          originalWord,
-                          translation,
-                          4,
-                        ),
-                      ),
-                      _StatusButton(
-                        label: 'Known',
-                        status: 5,
-                        color: Colors.green,
-                        onTap: () => _updateWordStatus(
-                          cleanWord,
-                          originalWord,
-                          translation,
-                          5,
-                        ),
+                        onPressed: () => _flutterTts.speak(originalText),
                       ),
                     ],
                   ),
                   SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () => _updateWordStatus(
-                      cleanWord,
-                      originalWord,
-                      translation,
-                      -1,
+
+                  // Standard Translation Box
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[300]!),
                     ),
-                    icon: Icon(Icons.block),
-                    label: Text('Ignore Word'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey,
-                      minimumSize: Size(double.infinity, 48),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "STANDARD TRANSLATION",
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          standardTranslation,
+                          style: TextStyle(fontSize: 16, color: Colors.black87),
+                        ),
+                      ],
                     ),
                   ),
+
+                  SizedBox(height: 12),
+
+                  // Gemini Translation Box with Formatting
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.purple[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.purple[200]!),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              size: 14,
+                              color: Colors.purple,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              "GEMINI AI",
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.purple,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 8),
+                        // REPLACED Text() with GeminiFormattedText to handle asterisks
+                        GeminiFormattedText(text: geminiTranslation),
+                      ],
+                    ),
+                  ),
+
+                  SizedBox(height: 24),
+
+                  if (!isPhrase)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _StatusButton(
+                          label: 'New',
+                          status: 0,
+                          color: Colors.blue,
+                          onTap: () => _updateWordStatus(
+                            cleanId,
+                            originalText,
+                            standardTranslation,
+                            0,
+                          ),
+                        ),
+                        _StatusButton(
+                          label: '1',
+                          status: 1,
+                          color: Colors.yellow[700]!,
+                          onTap: () => _updateWordStatus(
+                            cleanId,
+                            originalText,
+                            standardTranslation,
+                            1,
+                          ),
+                        ),
+                        _StatusButton(
+                          label: '2',
+                          status: 2,
+                          color: Colors.orange[600]!,
+                          onTap: () => _updateWordStatus(
+                            cleanId,
+                            originalText,
+                            standardTranslation,
+                            2,
+                          ),
+                        ),
+                        _StatusButton(
+                          label: '3',
+                          status: 3,
+                          color: Colors.orange[700]!,
+                          onTap: () => _updateWordStatus(
+                            cleanId,
+                            originalText,
+                            standardTranslation,
+                            3,
+                          ),
+                        ),
+                        _StatusButton(
+                          label: 'Known',
+                          status: 5,
+                          color: Colors.green,
+                          onTap: () => _updateWordStatus(
+                            cleanId,
+                            originalText,
+                            standardTranslation,
+                            5,
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text("Close"),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -947,6 +868,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   ) {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     VocabularyItem? existingItem = _vocabulary[cleanWord];
+
     if (existingItem != null) {
       final updatedItem = existingItem.copyWith(
         status: status,
@@ -990,16 +912,101 @@ class _StatusButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 60,
+      width: 55,
       child: ElevatedButton(
         onPressed: onTap,
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.white,
           padding: EdgeInsets.zero,
+          minimumSize: Size(50, 36),
         ),
-        child: Text(label),
+        child: Text(label, style: TextStyle(fontSize: 12)),
       ),
     );
+  }
+}
+
+/// Custom Widget to Parse Gemini's Markdown-like syntax
+/// Handles **bold text** and * lists without needing an HTML or Markdown package.
+class GeminiFormattedText extends StatelessWidget {
+  final String text;
+
+  const GeminiFormattedText({Key? key, required this.text}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    if (text == "Loading..." || text.startsWith("Gemini Error")) {
+      return Text(text, style: TextStyle(color: Colors.black54));
+    }
+
+    List<Widget> children = [];
+
+    // Split lines to handle bullets separately
+    List<String> lines = text.split('\n');
+
+    for (String line in lines) {
+      if (line.trim().isEmpty) {
+        children.add(SizedBox(height: 8)); // Paragraph spacing
+        continue;
+      }
+
+      // Handle Bullet points (lines starting with *)
+      if (line.trim().startsWith('* ')) {
+        children.add(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "• ",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              Expanded(child: _parseRichText(line.trim().substring(2))),
+            ],
+          ),
+        );
+      } else {
+        children.add(_parseRichText(line));
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  // Parses **bold** inside a line
+  Widget _parseRichText(String text) {
+    List<TextSpan> spans = [];
+
+    // Split by **
+    List<String> parts = text.split('**');
+
+    for (int i = 0; i < parts.length; i++) {
+      // Even parts are normal, Odd parts are bold (because split occurs at **)
+      if (i % 2 == 0) {
+        spans.add(
+          TextSpan(
+            text: parts[i],
+            style: TextStyle(color: Colors.black87, fontSize: 15, height: 1.4),
+          ),
+        );
+      } else {
+        spans.add(
+          TextSpan(
+            text: parts[i],
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              height: 1.4,
+            ),
+          ),
+        );
+      }
+    }
+
+    return RichText(text: TextSpan(children: spans));
   }
 }

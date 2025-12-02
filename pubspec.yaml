@@ -73,6 +73,7 @@ dependencies:
   http: ^1.2.0
   logging: ^1.2.0
   flutter_tts: ^4.2.3
+  flutter_gemini: ^3.0.0
   
 
 dev_dependencies:

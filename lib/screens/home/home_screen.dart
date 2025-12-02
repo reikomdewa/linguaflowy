@@ -1,5 +1,3 @@
-
-
 // import 'package:flutter/material.dart';
 // import 'package:flutter_bloc/flutter_bloc.dart';
 // import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -71,7 +69,7 @@
 //                   Icon(Icons.check_circle, size: 14, color: Colors.green),
 //                   SizedBox(width: 4),
 //                   Text(
-//                     '1,204 known words', 
+//                     '1,204 known words',
 //                     style: TextStyle(fontSize: 12, color: Colors.grey[700]),
 //                   ),
 //                 ],
@@ -84,7 +82,7 @@
 //         children: [
 //           // 1. YouTube-style Filter Chips
 //           _buildCategoryChips(),
-          
+
 //           // 2. Lesson Feed
 //           Expanded(
 //             child: BlocBuilder<LessonBloc, LessonState>(
@@ -130,9 +128,9 @@
 //         onPressed: () {
 //           // PASS CURRENT LANGUAGE HERE
 //           _showCreateLessonDialog(
-//             context, 
-//             user.id, 
-//             user.currentLanguage, 
+//             context,
+//             user.id,
+//             user.currentLanguage,
 //             isFavoriteByDefault: false
 //           );
 //         },
@@ -154,7 +152,7 @@
 //         itemBuilder: (context, index) {
 //           final category = _categories[index];
 //           final isSelected = _selectedCategory == category;
-          
+
 //           return GestureDetector(
 //             onTap: () {
 //               setState(() {
@@ -300,7 +298,7 @@
 //                           child: Text(
 //                             lesson.difficulty.toUpperCase(),
 //                             style: TextStyle(
-//                               fontSize: 10, 
+//                               fontSize: 10,
 //                               fontWeight: FontWeight.bold,
 //                               color: _getDifficultyColor(lesson.difficulty)
 //                             ),
@@ -369,7 +367,7 @@
 //   }) {
 //     final titleController = TextEditingController();
 //     final contentController = TextEditingController();
-    
+
 //     // CAPTURE CONTEXT
 //     final lessonBloc = context.read<LessonBloc>();
 //     final lessonService = context.read<LessonService>();
@@ -400,7 +398,7 @@
 //                   borderRadius: BorderRadius.circular(4)
 //                 ),
 //                 child: Text(
-//                   "Language: ${currentLanguage.toUpperCase()}", 
+//                   "Language: ${currentLanguage.toUpperCase()}",
 //                   style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold)
 //                 ),
 //               ),
@@ -468,10 +466,8 @@
 //       ),
 //     );
 //   }
-  
+
 // }
-
-
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -493,7 +489,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Video Section Specific Filter (The tabs you asked for)
   String _videoDifficultyTab = 'All';
-  final List<String> _difficultyTabs = ['All', 'Beginner', 'Intermediate', 'Advanced'];
+  final List<String> _difficultyTabs = [
+    'All',
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -511,11 +512,19 @@ class _HomeScreenState extends State<HomeScreen> {
               child: DropdownButton<String>(
                 value: user.currentLanguage,
                 icon: Icon(Icons.keyboard_arrow_down, color: Colors.blue),
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black,
+                ),
                 onChanged: (String? newValue) {
                   if (newValue != null) {
-                    context.read<AuthBloc>().add(AuthTargetLanguageChanged(newValue));
-                    context.read<LessonBloc>().add(LessonLoadRequested(user.id, newValue));
+                    context.read<AuthBloc>().add(
+                      AuthTargetLanguageChanged(newValue),
+                    );
+                    context.read<LessonBloc>().add(
+                      LessonLoadRequested(user.id, newValue),
+                    );
                   }
                 },
                 items: [
@@ -540,7 +549,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Icon(Icons.emoji_events, size: 16, color: Colors.amber[800]),
                   SizedBox(width: 4),
-                  Text('1,204', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.amber[900])),
+                  Text(
+                    '1,204',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber[900],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -557,21 +573,27 @@ class _HomeScreenState extends State<HomeScreen> {
             child: BlocBuilder<LessonBloc, LessonState>(
               builder: (context, state) {
                 if (state is LessonInitial) {
-                  context.read<LessonBloc>().add(LessonLoadRequested(user.id, user.currentLanguage));
+                  context.read<LessonBloc>().add(
+                    LessonLoadRequested(user.id, user.currentLanguage),
+                  );
                   return Center(child: CircularProgressIndicator());
                 }
-                if (state is LessonLoading) return Center(child: CircularProgressIndicator());
-                
+                if (state is LessonLoading)
+                  return Center(child: CircularProgressIndicator());
+
                 if (state is LessonLoaded) {
                   // If "Text" or "Audio" is selected at top, show simple list
-                  if (_selectedGlobalFilter != 'All' && _selectedGlobalFilter != 'Videos') {
+                  if (_selectedGlobalFilter != 'All' &&
+                      _selectedGlobalFilter != 'Videos') {
                     return _buildFilteredList(state.lessons);
                   }
 
                   // Default Dashboard Layout (Like Screenshot)
                   return RefreshIndicator(
                     onRefresh: () async {
-                      context.read<LessonBloc>().add(LessonLoadRequested(user.id, user.currentLanguage));
+                      context.read<LessonBloc>().add(
+                        LessonLoadRequested(user.id, user.currentLanguage),
+                      );
                     },
                     child: SingleChildScrollView(
                       padding: EdgeInsets.only(bottom: 80),
@@ -593,7 +615,12 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          _showCreateLessonDialog(context, user.id, user.currentLanguage, isFavoriteByDefault: false);
+          _showCreateLessonDialog(
+            context,
+            user.id,
+            user.currentLanguage,
+            isFavoriteByDefault: false,
+          );
         },
         backgroundColor: Colors.blue,
         icon: Icon(Icons.add),
@@ -606,11 +633,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildVideoSection(List<LessonModel> allLessons) {
     // 1. Filter only videos first
     final allVideos = allLessons.where((l) => l.type == 'video').toList();
-    
+
     // 2. Filter by Difficulty Tab
     final displayVideos = _videoDifficultyTab == 'All'
         ? allVideos
-        : allVideos.where((l) => l.difficulty.toLowerCase() == _videoDifficultyTab.toLowerCase()).toList();
+        : allVideos
+              .where(
+                (l) =>
+                    l.difficulty.toLowerCase() ==
+                    _videoDifficultyTab.toLowerCase(),
+              )
+              .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -620,7 +653,10 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
           child: Row(
             children: [
-              Text("Guided Courses", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              Text(
+                "Guided Courses",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
               SizedBox(width: 8),
               Icon(Icons.auto_awesome, size: 18, color: Colors.blue),
             ],
@@ -644,7 +680,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         tab,
                         style: TextStyle(
                           fontSize: 16,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                           color: isSelected ? Colors.black : Colors.grey[500],
                         ),
                       ),
@@ -654,7 +692,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           height: 2,
                           width: 20,
                           color: Colors.red, // The little underline indicator
-                        )
+                        ),
                     ],
                   ),
                 ),
@@ -668,7 +706,10 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             height: 200,
             alignment: Alignment.center,
-            child: Text("No videos found for $_videoDifficultyTab", style: TextStyle(color: Colors.grey)),
+            child: Text(
+              "No videos found for $_videoDifficultyTab",
+              style: TextStyle(color: Colors.grey),
+            ),
           )
         else
           SizedBox(
@@ -700,7 +741,10 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
           child: Row(
             children: [
-              Text("Popular Text Lessons", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(
+                "Popular Text Lessons",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
               Spacer(),
               Text("All >", style: TextStyle(color: Colors.grey, fontSize: 14)),
             ],
@@ -726,7 +770,12 @@ class _HomeScreenState extends State<HomeScreen> {
       width: 280,
       child: InkWell(
         onTap: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)));
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReaderScreen(lesson: lesson),
+            ),
+          );
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -740,14 +789,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     height: 160,
                     width: 280,
                     color: Colors.grey[200],
-                    child: lesson.imageUrl != null 
+                    child: lesson.imageUrl != null
                         ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
                         : null,
                   ),
                 ),
                 // Difficulty Badge (Overlay)
                 Positioned(
-                  top: 8, left: 8,
+                  top: 8,
+                  left: 8,
                   child: Container(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -756,15 +806,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Text(
                       lesson.difficulty.toUpperCase(),
-                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
                 // Progress Bar
                 Positioned(
-                  bottom: 0, left: 0, right: 0,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(12),
+                    ),
                     child: LinearProgressIndicator(
                       value: 0.05, // Mock progress
                       minHeight: 4,
@@ -772,7 +830,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
                     ),
                   ),
-                )
+                ),
               ],
             ),
             SizedBox(height: 10),
@@ -781,18 +839,28 @@ class _HomeScreenState extends State<HomeScreen> {
               lesson.title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, height: 1.2),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                height: 1.2,
+              ),
             ),
             SizedBox(height: 6),
             Row(
               children: [
                 Icon(Icons.circle, size: 8, color: Colors.blue),
                 SizedBox(width: 4),
-                Text("200 New", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text(
+                  "200 New",
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
                 SizedBox(width: 12),
                 Icon(Icons.circle, size: 8, color: Colors.amber),
                 SizedBox(width: 4),
-                Text("5 LingQs", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text(
+                  "5 words known",
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
               ],
             ),
           ],
@@ -812,22 +880,31 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: EdgeInsets.only(bottom: 12),
       child: ListTile(
         onTap: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)));
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReaderScreen(lesson: lesson),
+            ),
+          );
         },
         contentPadding: EdgeInsets.all(12),
         leading: Container(
-          width: 50, height: 50,
+          width: 50,
+          height: 50,
           decoration: BoxDecoration(
             color: Colors.blue.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(Icons.article, color: Colors.blue),
         ),
-        title: Text(lesson.title, style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          lesson.title,
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         subtitle: Text(
-          lesson.content.replaceAll('\n', ' '), 
-          maxLines: 1, 
-          overflow: TextOverflow.ellipsis
+          lesson.content.replaceAll('\n', ' '),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         trailing: Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
       ),
@@ -854,7 +931,9 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(
                 color: isSelected ? Colors.black : Colors.grey[100],
                 borderRadius: BorderRadius.circular(20),
-                border: isSelected ? null : Border.all(color: Colors.grey.shade300),
+                border: isSelected
+                    ? null
+                    : Border.all(color: Colors.grey.shade300),
               ),
               alignment: Alignment.center,
               child: Text(
@@ -893,7 +972,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return Center(child: Text("No lessons available"));
   }
 
-  void _showCreateLessonDialog(BuildContext context, String userId, String currentLanguage, {required bool isFavoriteByDefault}) {
+  void _showCreateLessonDialog(
+    BuildContext context,
+    String userId,
+    String currentLanguage, {
+    required bool isFavoriteByDefault,
+  }) {
     final titleController = TextEditingController();
     final contentController = TextEditingController();
     final lessonBloc = context.read<LessonBloc>();
@@ -907,22 +991,48 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: titleController, decoration: InputDecoration(labelText: 'Title', border: OutlineInputBorder())),
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(
+                  labelText: 'Title',
+                  border: OutlineInputBorder(),
+                ),
+              ),
               SizedBox(height: 16),
-              TextField(controller: contentController, decoration: InputDecoration(labelText: 'Content', border: OutlineInputBorder()), maxLines: 6),
+              TextField(
+                controller: contentController,
+                decoration: InputDecoration(
+                  labelText: 'Content',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 6,
+              ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
-              if (titleController.text.isNotEmpty && contentController.text.isNotEmpty) {
-                final sentences = lessonService.splitIntoSentences(contentController.text);
+              if (titleController.text.isNotEmpty &&
+                  contentController.text.isNotEmpty) {
+                final sentences = lessonService.splitIntoSentences(
+                  contentController.text,
+                );
                 final lesson = LessonModel(
-                  id: '', userId: userId, title: titleController.text, language: currentLanguage,
-                  content: contentController.text, sentences: sentences, createdAt: DateTime.now(),
-                  progress: 0, isFavorite: isFavoriteByDefault, type: 'text',
+                  id: '',
+                  userId: userId,
+                  title: titleController.text,
+                  language: currentLanguage,
+                  content: contentController.text,
+                  sentences: sentences,
+                  createdAt: DateTime.now(),
+                  progress: 0,
+                  isFavorite: isFavoriteByDefault,
+                  type: 'text',
                 );
                 lessonBloc.add(LessonCreateRequested(lesson));
                 Navigator.pop(dialogContext);
