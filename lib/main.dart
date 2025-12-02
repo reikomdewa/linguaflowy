@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
+import 'package:linguaflow/services/local_lesson_service.dart';
 import 'package:linguaflow/services/youtube_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,7 +22,7 @@ import 'blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:logging/logging.dart';
 
 void main() async {
-   // Enable verbose logging from youtube_explode_dart
+  // Enable verbose logging from youtube_explode_dart
   Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
     // You can customize this
@@ -42,6 +43,7 @@ class LanguageLearningApp extends StatelessWidget {
         RepositoryProvider(create: (context) => VocabularyService()),
         RepositoryProvider(create: (context) => TranslationService()),
         RepositoryProvider(create: (context) => YouTubeService()),
+        RepositoryProvider(create: (context) => LocalLessonService()),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -52,11 +54,17 @@ class LanguageLearningApp extends StatelessWidget {
           ),
           BlocProvider(
             create: (context) => LessonBloc(
-              // 2. PASS BOTH ARGUMENTS HERE
               context.read<LessonService>(),
-              context.read<YouTubeService>(),
+              context.read<LocalLessonService>(), // Use Local Service
             ),
           ),
+          // BlocProvider(
+          //   create: (context) => LessonBloc(
+          //     // 2. PASS BOTH ARGUMENTS HERE
+          //     context.read<LessonService>(),
+          //     context.read<YouTubeService>(),
+          //   ),
+          // ),
           BlocProvider(
             create: (context) =>
                 VocabularyBloc(context.read<VocabularyService>()),

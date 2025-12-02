@@ -96,6 +96,7 @@
 import 'package:bloc/bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/lesson_service.dart';
+import 'package:linguaflow/services/local_lesson_service.dart';
 import 'package:linguaflow/services/youtube_service.dart';
 // Import the separate event and state files
 import 'lesson_event.dart';
@@ -107,10 +108,10 @@ export 'lesson_state.dart';
 
 class LessonBloc extends Bloc<LessonEvent, LessonState> {
   final LessonService lessonService;
-  final YouTubeService youtubeService;
+  final LocalLessonService localLessonService;
   
 
-  LessonBloc(this.lessonService, this.youtubeService) : super(LessonInitial()) {
+  LessonBloc(this.lessonService, this.localLessonService) : super(LessonInitial()) {
     on<LessonLoadRequested>(_onLessonLoadRequested);
     on<LessonCreateRequested>(_onLessonCreateRequested);
     on<LessonDeleteRequested>(_onLessonDeleteRequested);
@@ -135,12 +136,14 @@ Future<void> _onLessonLoadRequested(
     // 2. YouTube
     try {
       print("BLOC: Fetching YouTube videos for ${event.languageCode}..."); // DEBUG
-      final youtubeLessons = await youtubeService.fetchRecommendedVideos(event.languageCode);
-      print("BLOC: Fetched ${youtubeLessons.length} YouTube videos."); // DEBUG
+      final userLessons = await lessonService.getLessons(event.userId, event.languageCode);
+      final systemLessons = await localLessonService.fetchLessons(event.languageCode);
+      print("BLOC: Fetched ${systemLessons.length} YouTube videos."); // DEBUG
 
-      if (youtubeLessons.isNotEmpty) {
-        final allLessons = [...localLessons, ...youtubeLessons];
-        emit(LessonLoaded(allLessons));
+      if (systemLessons.isNotEmpty) {
+        final allLessons = [...localLessons, ...systemLessons];
+        // emit(LessonLoaded(allLessons));
+         emit(LessonLoaded([...userLessons, ...systemLessons]));
       }
     } catch (e) {
       print("BLOC ERROR: $e");
