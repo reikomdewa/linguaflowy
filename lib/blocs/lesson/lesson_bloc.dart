@@ -1,19 +1,14 @@
-// LESSON BLOC
-// ==========================================
-// File: lib/blocs/lesson/lesson_bloc.dart
 import 'package:bloc/bloc.dart';
-import 'package:equatable/equatable.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/lesson_service.dart';
-  
 
 // Events
 abstract class LessonEvent {}
 
 class LessonLoadRequested extends LessonEvent {
   final String userId;
-  LessonLoadRequested(this.userId);
+  final String languageCode; // Add this
+  LessonLoadRequested(this.userId, this.languageCode);
 }
 
 class LessonCreateRequested extends LessonEvent {
@@ -28,16 +23,12 @@ class LessonDeleteRequested extends LessonEvent {
 
 // States
 abstract class LessonState {}
-
 class LessonInitial extends LessonState {}
-
 class LessonLoading extends LessonState {}
-
 class LessonLoaded extends LessonState {
   final List<LessonModel> lessons;
   LessonLoaded(this.lessons);
 }
-
 class LessonError extends LessonState {
   final String message;
   LessonError(this.message);
@@ -59,7 +50,8 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
   ) async {
     emit(LessonLoading());
     try {
-      final lessons = await lessonService.getLessons(event.userId);
+      // Pass the language code to the service
+      final lessons = await lessonService.getLessons(event.userId, event.languageCode);
       emit(LessonLoaded(lessons));
     } catch (e) {
       emit(LessonError(e.toString()));
@@ -72,7 +64,8 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
   ) async {
     try {
       await lessonService.createLesson(event.lesson);
-      add(LessonLoadRequested(event.lesson.userId));
+      // Reload using the lesson's language
+      add(LessonLoadRequested(event.lesson.userId, event.lesson.language)); 
     } catch (e) {
       emit(LessonError(e.toString()));
     }
@@ -84,6 +77,7 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
   ) async {
     try {
       await lessonService.deleteLesson(event.lessonId);
+      // Optimistic update
       if (state is LessonLoaded) {
         final currentLessons = (state as LessonLoaded).lessons;
         final updatedLessons = currentLessons

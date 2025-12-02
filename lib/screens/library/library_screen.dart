@@ -325,7 +325,7 @@ class LibraryScreen extends StatelessWidget {
       body: BlocBuilder<LessonBloc, LessonState>(
         builder: (context, state) {
           if (state is LessonInitial) {
-            context.read<LessonBloc>().add(LessonLoadRequested(user.id));
+            context.read<LessonBloc>().add(LessonLoadRequested(user.id, user.currentLanguage));
             return Center(child: CircularProgressIndicator());
           }
           if (state is LessonLoading) {

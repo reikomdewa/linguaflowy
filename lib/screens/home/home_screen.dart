@@ -1,4 +1,3 @@
-
 // // File: lib/screens/home/home_screen.dart
 
 // import 'package:flutter/material.dart';
@@ -154,7 +153,6 @@
 //   }
 // }
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -185,19 +183,30 @@ class _HomeScreenState extends State<HomeScreen> {
             // Language Dropdown
             DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: _selectedLanguage,
+                value: user.currentLanguage,
                 icon: Icon(Icons.keyboard_arrow_down),
                 style: TextStyle(
-                  fontSize: 18, 
-                  fontWeight: FontWeight.bold, 
-                  color: Colors.black
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
                 ),
                 onChanged: (String? newValue) {
+                  // if (newValue != null) {
+                  //   setState(() {
+                  //     _selectedLanguage = newValue;
+                  //   });
+                  //   // Optional: Trigger a bloc event to filter by language here
+                  // }
                   if (newValue != null) {
-                    setState(() {
-                      _selectedLanguage = newValue;
-                    });
-                    // Optional: Trigger a bloc event to filter by language here
+                    // 1. Update Global User Language
+                    context.read<AuthBloc>().add(
+                      AuthTargetLanguageChanged(newValue),
+                    );
+
+                    // 2. Reload Lessons for new language
+                    context.read<LessonBloc>().add(
+                      LessonLoadRequested(user.id, newValue),
+                    );
                   }
                 },
                 items: [
@@ -233,7 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: BlocBuilder<LessonBloc, LessonState>(
         builder: (context, state) {
           if (state is LessonInitial) {
-            context.read<LessonBloc>().add(LessonLoadRequested(user.id));
+            context.read<LessonBloc>().add(LessonLoadRequested(user.id, user.currentLanguage));
             return Center(child: CircularProgressIndicator());
           }
           if (state is LessonLoading) {
@@ -297,12 +306,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
-                  image: lesson.imageUrl != null 
-                    ? DecorationImage(image: NetworkImage(lesson.imageUrl!), fit: BoxFit.cover)
-                    : null,
+                  image: lesson.imageUrl != null
+                      ? DecorationImage(
+                          image: NetworkImage(lesson.imageUrl!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
                 ),
                 child: lesson.imageUrl == null
-                    ? Center(child: Text(lesson.language.toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold)))
+                    ? Center(
+                        child: Text(
+                          lesson.language.toUpperCase(),
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      )
                     : null,
               ),
               SizedBox(width: 16),
@@ -313,7 +330,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Text(
                       lesson.title,
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -366,7 +386,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showCreateLessonDialog(BuildContext context, String userId, {required bool isFavoriteByDefault}) {
+  void _showCreateLessonDialog(
+    BuildContext context,
+    String userId, {
+    required bool isFavoriteByDefault,
+  }) {
     final titleController = TextEditingController();
     final contentController = TextEditingController();
     String selectedLanguage = _selectedLanguage;
@@ -429,8 +453,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              if (titleController.text.isNotEmpty && contentController.text.isNotEmpty) {
-                final sentences = lessonService.splitIntoSentences(contentController.text);
+              if (titleController.text.isNotEmpty &&
+                  contentController.text.isNotEmpty) {
+                final sentences = lessonService.splitIntoSentences(
+                  contentController.text,
+                );
 
                 final lesson = LessonModel(
                   id: '',
@@ -441,18 +468,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   sentences: sentences,
                   createdAt: DateTime.now(),
                   progress: 0,
-                  isFavorite: isFavoriteByDefault, // Set based on where we created it
+                  isFavorite:
+                      isFavoriteByDefault, // Set based on where we created it
                 );
 
                 // Use the captured bloc instance
                 lessonBloc.add(LessonCreateRequested(lesson));
-                
+
                 Navigator.pop(dialogContext);
-                
+
                 scaffoldMessenger.showSnackBar(
-                  SnackBar(content: Text(isFavoriteByDefault 
-                    ? 'Lesson created and favorited!' 
-                    : 'Lesson created!')),
+                  SnackBar(
+                    content: Text(
+                      isFavoriteByDefault
+                          ? 'Lesson created and favorited!'
+                          : 'Lesson created!',
+                    ),
+                  ),
                 );
               }
             },
