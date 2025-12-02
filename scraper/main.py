@@ -1,9 +1,10 @@
+import json
 import os
+import glob
+import re
 import yt_dlp
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
-# We removed "subtitles" from the query to get more results. 
-# We will filter for captions later.
+# Define languages and queries
 LANGUAGES = {
     'es': 'Spanish comprehensible input',
     'fr': 'French comprehensible input',
@@ -14,29 +15,78 @@ LANGUAGES = {
     'en': 'English stories'
 }
 
-def get_best_transcript(video_id, target_lang):
-    try:
-        # Fetch all available transcripts
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+def clean_vtt_text(vtt_content):
+    """
+    Parses WebVTT content and extracts clean text.
+    Removes timestamps, styling tags, and duplicate lines.
+    """
+    lines = vtt_content.splitlines()
+    clean_lines = []
+    seen_lines = set()
+    
+    # Regex to identify timestamp lines (e.g., 00:00:05.000 --> 00:00:07.000)
+    timestamp_pattern = re.compile(r'\d{2}:\d{2}:\d{2}\.\d{3}\s-->\s\d{2}:\d{2}:\d{2}\.\d{3}')
+    
+    for line in lines:
+        line = line.strip()
+        # Skip headers, empty lines, timestamps, and numbers
+        if (not line or 
+            line == 'WEBVTT' or 
+            line.startswith('Kind:') or 
+            line.startswith('Language:') or 
+            timestamp_pattern.search(line) or 
+            line.isdigit()):
+            continue
+            
+        # Remove HTML-like tags (e.g. <c.colorE5E5E5>)
+        line = re.sub(r'<[^>]+>', '', line)
         
-        # 1. Try fetching the target language directly (Manual or Auto)
-        try:
-            transcript = transcript_list.find_transcript([target_lang])
-        except:
-            # 2. If target missing, fetch English and Auto-Translate
-            try:
-                transcript = transcript_list.find_transcript(['en', 'en-US']).translate(target_lang)
-            except:
-                # 3. Last resort: Take ANY available transcript and translate
-                transcript = transcript_list[0].translate(target_lang)
+        # Simple deduplication (often VTT repeats lines for karaoke effects)
+        if line not in seen_lines:
+            clean_lines.append(line)
+            seen_lines.add(line)
+            
+    return " ".join(clean_lines)
 
-        # Fetch data
-        data = transcript.fetch()
-        full_text = " ".join([i['text'] for i in data]).replace('\n', ' ')
-        return full_text
+def download_transcript(video_id, lang_code):
+    """
+    Uses yt-dlp to download the subtitle file, reads it, and returns text.
+    """
+    temp_filename = f"temp_{video_id}"
+    
+    # Options to ONLY download subtitles (no video/audio)
+    ydl_opts = {
+        'skip_download': True,
+        'writesubtitles': True,
+        'writeautomaticsub': True,      # Fallback to auto-generated
+        'subtitleslangs': [lang_code],  # Desired language
+        'outtmpl': temp_filename,       # Temp filename
+        'quiet': True,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([f'https://www.youtube.com/watch?v={video_id}'])
+            
+        # Find the downloaded .vtt file
+        # yt-dlp appends the lang code, e.g., temp_ID.en.vtt
+        files = glob.glob(f"{temp_filename}*.vtt")
+        
+        if not files:
+            return None
+            
+        # Read the file
+        with open(files[0], 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Clean up (delete temp file)
+        for f in files:
+            os.remove(f)
+            
+        return clean_vtt_text(content)
         
     except Exception as e:
-        print(f"    ! Transcript Error: {e}")
+        print(f"    ! Download error: {e}")
         return None
 
 def analyze_difficulty(text):
@@ -50,39 +100,35 @@ def analyze_difficulty(text):
 def search_and_scrape(lang_code, query):
     print(f"\n--- Searching: {query} ({lang_code}) ---")
     
-    # Configure yt-dlp for fast searching (metadata only, no download)
+    # Search options
     ydl_opts = {
         'quiet': True,
-        'extract_flat': True,
+        'extract_flat': True, # Only metadata for search
         'dump_single_json': True,
     }
 
     lessons = []
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        # Search for 15 videos
         try:
-            search_query = f"ytsearch15:{query}"
-            result = ydl.extract_info(search_query, download=False)
+            # Search for 15 videos
+            result = ydl.extract_info(f"ytsearch15:{query}", download=False)
             
             if 'entries' not in result:
-                print("    ! No entries found.")
                 return []
 
             for video in result['entries']:
                 video_id = video.get('id')
                 title = video.get('title')
-                
-                # yt-dlp doesn't always give thumbnails in flat mode, construct it manually
                 thumbnail = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
 
-                print(f"  > Checking: {title} ({video_id})")
+                print(f"  > Checking: {title}")
                 
-                # Try to get text
-                content = get_best_transcript(video_id, lang_code)
+                # Get Transcript using yt-dlp download method
+                content = download_transcript(video_id, lang_code)
                 
                 if content and len(content) > 100:
-                    print(f"    + SUCCESS: Got {len(content)} chars")
+                    print(f"    + SUCCESS: {len(content)} chars")
                     lessons.append({
                         "id": f"yt_{video_id}",
                         "userId": "system",
@@ -98,9 +144,9 @@ def search_and_scrape(lang_code, query):
                         "isFavorite": False
                     })
                 else:
-                    print("    - Skipped: No readable text.")
+                    print("    - Skipped: No subtitles.")
 
-                if len(lessons) >= 6: # Stop after 6 good videos
+                if len(lessons) >= 6: 
                     break
                     
         except Exception as e:
@@ -109,17 +155,16 @@ def search_and_scrape(lang_code, query):
     return lessons
 
 def main():
+    # Ensure data directory exists
     if not os.path.exists('data'):
         os.makedirs('data')
 
     for lang_code, query in LANGUAGES.items():
         lessons = search_and_scrape(lang_code, query)
         
-        # Always create the file, even if empty (prevents 404 errors)
         filename = f"data/lessons_{lang_code}.json"
         
-        # If we have previous data, we could merge it here, 
-        # but for now let's just save what we found to ensure it works.
+        # Save to JSON
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(lessons, f, ensure_ascii=False, indent=2)
             
