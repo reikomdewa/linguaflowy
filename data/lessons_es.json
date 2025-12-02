@@ -1,1 +1,30 @@
-[]
+[
+  {
+    "id": "yt_5S3jAK2arUk",
+    "userId": "system",
+    "title": "Spanish for Beginners - The Beach",
+    "language": "es",
+    "content": "Hola a todos. Hoy estamos en la playa. Hace mucho sol. Me gusta nadar en el mar. El agua está muy azul.",
+    "sentences": [],
+    "createdAt": "2024-01-01T12:00:00.000Z",
+    "imageUrl": "https://img.youtube.com/vi/5S3jAK2arUk/hqdefault.jpg",
+    "type": "video",
+    "difficulty": "beginner",
+    "videoUrl": "https://youtube.com/watch?v=5S3jAK2arUk",
+    "isFavorite": false
+  },
+  {
+    "id": "yt_D9_-C3-9Z9g",
+    "userId": "system",
+    "title": "Dreaming Spanish - Intermediate",
+    "language": "es",
+    "content": "Hoy vamos a hablar sobre la comida en España. La paella es muy famosa, pero hay muchos otros platos deliciosos.",
+    "sentences": [],
+    "createdAt": "2024-01-02T12:00:00.000Z",
+    "imageUrl": "https://img.youtube.com/vi/D9_-C3-9Z9g/hqdefault.jpg",
+    "type": "video",
+    "difficulty": "intermediate",
+    "videoUrl": "https://youtube.com/watch?v=D9_-C3-9Z9g",
+    "isFavorite": false
+  }
+]
