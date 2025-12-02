@@ -35,7 +35,7 @@ jobs:
           pip install -r scraper/requirements.txt
 
       - name: Run Scraper
-        run: python lib/scraper/main.py
+        run: python scraper/main.py
 
       - name: Commit and Push Data
         run: |
