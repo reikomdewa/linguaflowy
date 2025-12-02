@@ -25,6 +25,8 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
           pip install -r scraper/requirements.txt
 
@@ -36,5 +38,4 @@ jobs:
           git config --global user.name 'GitHub Action'
           git config --global user.email 'action@github.com'
           git add data/*.json
-          # Only commit if data changed
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update lessons data" && git push)
