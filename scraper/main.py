@@ -17,98 +17,121 @@ LANGUAGES = {
     'en': 'English stories'
 }
 
-MAX_FEED_SIZE = 50  # Keep last 50 videos per language
+MAX_FEED_SIZE = 50
+
+# --- BACKUP DATA ---
+BACKUP_LESSONS = [
+    {
+        "id": "yt_backup_demo",
+        "userId": "system",
+        "title": "YouTube Blocking Active - Showing Backup",
+        "language": "en",
+        "content": "YouTube has blocked the scraper IP. This is a backup lesson to keep the app UI working while the block persists.",
+        "sentences": [], 
+        "createdAt": "2024-01-01T00:00:00.000Z",
+        "imageUrl": "https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+        "type": "video",
+        "difficulty": "beginner",
+        "videoUrl": "https://youtube.com/watch?v=dQw4w9WgXcQ",
+        "isFavorite": False
+    }
+]
 
 def clean_vtt_text(vtt_content):
-    """
-    Parses WebVTT content and extracts clean text.
-    Removes timestamps, styling tags, and duplicate lines.
-    """
     lines = vtt_content.splitlines()
     clean_lines = []
-    seen_lines = set()
-    
-    # Regex to identify timestamp lines (e.g., 00:00:05.000 --> 00:00:07.000)
+    seen = set()
     timestamp_pattern = re.compile(r'\d{2}:\d{2}:\d{2}\.\d{3}\s-->\s\d{2}:\d{2}:\d{2}\.\d{3}')
     
     for line in lines:
         line = line.strip()
-        # Skip headers, empty lines, timestamps, and numbers
-        if (not line or 
-            line == 'WEBVTT' or 
-            line.startswith('Kind:') or 
-            line.startswith('Language:') or 
-            timestamp_pattern.search(line) or 
-            line.isdigit()):
+        if (not line or line == 'WEBVTT' or line.startswith('Kind:') or 
+            line.startswith('Language:') or timestamp_pattern.search(line) or line.isdigit()):
             continue
-            
-        # Remove HTML-like tags (e.g. <c.colorE5E5E5> or <b>)
         line = re.sub(r'<[^>]+>', '', line)
-        
-        # Decode HTML entities if needed (basic ones)
         line = line.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"')
-
-        # Simple deduplication (often VTT repeats lines for karaoke effects)
-        if line not in seen_lines:
+        if line not in seen:
             clean_lines.append(line)
-            seen_lines.add(line)
-            
+            seen.add(line)
     return " ".join(clean_lines)
 
-def download_transcript(video_id, lang_code):
-    """
-    Uses yt-dlp to download the subtitle file, reads it, and returns text.
-    """
+def download_transcript(video_id, target_lang):
     temp_filename = f"temp_{video_id}"
     
-    # Core Options
+    # 1. Check Cookies
+    use_cookies = os.path.exists('cookies.txt')
+    
+    # 2. Options: Download ALL subs to avoid "Format not available" errors
     ydl_opts = {
         'skip_download': True,
         'writesubtitles': True,
-        'writeautomaticsub': True,      # Fallback to auto-generated
-        'subtitleslangs': [lang_code],  # Desired language
-        'outtmpl': temp_filename,       # Temp filename
+        'writeautomaticsub': True,
+        'subtitleslangs': ['all', '-live_chat'], # Grab everything
+        'outtmpl': temp_filename,
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': True,
-        # SPOOFING: Pretend to be Android to bypass some checks
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web']
-            }
-        }
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
     }
 
-    # COOKIE INJECTION: If cookies.txt exists (from GitHub Secrets), use it!
-    if os.path.exists('cookies.txt'):
+    if use_cookies:
         ydl_opts['cookiefile'] = 'cookies.txt'
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([f'https://www.youtube.com/watch?v={video_id}'])
             
-        # Find the downloaded .vtt file (yt-dlp appends lang code)
-        files = glob.glob(f"{temp_filename}*.vtt")
+        # 3. Find the best matching file
+        # yt-dlp saves as temp_ID.lang.vtt
+        all_files = glob.glob(f"{temp_filename}*.vtt")
         
-        if not files:
-            return None
-            
-        # Read the file
-        with open(files[0], 'r', encoding='utf-8') as f:
+        if not all_files:
+            return None, None
+
+        selected_file = None
+        detected_lang = target_lang
+
+        # Try exact target match (e.g., .es.vtt)
+        for f in all_files:
+            if f".{target_lang}." in f:
+                selected_file = f
+                break
+        
+        # Try generic match (e.g. .es-MX.vtt)
+        if not selected_file:
+            for f in all_files:
+                if f".{target_lang}" in f:
+                    selected_file = f
+                    break
+
+        # Fallback to English if target not found (better than nothing)
+        if not selected_file:
+            for f in all_files:
+                if ".en." in f:
+                    selected_file = f
+                    detected_lang = "en" # Mark that we fell back
+                    break
+        
+        # Last resort: take the first file found
+        if not selected_file and all_files:
+            selected_file = all_files[0]
+
+        if not selected_file:
+            return None, None
+
+        # Read content
+        with open(selected_file, 'r', encoding='utf-8') as f:
             content = f.read()
             
-        # Clean up (delete temp file)
-        for f in files:
-            try:
-                os.remove(f)
-            except:
-                pass
+        # Cleanup ALL temp files
+        for f in all_files:
+            try: os.remove(f)
+            except: pass
             
-        return clean_vtt_text(content)
+        return clean_vtt_text(content), detected_lang
         
-    except Exception as e:
-        # print(f"    ! Download error: {e}")
-        return None
+    except Exception:
+        return None, None
 
 def analyze_difficulty(text):
     words = text.split()
@@ -121,21 +144,20 @@ def analyze_difficulty(text):
 def search_and_scrape(lang_code, query):
     print(f"\n--- Searching: {query} ({lang_code}) ---")
     
-    # Options for searching metadata
+    # Check if cookies exist
+    if os.path.exists('cookies.txt'):
+        print("  ℹ️  Cookies found. Using authenticated session.")
+    else:
+        print("  ⚠️  No cookies.txt found. Running anonymously (Higher ban risk).")
+
     ydl_opts = {
         'quiet': True,
         'extract_flat': True,
         'dump_single_json': True,
         'ignoreerrors': True,
-        # Use Android client for search too
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android']
-            }
-        }
+        'extractor_args': {'youtube': {'player_client': ['android']}}
     }
-
-    # Add cookies to search if available
+    
     if os.path.exists('cookies.txt'):
         ydl_opts['cookiefile'] = 'cookies.txt'
 
@@ -143,54 +165,48 @@ def search_and_scrape(lang_code, query):
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Search 10 videos
             result = ydl.extract_info(f"ytsearch10:{query}", download=False)
-            
-            if 'entries' not in result:
-                return []
+            if 'entries' not in result: return []
 
             for video in result['entries']:
-                # Safety check for None values
                 if not video: continue
-                
                 video_id = video.get('id')
                 title = video.get('title')
                 
                 if not video_id or not title: continue
 
-                # yt-dlp flat search doesn't always give thumbnails, construct manually
-                thumbnail = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
-
-                print(f"  > Checking: {title}")
+                print(f"  > Checking: {title[:50]}...")
                 
-                # Polite delay to act human
-                time.sleep(random.uniform(2.0, 5.0))
+                # Polite delay
+                time.sleep(random.uniform(2.0, 4.0))
                 
                 # Download Transcript
-                content = download_transcript(video_id, lang_code)
+                content, actual_lang = download_transcript(video_id, lang_code)
                 
                 if content and len(content) > 100:
-                    print(f"    + SUCCESS: {len(content)} chars")
+                    # If we fell back to English, maybe skip or tag it? 
+                    # For now we keep it but log it.
+                    lang_status = "Target" if actual_lang == lang_code else f"Fallback ({actual_lang})"
+                    print(f"    + SUCCESS: {len(content)} chars [{lang_status}]")
+                    
                     lessons.append({
                         "id": f"yt_{video_id}",
                         "userId": "system",
                         "title": title,
-                        "language": lang_code,
+                        "language": lang_code, # Keep requested lang code for filtering
                         "content": content,
                         "sentences": [], 
-                        "createdAt": "2024-01-01T00:00:00.000Z", # Placeholder date (updated on app load)
-                        "imageUrl": thumbnail,
+                        "createdAt": "2024-01-01T00:00:00.000Z",
+                        "imageUrl": f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
                         "type": "video",
                         "difficulty": analyze_difficulty(content),
                         "videoUrl": f"https://youtube.com/watch?v={video_id}",
                         "isFavorite": False
                     })
                 else:
-                    # Keep logs clean, don't spam errors
-                    print("    - Skipped (No subs or blocked)")
+                    print("    - Skipped (No text or Blocked)")
 
-                if len(lessons) >= 5: 
-                    break
+                if len(lessons) >= 5: break
                     
         except Exception as e:
             print(f"Search failed: {e}")
@@ -202,31 +218,35 @@ def main():
         os.makedirs('data')
 
     for lang_code, query in LANGUAGES.items():
-        # 1. Scrape new videos
-        new_lessons = search_and_scrape(lang_code, query)
+        lessons = search_and_scrape(lang_code, query)
         
         filename = f"data/lessons_{lang_code}.json"
         all_lessons = []
 
-        # 2. Load existing feed (History)
+        # Load history
         if os.path.exists(filename):
             try:
                 with open(filename, 'r', encoding='utf-8') as f:
                     all_lessons = json.load(f)
-            except:
-                pass
+            except: pass
 
-        # 3. Merge: Add new videos to the top, avoiding duplicates
+        # Merge
         existing_ids = {l['id'] for l in all_lessons}
-        
-        for lesson in new_lessons:
+        for lesson in lessons:
             if lesson['id'] not in existing_ids:
-                all_lessons.insert(0, lesson) # Add to top
+                all_lessons.insert(0, lesson)
         
-        # 4. Limit Feed Size
+        # If empty (Blocked), inject Backup
+        if not all_lessons:
+            print(f"  ! Scraping blocked. Injecting Backup for {lang_code}")
+            backup = BACKUP_LESSONS.copy()
+            for b in backup: b['language'] = lang_code
+            all_lessons = backup
+
+        # Limit size
         all_lessons = all_lessons[:MAX_FEED_SIZE]
         
-        # 5. Save
+        # Save
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(all_lessons, f, ensure_ascii=False, indent=2)
             
