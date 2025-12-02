@@ -18,8 +18,15 @@ import 'services/translation_service.dart';
 import 'blocs/auth/auth_bloc.dart';
 import 'blocs/lesson/lesson_bloc.dart';
 import 'blocs/vocabulary/vocabulary_bloc.dart';
+import 'package:logging/logging.dart';
 
 void main() async {
+   // Enable verbose logging from youtube_explode_dart
+  Logger.root.level = Level.ALL;
+  Logger.root.onRecord.listen((record) {
+    // You can customize this
+    print('[${record.level.name}] ${record.time}: ${record.message}');
+  });
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   runApp(LanguageLearningApp());

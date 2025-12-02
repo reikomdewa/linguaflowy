@@ -1,0 +1,39 @@
+name: Scrape YouTube Lessons
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 */6 * * *' # Run every 6 hours
+  workflow_dispatch: # Allows manual trigger button
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install youtube-search-python youtube-transcript-api
+
+      - name: Run Scraper
+        run: python scraper/main.py
+
+      - name: Commit and Push Data
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git add data/*.json
+          # Only commit if data changed
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update lessons data" && git push)

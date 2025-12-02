@@ -108,6 +108,7 @@ export 'lesson_state.dart';
 class LessonBloc extends Bloc<LessonEvent, LessonState> {
   final LessonService lessonService;
   final YouTubeService youtubeService;
+  
 
   LessonBloc(this.lessonService, this.youtubeService) : super(LessonInitial()) {
     on<LessonLoadRequested>(_onLessonLoadRequested);
