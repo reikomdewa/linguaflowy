@@ -1,7 +1,6 @@
-import json
 import os
 import yt_dlp
-from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 # We removed "subtitles" from the query to get more results. 
 # We will filter for captions later.
