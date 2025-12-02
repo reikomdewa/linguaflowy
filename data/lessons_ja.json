@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "id": "yt_fallback_ja",
+    "userId": "system",
+    "title": "Welcome to JA (Backup)",
+    "language": "ja",
+    "content": "YouTube scraping was blocked. This is a backup video for ja.",
+    "sentences": [],
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "imageUrl": "https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+    "type": "video",
+    "difficulty": "beginner",
+    "videoUrl": "https://youtube.com/watch?v=dQw4w9WgXcQ",
+    "isFavorite": false
+  }
+]
