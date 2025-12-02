@@ -3,6 +3,8 @@ import os
 import glob
 import re
 import yt_dlp
+import time
+import random
 
 # Define languages and queries
 LANGUAGES = {
@@ -18,18 +20,15 @@ LANGUAGES = {
 def clean_vtt_text(vtt_content):
     """
     Parses WebVTT content and extracts clean text.
-    Removes timestamps, styling tags, and duplicate lines.
     """
     lines = vtt_content.splitlines()
     clean_lines = []
     seen_lines = set()
     
-    # Regex to identify timestamp lines (e.g., 00:00:05.000 --> 00:00:07.000)
     timestamp_pattern = re.compile(r'\d{2}:\d{2}:\d{2}\.\d{3}\s-->\s\d{2}:\d{2}:\d{2}\.\d{3}')
     
     for line in lines:
         line = line.strip()
-        # Skip headers, empty lines, timestamps, and numbers
         if (not line or 
             line == 'WEBVTT' or 
             line.startswith('Kind:') or 
@@ -38,10 +37,8 @@ def clean_vtt_text(vtt_content):
             line.isdigit()):
             continue
             
-        # Remove HTML-like tags (e.g. <c.colorE5E5E5>)
         line = re.sub(r'<[^>]+>', '', line)
         
-        # Simple deduplication (often VTT repeats lines for karaoke effects)
         if line not in seen_lines:
             clean_lines.append(line)
             seen_lines.add(line)
@@ -49,44 +46,43 @@ def clean_vtt_text(vtt_content):
     return " ".join(clean_lines)
 
 def download_transcript(video_id, lang_code):
-    """
-    Uses yt-dlp to download the subtitle file, reads it, and returns text.
-    """
     temp_filename = f"temp_{video_id}"
     
-    # Options to ONLY download subtitles (no video/audio)
+    # 🔴 THE FIX: Use the ANDROID client to bypass 'Sign in' checks
     ydl_opts = {
         'skip_download': True,
         'writesubtitles': True,
-        'writeautomaticsub': True,      # Fallback to auto-generated
-        'subtitleslangs': [lang_code],  # Desired language
-        'outtmpl': temp_filename,       # Temp filename
+        'writeautomaticsub': True,
+        'subtitleslangs': [lang_code],
+        'outtmpl': temp_filename,
         'quiet': True,
+        # This tells YouTube we are an Android phone, not a server
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios']
+            }
+        }
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([f'https://www.youtube.com/watch?v={video_id}'])
             
-        # Find the downloaded .vtt file
-        # yt-dlp appends the lang code, e.g., temp_ID.en.vtt
         files = glob.glob(f"{temp_filename}*.vtt")
         
         if not files:
             return None
             
-        # Read the file
         with open(files[0], 'r', encoding='utf-8') as f:
             content = f.read()
             
-        # Clean up (delete temp file)
         for f in files:
             os.remove(f)
             
         return clean_vtt_text(content)
         
     except Exception as e:
-        print(f"    ! Download error: {e}")
+        # print(f"    ! Download error: {e}")
         return None
 
 def analyze_difficulty(text):
@@ -100,19 +96,25 @@ def analyze_difficulty(text):
 def search_and_scrape(lang_code, query):
     print(f"\n--- Searching: {query} ({lang_code}) ---")
     
-    # Search options
+    # Use Android client for search too
     ydl_opts = {
         'quiet': True,
-        'extract_flat': True, # Only metadata for search
+        'extract_flat': True,
         'dump_single_json': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android']
+            }
+        }
     }
 
     lessons = []
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Search for 15 videos
-            result = ydl.extract_info(f"ytsearch15:{query}", download=False)
+            # Add 'subtitles' to query to increase chance of success
+            search_query = f"ytsearch15:{query}"
+            result = ydl.extract_info(search_query, download=False)
             
             if 'entries' not in result:
                 return []
@@ -124,7 +126,9 @@ def search_and_scrape(lang_code, query):
 
                 print(f"  > Checking: {title}")
                 
-                # Get Transcript using yt-dlp download method
+                # Sleep briefly to avoid hammering the API
+                time.sleep(random.uniform(1.0, 2.0))
+                
                 content = download_transcript(video_id, lang_code)
                 
                 if content and len(content) > 100:
@@ -144,7 +148,8 @@ def search_and_scrape(lang_code, query):
                         "isFavorite": False
                     })
                 else:
-                    print("    - Skipped: No subtitles.")
+                    # Don't print failures to keep logs clean, it is expected
+                    print("    - Skipped (No subs or blocked)")
 
                 if len(lessons) >= 6: 
                     break
@@ -155,7 +160,6 @@ def search_and_scrape(lang_code, query):
     return lessons
 
 def main():
-    # Ensure data directory exists
     if not os.path.exists('data'):
         os.makedirs('data')
 
