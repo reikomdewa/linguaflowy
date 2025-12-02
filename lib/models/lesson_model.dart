@@ -55,6 +55,10 @@ class LessonModel {
   final DateTime createdAt;
   final int progress;
 
+  var imageUrl;
+
+  var isFavorite;
+
   LessonModel({
     required this.id,
     required this.userId,
@@ -63,7 +67,7 @@ class LessonModel {
     required this.content,
     required this.sentences,
     required this.createdAt,
-    this.progress = 0,
+    this.progress = 0, required bool isFavorite,
   });
 
   factory LessonModel.fromMap(Map<String, dynamic> map, String id) {
@@ -76,6 +80,7 @@ class LessonModel {
       sentences: List<String>.from(map['sentences'] ?? []),
       createdAt: DateTime.parse(map['createdAt']),
       progress: map['progress'] ?? 0,
+       isFavorite: false,
     );
   }
 
