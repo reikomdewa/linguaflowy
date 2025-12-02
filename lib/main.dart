@@ -1,8 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
+import 'package:linguaflow/services/youtube_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Import all screens and services
@@ -34,20 +34,41 @@ class LanguageLearningApp extends StatelessWidget {
         RepositoryProvider(create: (context) => LessonService()),
         RepositoryProvider(create: (context) => VocabularyService()),
         RepositoryProvider(create: (context) => TranslationService()),
+        RepositoryProvider(create: (context) => YouTubeService()),
       ],
       child: MultiBlocProvider(
         providers: [
           BlocProvider(
-            create: (context) => AuthBloc(context.read<AuthService>())
-              ..add(AuthCheckRequested()),
+            create: (context) =>
+                AuthBloc(context.read<AuthService>())
+                  ..add(AuthCheckRequested()),
           ),
           BlocProvider(
-            create: (context) => LessonBloc(context.read<LessonService>()),
+            create: (context) => LessonBloc(
+              // 2. PASS BOTH ARGUMENTS HERE
+              context.read<LessonService>(),
+              context.read<YouTubeService>(),
+            ),
           ),
           BlocProvider(
-            create: (context) => VocabularyBloc(context.read<VocabularyService>()),
+            create: (context) =>
+                VocabularyBloc(context.read<VocabularyService>()),
           ),
         ],
+        // providers: [
+        //   BlocProvider(
+        //     create: (context) => AuthBloc(context.read<AuthService>())
+        //       ..add(AuthCheckRequested()),
+        //   ),
+        //   BlocProvider(
+        //     create: (context) => LessonBloc(context.read<LessonService>(
+
+        //     )),
+        //   ),
+        //   BlocProvider(
+        //     create: (context) => VocabularyBloc(context.read<VocabularyService>()),
+        //   ),
+        // ],
         child: MaterialApp(
           title: 'Language Learning',
           theme: ThemeData(
