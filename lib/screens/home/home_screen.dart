@@ -79,6 +79,220 @@ class _HomeScreenState extends State<HomeScreen> {
     return {'new': newWords, 'known': knownWords};
   }
 
+  void _showStatsDialog(
+    BuildContext context,
+    int knownWords,
+    String languageCode,
+  ) {
+    // --- CEFR Level Logic ---
+    String currentLevel = "Beginner";
+    String nextLevel = "A1";
+    int nextGoal = 500;
+    double progress = 0.0;
+
+    if (knownWords < 500) {
+      currentLevel = "Newcomer";
+      nextLevel = "A1";
+      nextGoal = 500;
+      progress = knownWords / 500;
+    } else if (knownWords < 1000) {
+      currentLevel = "A1 (Beginner)";
+      nextLevel = "A2";
+      nextGoal = 1000;
+      progress = (knownWords - 500) / 500;
+    } else if (knownWords < 2000) {
+      currentLevel = "A2 (Elementary)";
+      nextLevel = "B1";
+      nextGoal = 2000;
+      progress = (knownWords - 1000) / 1000;
+    } else if (knownWords < 4000) {
+      currentLevel = "B1 (Intermediate)";
+      nextLevel = "B2";
+      nextGoal = 4000;
+      progress = (knownWords - 2000) / 2000;
+    } else if (knownWords < 8000) {
+      currentLevel = "B2 (Upper Int.)";
+      nextLevel = "C1";
+      nextGoal = 8000;
+      progress = (knownWords - 4000) / 4000;
+    } else {
+      currentLevel = "C1 (Advanced)";
+      nextLevel = "C2";
+      nextGoal = 16000;
+      progress = (knownWords - 8000) / 8000;
+    }
+
+    // Language Name Map
+    final langNames = {
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'en': 'English',
+      'it': 'Italian',
+      'pt': 'Portuguese',
+      'ja': 'Japanese',
+    };
+    final langName = langNames[languageCode] ?? 'Target Language';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true, // IMPORTANT: Allows the sheet to size correctly
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        // FIX: Add system bottom padding to the standard 24 padding
+        padding: EdgeInsets.fromLTRB(
+          24,
+          24,
+          24,
+          24 + MediaQuery.of(context).viewPadding.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min, // Shrinks to fit content
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber[100],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.auto_graph,
+                    color: Colors.amber[800],
+                    size: 28,
+                  ),
+                ),
+                SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "$langName Progress",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    Text(
+                      "$knownWords words known",
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Divider(height: 32),
+
+            // Level Badge
+            Center(
+              child: Column(
+                children: [
+                  Text(
+                    "Current Level",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    currentLevel,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.blue[800],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            SizedBox(height: 24),
+
+            // Progress Bar
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Next Goal: $nextLevel",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  "${nextGoal - knownWords} words to go",
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 10,
+                backgroundColor: Colors.grey[200],
+                valueColor: AlwaysStoppedAnimation(Colors.blue),
+              ),
+            ),
+            SizedBox(height: 24),
+
+            // Motivation Text
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lightbulb_outline, color: Colors.blue[700]),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "Knowing ${nextGoal - knownWords} more words will help you understand roughly 10% more of daily conversations!",
+                      style: TextStyle(
+                        color: Colors.blue[900],
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  "Keep Learning",
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = (context.watch<AuthBloc>().state as AuthAuthenticated).user;
@@ -91,74 +305,127 @@ class _HomeScreenState extends State<HomeScreen> {
         foregroundColor: Colors.black,
         title: Row(
           children: [
-            DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: user.currentLanguage,
-                icon: Icon(Icons.keyboard_arrow_down, color: Colors.blue),
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.black,
-                ),
-                onChanged: (String? newValue) {
-                  if (newValue != null) {
-                    context.read<AuthBloc>().add(
-                      AuthTargetLanguageChanged(newValue),
-                    );
-                    context.read<LessonBloc>().add(
-                      LessonLoadRequested(user.id, newValue),
-                    );
-                    context.read<VocabularyBloc>().add(
-                      VocabularyLoadRequested(user.id),
-                    );
-                  }
-                },
-                items: [
-                  DropdownMenuItem(value: 'es', child: Text('Spanish')),
-                  DropdownMenuItem(value: 'fr', child: Text('French')),
-                  DropdownMenuItem(value: 'de', child: Text('German')),
-                  DropdownMenuItem(value: 'en', child: Text('English')),
-                  DropdownMenuItem(value: 'it', child: Text('Italian')),
-                  DropdownMenuItem(value: 'pt', child: Text('Portuguese')),
-                  DropdownMenuItem(value: 'ja', child: Text('Japanese')),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                // 1. The "Glassy" White/Grey Background
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(20),
+                // 2. The Subtle Glass Border
+                border: Border.all(color: Colors.grey.shade300, width: 1),
+                // 3. Soft Shadow for depth
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
                 ],
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: user.currentLanguage,
+                  icon: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  isDense: true, // Reduces default internal padding
+                  dropdownColor: Colors.white,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey[800],
+                    fontFamily:
+                        'Roboto', // Ensures emojis render well on some devices
+                  ),
+                  onChanged: (String? newValue) {
+                    if (newValue != null) {
+                      context.read<AuthBloc>().add(
+                        AuthTargetLanguageChanged(newValue),
+                      );
+                      context.read<LessonBloc>().add(
+                        LessonLoadRequested(user.id, newValue),
+                      );
+                      context.read<VocabularyBloc>().add(
+                        VocabularyLoadRequested(user.id),
+                      );
+                    }
+                  },
+                  items: [
+                    DropdownMenuItem(value: 'es', child: Text('🇪🇸 Spanish')),
+                    DropdownMenuItem(value: 'fr', child: Text('🇫🇷 French')),
+                    DropdownMenuItem(value: 'de', child: Text('🇩🇪 German')),
+                    DropdownMenuItem(value: 'en', child: Text('🇬🇧 English')),
+                    DropdownMenuItem(value: 'it', child: Text('🇮🇹 Italian')),
+                    DropdownMenuItem(
+                      value: 'pt',
+                      child: Text('🇵🇹 Portuguese'),
+                    ),
+                    DropdownMenuItem(value: 'ja', child: Text('🇯🇵 Japanese')),
+                  ],
+                ),
               ),
             ),
             Spacer(),
-            // REAL TOTAL KNOWN WORDS COUNT
+
+            // --- STATS INDICATOR ---
             BlocBuilder<VocabularyBloc, VocabularyState>(
               builder: (context, vocabState) {
-                int totalKnown = 0;
+                int knownCount = 0;
+                // Only count words for the CURRENT language
                 if (vocabState is VocabularyLoaded) {
-                  // FIXED: used vocabState.items instead of vocabulary
-                  totalKnown = vocabState.items
-                      .where((v) => v.status > 0)
+                  knownCount = vocabState.items
+                      .where(
+                        (v) =>
+                            v.status > 0 && v.language == user.currentLanguage,
+                      )
                       .length;
                 }
 
-                return Container(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.2),
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.emoji_events,
-                        size: 16,
-                        color: Colors.amber[800],
+                    onTap: () => _showStatsDialog(
+                      context,
+                      knownCount,
+                      user.currentLanguage,
+                    ),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
                       ),
-                      SizedBox(width: 4),
-                      Text(
-                        totalKnown.toString(),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber[900],
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.amber.withOpacity(0.3),
                         ),
                       ),
-                    ],
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.emoji_events_rounded,
+                            size: 16,
+                            color: Colors.amber[800],
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            knownCount.toString(),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber[900],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 );
               },
@@ -229,18 +496,64 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          _showCreateLessonDialog(
-            context,
-            user.id,
-            user.currentLanguage,
-            isFavoriteByDefault: false,
-          );
-        },
-        backgroundColor: Colors.blue,
-        icon: Icon(Icons.add),
-        label: Text('New Lesson'),
+      // floatingActionButton: FloatingActionButton.extended(
+      //   onPressed: () {
+      //     _showCreateLessonDialog(
+      //       context,
+      //       user.id,
+      //       user.currentLanguage,
+      //       isFavoriteByDefault: false,
+      //     );
+      //   },
+      //   backgroundColor: Colors.blue,
+      //   icon: Icon(Icons.add),
+      //   label: Text('Import'),
+      // ),
+      floatingActionButton: Material(
+        color: Colors.transparent,
+        elevation: 10,
+        shadowColor: Colors.black.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(30),
+        child: InkWell(
+          onTap: () {
+            _showCreateLessonDialog(
+              context,
+              user.id,
+              user.currentLanguage,
+              isFavoriteByDefault: false,
+            );
+          },
+          borderRadius: BorderRadius.circular(30),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            decoration: BoxDecoration(
+              // The "Glassy" Dark Color
+              color: const Color(0xFF1E1E1E).withOpacity(0.90),
+              borderRadius: BorderRadius.circular(30),
+              // The "Glass" Edge Highlight
+              border: Border.all(
+                color: Colors.white.withOpacity(0.15),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, color: Colors.white, size: 22),
+                SizedBox(width: 8),
+                Text(
+                  'Import',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -470,6 +783,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
                 height: 1.2,
+                color: Colors.grey[600],
               ),
             ),
             SizedBox(height: 6),
@@ -527,7 +841,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         title: Text(
           lesson.title,
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[600],
+          ),
         ),
         subtitle: Text(
           lesson.content.replaceAll('\n', ' '),
