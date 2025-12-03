@@ -14,22 +14,42 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // --- FILTERS ---
   String _selectedGlobalFilter = 'All';
   final List<String> _globalFilters = ['All', 'Videos', 'Audio', 'Text'];
 
-  String _videoDifficultyTab = 'All';
-  final List<String> _difficultyTabs = ['All', 'Beginner', 'Intermediate', 'Advanced'];
+  // --- GUIDED / IMPORTED TABS ---
+  String _guidedTab = 'All';
+  // Added "Imported" to this list
+  final List<String> _guidedTabsList = [
+    'All',
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+    'Imported',
+  ];
+
+  // --- NATIVE / TRENDING TABS ---
+  String _nativeDifficultyTab = 'All';
+  final List<String> _difficultyTabs = [
+    'All',
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+  ];
 
   @override
   void initState() {
     super.initState();
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    // Ensure vocab is loaded when screen starts
     context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
   }
 
   /// Calculates stats based on the lesson content vs the user's vocabulary map
-  Map<String, int> _getLessonStats(LessonModel lesson, Map<String, VocabularyItem> vocabMap) {
+  Map<String, int> _getLessonStats(
+    LessonModel lesson,
+    Map<String, VocabularyItem> vocabMap,
+  ) {
     String fullText = lesson.content;
     if (lesson.transcript.isNotEmpty) {
       fullText = lesson.transcript.map((e) => e.text).join(" ");
@@ -41,14 +61,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final Set<String> uniqueWords = {};
 
     for (var word in words) {
-      final cleanWord = word.toLowerCase().trim().replaceAll(RegExp(r'[^\w\s]'), '');
+      final cleanWord = word.toLowerCase().trim().replaceAll(
+        RegExp(r'[^\w\s]'),
+        '',
+      );
       if (cleanWord.isEmpty) continue;
-      if (uniqueWords.contains(cleanWord)) continue; 
+      if (uniqueWords.contains(cleanWord)) continue;
 
       uniqueWords.add(cleanWord);
       final vocabItem = vocabMap[cleanWord];
 
-      // If item doesn't exist or status is 0, it's New. Otherwise, it's Known (1-5).
       if (vocabItem == null || vocabItem.status == 0) {
         newWords++;
       } else {
@@ -58,8 +80,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return {'new': newWords, 'known': knownWords};
   }
 
-  void _showStatsDialog(BuildContext context, int knownWords, String languageCode) {
-    // ... [CEFR Logic] ...
+  void _showStatsDialog(
+    BuildContext context,
+    int knownWords,
+    String languageCode,
+  ) {
     String currentLevel = "Beginner";
     String nextLevel = "A1";
     int nextGoal = 500;
@@ -98,8 +123,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final langNames = {
-      'es': 'Spanish', 'fr': 'French', 'de': 'German', 'en': 'English',
-      'it': 'Italian', 'pt': 'Portuguese', 'ja': 'Japanese'
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'en': 'English',
+      'it': 'Italian',
+      'pt': 'Portuguese',
+      'ja': 'Japanese',
     };
     final langName = langNames[languageCode] ?? 'Target Language';
 
@@ -109,15 +139,20 @@ class _HomeScreenState extends State<HomeScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      isScrollControlled: true, 
+      isScrollControlled: true,
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: isDark ? Color(0xFF1E1E1E) : Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(context).viewPadding.bottom),
+        padding: EdgeInsets.fromLTRB(
+          24,
+          24,
+          24,
+          24 + MediaQuery.of(context).viewPadding.bottom,
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min, 
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -128,7 +163,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Colors.amber.withOpacity(0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.auto_graph, color: Colors.amber[800], size: 28),
+                  child: Icon(
+                    Icons.auto_graph,
+                    color: Colors.amber[800],
+                    size: 28,
+                  ),
                 ),
                 SizedBox(width: 16),
                 Column(
@@ -136,25 +175,41 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Text(
                       "$langName Progress",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
                     ),
                     Text(
-                      "$knownWords words known",
+                      "You probably know more words.",
                       style: TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                   ],
-                )
+                ),
               ],
             ),
             Divider(height: 32),
             Center(
               child: Column(
                 children: [
-                  Text("Current Level", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  Text(
+                    "Current Level",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
                   SizedBox(height: 4),
                   Text(
                     currentLevel,
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.blue),
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.blue,
+                    ),
                   ),
                 ],
               ),
@@ -163,8 +218,17 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("Next Goal: $nextLevel", style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                Text("${nextGoal - knownWords} words to go", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                Text(
+                  "Next Goal: $nextLevel",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+                Text(
+                  "${nextGoal - knownWords} words to go",
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
               ],
             ),
             SizedBox(height: 8),
@@ -177,28 +241,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 valueColor: AlwaysStoppedAnimation(Colors.blue),
               ),
             ),
-            SizedBox(height: 24),
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.lightbulb_outline, color: Colors.blue),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      "Knowing ${nextGoal - knownWords} more words will help you understand roughly 10% more of daily conversations!",
-                      style: TextStyle(color: isDark ? Colors.blue[100] : Colors.blue[900], fontSize: 13, height: 1.4),
-                    ),
-                  ),
-                ],
-              ),
+            Text(
+              "$knownWords words known",
+              style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -207,7 +254,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   backgroundColor: isDark ? Colors.white : Colors.black,
                   foregroundColor: isDark ? Colors.black : Colors.white,
                   padding: EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 child: Text("Keep Learning"),
               ),
@@ -221,8 +270,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final user = (context.watch<AuthBloc>().state as AuthAuthenticated).user;
-    
-    // THEME VARIABLES
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
@@ -240,23 +287,41 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(
                 color: isDark ? Colors.white10 : Colors.grey[50],
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300, width: 1),
+                border: Border.all(
+                  color: isDark ? Colors.white24 : Colors.grey.shade300,
+                  width: 1,
+                ),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: user.currentLanguage,
                   icon: Padding(
                     padding: const EdgeInsets.only(left: 8),
-                    child: Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: Colors.grey),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: Colors.grey,
+                    ),
                   ),
                   isDense: true,
                   dropdownColor: isDark ? Color(0xFF2C2C2C) : Colors.white,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor, fontFamily: 'Roboto'),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                    fontFamily: 'Roboto',
+                  ),
                   onChanged: (String? newValue) {
                     if (newValue != null) {
-                      context.read<AuthBloc>().add(AuthTargetLanguageChanged(newValue));
-                      context.read<LessonBloc>().add(LessonLoadRequested(user.id, newValue));
-                      context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
+                      context.read<AuthBloc>().add(
+                        AuthTargetLanguageChanged(newValue),
+                      );
+                      context.read<LessonBloc>().add(
+                        LessonLoadRequested(user.id, newValue),
+                      );
+                      context.read<VocabularyBloc>().add(
+                        VocabularyLoadRequested(user.id),
+                      );
                     }
                   },
                   items: [
@@ -265,7 +330,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     DropdownMenuItem(value: 'de', child: Text('🇩🇪 German')),
                     DropdownMenuItem(value: 'en', child: Text('🇬🇧 English')),
                     DropdownMenuItem(value: 'it', child: Text('🇮🇹 Italian')),
-                    DropdownMenuItem(value: 'pt', child: Text('🇵🇹 Portuguese')),
+                    DropdownMenuItem(
+                      value: 'pt',
+                      child: Text('🇵🇹 Portuguese'),
+                    ),
                     DropdownMenuItem(value: 'ja', child: Text('🇯🇵 Japanese')),
                   ],
                 ),
@@ -277,27 +345,49 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context, vocabState) {
                 int knownCount = 0;
                 if (vocabState is VocabularyLoaded) {
-                  knownCount = vocabState.items.where((v) => v.status > 0 && v.language == user.currentLanguage).length;
+                  knownCount = vocabState.items
+                      .where(
+                        (v) =>
+                            v.status > 0 && v.language == user.currentLanguage,
+                      )
+                      .length;
                 }
                 return Material(
                   color: Colors.transparent,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(20),
-                    onTap: () => _showStatsDialog(context, knownCount, user.currentLanguage),
+                    onTap: () => _showStatsDialog(
+                      context,
+                      knownCount,
+                      user.currentLanguage,
+                    ),
                     child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.amber.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                        border: Border.all(
+                          color: Colors.amber.withOpacity(0.3),
+                        ),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.emoji_events_rounded, size: 16, color: Colors.amber[800]),
+                          Icon(
+                            Icons.emoji_events_rounded,
+                            size: 16,
+                            color: Colors.amber[800],
+                          ),
                           SizedBox(width: 6),
                           Text(
                             knownCount.toString(),
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.amber[900]),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber[900],
+                            ),
                           ),
                         ],
                       ),
@@ -314,40 +404,84 @@ class _HomeScreenState extends State<HomeScreen> {
           // CREATE VOCAB MAP
           Map<String, VocabularyItem> vocabMap = {};
           if (vocabState is VocabularyLoaded) {
-            vocabMap = {for (var item in vocabState.items) item.word.toLowerCase(): item};
+            vocabMap = {
+              for (var item in vocabState.items) item.word.toLowerCase(): item,
+            };
           }
 
           return Column(
             children: [
+              // 1. GLOBAL FILTERS (View Modes) - TOP
               _buildGlobalFilterChips(isDark),
+
               Expanded(
                 child: BlocBuilder<LessonBloc, LessonState>(
                   builder: (context, lessonState) {
                     if (lessonState is LessonInitial) {
-                      context.read<LessonBloc>().add(LessonLoadRequested(user.id, user.currentLanguage));
+                      context.read<LessonBloc>().add(
+                        LessonLoadRequested(user.id, user.currentLanguage),
+                      );
                       return Center(child: CircularProgressIndicator());
                     }
-                    if (lessonState is LessonLoading) return Center(child: CircularProgressIndicator());
+                    if (lessonState is LessonLoading) {
+                      return Center(child: CircularProgressIndicator());
+                    }
 
                     if (lessonState is LessonLoaded) {
-                      if (_selectedGlobalFilter != 'All' && _selectedGlobalFilter != 'Videos') {
-                        // Pass vocabMap here
-                        return _buildFilteredList(lessonState.lessons, vocabMap, isDark);
+                      // Split Data
+                      final nativeLessons = lessonState.lessons
+                          .where((l) => l.type == 'video_native')
+                          .toList();
+
+                      final guidedLessons = lessonState.lessons
+                          .where((l) => l.type == 'video')
+                          .toList();
+
+                      final importedLessons = lessonState.lessons
+                          .where((l) => l.type == 'text')
+                          .toList();
+
+                      // VIEW LOGIC
+                      if (_selectedGlobalFilter != 'All' &&
+                          _selectedGlobalFilter != 'Videos') {
+                        return _buildFilteredList(
+                          lessonState.lessons,
+                          vocabMap,
+                          isDark,
+                        );
                       }
 
+                      // DEFAULT VIEW
                       return RefreshIndicator(
                         onRefresh: () async {
-                          context.read<LessonBloc>().add(LessonLoadRequested(user.id, user.currentLanguage));
-                          context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
+                          context.read<LessonBloc>().add(
+                            LessonLoadRequested(user.id, user.currentLanguage),
+                          );
+                          context.read<VocabularyBloc>().add(
+                            VocabularyLoadRequested(user.id),
+                          );
                         },
                         child: SingleChildScrollView(
                           padding: EdgeInsets.only(bottom: 80),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildVideoSection(lessonState.lessons, vocabMap, isDark, textColor),
-                              // Pass vocabMap here
-                              _buildPopularTextSection(lessonState.lessons, vocabMap, isDark, textColor),
+                              // 2. GUIDED COURSES (Horizontal + Imported Tab)
+                              _buildGuidedSection(
+                                guidedLessons,
+                                importedLessons, // Pass imported lessons here
+                                vocabMap,
+                                isDark,
+                                textColor,
+                              ),
+
+                              // 3. TRENDING VIDEOS (Vertical + Tabs)
+                              _buildNativeSection(
+                                nativeLessons,
+                                vocabMap,
+                                isDark,
+                                textColor,
+                              ),
                             ],
                           ),
                         ),
@@ -408,344 +542,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- SECTION 1: VIDEO LESSONS ---
-  Widget _buildVideoSection(List<LessonModel> allLessons, Map<String, VocabularyItem> vocabMap, bool isDark, Color? textColor) {
-    final allVideos = allLessons.where((l) => l.type == 'video').toList();
-    final displayVideos = _videoDifficultyTab == 'All'
-        ? allVideos
-        : allVideos.where((l) => l.difficulty.toLowerCase() == _videoDifficultyTab.toLowerCase()).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Row(
-            children: [
-              Text(
-                "Guided Courses",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black45),
-              ),
-            ],
-          ),
-        ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: _difficultyTabs.map((tab) {
-              final isSelected = _videoDifficultyTab == tab;
-              return Padding(
-                padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-                child: InkWell(
-                  onTap: () => setState(() => _videoDifficultyTab = tab),
-                  child: Column(
-                    children: [
-                      Text(
-                        tab,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? (isDark ? Colors.white : Colors.black) : Colors.grey[500],
-                        ),
-                      ),
-                      if (isSelected)
-                        Container(margin: EdgeInsets.only(top: 4), height: 2, width: 20, color: Colors.red),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        if (displayVideos.isEmpty)
-          Container(
-            height: 200,
-            alignment: Alignment.center,
-            child: Text("No videos found", style: TextStyle(color: Colors.grey)),
-          )
-        else
-          SizedBox(
-            height: 250,
-            child: ListView.separated(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              itemCount: displayVideos.length,
-              separatorBuilder: (ctx, i) => SizedBox(width: 16),
-              itemBuilder: (context, index) {
-                return _buildVideoCardLarge(context, displayVideos[index], vocabMap, isDark, textColor);
-              },
-            ),
-          ),
-      ],
-    );
-  }
-
-  // --- SECTION 2: TEXT LESSONS ---
-  // Updated to accept vocabMap
-  Widget _buildPopularTextSection(List<LessonModel> allLessons, Map<String, VocabularyItem> vocabMap, bool isDark, Color? textColor) {
-    final textLessons = allLessons.where((l) => l.type == 'text').toList();
-    if (textLessons.isEmpty) return SizedBox();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Row(
-            children: [
-              Text(
-                "Your Imported Lessons",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black45),
-              ),
-              Spacer(),
-            ],
-          ),
-        ),
-        ListView.builder(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          itemCount: textLessons.length,
-          itemBuilder: (context, index) {
-            // Updated to pass vocabMap
-            return _buildTextLessonCard(context, textLessons[index], vocabMap, isDark);
-          },
-        ),
-      ],
-    );
-  }
-
-  // --- WIDGETS ---
-
-  Widget _buildVideoCardLarge(BuildContext context, LessonModel lesson, Map<String, VocabularyItem> vocabMap, bool isDark, Color? textColor) {
-    final stats = _getLessonStats(lesson, vocabMap);
-    final int newCount = stats['new']!;
-    final int knownCount = stats['known']!;
-    final double progress = (knownCount + newCount) == 0 ? 0 : knownCount / (knownCount + newCount);
-
-    return Container(
-      width: 280,
-      child: InkWell(
-        onTap: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)));
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    height: 160,
-                    width: 280,
-                    color: isDark ? Colors.white10 : Colors.grey[200],
-                    child: lesson.imageUrl != null ? Image.network(lesson.imageUrl!, fit: BoxFit.cover) : null,
-                  ),
-                ),
-                Positioned(
-                  top: 8, left: 8,
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(4)),
-                    child: Text(lesson.difficulty.toUpperCase(), style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-                Positioned(
-                  bottom: 0, left: 0, right: 0,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 4,
-                      backgroundColor: Colors.transparent,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 10),
-            Text(
-              lesson.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, height: 1.2, color: isDark ? Colors.grey[400] : Colors.grey[600]),
-            ),
-            SizedBox(height: 6),
-            Expanded(
-              child: Row(
-                children: [
-                  Icon(Icons.circle, size: 8, color: Colors.blue),
-                  SizedBox(width: 4),
-                  Text("$newCount New", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  SizedBox(width: 12),
-                  Icon(Icons.circle, size: 8, color: Colors.green), // Changed to Green for 'Known'
-                  SizedBox(width: 4),
-                  Text("$knownCount known", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  Spacer(),
-                  IconButton(
-                    icon: Icon(Icons.more_vert, color: Colors.grey, size: 16),
-                    constraints: BoxConstraints(),
-                    padding: EdgeInsets.zero,
-                    onPressed: () => _showLessonOptions(context, lesson, isDark),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- UPDATED TEXT CARD WITH STATS ---
-  Widget _buildTextLessonCard(BuildContext context, LessonModel lesson, Map<String, VocabularyItem> vocabMap, bool isDark) {
-    // 1. Calculate stats exactly like video card
-    final stats = _getLessonStats(lesson, vocabMap);
-    final int newCount = stats['new']!;
-    final int knownCount = stats['known']!;
-    final double progress = (knownCount + newCount) == 0 ? 0 : knownCount / (knownCount + newCount);
-
-    return Card(
-      elevation: 0,
-      color: isDark ? Colors.white10 : Colors.grey[50],
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isDark ? Colors.transparent : Colors.grey.shade200)),
-      margin: EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)));
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            children: [
-              // 2. Top Part (Icon, Title, Menu)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 50, height: 50,
-                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: Icon(Icons.article, color: Colors.blue),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          lesson.title,
-                          style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.grey[800]),
-                          maxLines: 1, overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          lesson.content.replaceAll('\n', ' '), 
-                          maxLines: 2, 
-                          overflow: TextOverflow.ellipsis, 
-                          style: TextStyle(color: Colors.grey, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.more_vert, color: Colors.grey, size: 16),
-                    constraints: BoxConstraints(),
-                    padding: EdgeInsets.zero,
-                    onPressed: () => _showLessonOptions(context, lesson, isDark),
-                  ),
-                ],
-              ),
-              
-              SizedBox(height: 12),
-
-              // 3. Bottom Part (Stats Row)
-              Row(
-                children: [
-                  // Progress Bar
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 6,
-                        backgroundColor: isDark ? Colors.black26 : Colors.grey[300],
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  // Word Counts
-                  Text(
-                    "${(progress * 100).toInt()}%",
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green),
-                  ),
-                  SizedBox(width: 8),
-                  Container(width: 1, height: 12, color: Colors.grey),
-                  SizedBox(width: 8),
-                  Text("$newCount New", style: TextStyle(fontSize: 11, color: Colors.blue)), // Blue for new
-                ],
-              )
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showLessonOptions(BuildContext context, LessonModel lesson, bool isDark) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (builderContext) => Container(
-        decoration: BoxDecoration(
-          color: isDark ? Color(0xFF1E1E1E) : Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: EdgeInsets.only(top: 20, left: 0, right: 0, bottom: MediaQuery.of(builderContext).viewPadding.bottom + 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              child: Container(
-                width: 40, height: 4, margin: EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(color: Colors.grey[600], borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            ListTile(
-              leading: Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(color: lesson.isFavorite ? Colors.amber.withOpacity(0.1) : (isDark ? Colors.white10 : Colors.grey[100]), shape: BoxShape.circle),
-                child: Icon(lesson.isFavorite ? Icons.star : Icons.star_border, color: lesson.isFavorite ? Colors.amber : Colors.grey),
-              ),
-              title: Text(lesson.isFavorite ? 'Remove from Favorites' : 'Add to Favorites', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-              subtitle: Text(lesson.isFavorite ? 'Removed from library.' : 'Saved to library.', style: TextStyle(color: Colors.grey)),
-              onTap: () {
-                final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-                final updatedLesson = lesson.copyWith(isFavorite: !lesson.isFavorite, userId: user.id);
-                context.read<LessonBloc>().add(LessonUpdateRequested(updatedLesson));
-                Navigator.pop(builderContext);
-              },
-            ),
-            Divider(color: Colors.grey[800]),
-            ListTile(
-              leading: Container(padding: EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.delete_outline, color: Colors.red)),
-              title: Text('Delete Lesson', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                context.read<LessonBloc>().add(LessonDeleteRequested(lesson.id));
-                Navigator.pop(builderContext);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // --- WIDGETS & SECTIONS ---
 
   Widget _buildGlobalFilterChips(bool isDark) {
     return Container(
@@ -765,15 +562,25 @@ class _HomeScreenState extends State<HomeScreen> {
               duration: Duration(milliseconds: 200),
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? (isDark ? Colors.white : Colors.black) : (isDark ? Colors.white10 : Colors.grey[100]),
+                color: isSelected
+                    ? (isDark ? Colors.white : Colors.black)
+                    : (isDark ? Colors.white10 : Colors.grey[100]),
                 borderRadius: BorderRadius.circular(20),
-                border: isSelected ? null : Border.all(color: isDark ? Colors.transparent : Colors.grey.shade300),
+                border: isSelected
+                    ? null
+                    : Border.all(
+                        color: isDark
+                            ? Colors.transparent
+                            : Colors.grey.shade300,
+                      ),
               ),
               alignment: Alignment.center,
               child: Text(
                 category,
                 style: TextStyle(
-                  color: isSelected ? (isDark ? Colors.black : Colors.white) : (isDark ? Colors.white70 : Colors.black),
+                  color: isSelected
+                      ? (isDark ? Colors.black : Colors.white)
+                      : (isDark ? Colors.white70 : Colors.black),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -784,10 +591,520 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- GUIDED COURSES SECTION (with Imported Tab) ---
+  Widget _buildGuidedSection(
+    List<LessonModel> guidedLessons,
+    List<LessonModel> importedLessons,
+    Map<String, VocabularyItem> vocabMap,
+    bool isDark,
+    Color? textColor,
+  ) {
+    // Determine which list to show based on the tab
+    List<LessonModel> displayLessons = [];
+    if (_guidedTab == 'Imported') {
+      displayLessons = importedLessons;
+    } else if (_guidedTab == 'All') {
+      displayLessons = guidedLessons;
+    } else {
+      displayLessons = guidedLessons
+          .where((l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase())
+          .toList();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Title
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Text(
+            "Guided Courses",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white70 : Colors.black45,
+            ),
+          ),
+        ),
+
+        // Tabs (Includes "Imported")
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: _guidedTabsList.map((tab) {
+              final isSelected = _guidedTab == tab;
+              return Padding(
+                padding: const EdgeInsets.only(right: 12.0, bottom: 12),
+                child: InkWell(
+                  onTap: () => setState(() => _guidedTab = tab),
+                  child: Column(
+                    children: [
+                      Text(
+                        tab,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: isSelected
+                              ? (isDark ? Colors.white : Colors.black)
+                              : Colors.grey[500],
+                        ),
+                      ),
+                      if (isSelected)
+                        Container(
+                          margin: EdgeInsets.only(top: 4),
+                          height: 2,
+                          width: 20,
+                          color: Colors.blue,
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        // Horizontal List
+        if (displayLessons.isEmpty)
+          Container(
+            height: 250,
+            alignment: Alignment.center,
+            child: Text(
+              _guidedTab == 'Imported'
+                  ? "No imported lessons yet."
+                  : "No guided courses found.",
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
+        else
+          SizedBox(
+            height: 230,
+            child: ListView.separated(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              scrollDirection: Axis.horizontal,
+              itemCount: displayLessons.length,
+              separatorBuilder: (ctx, i) => SizedBox(width: 16),
+              itemBuilder: (context, index) {
+                return _buildVideoCardLarge(
+                  context,
+                  displayLessons[index],
+                  vocabMap,
+                  isDark,
+                  textColor,
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  // --- TRENDING VIDEOS SECTION ---
+  Widget _buildNativeSection(
+    List<LessonModel> lessons,
+    Map<String, VocabularyItem> vocabMap,
+    bool isDark,
+    Color? textColor,
+  ) {
+    // Filter by native tab
+    final displayVideos = _nativeDifficultyTab == 'All'
+        ? lessons
+        : lessons
+              .where(
+                (l) =>
+                    l.difficulty.toLowerCase() ==
+                    _nativeDifficultyTab.toLowerCase(),
+              )
+              .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Title
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            "Immersion",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white70 : Colors.black45,
+            ),
+          ),
+        ),
+
+        // Tabs
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: _difficultyTabs.map((tab) {
+              final isSelected = _nativeDifficultyTab == tab;
+              return Padding(
+                padding: const EdgeInsets.only(right: 24.0, bottom: 12),
+                child: InkWell(
+                  onTap: () => setState(() => _nativeDifficultyTab = tab),
+                  child: Column(
+                    children: [
+                      Text(
+                        tab,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: isSelected
+                              ? (isDark ? Colors.white : Colors.black)
+                              : Colors.grey[500],
+                        ),
+                      ),
+                      if (isSelected)
+                        Container(
+                          margin: EdgeInsets.only(top: 4),
+                          height: 2,
+                          width: 20,
+                          color: Colors.red,
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        // Vertical List
+        if (displayVideos.isEmpty)
+          Container(
+            height: 150,
+            alignment: Alignment.center,
+            child: Text(
+              "No videos found",
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
+        else
+          ListView.separated(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            itemCount: displayVideos.length,
+            separatorBuilder: (ctx, i) => SizedBox(height: 16),
+            itemBuilder: (context, index) {
+              return Center(
+                child: _buildVideoCardLarge(
+                  context,
+                  displayVideos[index],
+                  vocabMap,
+                  isDark,
+                  textColor,
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  // --- CARD WIDGETS ---
+
+  Widget _buildVideoCardLarge(
+    BuildContext context,
+    LessonModel lesson,
+    Map<String, VocabularyItem> vocabMap,
+    bool isDark,
+    Color? textColor,
+  ) {
+    final stats = _getLessonStats(lesson, vocabMap);
+    final int newCount = stats['new']!;
+    final int knownCount = stats['known']!;
+
+    double progress = lesson.progress > 0 ? lesson.progress / 100 : 0.0;
+    if (progress == 0 && (knownCount + newCount) > 0) {
+      progress = knownCount / (knownCount + newCount);
+    }
+
+    return Container(
+      width: 280,
+      margin: EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReaderScreen(lesson: lesson),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    height: 160,
+                    width: 280,
+                    color: isDark ? Colors.white10 : Colors.grey[200],
+                    child: lesson.imageUrl != null
+                        ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
+                        : (lesson.type == 'text'
+                              ? Center(
+                                  child: Icon(
+                                    Icons.article,
+                                    size: 64,
+                                    color: Colors.blue.withOpacity(0.5),
+                                  ),
+                                )
+                              : Center(
+                                  child: Icon(
+                                    Icons.play_circle,
+                                    size: 64,
+                                    color: Colors.grey,
+                                  ),
+                                )),
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      lesson.difficulty.toUpperCase(),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(12),
+                    ),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 4,
+                      backgroundColor: Colors.transparent,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            // SizedBox(height: 10),
+            Text(
+              lesson.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                height: 1.2,
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              ),
+            ),
+            // SizedBox(height: 6),
+            // Replace your existing Row(...) with this:
+            SizedBox(
+              height: 20,
+              child: Row(
+                children: [
+                  // Make the left side flexible so it can shrink if needed
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(Icons.circle, size: 8, color: Colors.blue),
+                        SizedBox(width: 4),
+                        // Allow text to shrink and show ellipsis
+                        Flexible(
+                          child: Text(
+                            "$newCount New",
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+
+                        SizedBox(width: 12),
+
+                        Icon(Icons.circle, size: 8, color: Colors.green),
+                        SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            "$knownCount known",
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Keep the options button fixed size on the right
+                  IconButton(
+                    icon: Icon(Icons.more_vert, color: Colors.grey, size: 16),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+                    onPressed: () =>
+                        _showLessonOptions(context, lesson, isDark),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Backup text card if needed
+  Widget _buildTextLessonCard(
+    BuildContext context,
+    LessonModel lesson,
+    Map<String, VocabularyItem> vocabMap,
+    bool isDark,
+  ) {
+    final stats = _getLessonStats(lesson, vocabMap);
+    final int newCount = stats['new']!;
+    final int knownCount = stats['known']!;
+    final double progress = (knownCount + newCount) == 0
+        ? 0
+        : knownCount / (knownCount + newCount);
+
+    return Card(
+      elevation: 0,
+      color: isDark ? Colors.white10 : Colors.grey[50],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isDark ? Colors.transparent : Colors.grey.shade200,
+        ),
+      ),
+      margin: EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReaderScreen(lesson: lesson),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.article, color: Colors.blue),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          lesson.title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white70 : Colors.grey[800],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          lesson.content.replaceAll('\n', ' '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.more_vert, color: Colors.grey, size: 16),
+                    constraints: BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                    onPressed: () =>
+                        _showLessonOptions(context, lesson, isDark),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 6,
+                        backgroundColor: isDark
+                            ? Colors.black26
+                            : Colors.grey[300],
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    "${(progress * 100).toInt()}%",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Container(width: 1, height: 12, color: Colors.grey),
+                  SizedBox(width: 8),
+                  Text(
+                    "$newCount New",
+                    style: TextStyle(fontSize: 11, color: Colors.blue),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // Updated to accept vocabMap
-  Widget _buildFilteredList(List<LessonModel> lessons, Map<String, VocabularyItem> vocabMap, bool isDark) {
+  Widget _buildFilteredList(
+    List<LessonModel> lessons,
+    Map<String, VocabularyItem> vocabMap,
+    bool isDark,
+  ) {
     final filtered = lessons.where((l) {
-      if (_selectedGlobalFilter == 'Videos') return l.type == 'video';
+      if (_selectedGlobalFilter == 'Videos')
+        return l.type == 'video' || l.type == 'video_native';
       if (_selectedGlobalFilter == 'Audio') return l.type == 'audio';
       if (_selectedGlobalFilter == 'Text') return l.type == 'text';
       return true;
@@ -803,7 +1120,112 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showCreateLessonDialog(BuildContext context, String userId, String currentLanguage, {required bool isFavoriteByDefault}) {
+  void _showLessonOptions(
+    BuildContext context,
+    LessonModel lesson,
+    bool isDark,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (builderContext) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? Color(0xFF1E1E1E) : Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: EdgeInsets.only(
+          top: 20,
+          left: 0,
+          right: 0,
+          bottom: MediaQuery.of(builderContext).viewPadding.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            ListTile(
+              leading: Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: lesson.isFavorite
+                      ? Colors.amber.withOpacity(0.1)
+                      : (isDark ? Colors.white10 : Colors.grey[100]),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  lesson.isFavorite ? Icons.star : Icons.star_border,
+                  color: lesson.isFavorite ? Colors.amber : Colors.grey,
+                ),
+              ),
+              title: Text(
+                lesson.isFavorite
+                    ? 'Remove from Favorites'
+                    : 'Add to Favorites',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+              subtitle: Text(
+                lesson.isFavorite
+                    ? 'Removed from library.'
+                    : 'Saved to library.',
+                style: TextStyle(color: Colors.grey),
+              ),
+              onTap: () {
+                final user =
+                    (context.read<AuthBloc>().state as AuthAuthenticated).user;
+                final updatedLesson = lesson.copyWith(
+                  isFavorite: !lesson.isFavorite,
+                  userId: user.id,
+                );
+                context.read<LessonBloc>().add(
+                  LessonUpdateRequested(updatedLesson),
+                );
+                Navigator.pop(builderContext);
+              },
+            ),
+            Divider(color: Colors.grey[800]),
+            ListTile(
+              leading: Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.delete_outline, color: Colors.red),
+              ),
+              title: Text('Delete Lesson', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                context.read<LessonBloc>().add(
+                  LessonDeleteRequested(lesson.id),
+                );
+                Navigator.pop(builderContext);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCreateLessonDialog(
+    BuildContext context,
+    String userId,
+    String currentLanguage, {
+    required bool isFavoriteByDefault,
+  }) {
     final titleController = TextEditingController();
     final contentController = TextEditingController();
     final lessonBloc = context.read<LessonBloc>();
@@ -814,7 +1236,10 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: isDark ? Color(0xFF1E1E1E) : Colors.white,
-        title: Text('Create New Lesson', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+        title: Text(
+          'Create New Lesson',
+          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -822,28 +1247,49 @@ class _HomeScreenState extends State<HomeScreen> {
               TextField(
                 controller: titleController,
                 style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                decoration: InputDecoration(labelText: 'Title', border: OutlineInputBorder(), labelStyle: TextStyle(color: Colors.grey)),
+                decoration: InputDecoration(
+                  labelText: 'Title',
+                  border: OutlineInputBorder(),
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
               ),
               SizedBox(height: 16),
               TextField(
                 controller: contentController,
                 style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                decoration: InputDecoration(labelText: 'Content', border: OutlineInputBorder(), labelStyle: TextStyle(color: Colors.grey)),
+                decoration: InputDecoration(
+                  labelText: 'Content',
+                  border: OutlineInputBorder(),
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
                 maxLines: 6,
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
-              if (titleController.text.isNotEmpty && contentController.text.isNotEmpty) {
-                final sentences = lessonService.splitIntoSentences(contentController.text);
+              if (titleController.text.isNotEmpty &&
+                  contentController.text.isNotEmpty) {
+                final sentences = lessonService.splitIntoSentences(
+                  contentController.text,
+                );
                 final lesson = LessonModel(
-                  id: '', userId: userId, title: titleController.text, language: currentLanguage,
-                  content: contentController.text, sentences: sentences, createdAt: DateTime.now(),
-                  progress: 0, isFavorite: isFavoriteByDefault, type: 'text',
+                  id: '',
+                  userId: userId,
+                  title: titleController.text,
+                  language: currentLanguage,
+                  content: contentController.text,
+                  sentences: sentences,
+                  createdAt: DateTime.now(),
+                  progress: 0,
+                  isFavorite: isFavoriteByDefault,
+                  type: 'text',
                 );
                 lessonBloc.add(LessonCreateRequested(lesson));
                 Navigator.pop(dialogContext);
