@@ -63,7 +63,7 @@ class VocabularyItem {
     int? status,
     int? timesEncountered,
     String? translation,
-    String? notes,
+    String? notes, required DateTime lastReviewed,
   }) {
     return VocabularyItem(
       id: id,

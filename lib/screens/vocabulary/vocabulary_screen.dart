@@ -169,7 +169,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                             onSelected: (status) {
                               context.read<VocabularyBloc>().add(
                                     VocabularyUpdateRequested(
-                                      item.copyWith(status: status),
+                                      item.copyWith(status: status, lastReviewed: DateTime.now()),
                                     ),
                                   );
                             },

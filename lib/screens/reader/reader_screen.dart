@@ -1,3 +1,6 @@
+// 
+
+
 import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -12,7 +15,8 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
-import 'package:linguaflow/widgets/translation_sheet.dart'; // Ensure this matches your file structure
+// Make sure to import your translation sheet file
+import 'package:linguaflow/widgets/translation_sheet.dart'; 
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class ReaderScreen extends StatefulWidget {
@@ -106,12 +110,50 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    final vocabService = context.read<VocabularyService>();
-    final items = await vocabService.getVocabulary(user.id);
-    if (mounted) {
-      setState(() {
-        _vocabulary = {for (var item in items) item.word.toLowerCase(): item};
-      });
+    
+    // UPDATED: Fetch directly from Firestore to ensure persistence
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.id)
+          .collection('vocabulary')
+          .get();
+
+      final Map<String, VocabularyItem> loadedVocab = {};
+      
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        loadedVocab[doc.id] = VocabularyItem(
+          id: doc.id,
+          userId: user.id,
+          word: data['word'] ?? doc.id,
+          baseForm: data['baseForm'] ?? doc.id,
+          language: data['language'] ?? '',
+          translation: data['translation'] ?? '',
+          status: data['status'] ?? 0,
+          timesEncountered: data['timesEncountered'] ?? 1,
+          lastReviewed: (data['lastReviewed'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _vocabulary = loadedVocab;
+        });
+      }
+    } catch (e) {
+      print("Error loading vocabulary from Firestore: $e");
+      // Fallback to service
+      try {
+        final vocabService = context.read<VocabularyService>();
+        final items = await vocabService.getVocabulary(user.id);
+        if (mounted) {
+          setState(() {
+            _vocabulary = {for (var item in items) item.word.toLowerCase(): item};
+          });
+        }
+      } catch (_) {}
     }
   }
 
@@ -136,7 +178,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   // --- SELECTION LOGIC ---
-  void _handleDragUpdate(int sentenceIndex, int maxWords, Offset globalPosition) {
+  void _handleDragUpdate(
+    int sentenceIndex,
+    int maxWords,
+    Offset globalPosition,
+  ) {
     for (int i = 0; i < maxWords; i++) {
       final key = _getWordKey(sentenceIndex, i);
       final context = key.currentContext;
@@ -183,9 +229,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
 
     final sublist = words.sublist(start, end + 1);
-    // Use space to join phrases properly
-    final phrase = sublist.join(" "); 
-    
+    final phrase = sublist.join(" ");
+
     final cleanId = phrase.toLowerCase().trim().replaceAll(
       RegExp(r'[^\w\s]'),
       '',
@@ -370,13 +415,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
       if (clean.isEmpty) continue;
 
       final item = _vocabulary[clean];
-      // Mark words that are unknown (null) or New (0)
       if (item == null || item.status == 0) {
         _updateWordStatus(
           clean,
           word.trim(),
-          "Auto-marked",
-          5, // Known
+          "", // Auto-marked doesn't need translation
+          5,
           showDialog: false,
         );
         markedAny = true;
@@ -600,8 +644,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
                     overlayShape: RoundSliderOverlayShape(overlayRadius: 0),
                     activeTrackColor: Colors.blue,
-                    inactiveTrackColor:
-                        isDark ? Colors.grey[800] : Colors.grey[200],
+                    inactiveTrackColor: isDark
+                        ? Colors.grey[800]
+                        : Colors.grey[200],
                     thumbColor: Colors.blue,
                   ),
                   child: Slider(
@@ -732,7 +777,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Widget _buildSentence(String sentence, int sentenceIndex) {
     final words = sentence.split(RegExp(r'(\s+)'));
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     final double fontSize = _isSentenceMode ? 26 : 18;
     final double lineHeight = _isSentenceMode ? 1.6 : 1.5;
 
@@ -744,7 +788,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
         final int wordIndex = entry.key;
         final String word = entry.value;
         final cleanWord = word.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
-        
         final GlobalKey wordKey = _getWordKey(sentenceIndex, wordIndex);
 
         if (cleanWord.isEmpty || word.trim().isEmpty) {
@@ -756,7 +799,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
               style: TextStyle(
                 fontSize: fontSize,
                 height: lineHeight,
-                // Fix dark mode text for punctuation/spaces
                 color: isDark ? Colors.white : Colors.black87,
               ),
             ),
@@ -779,23 +821,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
         final vocabItem = _vocabulary[cleanWord];
         Color bgColor = _getWordColor(vocabItem);
-        
-        // --- TEXT COLOR LOGIC FIX ---
         Color textColor;
+
         if (isSelected) {
-          textColor = Colors.white; 
           bgColor = Colors.purple.withOpacity(0.3);
+          textColor = Colors.white;
         } else if (vocabItem == null || vocabItem.status == 0) {
-          // New Word (Blue tint)
-          // Dark Mode: White text. Light Mode: Black text.
           textColor = isDark ? Colors.white : Colors.black87;
         } else if (vocabItem.status == 5) {
-          // Known (Transparent)
-          // Dark Mode: White text. Light Mode: Black text.
           textColor = isDark ? Colors.white : Colors.black87;
         } else {
-          // Status 1-4 (Yellows/Oranges)
-          // High contrast black text usually looks best on yellow/orange
           textColor = Colors.black87;
         }
 
@@ -803,8 +838,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
           key: wordKey,
           behavior: HitTestBehavior.translucent,
           onLongPressStart: (_) => _startSelection(sentenceIndex, wordIndex),
-          onLongPressMoveUpdate: (details) =>
-              _handleDragUpdate(sentenceIndex, words.length, details.globalPosition),
+          onLongPressMoveUpdate: (details) => _handleDragUpdate(
+            sentenceIndex,
+            words.length,
+            details.globalPosition,
+          ),
           onLongPressEnd: (_) => _finishSelection(sentence),
           onTap: () {
             if (_isSelectionMode) {
@@ -940,7 +978,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final translationService = context.read<TranslationService>();
     VocabularyItem? existingItem = isPhrase ? null : _vocabulary[cleanId];
 
-    if (_isVideo && _videoController != null && _videoController!.value.isPlaying) {
+    if (_isVideo &&
+        _videoController != null &&
+        _videoController!.value.isPlaying) {
       _videoController!.pause();
     }
 
@@ -948,20 +988,25 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (existingItem != null) {
       translationFuture = Future.value(existingItem.translation);
     } else {
-      translationFuture = translationService.translate(
-        originalText,
-        user.nativeLanguage,
-        widget.lesson.language,
-      ).catchError((e) => "Translation unavailable");
+      translationFuture = translationService
+          .translate(originalText, user.nativeLanguage, widget.lesson.language)
+          .catchError((e) => "Translation unavailable");
     }
 
     final geminiPrompt = isPhrase
-        ? "Translate phrase to ${user.nativeLanguage}. Explain grammar. Phrase: \"$originalText\""
-        : "Translate word '$originalText' to ${user.nativeLanguage}. Give context.";
-    
-    final Future<String?> geminiFuture = Gemini.instance.prompt(
-      parts: [Part.text(geminiPrompt)],
-    ).then((value) => value?.output).catchError((e) => "Gemini unavailable");
+    ? "Translate this ${user.currentLanguage} phrase to ${user.nativeLanguage}: \"$originalText\"\n"
+      "Provide:\n"
+      "1. Translation (concise)\n"
+      "2. Key grammar point (1-2 sentences)"
+    : "Translate this ${user.currentLanguage} word to ${user.nativeLanguage}: \"$originalText\"\n"
+      "Provide:\n"
+      "1. Most common translation\n"
+      "2. Brief usage context (one example)";
+
+    final Future<String?> geminiFuture = Gemini.instance
+        .prompt(parts: [Part.text(geminiPrompt)])
+        .then((value) => value?.output)
+        .catchError((e) => "Gemini unavailable");
 
     showModalBottomSheet(
       context: context,
@@ -975,13 +1020,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
           isPhrase: isPhrase,
           existingItem: existingItem,
           targetLanguage: widget.lesson.language,
+          // sourceLanguage: widget.lesson.language,
+          nativeLanguage: user.nativeLanguage,
           onSpeak: () => _flutterTts.speak(originalText),
-          onUpdateStatus: (status, translation) => _updateWordStatus(
-            cleanId,
-            originalText,
-            translation,
-            status,
-          ),
+          onUpdateStatus: (status, translation) =>
+              _updateWordStatus(cleanId, originalText, translation, status),
           onSaveToFirebase: () => _saveWordToFirebase(originalText),
           onClose: () => Navigator.pop(context),
         );
@@ -999,13 +1042,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
           .doc(user.id)
           .collection('saved_words')
           .add({
-        'word': word,
-        'added_at': FieldValue.serverTimestamp(),
-        'source_lesson': widget.lesson.id,
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Saved to your list!")),
-      );
+            'word': word,
+            'added_at': FieldValue.serverTimestamp(),
+            'source_lesson': widget.lesson.id,
+          });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Saved to your list!")));
     } catch (e) {
       print("Error saving word: $e");
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1014,28 +1057,29 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  void _updateWordStatus(
+  // *** FIXED FUNCTION WITH FIREBASE PERSISTENCE ***
+  Future<void> _updateWordStatus(
     String cleanWord,
     String originalWord,
     String translation,
     int status, {
     bool showDialog = true,
-  }) {
+  }) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     VocabularyItem? existingItem = _vocabulary[cleanWord];
+    VocabularyItem newItem;
 
+    // 1. Prepare Data
     if (existingItem != null) {
-      final updatedItem = existingItem.copyWith(
+      newItem = existingItem.copyWith(
         status: status,
+        translation: translation.isNotEmpty ? translation : existingItem.translation,
         timesEncountered: existingItem.timesEncountered + 1,
+        lastReviewed: DateTime.now(),
       );
-      context.read<VocabularyBloc>().add(
-        VocabularyUpdateRequested(updatedItem),
-      );
-      setState(() => _vocabulary[cleanWord] = updatedItem);
     } else {
-      final newItem = VocabularyItem(
-        id: '',
+      newItem = VocabularyItem(
+        id: cleanWord, // Using word as ID
         userId: user.id,
         word: cleanWord,
         baseForm: cleanWord,
@@ -1046,11 +1090,51 @@ class _ReaderScreenState extends State<ReaderScreen> {
         lastReviewed: DateTime.now(),
         createdAt: DateTime.now(),
       );
-      context.read<VocabularyBloc>().add(VocabularyAddRequested(newItem));
-      setState(() => _vocabulary[cleanWord] = newItem);
     }
-    if (showDialog && Navigator.canPop(context)) {
-      Navigator.pop(context);
+
+    // 2. Update Local State (Immediate Feedback)
+    setState(() => _vocabulary[cleanWord] = newItem);
+
+    // 3. Update Bloc (for other screens)
+    if (existingItem != null) {
+      context.read<VocabularyBloc>().add(VocabularyUpdateRequested(newItem));
+    } else {
+      context.read<VocabularyBloc>().add(VocabularyAddRequested(newItem));
+    }
+
+    // 4. *** PERSIST TO FIREBASE *** (This was missing or incomplete)
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.id)
+          .collection('vocabulary')
+          .doc(cleanWord) // docId = word ensures uniqueness
+          .set({
+            'id': cleanWord,
+            'userId': user.id,
+            'word': cleanWord,
+            'baseForm': cleanWord,
+            'language': widget.lesson.language,
+            'translation': translation,
+            'status': status,
+            'timesEncountered': newItem.timesEncountered,
+            'lastReviewed': FieldValue.serverTimestamp(),
+            'createdAt': existingItem != null ? existingItem.createdAt : FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true)); 
+    } catch (e) {
+      print("Error saving ranking to Firestore: $e");
+      // Optionally show error snackbar here
+    }
+
+    if (showDialog) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Word status updated"),
+          duration: Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 }

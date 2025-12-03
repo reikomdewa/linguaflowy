@@ -23,8 +23,10 @@ class UserModel {
       email: map['email']?.toString() ?? '',
       displayName: map['displayName']?.toString() ?? '',
       nativeLanguage: map['nativeLanguage']?.toString() ?? 'en',
-      currentLanguage: map['currentLanguage']?.toString() ?? 'es', // Load from DB
-      targetLanguages: (map['targetLanguages'] as List<dynamic>?)
+      currentLanguage:
+          map['currentLanguage']?.toString() ?? 'es', // Load from DB
+      targetLanguages:
+          (map['targetLanguages'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
