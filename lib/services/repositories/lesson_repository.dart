@@ -12,48 +12,55 @@ class LessonRepository {
   })  : _firestoreService = firestoreService,
         _localService = localService;
 
-  // --- READ-MERGE LOGIC ---
   Future<List<LessonModel>> getAndSyncLessons(String userId, String languageCode) async {
+    print("DEBUG: Repository -> getAndSyncLessons STARTED");
     try {
-      // 1. Fetch all 3 sources in parallel
+      // 1. Fetch all 3 sources
       final results = await Future.wait([
         _firestoreService.getLessons(userId, languageCode),
-        _localService.fetchStandardLessons(languageCode), // Correct Method Name
-        _localService.fetchNativeVideos(languageCode),    // Correct Method Name
+        _localService.fetchStandardLessons(languageCode),
+        _localService.fetchNativeVideos(languageCode),
       ]);
 
       final userLessons = results[0];
       final systemStandard = results[1];
       final systemNative = results[2];
 
-      // 2. Merge Logic: Firestore overrides Local
+      print("DEBUG: Repository -> Retrieved: Cloud(${userLessons.length}), Standard(${systemStandard.length}), Native(${systemNative.length})");
+
+      // 2. Merge Logic
       final Map<String, LessonModel> combinedMap = {};
 
-      // Add Local content first
       for (var lesson in systemStandard) combinedMap[lesson.id] = lesson;
       for (var lesson in systemNative) combinedMap[lesson.id] = lesson;
-
-      // Add Firestore content (Overrides local if ID exists)
       for (var lesson in userLessons) combinedMap[lesson.id] = lesson;
 
-      // 3. Sort by Newest
       final allLessons = combinedMap.values.toList();
       allLessons.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+      print("DEBUG: Repository -> Final merged count: ${allLessons.length}");
       return allLessons;
     } catch (e) {
-      print("Repository Error: $e");
+      print("DEBUG: Repository -> ❌ CRITICAL ERROR in getAndSyncLessons: $e");
       return [];
     }
   }
 
-  // --- WRITE-COPY LOGIC ---
   Future<void> saveOrUpdateLesson(LessonModel lesson) async {
-    // This turns a local lesson into a cloud lesson if it wasn't one already
-    await _firestoreService.updateLesson(lesson);
+    print("DEBUG: Repository -> saveOrUpdateLesson called. ID is: '${lesson.id}'");
+    
+    // THE FIX LOGIC
+    if (lesson.id.isEmpty) {
+      print("DEBUG: Repository -> ID is empty. Routing to CREATE.");
+      await _firestoreService.createLesson(lesson);
+    } else {
+      print("DEBUG: Repository -> ID exists. Routing to UPDATE.");
+      await _firestoreService.updateLesson(lesson);
+    }
   }
 
   Future<void> deleteLesson(String lessonId) async {
+    print("DEBUG: Repository -> deleteLesson called for $lessonId");
     await _firestoreService.deleteLesson(lessonId);
   }
 }

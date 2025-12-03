@@ -5,34 +5,37 @@ import 'package:linguaflow/models/transcript_line.dart';
 
 class LocalLessonService {
   
-  // 1. Fetch Standard System Lessons (assets/data/lessons_xx.json)
   Future<List<LessonModel>> fetchStandardLessons(String languageCode) async {
+    print("DEBUG: LocalLessonService -> Fetching Standard Lessons for $languageCode");
     return _loadFromAsset('assets/data/lessons_$languageCode.json', languageCode, 'system');
   }
 
-  // 2. Fetch Native/Trending Videos (assets/native_videos/trending_xx.json)
   Future<List<LessonModel>> fetchNativeVideos(String languageCode) async {
-    // We try/catch specifically here because this file might not exist for all languages yet
+    print("DEBUG: LocalLessonService -> Fetching Native Videos for $languageCode");
     try {
-      return await _loadFromAsset(
+      final results = await _loadFromAsset(
         'assets/native_videos/trending_$languageCode.json', 
         languageCode, 
-        'system_native' // distinct ID prefix or user
+        'system_native'
       );
+      print("DEBUG: LocalLessonService -> Found ${results.length} native videos");
+      return results;
     } catch (e) {
-      print("⚠️ No native videos found for $languageCode (or file missing).");
+      print("DEBUG: LocalLessonService -> ⚠️ Native videos file missing or error: $e");
+      // Return empty list so the app doesn't crash
       return [];
     }
   }
 
-  // --- Helper to reduce code duplication ---
   Future<List<LessonModel>> _loadFromAsset(String path, String languageCode, String defaultUserId) async {
     try {
+      print("DEBUG: LocalLessonService -> Loading asset: $path");
       final String jsonString = await rootBundle.loadString(path);
+      
       final List<dynamic> data = json.decode(jsonString);
+      print("DEBUG: LocalLessonService -> JSON decoded, found ${data.length} items");
       
       return data.map((jsonItem) {
-        // Ensure ID is string
         final id = jsonItem['id']?.toString() ?? 'unknown_${DateTime.now().millisecondsSinceEpoch}';
         
         return LessonModel(
@@ -49,7 +52,6 @@ class LocalLessonService {
               .toList() ?? [],
           createdAt: DateTime.tryParse(jsonItem['createdAt'] ?? '') ?? DateTime.now(),
           imageUrl: jsonItem['imageUrl'],
-          // If coming from native file, Python script sets 'video_native', otherwise 'video'/'text'
           type: jsonItem['type'] ?? 'text', 
           difficulty: jsonItem['difficulty'] ?? 'intermediate',
           videoUrl: jsonItem['videoUrl'],
@@ -59,7 +61,10 @@ class LocalLessonService {
       }).toList();
 
     } catch (e) {
-      // If it's just a missing file (common during dev), return empty
+      print("DEBUG: LocalLessonService -> ❌ Error loading $path: $e");
+      // Rethrow native video errors to be caught by the specific method, 
+      // but return empty for standard lessons if they fail
+      if (path.contains('native')) rethrow;
       return [];
     }
   }
