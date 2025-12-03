@@ -787,23 +787,155 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             SizedBox(height: 6),
+
             // REAL STATS DISPLAY
-            Row(
-              children: [
-                Icon(Icons.circle, size: 8, color: Colors.blue),
-                SizedBox(width: 4),
-                Text(
-                  "$newCount New",
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(Icons.circle, size: 8, color: Colors.blue),
+                  SizedBox(width: 4),
+                  Text(
+                    "$newCount New",
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  SizedBox(width: 12),
+                  Icon(Icons.circle, size: 8, color: Colors.amber),
+                  SizedBox(width: 4),
+                  Text(
+                    "$knownCount known",
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  Spacer(),
+                  IconButton(
+                    icon: Icon(
+                      Icons.more_vert,
+                      color: Colors.grey[400],
+                      size: 12,
+                    ),
+                    constraints: BoxConstraints(), // Removes default padding
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _showLessonOptions(context, lesson),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLessonOptions(BuildContext context, LessonModel lesson) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled:
+          true, // Required to handle the bottom padding correctly
+      builder: (builderContext) => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        // FIX: Add system bottom padding so buttons aren't hidden behind nav bar
+        padding: EdgeInsets.only(
+          top: 20,
+          left: 0,
+          right: 0,
+          bottom: MediaQuery.of(builderContext).viewPadding.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle Bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                SizedBox(width: 12),
-                Icon(Icons.circle, size: 8, color: Colors.amber),
-                SizedBox(width: 4),
-                Text(
-                  "$knownCount known",
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+            ),
+
+            // Favorite Option
+            ListTile(
+              leading: Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: lesson.isFavorite
+                      ? Colors.amber[50]
+                      : Colors.grey[100],
+                  shape: BoxShape.circle,
                 ),
-              ],
+                child: Icon(
+                  lesson.isFavorite ? Icons.star : Icons.star_border,
+                  color: lesson.isFavorite ? Colors.amber : Colors.grey,
+                ),
+              ),
+              title: Text(
+                lesson.isFavorite
+                    ? 'Remove from Favorites'
+                    : 'Add to Favorites',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                lesson.isFavorite
+                    ? 'This lesson will be removed from your library.'
+                    : 'Save this lesson to your library.',
+              ),
+              onTap: () {
+                // 1. Get current user ID (Assuming you have access to 'user' object in this scope)
+                // If 'user' isn't available here, pass it into _showLessonOptions function
+                final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+
+                // 2. Create updated lesson
+                final updatedLesson = lesson.copyWith(
+                  isFavorite: !lesson.isFavorite,
+                  userId: user.id, // <--- IMPORTANT: Ensure lesson belongs to user
+                );
+                
+                // 3. Update via Bloc
+                context.read<LessonBloc>().add(
+                  LessonUpdateRequested(updatedLesson),
+                );
+                
+                Navigator.pop(builderContext);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      updatedLesson.isFavorite
+                          ? "Added to favorites"
+                          : "Removed from favorites",
+                    ),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              },
+            ),
+
+            Divider(),
+
+            // Delete Option
+            ListTile(
+              leading: Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.delete_outline, color: Colors.red),
+              ),
+              title: Text('Delete Lesson', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                // Use the parent 'context' to find the Bloc
+                context.read<LessonBloc>().add(
+                  LessonDeleteRequested(lesson.id),
+                );
+                Navigator.pop(builderContext);
+              },
             ),
           ],
         ),
@@ -851,7 +983,12 @@ class _HomeScreenState extends State<HomeScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        trailing: Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+        trailing: IconButton(
+          icon: Icon(Icons.more_vert, color: Colors.grey[400], size: 12),
+          constraints: BoxConstraints(), // Removes default padding
+          padding: EdgeInsets.zero,
+          onPressed: () => _showLessonOptions(context, lesson),
+        ),
       ),
     );
   }

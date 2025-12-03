@@ -1011,7 +1011,6 @@
 //   }
 // }
 
-
 import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -1152,7 +1151,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
             localPosition.dx <= size.width + 5 &&
             localPosition.dy >= -10 &&
             localPosition.dy <= size.height + 10) {
-          
           if (_selectionEndIndex != i) {
             setState(() {
               _selectionEndIndex = i;
@@ -1186,8 +1184,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     final sublist = words.sublist(start, end + 1);
     final phrase = sublist.join("");
-    
-    final cleanId = phrase.toLowerCase().trim().replaceAll(RegExp(r'[^\w\s]'), '');
+
+    final cleanId = phrase.toLowerCase().trim().replaceAll(
+      RegExp(r'[^\w\s]'),
+      '',
+    );
     final originalText = phrase.trim();
 
     _showCombinedDialog(cleanId, originalText, isPhrase: true);
@@ -1245,7 +1246,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     if (widget.lesson.transcript.isEmpty) return;
 
-    final currentSeconds = _videoController!.value.position.inMilliseconds / 1000;
+    final currentSeconds =
+        _videoController!.value.position.inMilliseconds / 1000;
     int newIndex = -1;
 
     for (int i = 0; i < widget.lesson.transcript.length; i++) {
@@ -1256,7 +1258,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
     }
 
-    if (!_isSelectionMode && newIndex != -1 && newIndex != _activeSentenceIndex) {
+    if (!_isSelectionMode &&
+        newIndex != -1 &&
+        newIndex != _activeSentenceIndex) {
       setState(() => _activeSentenceIndex = newIndex);
       _scrollToActiveLine(newIndex);
     }
@@ -1275,7 +1279,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _seekToTime(double seconds) {
     if (_videoController != null) {
-      _videoController!.seekTo(Duration(milliseconds: (seconds * 1000).toInt()));
+      _videoController!.seekTo(
+        Duration(milliseconds: (seconds * 1000).toInt()),
+      );
       _videoController!.play();
     }
   }
@@ -1321,11 +1327,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: _isSelectionMode
-            ? Text("Release to Translate Phrase", style: TextStyle(color: Colors.white, fontSize: 16))
-            : Text(widget.lesson.title, style: TextStyle(color: Colors.black, fontSize: 16)),
+            ? Text(
+                "Release to Translate Phrase",
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              )
+            : Text(
+                widget.lesson.title,
+                style: TextStyle(color: Colors.black, fontSize: 16),
+              ),
         backgroundColor: _isSelectionMode ? Colors.purple : Colors.white,
         elevation: 0,
-        iconTheme: IconThemeData(color: _isSelectionMode ? Colors.white : Colors.black),
+        iconTheme: IconThemeData(
+          color: _isSelectionMode ? Colors.white : Colors.black,
+        ),
         leading: _isSelectionMode
             ? IconButton(icon: Icon(Icons.close), onPressed: _clearSelection)
             : BackButton(),
@@ -1351,7 +1365,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       final index = entry.key;
                       final line = entry.value;
                       final isActive = index == _activeSentenceIndex;
-                      return _buildTranscriptRow(index, line.text, line.start, isActive);
+                      return _buildTranscriptRow(
+                        index,
+                        line.text,
+                        line.start,
+                        isActive,
+                      );
                     }).toList()
                   else
                     ...widget.lesson.sentences.asMap().entries.map((entry) {
@@ -1370,7 +1389,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  Widget _buildTranscriptRow(int index, String text, double startTime, bool isActive) {
+  Widget _buildTranscriptRow(
+    int index,
+    String text,
+    double startTime,
+    bool isActive,
+  ) {
     return Container(
       key: _itemKeys[index],
       margin: EdgeInsets.only(bottom: 12),
@@ -1396,8 +1420,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
           Expanded(
             child: GestureDetector(
-              onLongPress: () => _showCombinedDialog("sentence_$index", text, isPhrase: true),
-              onDoubleTap: () => !_isSelectionMode && _isVideo ? _seekToTime(startTime) : null,
+              onLongPress: () =>
+                  _showCombinedDialog("sentence_$index", text, isPhrase: true),
+              onDoubleTap: () =>
+                  !_isSelectionMode && _isVideo ? _seekToTime(startTime) : null,
               child: _buildSentence(text, index),
             ),
           ),
@@ -1408,7 +1434,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   Widget _buildTextRow(int index, String sentence, bool isActive) {
     return GestureDetector(
-      onLongPress: () => _showCombinedDialog("sentence_$index", sentence, isPhrase: true),
+      onLongPress: () =>
+          _showCombinedDialog("sentence_$index", sentence, isPhrase: true),
       onDoubleTap: () => _speakSentence(sentence, index),
       child: Container(
         key: _itemKeys[index],
@@ -1438,7 +1465,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _wordKeys[sentenceIndex]!.add(wordKey);
 
         if (cleanWord.isEmpty || word.trim().isEmpty) {
-           return Text(word, style: TextStyle(fontSize: 18, height: 1.5, color: Colors.black87));
+          return Text(
+            word,
+            style: TextStyle(fontSize: 18, height: 1.5, color: Colors.black87),
+          );
         }
 
         bool isSelected = false;
@@ -1446,9 +1476,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
         bool isEnd = false;
 
         if (_isSelectionMode && _selectionSentenceIndex == sentenceIndex) {
-          int start = _selectionStartIndex < _selectionEndIndex ? _selectionStartIndex : _selectionEndIndex;
-          int end = _selectionStartIndex < _selectionEndIndex ? _selectionEndIndex : _selectionStartIndex;
-          
+          int start = _selectionStartIndex < _selectionEndIndex
+              ? _selectionStartIndex
+              : _selectionEndIndex;
+          int end = _selectionStartIndex < _selectionEndIndex
+              ? _selectionEndIndex
+              : _selectionStartIndex;
+
           if (wordIndex >= start && wordIndex <= end) {
             isSelected = true;
             if (wordIndex == start) isStart = true;
@@ -1457,7 +1491,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
         }
 
         final vocabItem = _vocabulary[cleanWord];
-        Color bgColor = isSelected ? Colors.purple.withOpacity(0.25) : _getWordColor(vocabItem);
+        Color bgColor = isSelected
+            ? Colors.purple.withOpacity(0.25)
+            : _getWordColor(vocabItem);
 
         BorderRadiusGeometry radius;
         if (isSelected) {
@@ -1466,7 +1502,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           } else if (isStart) {
             radius = BorderRadius.horizontal(left: Radius.circular(4));
           } else if (isEnd) {
-             radius = BorderRadius.horizontal(right: Radius.circular(4));
+            radius = BorderRadius.horizontal(right: Radius.circular(4));
           } else {
             radius = BorderRadius.zero;
           }
@@ -1478,7 +1514,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
           key: wordKey,
           behavior: HitTestBehavior.translucent,
           onLongPressStart: (_) => _startSelection(sentenceIndex, wordIndex),
-          onLongPressMoveUpdate: (details) => _handleDragUpdate(sentenceIndex, details.globalPosition),
+          onLongPressMoveUpdate: (details) =>
+              _handleDragUpdate(sentenceIndex, details.globalPosition),
           onLongPressEnd: (_) => _finishSelection(sentence),
           onTap: () {
             if (_isSelectionMode) {
@@ -1491,7 +1528,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
             decoration: BoxDecoration(
               color: bgColor,
               borderRadius: radius,
-              border: isSelected ? Border.all(color: Colors.purple.withOpacity(0.5), width: 1) : null,
+              border: isSelected
+                  ? Border.all(color: Colors.purple.withOpacity(0.5), width: 1)
+                  : null,
             ),
             padding: EdgeInsets.symmetric(horizontal: 1, vertical: 1),
             child: Text(
@@ -1543,10 +1582,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
               _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
               color: Colors.blue,
             ),
-            onPressed: () => _isPlaying ? _videoController!.pause() : _videoController!.play(),
+            onPressed: () => _isPlaying
+                ? _videoController!.pause()
+                : _videoController!.play(),
           ),
           SizedBox(width: 8),
-          Text("Audio Mode", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+          Text(
+            "Audio Mode",
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+          ),
         ],
       ),
     );
@@ -1557,7 +1601,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+        ],
       ),
       child: Row(
         children: [
@@ -1565,7 +1611,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
             radius: 24,
             backgroundColor: Colors.blue,
             child: IconButton(
-              icon: Icon(_isTtsPlaying ? Icons.stop : Icons.play_arrow, color: Colors.white),
+              icon: Icon(
+                _isTtsPlaying ? Icons.stop : Icons.play_arrow,
+                color: Colors.white,
+              ),
               onPressed: _toggleTtsFullLesson,
             ),
           ),
@@ -1573,8 +1622,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Audio Lesson", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              Text("Long press sentence to translate", style: TextStyle(fontSize: 10, color: Colors.grey)),
+              Text(
+                "Audio Lesson",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              Text(
+                "Long press sentence to translate",
+                style: TextStyle(fontSize: 10, color: Colors.grey),
+              ),
             ],
           ),
         ],
@@ -1583,14 +1638,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   // --- DIALOG ---
-  void _showCombinedDialog(String cleanId, String originalText, {required bool isPhrase}) async {
+  void _showCombinedDialog(
+    String cleanId,
+    String originalText, {
+    required bool isPhrase,
+  }) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final translationService = context.read<TranslationService>();
 
     VocabularyItem? existingItem = isPhrase ? null : _vocabulary[cleanId];
 
     bool resumeVideoAfter = false;
-    if (_isVideo && _videoController != null && _videoController!.value.isPlaying) {
+    if (_isVideo &&
+        _videoController != null &&
+        _videoController!.value.isPlaying) {
       _videoController!.pause();
       resumeVideoAfter = true;
     }
@@ -1601,30 +1662,49 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (existingItem == null) {
       translationService
           .translate(originalText, user.nativeLanguage, widget.lesson.language)
-          .then((val) { standardTranslation = val; })
-          .catchError((_) { standardTranslation = "Failed to translate"; });
+          .then((val) {
+            standardTranslation = val;
+          })
+          .catchError((_) {
+            standardTranslation = "Failed to translate";
+          });
     }
-
     final geminiPrompt = isPhrase
-        ? "Translate this sentence/phrase to ${user.nativeLanguage}.Provide only the most common translation without explanations.Not more than 60 words. Explain any grammar or idiom nuances briefly. Text: \"$originalText\""
-        : "Translate word '$originalText' to ${user.nativeLanguage}. Give context(2 or 3 short sentences with translations to ${user.currentLanguage}).Provide only the most common translation without explanations.Not more than 60 words. ";
+        ? "Translate this ${user.currentLanguage} sentence/phrase to ${user.nativeLanguage}: \"$originalText\"\n\n"
+              "Provide:\n"
+              "1. The most natural translation (no explanation)\n"
+              "2. Brief notes on any grammar patterns or idioms (1-2 sentences)\n\n"
+              "Keep total response under 60 words."
+        : "Translate this ${user.currentLanguage} word to ${user.nativeLanguage}: \"$originalText\"\n\n"
+              "Provide:\n"
+              "1. The most common translation\n"
+              "2. 2-3 example sentences in ${user.currentLanguage} showing different contexts\n"
+              "3. Translation of each example to ${user.nativeLanguage}\n\n"
+              "Keep total response under 60 words.";
+    // final geminiPrompt = isPhrase
+    //     ? "Translate this sentence/phrase to ${user.nativeLanguage}.Provide only the most common translation without explanations.Not more than 60 words. Explain any grammar or idiom nuances briefly. Text: \"$originalText\""
+    //     : "Translate word '$originalText' to ${user.nativeLanguage}. Give context(2 or 3 short sentences with translations to ${user.currentLanguage}).Provide only the most common translation without explanations.Not more than 60 words. ";
 
-    Gemini.instance.prompt(parts: [Part.text(geminiPrompt)]).then((value) {
-      geminiTranslation = value?.output ?? "No output from Gemini";
-    }).catchError((e) {
-      geminiTranslation = "Gemini Error: $e";
-    });
+    Gemini.instance
+        .prompt(parts: [Part.text(geminiPrompt)])
+        .then((value) {
+          geminiTranslation = value?.output ?? "No output from Gemini";
+        })
+        .catchError((e) {
+          geminiTranslation = "Gemini Error: $e";
+        });
 
     if (!mounted) return;
 
     await showModalBottomSheet(
       context: context,
-      isScrollControlled: true, 
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
           // Poll for updates if loading
-          if (standardTranslation == 'Loading...' || geminiTranslation == 'Loading...') {
+          if (standardTranslation == 'Loading...' ||
+              geminiTranslation == 'Loading...') {
             Future.delayed(Duration(milliseconds: 500), () {
               if (context.mounted) setModalState(() {});
             });
@@ -1635,8 +1715,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
               color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
-            padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(context).viewPadding.bottom),
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+            padding: EdgeInsets.fromLTRB(
+              24,
+              24,
+              24,
+              24 + MediaQuery.of(context).viewPadding.bottom,
+            ),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1647,7 +1734,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       Expanded(
                         child: Text(
                           originalText,
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       IconButton(
@@ -1657,7 +1747,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ],
                   ),
                   SizedBox(height: 16),
-                  
+
                   // Standard Translation
                   Container(
                     width: double.infinity,
@@ -1670,9 +1760,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("TRANSLATION", style: TextStyle(fontSize: 10, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                        Text(
+                          "TRANSLATION",
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         SizedBox(height: 4),
-                        Text(standardTranslation, style: TextStyle(fontSize: 16, color: Colors.black87)),
+                        Text(
+                          standardTranslation,
+                          style: TextStyle(fontSize: 16, color: Colors.black87),
+                        ),
                       ],
                     ),
                   ),
@@ -1687,20 +1787,33 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       border: Border.all(color: Colors.purple[200]!),
                     ),
                     child: Theme(
-                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                      data: Theme.of(
+                        context,
+                      ).copyWith(dividerColor: Colors.transparent),
                       child: ExpansionTile(
                         tilePadding: EdgeInsets.symmetric(horizontal: 12),
                         childrenPadding: EdgeInsets.all(12),
                         title: Row(
                           children: [
-                            Icon(Icons.auto_awesome, size: 16, color: Colors.purple),
+                            Icon(
+                              Icons.auto_awesome,
+                              size: 16,
+                              color: Colors.purple,
+                            ),
                             SizedBox(width: 8),
-                            Text("Explain with AI", style: TextStyle(fontSize: 14, color: Colors.purple, fontWeight: FontWeight.bold)),
+                            Text(
+                              "Explain with AI",
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.purple,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                         children: [
-                           // Fixed Markdown Parsing
-                           GeminiFormattedText(text: geminiTranslation),
+                          // Fixed Markdown Parsing
+                          GeminiFormattedText(text: geminiTranslation),
                         ],
                       ),
                     ),
@@ -1713,11 +1826,61 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _StatusButton(label: 'New', status: 0, color: Colors.blue, onTap: () => _updateWordStatus(cleanId, originalText, standardTranslation, 0)),
-                        _StatusButton(label: '1', status: 1, color: Colors.yellow[700]!, onTap: () => _updateWordStatus(cleanId, originalText, standardTranslation, 1)),
-                        _StatusButton(label: '2', status: 2, color: Colors.orange[600]!, onTap: () => _updateWordStatus(cleanId, originalText, standardTranslation, 2)),
-                        _StatusButton(label: '3', status: 3, color: Colors.orange[700]!, onTap: () => _updateWordStatus(cleanId, originalText, standardTranslation, 3)),
-                        _StatusButton(label: 'Known', status: 5, color: Colors.green, onTap: () => _updateWordStatus(cleanId, originalText, standardTranslation, 5)),
+                        _StatusButton(
+                          label: 'New',
+                          status: 0,
+                          color: Colors.blue,
+                          onTap: () => _updateWordStatus(
+                            cleanId,
+                            originalText,
+                            standardTranslation,
+                            0,
+                          ),
+                        ),
+                        _StatusButton(
+                          label: '1',
+                          status: 1,
+                          color: Colors.yellow[700]!,
+                          onTap: () => _updateWordStatus(
+                            cleanId,
+                            originalText,
+                            standardTranslation,
+                            1,
+                          ),
+                        ),
+                        _StatusButton(
+                          label: '2',
+                          status: 2,
+                          color: Colors.orange[600]!,
+                          onTap: () => _updateWordStatus(
+                            cleanId,
+                            originalText,
+                            standardTranslation,
+                            2,
+                          ),
+                        ),
+                        _StatusButton(
+                          label: '3',
+                          status: 3,
+                          color: Colors.orange[700]!,
+                          onTap: () => _updateWordStatus(
+                            cleanId,
+                            originalText,
+                            standardTranslation,
+                            3,
+                          ),
+                        ),
+                        _StatusButton(
+                          label: 'Known',
+                          status: 5,
+                          color: Colors.green,
+                          onTap: () => _updateWordStatus(
+                            cleanId,
+                            originalText,
+                            standardTranslation,
+                            5,
+                          ),
+                        ),
                       ],
                     )
                   else
@@ -1743,13 +1906,23 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  void _updateWordStatus(String cleanWord, String originalWord, String translation, int status) {
+  void _updateWordStatus(
+    String cleanWord,
+    String originalWord,
+    String translation,
+    int status,
+  ) {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     VocabularyItem? existingItem = _vocabulary[cleanWord];
 
     if (existingItem != null) {
-      final updatedItem = existingItem.copyWith(status: status, timesEncountered: existingItem.timesEncountered + 1);
-      context.read<VocabularyBloc>().add(VocabularyUpdateRequested(updatedItem));
+      final updatedItem = existingItem.copyWith(
+        status: status,
+        timesEncountered: existingItem.timesEncountered + 1,
+      );
+      context.read<VocabularyBloc>().add(
+        VocabularyUpdateRequested(updatedItem),
+      );
       setState(() => _vocabulary[cleanWord] = updatedItem);
     } else {
       final newItem = VocabularyItem(
@@ -1776,14 +1949,24 @@ class _StatusButton extends StatelessWidget {
   final int status;
   final Color color;
   final VoidCallback onTap;
-  const _StatusButton({required this.label, required this.status, required this.color, required this.onTap});
+  const _StatusButton({
+    required this.label,
+    required this.status,
+    required this.color,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: 55,
       child: ElevatedButton(
         onPressed: onTap,
-        style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, padding: EdgeInsets.zero, minimumSize: Size(50, 36)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          padding: EdgeInsets.zero,
+          minimumSize: Size(50, 36),
+        ),
         child: Text(label, style: TextStyle(fontSize: 12)),
       ),
     );
@@ -1800,7 +1983,10 @@ class GeminiFormattedText extends StatelessWidget {
     if (text == "Loading..." || text.startsWith("Gemini Error")) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: Text(text, style: TextStyle(color: Colors.black54, fontStyle: FontStyle.italic)),
+        child: Text(
+          text,
+          style: TextStyle(color: Colors.black54, fontStyle: FontStyle.italic),
+        ),
       );
     }
 
@@ -1813,7 +1999,7 @@ class GeminiFormattedText extends StatelessWidget {
         children.add(SizedBox(height: 8));
         continue;
       }
-      
+
       // Handle Bullets (* or -)
       if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
         // Remove the bullet char
@@ -1824,7 +2010,14 @@ class GeminiFormattedText extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("• ", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, height: 1.4)),
+                Text(
+                  "• ",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    height: 1.4,
+                  ),
+                ),
                 Expanded(child: _parseRichText(content)),
               ],
             ),
@@ -1835,17 +2028,20 @@ class GeminiFormattedText extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 4.0),
             child: _parseRichText(trimmed),
-          )
+          ),
         );
       }
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
   }
 
   // Improved Markdown Parser: Removes ** and bolds content
   Widget _parseRichText(String text) {
     List<TextSpan> spans = [];
-    
+
     // Split by ** to find bold sections
     List<String> parts = text.split('**');
 
@@ -1855,10 +2051,25 @@ class GeminiFormattedText extends StatelessWidget {
 
       // Even index = regular text, Odd index = bold text (because we split by **)
       if (i % 2 == 0) {
-        spans.add(TextSpan(text: part, style: TextStyle(color: Colors.black87, fontSize: 15, height: 1.4)));
+        spans.add(
+          TextSpan(
+            text: part,
+            style: TextStyle(color: Colors.black87, fontSize: 15, height: 1.4),
+          ),
+        );
       } else {
         // This was inside **...**, so apply bold
-        spans.add(TextSpan(text: part, style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 15, height: 1.4)));
+        spans.add(
+          TextSpan(
+            text: part,
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              height: 1.4,
+            ),
+          ),
+        );
       }
     }
     return RichText(text: TextSpan(children: spans));

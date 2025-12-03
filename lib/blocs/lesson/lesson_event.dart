@@ -29,7 +29,10 @@ abstract class LessonEvent extends Equatable {
   @override
   List<Object?> get props => [];
 }
-
+class LessonUpdateRequested extends LessonEvent {
+  final LessonModel lesson;
+  LessonUpdateRequested(this.lesson);
+}
 class LessonLoadRequested extends LessonEvent {
   final String userId;
   final String languageCode;
