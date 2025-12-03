@@ -1,41 +1,56 @@
-// File: lib/services/vocabulary_service.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 
 class VocabularyService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<List<VocabularyItem>> getVocabulary(String userId) async {
-    final snapshot = await _firestore
-        .collection('vocabulary')
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .get();
+  // Helper to ensure IDs match the Reader logic (e.g. "C'est" -> "cest")
+  String _generateDocId(String word) {
+    return word.toLowerCase().trim().replaceAll(RegExp(r'[^\w\s]'), '');
+  }
 
-    return snapshot.docs
-        .map((doc) => VocabularyItem.fromMap(doc.data(), doc.id))
-        .toList();
+  Future<List<VocabularyItem>> getVocabulary(String userId) async {
+    try {
+      // 1. Get reference to the specific user's subcollection
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('vocabulary')
+          .get(); // Removed orderBy temporarily to prevent index errors during dev
+
+      // 2. Map safely using the fixed Model
+      return snapshot.docs.map((doc) {
+        return VocabularyItem.fromMap(doc.data(), doc.id);
+      }).toList();
+      
+    } catch (e) {
+      print("Error in VocabularyService.getVocabulary: $e");
+      return [];
+    }
   }
 
   Future<void> addVocabulary(VocabularyItem item) async {
-    await _firestore.collection('vocabulary').add(item.toMap());
+    final String docId = _generateDocId(item.word);
+    final String actualId = docId.isNotEmpty ? docId : item.id;
+
+    await _firestore
+        .collection('users')
+        .doc(item.userId)
+        .collection('vocabulary')
+        .doc(actualId)
+        .set(item.toMap(), SetOptions(merge: true));
   }
 
   Future<void> updateVocabulary(VocabularyItem item) async {
-    await _firestore.collection('vocabulary').doc(item.id).update(item.toMap());
-  }
+    // We use set(merge: true) to be safe
+    final String docId = _generateDocId(item.word);
+    final String actualId = docId.isNotEmpty ? docId : item.id;
 
-  Future<VocabularyItem?> findWord(String userId, String word, String language) async {
-    final snapshot = await _firestore
+    await _firestore
+        .collection('users')
+        .doc(item.userId)
         .collection('vocabulary')
-        .where('userId', isEqualTo: userId)
-        .where('word', isEqualTo: word.toLowerCase())
-        .where('language', isEqualTo: language)
-        .limit(1)
-        .get();
-
-    if (snapshot.docs.isEmpty) return null;
-    return VocabularyItem.fromMap(snapshot.docs.first.data(), snapshot.docs.first.id);
+        .doc(actualId)
+        .set(item.toMap(), SetOptions(merge: true));
   }
 }

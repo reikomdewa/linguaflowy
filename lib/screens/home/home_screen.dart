@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -25,9 +24,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+    // Ensure vocab is loaded when screen starts
     context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
   }
 
+  /// Calculates stats based on the lesson content vs the user's vocabulary map
   Map<String, int> _getLessonStats(LessonModel lesson, Map<String, VocabularyItem> vocabMap) {
     String fullText = lesson.content;
     if (lesson.transcript.isNotEmpty) {
@@ -47,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
       uniqueWords.add(cleanWord);
       final vocabItem = vocabMap[cleanWord];
 
+      // If item doesn't exist or status is 0, it's New. Otherwise, it's Known (1-5).
       if (vocabItem == null || vocabItem.status == 0) {
         newWords++;
       } else {
@@ -57,7 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showStatsDialog(BuildContext context, int knownWords, String languageCode) {
-    // ... [CEFR Logic - Kept same as previous] ...
+    // ... [CEFR Logic] ...
     String currentLevel = "Beginner";
     String nextLevel = "A1";
     int nextGoal = 500;
@@ -101,9 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
     };
     final langName = langNames[languageCode] ?? 'Target Language';
 
-    // THEME AWARE COLORS
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
 
     showModalBottomSheet(
@@ -226,7 +226,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
-    final cardColor = Theme.of(context).cardColor;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -273,6 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             Spacer(),
+            // TOP RIGHT GLOBAL STATS
             BlocBuilder<VocabularyBloc, VocabularyState>(
               builder: (context, vocabState) {
                 int knownCount = 0;
@@ -311,6 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: BlocBuilder<VocabularyBloc, VocabularyState>(
         builder: (context, vocabState) {
+          // CREATE VOCAB MAP
           Map<String, VocabularyItem> vocabMap = {};
           if (vocabState is VocabularyLoaded) {
             vocabMap = {for (var item in vocabState.items) item.word.toLowerCase(): item};
@@ -330,7 +331,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     if (lessonState is LessonLoaded) {
                       if (_selectedGlobalFilter != 'All' && _selectedGlobalFilter != 'Videos') {
-                        return _buildFilteredList(lessonState.lessons, isDark);
+                        // Pass vocabMap here
+                        return _buildFilteredList(lessonState.lessons, vocabMap, isDark);
                       }
 
                       return RefreshIndicator(
@@ -344,7 +346,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               _buildVideoSection(lessonState.lessons, vocabMap, isDark, textColor),
-                              _buildPopularTextSection(lessonState.lessons, isDark, textColor),
+                              // Pass vocabMap here
+                              _buildPopularTextSection(lessonState.lessons, vocabMap, isDark, textColor),
                             ],
                           ),
                         ),
@@ -359,52 +362,49 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       floatingActionButton: Material(
-  color: Colors.transparent,
-  elevation: 10,
-  shadowColor: Colors.black.withOpacity(0.3),
-  borderRadius: BorderRadius.circular(30),
-  child: InkWell(
-    onTap: () {
-      _showCreateLessonDialog(
-        context,
-        user.id,
-        user.currentLanguage,
-        isFavoriteByDefault: false,
-      );
-    },
-    borderRadius: BorderRadius.circular(30),
-    child: Container(
-      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-      decoration: BoxDecoration(
-        // The "Glassy" Dark Color
-        color: const Color(0xFF1E1E1E).withOpacity(0.90),
+        color: Colors.transparent,
+        elevation: 10,
+        shadowColor: Colors.black.withOpacity(0.3),
         borderRadius: BorderRadius.circular(30),
-        // The "Glass" Edge Highlight
-        border: Border.all(
-          color: Colors.white.withOpacity(0.15),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.add_rounded, color: Colors.white, size: 22),
-          SizedBox(width: 8),
-          Text(
-            'Import',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
+        child: InkWell(
+          onTap: () {
+            _showCreateLessonDialog(
+              context,
+              user.id,
+              user.currentLanguage,
+              isFavoriteByDefault: false,
+            );
+          },
+          borderRadius: BorderRadius.circular(30),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E).withOpacity(0.90),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.15),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, color: Colors.white, size: 22),
+                SizedBox(width: 8),
+                Text(
+                  'Import',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
-    ),
-  ),
-),
-
     );
   }
 
@@ -482,7 +482,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // --- SECTION 2: TEXT LESSONS ---
-  Widget _buildPopularTextSection(List<LessonModel> allLessons, bool isDark, Color? textColor) {
+  // Updated to accept vocabMap
+  Widget _buildPopularTextSection(List<LessonModel> allLessons, Map<String, VocabularyItem> vocabMap, bool isDark, Color? textColor) {
     final textLessons = allLessons.where((l) => l.type == 'text').toList();
     if (textLessons.isEmpty) return SizedBox();
 
@@ -507,7 +508,8 @@ class _HomeScreenState extends State<HomeScreen> {
           physics: NeverScrollableScrollPhysics(),
           itemCount: textLessons.length,
           itemBuilder: (context, index) {
-            return _buildTextLessonCard(context, textLessons[index], isDark);
+            // Updated to pass vocabMap
+            return _buildTextLessonCard(context, textLessons[index], vocabMap, isDark);
           },
         ),
       ],
@@ -520,6 +522,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final stats = _getLessonStats(lesson, vocabMap);
     final int newCount = stats['new']!;
     final int knownCount = stats['known']!;
+    final double progress = (knownCount + newCount) == 0 ? 0 : knownCount / (knownCount + newCount);
 
     return Container(
       width: 280,
@@ -527,6 +530,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: () {
           Navigator.push(context, MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)));
         },
+        borderRadius: BorderRadius.circular(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -554,7 +558,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
                     child: LinearProgressIndicator(
-                      value: (knownCount + newCount) == 0 ? 0 : knownCount / (knownCount + newCount),
+                      value: progress,
                       minHeight: 4,
                       backgroundColor: Colors.transparent,
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
@@ -578,7 +582,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(width: 4),
                   Text("$newCount New", style: TextStyle(fontSize: 12, color: Colors.grey)),
                   SizedBox(width: 12),
-                  Icon(Icons.circle, size: 8, color: Colors.amber),
+                  Icon(Icons.circle, size: 8, color: Colors.green), // Changed to Green for 'Known'
                   SizedBox(width: 4),
                   Text("$knownCount known", style: TextStyle(fontSize: 12, color: Colors.grey)),
                   Spacer(),
@@ -592,6 +596,102 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // --- UPDATED TEXT CARD WITH STATS ---
+  Widget _buildTextLessonCard(BuildContext context, LessonModel lesson, Map<String, VocabularyItem> vocabMap, bool isDark) {
+    // 1. Calculate stats exactly like video card
+    final stats = _getLessonStats(lesson, vocabMap);
+    final int newCount = stats['new']!;
+    final int knownCount = stats['known']!;
+    final double progress = (knownCount + newCount) == 0 ? 0 : knownCount / (knownCount + newCount);
+
+    return Card(
+      elevation: 0,
+      color: isDark ? Colors.white10 : Colors.grey[50],
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isDark ? Colors.transparent : Colors.grey.shade200)),
+      margin: EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)));
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            children: [
+              // 2. Top Part (Icon, Title, Menu)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 50, height: 50,
+                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    child: Icon(Icons.article, color: Colors.blue),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          lesson.title,
+                          style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.grey[800]),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          lesson.content.replaceAll('\n', ' '), 
+                          maxLines: 2, 
+                          overflow: TextOverflow.ellipsis, 
+                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.more_vert, color: Colors.grey, size: 16),
+                    constraints: BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _showLessonOptions(context, lesson, isDark),
+                  ),
+                ],
+              ),
+              
+              SizedBox(height: 12),
+
+              // 3. Bottom Part (Stats Row)
+              Row(
+                children: [
+                  // Progress Bar
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 6,
+                        backgroundColor: isDark ? Colors.black26 : Colors.grey[300],
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  // Word Counts
+                  Text(
+                    "${(progress * 100).toInt()}%",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green),
+                  ),
+                  SizedBox(width: 8),
+                  Container(width: 1, height: 12, color: Colors.grey),
+                  SizedBox(width: 8),
+                  Text("$newCount New", style: TextStyle(fontSize: 11, color: Colors.blue)), // Blue for new
+                ],
+              )
+            ],
+          ),
         ),
       ),
     );
@@ -647,34 +747,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTextLessonCard(BuildContext context, LessonModel lesson, bool isDark) {
-    return Card(
-      elevation: 0,
-      color: isDark ? Colors.white10 : Colors.grey[50],
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isDark ? Colors.transparent : Colors.grey.shade200)),
-      margin: EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        onTap: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)));
-        },
-        contentPadding: EdgeInsets.all(12),
-        leading: Container(
-          width: 50, height: 50,
-          decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-          child: Icon(Icons.article, color: Colors.blue),
-        ),
-        title: Text(lesson.title, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.grey[600])),
-        subtitle: Text(lesson.content.replaceAll('\n', ' '), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey)),
-        trailing: IconButton(
-          icon: Icon(Icons.more_vert, color: Colors.grey, size: 16),
-          constraints: BoxConstraints(),
-          padding: EdgeInsets.zero,
-          onPressed: () => _showLessonOptions(context, lesson, isDark),
-        ),
-      ),
-    );
-  }
-
   Widget _buildGlobalFilterChips(bool isDark) {
     return Container(
       height: 60,
@@ -712,7 +784,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildFilteredList(List<LessonModel> lessons, bool isDark) {
+  // Updated to accept vocabMap
+  Widget _buildFilteredList(List<LessonModel> lessons, Map<String, VocabularyItem> vocabMap, bool isDark) {
     final filtered = lessons.where((l) {
       if (_selectedGlobalFilter == 'Videos') return l.type == 'video';
       if (_selectedGlobalFilter == 'Audio') return l.type == 'audio';
@@ -725,7 +798,7 @@ class _HomeScreenState extends State<HomeScreen> {
       itemCount: filtered.length,
       separatorBuilder: (ctx, i) => SizedBox(height: 16),
       itemBuilder: (context, index) {
-        return _buildTextLessonCard(context, filtered[index], isDark);
+        return _buildTextLessonCard(context, filtered[index], vocabMap, isDark);
       },
     );
   }

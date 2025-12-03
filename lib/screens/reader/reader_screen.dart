@@ -1,6 +1,3 @@
-// 
-
-
 import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -108,11 +105,27 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return _stableWordKeys[key]!;
   }
 
+  // --- HELPER: Consistent ID Generation ---
+  String _generateCleanId(String text) {
+    return text.toLowerCase().trim().replaceAll(RegExp(r'[^\w\s]'), '');
+  }
+
+  // --- HELPER: Safe Date Parsing ---
+  // This prevents the "Timestamp not subtype of String" crash
+  DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    return DateTime.now();
+  }
+
+  // *** FIXED LOADING LOGIC ***
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     
-    // UPDATED: Fetch directly from Firestore to ensure persistence
     try {
+      // 1. Fetch ALL vocabulary for this user to ensure we catch everything
+      // (Removing the language filter makes it safer against slight code mismatches)
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.id)
@@ -123,17 +136,21 @@ class _ReaderScreenState extends State<ReaderScreen> {
       
       for (var doc in snapshot.docs) {
         final data = doc.data();
+        
+        // 2. Safe Manual Mapping
+        // We use .toString() on string fields and _parseDateTime on dates
+        // to strictly prevent type casting crashes.
         loadedVocab[doc.id] = VocabularyItem(
           id: doc.id,
           userId: user.id,
-          word: data['word'] ?? doc.id,
-          baseForm: data['baseForm'] ?? doc.id,
-          language: data['language'] ?? '',
-          translation: data['translation'] ?? '',
-          status: data['status'] ?? 0,
-          timesEncountered: data['timesEncountered'] ?? 1,
-          lastReviewed: (data['lastReviewed'] as Timestamp?)?.toDate() ?? DateTime.now(),
-          createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          word: data['word']?.toString() ?? doc.id,
+          baseForm: data['baseForm']?.toString() ?? doc.id,
+          language: data['language']?.toString() ?? '',
+          translation: data['translation']?.toString() ?? '',
+          status: (data['status'] is int) ? data['status'] : 0,
+          timesEncountered: (data['timesEncountered'] is int) ? data['timesEncountered'] : 1,
+          lastReviewed: _parseDateTime(data['lastReviewed']),
+          createdAt: _parseDateTime(data['createdAt']),
         );
       }
 
@@ -144,7 +161,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
     } catch (e) {
       print("Error loading vocabulary from Firestore: $e");
-      // Fallback to service
+      // Fallback to service if direct call fails
       try {
         final vocabService = context.read<VocabularyService>();
         final items = await vocabService.getVocabulary(user.id);
@@ -159,19 +176,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   Color _getWordColor(VocabularyItem? item) {
     if (item == null || item.status == 0) {
-      return Colors.blue.withOpacity(0.15);
+      return Colors.blue.withOpacity(0.15); // New
     }
     switch (item.status) {
       case 1:
-        return Color(0xFFFFF9C4);
+        return Color(0xFFFFF9C4); 
       case 2:
-        return Color(0xFFFFF59D);
+        return Color(0xFFFFF59D); 
       case 3:
-        return Color(0xFFFFCC80);
+        return Color(0xFFFFCC80); 
       case 4:
-        return Color(0xFFFFB74D);
+        return Color(0xFFFFB74D); 
       case 5:
-        return Colors.transparent;
+        return Colors.transparent; // Known
       default:
         return Colors.transparent;
     }
@@ -231,10 +248,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final sublist = words.sublist(start, end + 1);
     final phrase = sublist.join(" ");
 
-    final cleanId = phrase.toLowerCase().trim().replaceAll(
-      RegExp(r'[^\w\s]'),
-      '',
-    );
+    final cleanId = _generateCleanId(phrase);
     final originalText = phrase.trim();
 
     final bool isPhraseSelection = sublist.length > 1;
@@ -411,7 +425,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     bool markedAny = false;
 
     for (var word in words) {
-      final clean = word.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
+      final clean = _generateCleanId(word);
       if (clean.isEmpty) continue;
 
       final item = _vocabulary[clean];
@@ -787,7 +801,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       children: words.asMap().entries.map((entry) {
         final int wordIndex = entry.key;
         final String word = entry.value;
-        final cleanWord = word.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
+        final cleanWord = _generateCleanId(word);
         final GlobalKey wordKey = _getWordKey(sentenceIndex, wordIndex);
 
         if (cleanWord.isEmpty || word.trim().isEmpty) {
@@ -1102,28 +1116,27 @@ class _ReaderScreenState extends State<ReaderScreen> {
       context.read<VocabularyBloc>().add(VocabularyAddRequested(newItem));
     }
 
-    // 4. *** PERSIST TO FIREBASE *** (This was missing or incomplete)
+    // 4. *** PERSIST TO FIREBASE ***
     try {
-      await FirebaseFirestore.instance
+        await FirebaseFirestore.instance
           .collection('users')
           .doc(user.id)
           .collection('vocabulary')
-          .doc(cleanWord) // docId = word ensures uniqueness
+          .doc(cleanWord)
           .set({
             'id': cleanWord,
             'userId': user.id,
             'word': cleanWord,
             'baseForm': cleanWord,
-            'language': widget.lesson.language,
+            'language': widget.lesson.language, 
             'translation': translation,
             'status': status,
             'timesEncountered': newItem.timesEncountered,
             'lastReviewed': FieldValue.serverTimestamp(),
             'createdAt': existingItem != null ? existingItem.createdAt : FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true)); 
+          }, SetOptions(merge: true));
     } catch (e) {
       print("Error saving ranking to Firestore: $e");
-      // Optionally show error snackbar here
     }
 
     if (showDialog) {
