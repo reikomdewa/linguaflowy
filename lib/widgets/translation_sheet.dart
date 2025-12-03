@@ -3,7 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http; 
 import 'dart:convert';
 import 'package:linguaflow/models/vocabulary_item.dart';
-import 'gemini_formatted_text.dart'; // Make sure this import path is correct
+import 'gemini_formatted_text.dart'; // Ensure this file exists in your widgets folder
 
 class TranslationSheet extends StatefulWidget {
   final String originalText;
@@ -46,6 +46,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
   @override
   void initState() {
     super.initState();
+    // Cache the main translation
     widget.translationFuture.then((val) {
       if (mounted) setState(() => _cachedTranslation = val);
     });
@@ -57,19 +58,22 @@ class _TranslationSheetState extends State<TranslationSheet> {
     if (tabIndex == 1) {
       final key = dotenv.env['WORDREFERENCE_KEY'];
       if (key == null) return "Configure WORDREFERENCE_KEY in .env";
-      // Implement actual HTTP call here
+      // Actual implementation would go here:
+      // final url = Uri.parse('...');
       await Future.delayed(Duration(milliseconds: 600)); 
       return "WordReference result for '${widget.originalText}'...\n(API implementation required)";
     }
     
     // 2. Glosbe
     if (tabIndex == 2) {
+      // Glosbe API call logic
       await Future.delayed(Duration(milliseconds: 600));
       return "Glosbe examples for '${widget.originalText}'...";
     }
 
     // 3. Reverso
     if (tabIndex == 3) {
+      // Reverso scraping/API logic
       await Future.delayed(Duration(milliseconds: 600));
       return "Reverso Context matches for '${widget.originalText}'...";
     }
@@ -96,7 +100,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
       maxChildSize: 0.9,
       builder: (context, scrollController) {
         return Container(
-          margin: EdgeInsets.fromLTRB(10, 0, 10, 0), // Bottom handled by SafeArea inside
+          margin: EdgeInsets.zero, 
           decoration: BoxDecoration(
             color: backgroundColor,
             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -123,7 +127,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
                 ),
               ),
 
-              // --- CONTENT ---
+              // --- CONTENT SCROLLABLE AREA ---
               Expanded(
                 child: ListView(
                   controller: scrollController,
@@ -132,7 +136,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
                     _buildHeaderRow(primaryTextColor),
                     SizedBox(height: 12),
 
-                    // Tabs
+                    // --- TABS ---
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -146,17 +150,18 @@ class _TranslationSheetState extends State<TranslationSheet> {
                     ),
                     Divider(color: Colors.grey.withOpacity(0.2)),
 
+                    // --- TAB CONTENT ---
                     if (_selectedTabIndex == 0)
                       _buildEditorContent(isDark, primaryTextColor)
                     else
                       _buildDictionaryResult(_selectedTabIndex, isDark, primaryTextColor),
                       
-                    SizedBox(height: 80), // Extra space for bottom bar
+                    SizedBox(height: 80), // Spacer for bottom fixed bar
                   ],
                 ),
               ),
 
-              // --- BOTTOM RANKING BAR (Sticky & Safe Area) ---
+              // --- BOTTOM RANKING BAR (Sticky) ---
               if (!widget.isPhrase)
                 _buildBottomRankingBar(isDark),
             ],
@@ -268,7 +273,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
       future: _getOrFetchDict(index),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
-        if (snapshot.hasError) return Text("Error", style: TextStyle(color: Colors.red));
+        if (snapshot.hasError) return Text("Error loading dictionary.", style: TextStyle(color: Colors.red));
         return Container(
           padding: EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -281,12 +286,11 @@ class _TranslationSheetState extends State<TranslationSheet> {
     );
   }
 
-  // --- SAFE AREA FIX HERE ---
   Widget _buildBottomRankingBar(bool isDark) {
     final barColor = isDark ? Color(0xFF202022) : Colors.white;
     final borderColor = isDark ? Colors.white10 : Colors.grey[300]!;
 
-    // Using MediaQuery viewPadding to handle bottom nav bars / home indicators
+    // Using MediaQuery viewPadding.bottom to lift content above gesture bar/home button
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
 
     return Container(
@@ -327,13 +331,19 @@ class _TranslationSheetState extends State<TranslationSheet> {
       onTap: () => widget.onUpdateStatus(status, _cachedTranslation),
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        width: 48,
+        width: 46, // Width to fit 6 buttons comfortably
         height: 40,
         decoration: BoxDecoration(
-          color: isActive ? color : Colors.transparent,
+          // SHADING LOGIC:
+          // Active: Solid color
+          // Inactive: Light opacity of the color (Shading)
+          color: isActive ? color : color.withOpacity(isDark ? 0.2 : 0.15),
           borderRadius: BorderRadius.circular(8),
+          // BORDER LOGIC:
+          // Active: No border (the solid color is enough)
+          // Inactive: Thin solid border of the color
           border: Border.all(
-            color: isActive ? Colors.transparent : (isDark ? Colors.white24 : Colors.grey[300]!),
+            color: isActive ? Colors.transparent : color.withOpacity(0.6),
             width: 1.5
           ),
         ),
@@ -341,7 +351,10 @@ class _TranslationSheetState extends State<TranslationSheet> {
         child: Text(
           label,
           style: TextStyle(
-            color: isActive ? Colors.white : (isDark ? Colors.grey[400] : Colors.grey[600]),
+            // TEXT COLOR:
+            // Active: White (contrast against solid)
+            // Inactive: The color itself (contrast against shading)
+            color: isActive ? Colors.white : color,
             fontWeight: FontWeight.bold,
             fontSize: 11
           ),
