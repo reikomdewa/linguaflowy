@@ -113,16 +113,20 @@ import 'blocs/auth/auth_bloc.dart';
 import 'blocs/lesson/lesson_bloc.dart';
 import 'blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:logging/logging.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   // Enable verbose logging
+ await dotenv.load(fileName: ".env");
+
   Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
     print('[${record.level.name}] ${record.time}: ${record.message}');
   });
-  
+
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  // await dotenv.load();
   
   runApp(LanguageLearningApp());
 }
