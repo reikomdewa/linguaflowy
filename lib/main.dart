@@ -1,8 +1,7 @@
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
 import 'package:linguaflow/services/local_lesson_service.dart';
@@ -23,7 +22,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   // Enable verbose logging
- await dotenv.load(fileName: ".env");
+  await dotenv.load(fileName: ".env");
 
   Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
@@ -41,23 +40,23 @@ class LanguageLearningApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-      // await dotenv.load();
-   // 1. Create Services
-  final firestoreService = LessonService();
-  final localLessonService = LocalLessonService();
+    // await dotenv.load();
+    // 1. Create Services
+    final firestoreService = LessonService();
+    final localLessonService = LocalLessonService();
 
-  // 2. Create Repository (Inject Services)
-  // final lessonRepository = LessonRepository(
-  //   firestoreService: firestoreService,
-  //   localService: localLessonService,
-  // );
-  final lessonRepository = LessonRepository(
-  firestoreService: LessonService(),
-  localService: LocalLessonService(),
-);
+    // 2. Create Repository (Inject Services)
+    // final lessonRepository = LessonRepository(
+    //   firestoreService: firestoreService,
+    //   localService: localLessonService,
+    // );
+    final lessonRepository = LessonRepository(
+      firestoreService: LessonService(),
+      localService: LocalLessonService(),
+    );
     return MultiRepositoryProvider(
       providers: [
-         RepositoryProvider.value(value: lessonRepository),
+        RepositoryProvider.value(value: lessonRepository),
         RepositoryProvider(create: (context) => AuthService()),
         RepositoryProvider(create: (context) => LessonService()),
         RepositoryProvider(create: (context) => VocabularyService()),
@@ -72,18 +71,21 @@ class LanguageLearningApp extends StatelessWidget {
           ),
           // 2. AUTH BLOC
           BlocProvider(
-            create: (context) => AuthBloc(context.read<AuthService>())
-              ..add(AuthCheckRequested()),
+            create: (context) =>
+                AuthBloc(context.read<AuthService>())
+                  ..add(AuthCheckRequested()),
           ),
           // 3. LESSON BLOC
-    BlocProvider<LessonBloc>(
-  create: (context) => LessonBloc(
-    lessonRepository: lessonRepository, // Inject Repo, NOT services
-  ),
-),
+          BlocProvider<LessonBloc>(
+            create: (context) => LessonBloc(
+              lessonRepository: lessonRepository, // Inject Repo, NOT services
+            ),
+          ),
+          BlocProvider<QuizBloc>(create: (context) => QuizBloc()),
           // 4. VOCABULARY BLOC
           BlocProvider(
-            create: (context) => VocabularyBloc(context.read<VocabularyService>()),
+            create: (context) =>
+                VocabularyBloc(context.read<VocabularyService>()),
           ),
         ],
         // Wrap MaterialApp with Settings Builder to apply themes
@@ -92,10 +94,10 @@ class LanguageLearningApp extends StatelessWidget {
             return MaterialApp(
               title: 'LinguaFlow',
               debugShowCheckedModeBanner: false,
-              
+
               // --- THEME CONFIGURATION ---
               themeMode: settings.themeMode,
-              
+
               // Light Theme
               theme: ThemeData(
                 brightness: Brightness.light,
@@ -112,7 +114,7 @@ class LanguageLearningApp extends StatelessWidget {
                   bodyLarge: TextStyle(fontSize: 16 * settings.fontSizeScale),
                 ),
               ),
-              
+
               // Dark Theme
               darkTheme: ThemeData(
                 brightness: Brightness.dark,
@@ -128,7 +130,7 @@ class LanguageLearningApp extends StatelessWidget {
                   bodyLarge: TextStyle(fontSize: 16 * settings.fontSizeScale),
                 ),
               ),
-              
+
               home: AuthGate(),
             );
           },

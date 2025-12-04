@@ -3,18 +3,20 @@ class UserModel {
   final String email;
   final String displayName;
   final String nativeLanguage;
-  final String currentLanguage; // New field
+  final String currentLanguage;
   final List<String> targetLanguages;
   final DateTime createdAt;
+  final bool isPremium; // New Field
 
   UserModel({
     required this.id,
     required this.email,
     required this.displayName,
     this.nativeLanguage = 'en',
-    this.currentLanguage = 'es', // Default to Spanish or your choice
+    this.currentLanguage = 'es',
     this.targetLanguages = const [],
     required this.createdAt,
+    this.isPremium = false, // Default to false
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map, String id) {
@@ -23,8 +25,7 @@ class UserModel {
       email: map['email']?.toString() ?? '',
       displayName: map['displayName']?.toString() ?? '',
       nativeLanguage: map['nativeLanguage']?.toString() ?? 'en',
-      currentLanguage:
-          map['currentLanguage']?.toString() ?? 'es', // Load from DB
+      currentLanguage: map['currentLanguage']?.toString() ?? 'es',
       targetLanguages:
           (map['targetLanguages'] as List<dynamic>?)
               ?.map((e) => e.toString())
@@ -33,6 +34,8 @@ class UserModel {
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'].toString())
           : DateTime.now(),
+      // Load premium status, default to false if missing
+      isPremium: map['isPremium'] == true, 
     );
   }
 
@@ -41,9 +44,10 @@ class UserModel {
       'email': email,
       'displayName': displayName,
       'nativeLanguage': nativeLanguage,
-      'currentLanguage': currentLanguage, // Save to DB
+      'currentLanguage': currentLanguage,
       'targetLanguages': targetLanguages,
       'createdAt': createdAt.toIso8601String(),
+      'isPremium': isPremium, // Save to DB
     };
   }
 
@@ -56,6 +60,7 @@ class UserModel {
     String? currentLanguage,
     List<String>? targetLanguages,
     DateTime? createdAt,
+    bool? isPremium, // Added parameter
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -65,6 +70,7 @@ class UserModel {
       currentLanguage: currentLanguage ?? this.currentLanguage,
       targetLanguages: targetLanguages ?? this.targetLanguages,
       createdAt: createdAt ?? this.createdAt,
+      isPremium: isPremium ?? this.isPremium, // Added logic
     );
   }
 }
