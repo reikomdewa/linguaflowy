@@ -9,11 +9,13 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
+import 'package:linguaflow/screens/reader/widgets/reader_top_bar.dart';
 import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
-// Make sure to import your translation sheet file
 import 'package:linguaflow/widgets/translation_sheet.dart'; 
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+
+// NOTE: ReaderTopBar and ReaderModeToggleButton are defined at the bottom of this file
 
 class ReaderScreen extends StatefulWidget {
   final LessonModel lesson;
@@ -42,6 +44,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
   int _activeSentenceIndex = -1;
   final List<GlobalKey> _itemKeys = [];
 
+  // --- SMART CHUNKING STATE ---
+  List<String> _smartChunks = []; 
+  List<int> _chunkToTranscriptMap = []; 
+
+  // --- PAGINATION STATE (For Text Mode) ---
+  final PageController _pageController = PageController();
+  List<List<int>> _bookPages = []; 
+  int _currentPage = 0;
+  final int _wordsPerPage = 100; 
+
   // --- SELECTION STATE ---
   bool _isSelectionMode = false;
   int _selectionSentenceIndex = -1;
@@ -51,6 +63,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // --- SENTENCE MODE STATE ---
   bool _isSentenceMode = false;
   bool _hasShownSwipeHint = false;
+  String? _currentSentenceTranslation;
 
   // --- KEY CACHING ---
   final Map<String, GlobalKey> _stableWordKeys = {};
@@ -69,13 +82,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
 
     _loadVocabulary();
+    
+    _generateSmartChunks();
 
-    final count = widget.lesson.transcript.isNotEmpty
-        ? widget.lesson.transcript.length
+    final maxCount = (_smartChunks.length > widget.lesson.sentences.length) 
+        ? _smartChunks.length 
         : widget.lesson.sentences.length;
-
-    for (var i = 0; i < count; i++) {
+        
+    for (var i = 0; i < maxCount + 50; i++) { 
       _itemKeys.add(GlobalKey());
+    }
+
+    if (widget.lesson.transcript.isEmpty) {
+      _prepareBookPages();
     }
 
     if (widget.lesson.type == 'video' || widget.lesson.videoUrl != null) {
@@ -85,12 +104,73 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
+  void _generateSmartChunks() {
+    _smartChunks = [];
+    _chunkToTranscriptMap = [];
+
+    if (widget.lesson.transcript.isNotEmpty) {
+      for (int i = 0; i < widget.lesson.transcript.length; i++) {
+        _smartChunks.add(widget.lesson.transcript[i].text);
+        _chunkToTranscriptMap.add(i);
+      }
+      return;
+    }
+
+    List<String> rawSentences = widget.lesson.sentences;
+    if (rawSentences.isEmpty) {
+      rawSentences = widget.lesson.content.split(RegExp(r'(?<=[.!?])\s+'));
+    }
+
+    for (int i = 0; i < rawSentences.length; i++) {
+      String sentence = rawSentences[i];
+      if (sentence.split(' ').length > 15) {
+        List<String> parts = sentence.split(RegExp(r'(?<=[,;:])\s+'));
+        for (String part in parts) {
+          if (part.trim().isNotEmpty) {
+            _smartChunks.add(part.trim());
+            _chunkToTranscriptMap.add(i);
+          }
+        }
+      } else {
+        if (sentence.trim().isNotEmpty) {
+          _smartChunks.add(sentence.trim());
+          _chunkToTranscriptMap.add(i);
+        }
+      }
+    }
+  }
+
+  void _prepareBookPages() {
+    _bookPages = [];
+    List<int> currentPageIndices = [];
+    int currentWordCount = 0;
+
+    for (int i = 0; i < widget.lesson.sentences.length; i++) {
+      String s = widget.lesson.sentences[i];
+      int wordCount = s.split(' ').length;
+
+      if (currentWordCount + wordCount > _wordsPerPage && currentPageIndices.isNotEmpty) {
+        _bookPages.add(currentPageIndices);
+        currentPageIndices = [];
+        currentWordCount = 0;
+      }
+
+      currentPageIndices.add(i);
+      currentWordCount += wordCount;
+    }
+
+    if (currentPageIndices.isNotEmpty) {
+      _bookPages.add(currentPageIndices);
+    }
+  }
+
   @override
   void dispose() {
     try {
       _videoController?.removeListener(_videoListener);
     } catch (_) {}
     _videoController?.dispose();
+    _pageController.dispose();
     _flutterTts.stop();
     _stableWordKeys.clear();
     super.dispose();
@@ -104,13 +184,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return _stableWordKeys[key]!;
   }
 
-  // --- HELPER: Consistent ID Generation ---
   String _generateCleanId(String text) {
     return text.toLowerCase().trim().replaceAll(RegExp(r'[^\w\s]'), '');
   }
 
-  // --- HELPER: Safe Date Parsing ---
-  // This prevents the "Timestamp not subtype of String" crash
   DateTime _parseDateTime(dynamic value) {
     if (value == null) return DateTime.now();
     if (value is Timestamp) return value.toDate();
@@ -118,13 +195,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return DateTime.now();
   }
 
-  // *** FIXED LOADING LOGIC ***
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    
     try {
-      // 1. Fetch ALL vocabulary for this user to ensure we catch everything
-      // (Removing the language filter makes it safer against slight code mismatches)
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.id)
@@ -132,13 +205,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
           .get();
 
       final Map<String, VocabularyItem> loadedVocab = {};
-      
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        
-        // 2. Safe Manual Mapping
-        // We use .toString() on string fields and _parseDateTime on dates
-        // to strictly prevent type casting crashes.
         loadedVocab[doc.id] = VocabularyItem(
           id: doc.id,
           userId: user.id,
@@ -152,71 +220,40 @@ class _ReaderScreenState extends State<ReaderScreen> {
           createdAt: _parseDateTime(data['createdAt']),
         );
       }
-
-      if (mounted) {
-        setState(() {
-          _vocabulary = loadedVocab;
-        });
-      }
+      if (mounted) setState(() => _vocabulary = loadedVocab);
     } catch (e) {
-      print("Error loading vocabulary from Firestore: $e");
-      // Fallback to service if direct call fails
+      print("Error loading vocabulary: $e");
       try {
         final vocabService = context.read<VocabularyService>();
         final items = await vocabService.getVocabulary(user.id);
-        if (mounted) {
-          setState(() {
-            _vocabulary = {for (var item in items) item.word.toLowerCase(): item};
-          });
-        }
+        if (mounted) setState(() => _vocabulary = {for (var item in items) item.word.toLowerCase(): item});
       } catch (_) {}
     }
   }
 
   Color _getWordColor(VocabularyItem? item) {
-    if (item == null || item.status == 0) {
-      return Colors.blue.withOpacity(0.15); // New
-    }
+    if (item == null || item.status == 0) return Colors.blue.withOpacity(0.15); 
     switch (item.status) {
-      case 1:
-        return Color(0xFFFFF9C4); 
-      case 2:
-        return Color(0xFFFFF59D); 
-      case 3:
-        return Color(0xFFFFCC80); 
-      case 4:
-        return Color(0xFFFFB74D); 
-      case 5:
-        return Colors.transparent; // Known
-      default:
-        return Colors.transparent;
+      case 1: return Color(0xFFFFF9C4); 
+      case 2: return Color(0xFFFFF59D); 
+      case 3: return Color(0xFFFFCC80); 
+      case 4: return Color(0xFFFFB74D); 
+      case 5: return Colors.transparent; 
+      default: return Colors.transparent;
     }
   }
 
   // --- SELECTION LOGIC ---
-  void _handleDragUpdate(
-    int sentenceIndex,
-    int maxWords,
-    Offset globalPosition,
-  ) {
+  void _handleDragUpdate(int sentenceIndex, int maxWords, Offset globalPosition) {
     for (int i = 0; i < maxWords; i++) {
       final key = _getWordKey(sentenceIndex, i);
       final context = key.currentContext;
-
       if (context != null) {
         final renderBox = context.findRenderObject() as RenderBox?;
         if (renderBox != null) {
-          final topLeft = renderBox.localToGlobal(Offset.zero);
-          final size = renderBox.size;
-          final rect = topLeft & size;
-          final inflatedRect = rect.inflate(10.0);
-
-          if (inflatedRect.contains(globalPosition)) {
-            if (_selectionEndIndex != i) {
-              setState(() {
-                _selectionEndIndex = i;
-              });
-            }
+          final rect = (renderBox.localToGlobal(Offset.zero) & renderBox.size).inflate(10.0);
+          if (rect.contains(globalPosition)) {
+            if (_selectionEndIndex != i) setState(() => _selectionEndIndex = i);
             return;
           }
         }
@@ -225,34 +262,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _finishSelection(String fullSentence) {
-    if (_selectionStartIndex == -1 || _selectionEndIndex == -1) {
-      _clearSelection();
-      return;
-    }
-
-    final start = _selectionStartIndex < _selectionEndIndex
-        ? _selectionStartIndex
-        : _selectionEndIndex;
-    final end = _selectionStartIndex < _selectionEndIndex
-        ? _selectionEndIndex
-        : _selectionStartIndex;
-
+    if (_selectionStartIndex == -1 || _selectionEndIndex == -1) { _clearSelection(); return; }
+    final start = _selectionStartIndex < _selectionEndIndex ? _selectionStartIndex : _selectionEndIndex;
+    final end = _selectionStartIndex < _selectionEndIndex ? _selectionEndIndex : _selectionStartIndex;
     final words = fullSentence.split(RegExp(r'(\s+)'));
-
-    if (start < 0 || end >= words.length) {
-      _clearSelection();
-      return;
-    }
-
-    final sublist = words.sublist(start, end + 1);
-    final phrase = sublist.join(" ");
-
-    final cleanId = _generateCleanId(phrase);
-    final originalText = phrase.trim();
-
-    final bool isPhraseSelection = sublist.length > 1;
-
-    _showLingQDialog(cleanId, originalText, isPhrase: isPhraseSelection);
+    if (start < 0 || end >= words.length) { _clearSelection(); return; }
+    final phrase = words.sublist(start, end + 1).join(" ");
+    _showLingQDialog(_generateCleanId(phrase), phrase.trim(), isPhrase: words.sublist(start, end + 1).length > 1);
   }
 
   void _clearSelection() {
@@ -265,9 +281,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _startSelection(int sentenceIndex, int wordIndex) {
-    if (_isVideo && _videoController != null) _videoController!.pause();
+    if (_isVideo) _videoController?.pause();
     if (_isTtsPlaying) _flutterTts.stop();
-
     setState(() {
       _isSelectionMode = true;
       _selectionSentenceIndex = sentenceIndex;
@@ -279,21 +294,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // --- MEDIA CONTROLS ---
   void _initializeVideoPlayer() {
     String? videoId;
-    if (widget.lesson.id.startsWith('yt_')) {
-      videoId = widget.lesson.id.replaceAll('yt_', '');
-    } else if (widget.lesson.videoUrl != null) {
-      videoId = YoutubePlayer.convertUrlToId(widget.lesson.videoUrl!);
-    }
+    if (widget.lesson.id.startsWith('yt_')) videoId = widget.lesson.id.replaceAll('yt_', '');
+    else if (widget.lesson.videoUrl != null) videoId = YoutubePlayer.convertUrlToId(widget.lesson.videoUrl!);
 
     if (videoId != null) {
       _isVideo = true;
       _videoController = YoutubePlayerController(
         initialVideoId: videoId,
-        flags: const YoutubePlayerFlags(
-          autoPlay: false,
-          mute: false,
-          enableCaption: false,
-        ),
+        flags: const YoutubePlayerFlags(autoPlay: false, mute: false, enableCaption: false),
       );
       _videoController!.addListener(_videoListener);
     }
@@ -301,15 +309,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _videoListener() {
     if (_videoController == null) return;
-    if (_videoController!.value.isPlaying != _isPlaying) {
-      setState(() => _isPlaying = _videoController!.value.isPlaying);
-    }
-
+    if (_videoController!.value.isPlaying != _isPlaying) setState(() => _isPlaying = _videoController!.value.isPlaying);
     if (widget.lesson.transcript.isEmpty) return;
-    final currentSeconds =
-        _videoController!.value.position.inMilliseconds / 1000;
-
+    
+    final currentSeconds = _videoController!.value.position.inMilliseconds / 1000;
     int realTimeIndex = -1;
+    
     for (int i = 0; i < widget.lesson.transcript.length; i++) {
       final line = widget.lesson.transcript[i];
       if (currentSeconds >= line.start && currentSeconds < line.end) {
@@ -320,17 +325,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     if (_isSentenceMode) {
       if (realTimeIndex != -1 && realTimeIndex != _activeSentenceIndex) {
-        setState(() => _activeSentenceIndex = realTimeIndex);
+        setState(() {
+          _activeSentenceIndex = realTimeIndex;
+          _currentSentenceTranslation = null;
+        });
       }
-      if (_activeSentenceIndex >= 0 &&
-          _activeSentenceIndex < widget.lesson.transcript.length) {
+      if (_activeSentenceIndex >= 0 && _activeSentenceIndex < widget.lesson.transcript.length) {
         final activeLine = widget.lesson.transcript[_activeSentenceIndex];
-        if (_isPlaying &&
-            currentSeconds >= activeLine.end &&
-            currentSeconds < activeLine.end + 0.5) {
-          if (realTimeIndex == _activeSentenceIndex) {
-            _videoController!.pause();
-          }
+        if (_isPlaying && currentSeconds >= activeLine.end && currentSeconds < activeLine.end + 0.5) {
+          if (realTimeIndex == _activeSentenceIndex) _videoController!.pause();
         }
       }
     } else if (!_isSelectionMode) {
@@ -342,23 +345,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _scrollToActiveLine(int index) {
-    if (!_isSentenceMode &&
-        index < _itemKeys.length &&
-        _itemKeys[index].currentContext != null) {
-      Scrollable.ensureVisible(
-        _itemKeys[index].currentContext!,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        alignment: 0.5,
-      );
+    if (!_isSentenceMode && index < _itemKeys.length && _itemKeys[index].currentContext != null) {
+      Scrollable.ensureVisible(_itemKeys[index].currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut, alignment: 0.5);
     }
   }
 
   void _seekToTime(double seconds) {
     if (_videoController != null) {
-      _videoController!.seekTo(
-        Duration(milliseconds: (seconds * 1000).toInt()),
-      );
+      _videoController!.seekTo(Duration(milliseconds: (seconds * 1000).toInt()));
       _videoController!.play();
     }
   }
@@ -366,58 +360,105 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _initializeTts() async {
     await _flutterTts.setLanguage(widget.lesson.language);
     await _flutterTts.setSpeechRate(_ttsSpeed);
+    
     _flutterTts.setCompletionHandler(() {
-      setState(() {
-        _isTtsPlaying = false;
-        if (!_isSentenceMode) _activeSentenceIndex = -1;
-      });
+      // If we are in Chunk Mode, we stop after one chunk.
+      if (_isSentenceMode) {
+        setState(() => _isTtsPlaying = false);
+      } 
+      // If we are in Paragraph Mode, we Auto-Advance to next sentence.
+      else {
+        if (_activeSentenceIndex < widget.lesson.sentences.length - 1) {
+          // Play next
+          int nextIndex = _activeSentenceIndex + 1;
+          // Check if next sentence is on a new page, if so flip page
+          if (_bookPages.isNotEmpty) {
+             // Calculate which page the next sentence belongs to
+             for(int i=0; i<_bookPages.length; i++) {
+               if (_bookPages[i].contains(nextIndex)) {
+                 if(_currentPage != i) {
+                   _pageController.jumpToPage(i);
+                   setState(() => _currentPage = i);
+                 }
+                 break;
+               }
+             }
+          }
+          _speakSentence(widget.lesson.sentences[nextIndex], nextIndex);
+        } else {
+          // End of lesson
+          setState(() {
+             _isTtsPlaying = false;
+             _activeSentenceIndex = -1;
+          });
+        }
+      }
     });
   }
 
   Future<void> _speakSentence(String text, int index) async {
-    await _flutterTts.stop();
     setState(() {
       _activeSentenceIndex = index;
       _isTtsPlaying = true;
+      _currentSentenceTranslation = null;
     });
+    
+    // Scroll to active sentence in paragraph mode
+    if (!_isSentenceMode && !_isVideo) {
+       _scrollToActiveLine(index);
+    }
+    
     await _flutterTts.speak(text);
+  }
+
+  Future<void> _stopTts() async {
+    await _flutterTts.stop();
+    setState(() => _isTtsPlaying = false);
   }
 
   Future<void> _toggleTtsFullLesson() async {
     if (_isTtsPlaying) {
-      await _flutterTts.stop();
-      setState(() {
-        _isTtsPlaying = false;
-        if (!_isSentenceMode) _activeSentenceIndex = -1;
-      });
+      await _stopTts();
     } else {
-      setState(() => _isTtsPlaying = true);
-      await _flutterTts.speak(widget.lesson.content);
+      int startIndex = _activeSentenceIndex == -1 ? 0 : _activeSentenceIndex;
+      if(startIndex >= widget.lesson.sentences.length) startIndex = 0;
+      
+      _speakSentence(widget.lesson.sentences[startIndex], startIndex);
     }
   }
 
   void _toggleSentenceMode() {
+    if(_isVideo) _videoController?.pause();
+    if(_isTtsPlaying) _stopTts();
+
     setState(() {
       _isSentenceMode = !_isSentenceMode;
-      if (_activeSentenceIndex == -1) _activeSentenceIndex = 0;
+      if (_activeSentenceIndex == -1 || _activeSentenceIndex >= _smartChunks.length) {
+        _activeSentenceIndex = 0;
+      }
+      _currentSentenceTranslation = null;
     });
-    if (_isSentenceMode) {
-      _playCurrentSentenceInMode();
+  }
+
+  void _togglePlaybackInMode() {
+    if (_isVideo && _videoController != null) {
+      if (_isPlaying) {
+        _videoController!.pause();
+      } else {
+        _videoController!.play();
+      }
+    } else {
+      if (_isTtsPlaying) {
+        _stopTts();
+      } else {
+        _playCurrentSentenceInMode();
+      }
     }
   }
 
-  // --- SWIPE LOGIC ---
   void _handleSwipeMarking(int leavingIndex) {
-    if (leavingIndex < 0) return;
-
-    String sentenceText = "";
-    if (widget.lesson.transcript.isNotEmpty &&
-        leavingIndex < widget.lesson.transcript.length) {
-      sentenceText = widget.lesson.transcript[leavingIndex].text;
-    } else if (leavingIndex < widget.lesson.sentences.length) {
-      sentenceText = widget.lesson.sentences[leavingIndex];
-    }
-
+    if (leavingIndex < 0 || leavingIndex >= _smartChunks.length) return;
+    String sentenceText = _smartChunks[leavingIndex];
     if (sentenceText.isEmpty) return;
 
     final words = sentenceText.split(RegExp(r'(\s+)'));
@@ -426,59 +467,80 @@ class _ReaderScreenState extends State<ReaderScreen> {
     for (var word in words) {
       final clean = _generateCleanId(word);
       if (clean.isEmpty) continue;
-
       final item = _vocabulary[clean];
       if (item == null || item.status == 0) {
-        _updateWordStatus(
-          clean,
-          word.trim(),
-          "", // Auto-marked doesn't need translation
-          5,
-          showDialog: false,
-        );
+        _updateWordStatus(clean, word.trim(), "", 5, showDialog: false);
         markedAny = true;
       }
     }
 
     if (markedAny && !_hasShownSwipeHint) {
       _hasShownSwipeHint = true;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Swiping marks blue words as known"),
-          duration: Duration(seconds: 3),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Swiping marks blue words as known"), duration: Duration(seconds: 3), behavior: SnackBarBehavior.floating));
     }
   }
 
   void _nextSentence() {
-    final count = widget.lesson.transcript.isNotEmpty
-        ? widget.lesson.transcript.length
-        : widget.lesson.sentences.length;
-
-    if (_activeSentenceIndex < count - 1) {
+    if (_activeSentenceIndex < _smartChunks.length - 1) {
       _handleSwipeMarking(_activeSentenceIndex);
-      setState(() => _activeSentenceIndex++);
-      _playCurrentSentenceInMode();
+      setState(() {
+        _activeSentenceIndex++;
+        _currentSentenceTranslation = null;
+      });
     }
   }
 
   void _prevSentence() {
     if (_activeSentenceIndex > 0) {
-      setState(() => _activeSentenceIndex--);
-      _playCurrentSentenceInMode();
+      setState(() {
+        _activeSentenceIndex--;
+        _currentSentenceTranslation = null;
+      });
     }
   }
 
   void _playCurrentSentenceInMode() {
     if (_activeSentenceIndex == -1) return;
     if (_isVideo && widget.lesson.transcript.isNotEmpty) {
-      final line = widget.lesson.transcript[_activeSentenceIndex];
-      _seekToTime(line.start);
+      if (_activeSentenceIndex < widget.lesson.transcript.length) {
+        final line = widget.lesson.transcript[_activeSentenceIndex];
+        _seekToTime(line.start);
+      }
     } else {
-      final sentence = widget.lesson.sentences[_activeSentenceIndex];
-      _speakSentence(sentence, _activeSentenceIndex);
+      if (_activeSentenceIndex < _smartChunks.length) {
+        final chunk = _smartChunks[_activeSentenceIndex];
+        _speakSentence(chunk, _activeSentenceIndex);
+      }
+    }
+  }
+
+  Future<void> _translateCurrentSentence() async {
+    String text = "";
+    if (_activeSentenceIndex < _smartChunks.length) text = _smartChunks[_activeSentenceIndex];
+    if (text.isEmpty) return;
+
+    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+    final translationService = context.read<TranslationService>();
+
+    try {
+      final translated = await translationService.translate(text, user.nativeLanguage, widget.lesson.language);
+      setState(() => _currentSentenceTranslation = translated);
+    } catch (e) {
+      setState(() => _currentSentenceTranslation = "Translation unavailable");
+    }
+  }
+
+  void _onSliderChanged(double value) {
+    if (_isSentenceMode || (_isVideo && widget.lesson.transcript.isNotEmpty)) {
+      final newIndex = value.toInt();
+      setState(() {
+        _activeSentenceIndex = newIndex;
+        _currentSentenceTranslation = null;
+      });
+    } else {
+      final newPage = value.toInt();
+      setState(() => _currentPage = newPage);
+      _pageController.jumpToPage(newPage);
     }
   }
 
@@ -488,42 +550,47 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
 
+    double sliderValue = 0.0;
+    double sliderMax = 1.0;
+
+    if (_isSentenceMode || (_isVideo && widget.lesson.transcript.isNotEmpty)) {
+      final total = _smartChunks.length;
+      sliderMax = (total > 0) ? (total - 1).toDouble() : 0.0;
+      sliderValue = (_activeSentenceIndex >= 0) ? _activeSentenceIndex.toDouble() : 0.0;
+    } else {
+      final totalPages = _bookPages.length;
+      sliderMax = (totalPages > 0) ? (totalPages - 1).toDouble() : 0.0;
+      sliderValue = _currentPage.toDouble();
+    }
+    
+    if (sliderValue > sliderMax) sliderValue = sliderMax;
+    if (sliderValue < 0) sliderValue = 0;
+
     return Scaffold(
       backgroundColor: bgColor,
-      appBar: AppBar(
-        title: _isSelectionMode
-            ? Text(
-                "Release to Translate",
-                style: TextStyle(color: Colors.white, fontSize: 16),
-              )
-            : Text(
-                widget.lesson.title,
-                style: TextStyle(color: textColor, fontSize: 16),
-              ),
-        backgroundColor: _isSelectionMode ? Colors.purple : bgColor,
-        elevation: 0,
-        iconTheme: IconThemeData(
-          color: _isSelectionMode ? Colors.white : textColor,
-        ),
-        leading: _isSelectionMode
-            ? IconButton(icon: Icon(Icons.close), onPressed: _clearSelection)
-            : BackButton(),
-        actions: [
-          if (!_isSelectionMode && _isVideo)
-            IconButton(
-              icon: Icon(_isAudioMode ? Icons.videocam : Icons.headphones),
-              onPressed: () => setState(() => _isAudioMode = !_isAudioMode),
-            ),
-        ],
-      ),
+      appBar: null, 
       body: SafeArea(
         child: Stack(
           children: [
             Column(
               children: [
-                _isVideo
-                    ? _buildVideoHeader(isDark)
-                    : _buildTtsHeader(isDark, textColor),
+                // --- TOP BAR ---
+                ReaderTopBar(
+                  isDark: isDark,
+                  isVideo: _isVideo,
+                  title: widget.lesson.title,
+                  sliderValue: sliderValue,
+                  sliderMax: sliderMax,
+                  onSliderChanged: _onSliderChanged,
+                  onBackPressed: () => Navigator.pop(context),
+                  // Show play button ONLY if NOT video and NOT Chunk mode
+                  showPlayButton: !_isVideo && !_isSentenceMode,
+                  isPlaying: _isTtsPlaying,
+                  onPlayPressed: _toggleTtsFullLesson,
+                ),
+
+                if (_isVideo) _buildVideoHeader(isDark),
+
                 Expanded(
                   child: _isSentenceMode
                       ? _buildSentenceModeView(isDark, textColor)
@@ -532,53 +599,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
               ],
             ),
 
+            // --- FLOATING BUTTON ---
             if (!_isSelectionMode)
               Positioned(
                 bottom: 24,
                 right: 24,
-                child: Material(
-                  color: Colors.transparent,
-                  elevation: 10,
-                  shadowColor: Colors.black.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(30),
-                  child: InkWell(
-                    onTap: _toggleSentenceMode,
-                    borderRadius: BorderRadius.circular(30),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Color(0xFF2C2C2C).withOpacity(0.9)
-                            : Colors.black.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _isSentenceMode ? Icons.notes : Icons.short_text,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            _isSentenceMode ? 'All' : 'Chunks',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                child: ReaderModeToggleButton(
+                  isDark: isDark,
+                  isSentenceMode: _isSentenceMode,
+                  onToggle: _toggleSentenceMode,
                 ),
               ),
           ],
@@ -588,300 +617,158 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   Widget _buildParagraphModeView(bool isDark) {
-    final hasTranscript = widget.lesson.transcript.isNotEmpty;
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (hasTranscript)
-            ...widget.lesson.transcript.asMap().entries.map((entry) {
-              final index = entry.key;
-              final line = entry.value;
-              final isActive = index == _activeSentenceIndex;
-              return _buildTranscriptRow(
-                index,
-                line.text,
-                line.start,
-                isActive,
-                isDark,
-              );
-            })
-          else
-            ...widget.lesson.sentences.asMap().entries.map((entry) {
-              final index = entry.key;
-              final sentence = entry.value;
-              final isActive = index == _activeSentenceIndex;
-              return _buildTextRow(index, sentence, isActive, isDark);
-            }),
+    if (widget.lesson.transcript.isNotEmpty) {
+      return SingleChildScrollView(
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ...widget.lesson.transcript.asMap().entries.map((entry) {
+            return _buildTranscriptRow(entry.key, entry.value.text, entry.value.start, entry.key == _activeSentenceIndex, isDark);
+          }),
           SizedBox(height: 100),
-        ],
-      ),
+        ]),
+      );
+    }
+    if (_bookPages.isEmpty) return Center(child: CircularProgressIndicator());
+    return PageView.builder(
+      controller: _pageController, itemCount: _bookPages.length, onPageChanged: (index) => setState(() => _currentPage = index),
+      itemBuilder: (context, pageIndex) {
+        return SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            ..._bookPages[pageIndex].map((index) => _buildTextRow(index, widget.lesson.sentences[index], index == _activeSentenceIndex, isDark)).toList(),
+            SizedBox(height: 100),
+          ]),
+        );
+      },
     );
   }
 
   Widget _buildSentenceModeView(bool isDark, Color? textColor) {
-    final count = widget.lesson.transcript.isNotEmpty
-        ? widget.lesson.transcript.length
-        : widget.lesson.sentences.length;
-
+    final count = _smartChunks.length;
     if (count == 0) return Center(child: Text("No content"));
-
     if (_activeSentenceIndex < 0) _activeSentenceIndex = 0;
     if (_activeSentenceIndex >= count) _activeSentenceIndex = count - 1;
 
-    String currentText = "";
-    if (widget.lesson.transcript.isNotEmpty) {
-      currentText = widget.lesson.transcript[_activeSentenceIndex].text;
-    } else {
-      currentText = widget.lesson.sentences[_activeSentenceIndex];
-    }
+    String currentText = _smartChunks[_activeSentenceIndex];
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: Row(
-            children: [
-              Text(
-                "${_activeSentenceIndex + 1}",
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 4,
-                    thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape: RoundSliderOverlayShape(overlayRadius: 0),
-                    activeTrackColor: Colors.blue,
-                    inactiveTrackColor: isDark
-                        ? Colors.grey[800]
-                        : Colors.grey[200],
-                    thumbColor: Colors.blue,
-                  ),
-                  child: Slider(
-                    value: _activeSentenceIndex.toDouble(),
-                    min: 0,
-                    max: (count - 1).toDouble() < 0
-                        ? 0
-                        : (count - 1).toDouble(),
-                    onChanged: (val) {
-                      setState(() => _activeSentenceIndex = val.toInt());
-                      _playCurrentSentenceInMode();
-                    },
-                  ),
-                ),
-              ),
-              Text(
-                "$count",
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
+        SizedBox(height: 40),
+        Center(
           child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onVerticalDragEnd: (details) {
-              if (details.primaryVelocity! < 0) {
-                _nextSentence();
-              } else if (details.primaryVelocity! > 0) {
-                _prevSentence();
-              }
-            },
-            onHorizontalDragEnd: (details) {
-              if (details.primaryVelocity! < 0) {
-                _nextSentence();
-              } else if (details.primaryVelocity! > 0) {
-                _prevSentence();
-              }
-            },
+            onTap: _togglePlaybackInMode,
             child: Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(horizontal: 24),
-              alignment: Alignment.center,
-              child: SingleChildScrollView(
-                child: _buildSentence(currentText, _activeSentenceIndex),
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withOpacity(0.5), width: 2)),
+              child: Icon(
+                _isVideo 
+                  ? (_isPlaying ? Icons.pause : Icons.play_arrow)
+                  : (_isTtsPlaying ? Icons.stop : Icons.play_arrow),
+                size: 40, color: isDark ? Colors.white : Colors.black87
               ),
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 20),
-          child: Text(
-            "Swipe UP for next • DOWN for previous",
-            style: TextStyle(color: Colors.grey, fontSize: 12),
+        Spacer(),
+        Expanded(
+          flex: 3,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragEnd: (details) {
+              if (details.primaryVelocity! < 0) _nextSentence();
+              else if (details.primaryVelocity! > 0) _prevSentence();
+            },
+            onVerticalDragEnd: (details) {
+              if (details.primaryVelocity! < 0) _nextSentence();
+              else if (details.primaryVelocity! > 0) _prevSentence();
+            },
+            child: Container(
+              width: double.infinity, padding: EdgeInsets.symmetric(horizontal: 24), alignment: Alignment.center,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildSentence(currentText, _activeSentenceIndex, isBigMode: true),
+                    SizedBox(height: 24),
+                    if (_currentSentenceTranslation == null)
+                      TextButton.icon(icon: Icon(Icons.translate, size: 16, color: Colors.grey), label: Text("Translate Sentence", style: TextStyle(color: Colors.grey)), onPressed: _translateCurrentSentence)
+                    else
+                      Padding(padding: const EdgeInsets.all(8.0), child: Text(_currentSentenceTranslation!, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[400], fontStyle: FontStyle.italic, fontSize: 16))),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
+        Spacer(),
+        Padding(padding: const EdgeInsets.only(bottom: 20), child: Text("Swipe LEFT/UP for next • RIGHT/DOWN for previous", style: TextStyle(color: Colors.grey, fontSize: 12))),
       ],
     );
   }
 
-  Widget _buildTranscriptRow(
-    int index,
-    String text,
-    double startTime,
-    bool isActive,
-    bool isDark,
-  ) {
+  // --- ROWS ---
+  Widget _buildTranscriptRow(int index, String text, double startTime, bool isActive, bool isDark) {
     return Container(
-      key: _itemKeys[index],
-      margin: EdgeInsets.only(bottom: 12),
-      padding: isActive ? EdgeInsets.all(12) : EdgeInsets.zero,
-      decoration: BoxDecoration(
-        color: isActive
-            ? (isDark ? Colors.white10 : Colors.grey[100])
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_isVideo)
-            GestureDetector(
-              onTap: () => _seekToTime(startTime),
-              child: Padding(
-                padding: EdgeInsets.only(top: 4, right: 12),
-                child: Icon(
-                  isActive ? Icons.play_arrow : Icons.play_arrow_outlined,
-                  color: isActive ? Colors.blue : Colors.grey[400],
-                  size: 24,
-                ),
-              ),
-            ),
-          Expanded(
-            child: GestureDetector(
-              onLongPress: () =>
-                  _showLingQDialog("sentence_$index", text, isPhrase: true),
-              onDoubleTap: () =>
-                  !_isSelectionMode && _isVideo ? _seekToTime(startTime) : null,
-              child: _buildSentence(text, index),
-            ),
-          ),
-        ],
-      ),
+      key: _itemKeys[index], margin: EdgeInsets.only(bottom: 12), padding: isActive ? EdgeInsets.all(12) : EdgeInsets.zero,
+      decoration: BoxDecoration(color: isActive ? (isDark ? Colors.white10 : Colors.grey[100]) : Colors.transparent, borderRadius: BorderRadius.circular(8)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (_isVideo) GestureDetector(onTap: () => _seekToTime(startTime), child: Padding(padding: EdgeInsets.only(top: 4, right: 12), child: Icon(isActive ? Icons.play_arrow : Icons.play_arrow_outlined, color: isActive ? Colors.blue : Colors.grey[400], size: 24))),
+        Expanded(child: GestureDetector(onLongPress: () => _showLingQDialog("sentence_$index", text, isPhrase: true), child: _buildSentence(text, index))),
+      ]),
     );
   }
 
   Widget _buildTextRow(int index, String sentence, bool isActive, bool isDark) {
     return GestureDetector(
-      onLongPress: () =>
-          _showLingQDialog("sentence_$index", sentence, isPhrase: true),
+      onLongPress: () => _showLingQDialog("sentence_$index", sentence, isPhrase: true),
       onDoubleTap: () => _speakSentence(sentence, index),
       child: Container(
-        key: _itemKeys[index],
-        margin: EdgeInsets.only(bottom: 24),
-        padding: isActive ? EdgeInsets.all(12) : EdgeInsets.zero,
-        decoration: BoxDecoration(
-          color: isActive ? Colors.yellow.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
+        key: _itemKeys[index], margin: EdgeInsets.only(bottom: 24), padding: isActive ? EdgeInsets.all(12) : EdgeInsets.zero,
+        decoration: BoxDecoration(color: isActive ? Colors.yellow.withOpacity(0.1) : Colors.transparent, borderRadius: BorderRadius.circular(8)),
         child: _buildSentence(sentence, index),
       ),
     );
   }
 
-  Widget _buildSentence(String sentence, int sentenceIndex) {
+  Widget _buildSentence(String sentence, int sentenceIndex, {bool isBigMode = false}) {
     final words = sentence.split(RegExp(r'(\s+)'));
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final double fontSize = _isSentenceMode ? 26 : 18;
-    final double lineHeight = _isSentenceMode ? 1.6 : 1.5;
+    double fontSize = 18;
+    if (isBigMode) fontSize = _isVideo ? 26 : 22;
+    final double lineHeight = isBigMode ? 1.6 : 1.5;
 
     return Wrap(
-      spacing: 0,
-      runSpacing: _isSentenceMode ? 12 : 6,
-      alignment: _isSentenceMode ? WrapAlignment.center : WrapAlignment.start,
+      spacing: 0, runSpacing: isBigMode ? 12 : 6, alignment: isBigMode ? WrapAlignment.center : WrapAlignment.start,
       children: words.asMap().entries.map((entry) {
         final int wordIndex = entry.key;
         final String word = entry.value;
         final cleanWord = _generateCleanId(word);
-        final GlobalKey wordKey = _getWordKey(sentenceIndex, wordIndex);
+        final GlobalKey wordKey = GlobalKey(); 
 
-        if (cleanWord.isEmpty || word.trim().isEmpty) {
-          return Container(
-            key: wordKey,
-            padding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-            child: Text(
-              word,
-              style: TextStyle(
-                fontSize: fontSize,
-                height: lineHeight,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-          );
-        }
+        if (cleanWord.isEmpty || word.trim().isEmpty) return Container(key: wordKey, padding: EdgeInsets.symmetric(horizontal: 2, vertical: 1), child: Text(word, style: TextStyle(fontSize: fontSize, height: lineHeight, color: isDark ? Colors.white : Colors.black87)));
 
         bool isSelected = false;
         if (_isSelectionMode && _selectionSentenceIndex == sentenceIndex) {
-          int start = _selectionStartIndex < _selectionEndIndex
-              ? _selectionStartIndex
-              : _selectionEndIndex;
-          int end = _selectionStartIndex < _selectionEndIndex
-              ? _selectionEndIndex
-              : _selectionStartIndex;
-
-          if (wordIndex >= start && wordIndex <= end) {
-            isSelected = true;
-          }
+          int start = _selectionStartIndex < _selectionEndIndex ? _selectionStartIndex : _selectionEndIndex;
+          int end = _selectionStartIndex < _selectionEndIndex ? _selectionEndIndex : _selectionStartIndex;
+          if (wordIndex >= start && wordIndex <= end) isSelected = true;
         }
 
         final vocabItem = _vocabulary[cleanWord];
         Color bgColor = _getWordColor(vocabItem);
-        Color textColor;
-
-        if (isSelected) {
-          bgColor = Colors.purple.withOpacity(0.3);
-          textColor = Colors.white;
-        } else if (vocabItem == null || vocabItem.status == 0) {
-          textColor = isDark ? Colors.white : Colors.black87;
-        } else if (vocabItem.status == 5) {
-          textColor = isDark ? Colors.white : Colors.black87;
-        } else {
-          textColor = Colors.black87;
-        }
+        Color textColor = (isSelected || vocabItem?.status == 5 || vocabItem == null) ? (isDark ? Colors.white : Colors.black87) : Colors.black87;
+        if(isSelected) { bgColor = Colors.purple.withOpacity(0.3); textColor = Colors.white; }
 
         return GestureDetector(
-          key: wordKey,
-          behavior: HitTestBehavior.translucent,
+          key: wordKey, behavior: HitTestBehavior.translucent,
           onLongPressStart: (_) => _startSelection(sentenceIndex, wordIndex),
-          onLongPressMoveUpdate: (details) => _handleDragUpdate(
-            sentenceIndex,
-            words.length,
-            details.globalPosition,
-          ),
+          onLongPressMoveUpdate: (details) => _handleDragUpdate(sentenceIndex, words.length, details.globalPosition),
           onLongPressEnd: (_) => _finishSelection(sentence),
-          onTap: () {
-            if (_isSelectionMode) {
-              _clearSelection();
-            } else {
-              _onWordTap(cleanWord, word);
-            }
-          },
+          onTap: () { if (_isSelectionMode) _clearSelection(); else _onWordTap(cleanWord, word); },
           child: Container(
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(4),
-              border: isSelected
-                  ? Border.all(color: Colors.purple.withOpacity(0.5), width: 1)
-                  : null,
-            ),
+            decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(4), border: isSelected ? Border.all(color: Colors.purple.withOpacity(0.5), width: 1) : null),
             padding: EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-            child: Text(
-              word,
-              style: TextStyle(
-                fontSize: fontSize,
-                height: lineHeight,
-                color: textColor,
-                fontFamily: 'Roboto',
-              ),
-            ),
+            child: Text(word, style: TextStyle(fontSize: fontSize, height: lineHeight, color: textColor, fontFamily: 'Roboto')),
           ),
         );
       }).toList(),
@@ -895,258 +782,48 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   Widget _buildVideoHeader(bool isDark) {
     if (_videoController == null) return SizedBox.shrink();
-    return Column(
-      children: [
-        SizedBox(
-          height: _isAudioMode ? 1 : 220,
-          child: YoutubePlayer(
-            controller: _videoController!,
-            showVideoProgressIndicator: true,
-            progressIndicatorColor: Colors.red,
-          ),
-        ),
-        if (_isAudioMode) _buildAudioPlayerUI(isDark),
-      ],
-    );
+    return Column(children: [SizedBox(height: _isAudioMode ? 1 : 220, child: YoutubePlayer(controller: _videoController!, showVideoProgressIndicator: true, progressIndicatorColor: Colors.red)), if (_isAudioMode) _buildAudioPlayerUI(isDark)]);
   }
 
   Widget _buildAudioPlayerUI(bool isDark) {
-    return Container(
-      color: isDark ? Color(0xFF1E1E1E) : Colors.grey[100],
-      padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      child: Row(
-        children: [
-          IconButton(
-            iconSize: 42,
-            icon: Icon(
-              _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-              color: Colors.blue,
-            ),
-            onPressed: () => _isPlaying
-                ? _videoController!.pause()
-                : _videoController!.play(),
-          ),
-          SizedBox(width: 8),
-          Text(
-            "Audio Mode",
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-          ),
-        ],
-      ),
-    );
+    return Container(color: isDark ? Color(0xFF1E1E1E) : Colors.grey[100], padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16), child: Row(children: [IconButton(iconSize: 42, icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: Colors.blue), onPressed: () => _isPlaying ? _videoController!.pause() : _videoController!.play()), SizedBox(width: 8), Text("Audio Mode", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))]));
   }
 
-  Widget _buildTtsHeader(bool isDark, Color? textColor) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? Color(0xFF1E1E1E) : Colors.white,
-        boxShadow: [
-          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: Colors.blue,
-            child: IconButton(
-              icon: Icon(
-                _isTtsPlaying ? Icons.stop : Icons.play_arrow,
-                color: Colors.white,
-              ),
-              onPressed: _toggleTtsFullLesson,
-            ),
-          ),
-          SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Audio Lesson",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: textColor,
-                ),
-              ),
-              Text(
-                "Long press sentence to translate",
-                style: TextStyle(fontSize: 10, color: Colors.grey),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- DIALOG ---
-  void _showLingQDialog(
-    String cleanId,
-    String originalText, {
-    required bool isPhrase,
-  }) {
+  void _showLingQDialog(String cleanId, String originalText, {required bool isPhrase}) {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final translationService = context.read<TranslationService>();
     VocabularyItem? existingItem = isPhrase ? null : _vocabulary[cleanId];
-
-    if (_isVideo &&
-        _videoController != null &&
-        _videoController!.value.isPlaying) {
-      _videoController!.pause();
-    }
+    if (_isVideo) _videoController!.pause();
 
     Future<String> translationFuture;
-    if (existingItem != null) {
-      translationFuture = Future.value(existingItem.translation);
-    } else {
-      translationFuture = translationService
-          .translate(originalText, user.nativeLanguage, widget.lesson.language)
-          .catchError((e) => "Translation unavailable");
-    }
+    if (existingItem != null) translationFuture = Future.value(existingItem.translation);
+    else translationFuture = translationService.translate(originalText, user.nativeLanguage, widget.lesson.language).catchError((e) => "Translation unavailable");
 
-    final geminiPrompt = isPhrase
-    ? "Translate this ${user.currentLanguage} phrase to ${user.nativeLanguage}: \"$originalText\"\n"
-      "Provide:\n"
-      "1. Translation (concise)\n"
-      "2. Key grammar point (1-2 sentences)"
-    : "Translate this ${user.currentLanguage} word to ${user.nativeLanguage}: \"$originalText\"\n"
-      "Provide:\n"
-      "1. Most common translation\n"
-      "2. Brief usage context (one example)";
+    final geminiPrompt = isPhrase ? "Translate this ${user.currentLanguage} phrase to ${user.nativeLanguage}: \"$originalText\"..." : "Translate this ${user.currentLanguage} word to ${user.nativeLanguage}: \"$originalText\"...";
+    final Future<String?> geminiFuture = Gemini.instance.prompt(parts: [Part.text(geminiPrompt)]).then((value) => value?.output).catchError((e) => "Gemini unavailable");
 
-    final Future<String?> geminiFuture = Gemini.instance
-        .prompt(parts: [Part.text(geminiPrompt)])
-        .then((value) => value?.output)
-        .catchError((e) => "Gemini unavailable");
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return TranslationSheet(
-          originalText: originalText,
-          translationFuture: translationFuture,
-          geminiFuture: geminiFuture,
-          isPhrase: isPhrase,
-          existingItem: existingItem,
-          targetLanguage: widget.lesson.language,
-          // sourceLanguage: widget.lesson.language,
-          nativeLanguage: user.nativeLanguage,
-          onSpeak: () => _flutterTts.speak(originalText),
-          onUpdateStatus: (status, translation) =>
-              _updateWordStatus(cleanId, originalText, translation, status),
-          onSaveToFirebase: () => _saveWordToFirebase(originalText),
-          onClose: () => Navigator.pop(context),
-        );
-      },
-    ).then((_) {
-      _clearSelection();
-    });
+    showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (context) {
+      return TranslationSheet(originalText: originalText, translationFuture: translationFuture, geminiFuture: geminiFuture, isPhrase: isPhrase, existingItem: existingItem, targetLanguage: widget.lesson.language, nativeLanguage: user.nativeLanguage, onSpeak: () => _flutterTts.speak(originalText), onUpdateStatus: (status, translation) => _updateWordStatus(cleanId, originalText, translation, status), onSaveToFirebase: () => _saveWordToFirebase(originalText), onClose: () => Navigator.pop(context));
+    }).then((_) => _clearSelection());
   }
 
   void _saveWordToFirebase(String word) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.id)
-          .collection('saved_words')
-          .add({
-            'word': word,
-            'added_at': FieldValue.serverTimestamp(),
-            'source_lesson': widget.lesson.id,
-          });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Saved to your list!")));
-    } catch (e) {
-      print("Error saving word: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error saving: Check console rules")),
-      );
-    }
+    try { await FirebaseFirestore.instance.collection('users').doc(user.id).collection('saved_words').add({'word': word, 'added_at': FieldValue.serverTimestamp(), 'source_lesson': widget.lesson.id}); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Saved to your list!"))); } catch (e) { print("Error saving word: $e"); }
   }
 
-  // *** FIXED FUNCTION WITH FIREBASE PERSISTENCE ***
-  Future<void> _updateWordStatus(
-    String cleanWord,
-    String originalWord,
-    String translation,
-    int status, {
-    bool showDialog = true,
-  }) async {
+  Future<void> _updateWordStatus(String cleanWord, String originalWord, String translation, int status, {bool showDialog = true}) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     VocabularyItem? existingItem = _vocabulary[cleanWord];
     VocabularyItem newItem;
+    if (existingItem != null) newItem = existingItem.copyWith(status: status, translation: translation.isNotEmpty ? translation : existingItem.translation, timesEncountered: existingItem.timesEncountered + 1, lastReviewed: DateTime.now());
+    else newItem = VocabularyItem(id: cleanWord, userId: user.id, word: cleanWord, baseForm: cleanWord, language: widget.lesson.language, translation: translation, status: status, timesEncountered: 1, lastReviewed: DateTime.now(), createdAt: DateTime.now());
 
-    // 1. Prepare Data
-    if (existingItem != null) {
-      newItem = existingItem.copyWith(
-        status: status,
-        translation: translation.isNotEmpty ? translation : existingItem.translation,
-        timesEncountered: existingItem.timesEncountered + 1,
-        lastReviewed: DateTime.now(),
-      );
-    } else {
-      newItem = VocabularyItem(
-        id: cleanWord, // Using word as ID
-        userId: user.id,
-        word: cleanWord,
-        baseForm: cleanWord,
-        language: widget.lesson.language,
-        translation: translation,
-        status: status,
-        timesEncountered: 1,
-        lastReviewed: DateTime.now(),
-        createdAt: DateTime.now(),
-      );
-    }
-
-    // 2. Update Local State (Immediate Feedback)
     setState(() => _vocabulary[cleanWord] = newItem);
+    if (existingItem != null) context.read<VocabularyBloc>().add(VocabularyUpdateRequested(newItem));
+    else context.read<VocabularyBloc>().add(VocabularyAddRequested(newItem));
 
-    // 3. Update Bloc (for other screens)
-    if (existingItem != null) {
-      context.read<VocabularyBloc>().add(VocabularyUpdateRequested(newItem));
-    } else {
-      context.read<VocabularyBloc>().add(VocabularyAddRequested(newItem));
-    }
-
-    // 4. *** PERSIST TO FIREBASE ***
-    try {
-        await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.id)
-          .collection('vocabulary')
-          .doc(cleanWord)
-          .set({
-            'id': cleanWord,
-            'userId': user.id,
-            'word': cleanWord,
-            'baseForm': cleanWord,
-            'language': widget.lesson.language, 
-            'translation': translation,
-            'status': status,
-            'timesEncountered': newItem.timesEncountered,
-            'lastReviewed': FieldValue.serverTimestamp(),
-            'createdAt': existingItem != null ? existingItem.createdAt : FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-    } catch (e) {
-      print("Error saving ranking to Firestore: $e");
-    }
-
-    if (showDialog) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Word status updated"),
-          duration: Duration(seconds: 1),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    try { await FirebaseFirestore.instance.collection('users').doc(user.id).collection('vocabulary').doc(cleanWord).set({'id': cleanWord, 'userId': user.id, 'word': cleanWord, 'baseForm': cleanWord, 'language': widget.lesson.language, 'translation': translation, 'status': status, 'timesEncountered': newItem.timesEncountered, 'lastReviewed': FieldValue.serverTimestamp(), 'createdAt': existingItem != null ? existingItem.createdAt : FieldValue.serverTimestamp()}, SetOptions(merge: true)); } catch (e) { print("Error saving ranking to Firestore: $e"); }
+    if (showDialog) { ScaffoldMessenger.of(context).hideCurrentSnackBar(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Word status updated"), duration: Duration(seconds: 1), behavior: SnackBarBehavior.floating)); }
   }
 }
