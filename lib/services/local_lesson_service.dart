@@ -68,4 +68,31 @@ class LocalLessonService {
       return [];
     }
   }
+
+  // Inside LocalLessonService
+
+Future<List<LessonModel>> fetchTextBooks(String languageCode) async {
+  try {
+    return await _loadFromAsset(
+      'assets/text_lessons/books_$languageCode.json', 
+      languageCode, 
+      'system_gutenberg'
+    );
+  } catch (e) {
+    print("DEBUG: No books found for $languageCode");
+    return [];
+  }
+}
+// Inside LocalLessonService
+Future<List<LessonModel>> fetchBeginnerBooks(String languageCode) async {
+  try {
+    return await _loadFromAsset(
+      'assets/beginner_books/beginner_$languageCode.json', 
+      languageCode, 
+      'system_beginner'
+    );
+  } catch (e) {
+    return [];
+  }
+}
 }

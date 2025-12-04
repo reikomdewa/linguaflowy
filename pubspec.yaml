@@ -107,6 +107,10 @@ flutter:
      - assets/data/
      - .env
      - assets/native_videos/
+     - assets/text_lessons/
+     - assets/beginner_books/
+  # An image asset can be specified in either of two ways:
+  
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
