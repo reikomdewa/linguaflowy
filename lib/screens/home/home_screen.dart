@@ -636,7 +636,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: _guidedTabsList.map((tab) {
               final isSelected = _guidedTab == tab;
               return Padding(
-                padding: const EdgeInsets.only(right: 24.0, bottom: 12),
+                padding: const EdgeInsets.only(right: 12.0, bottom: 12),
                 child: InkWell(
                   onTap: () => setState(() => _guidedTab = tab),
                   child: Column(
@@ -746,7 +746,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: _difficultyTabs.map((tab) {
               final isSelected = _nativeDifficultyTab == tab;
               return Padding(
-                padding: const EdgeInsets.only(right: 24.0, bottom: 12),
+                padding: const EdgeInsets.only(right: 12.0, bottom: 12),
                 child: InkWell(
                   onTap: () => setState(() => _nativeDifficultyTab = tab),
                   child: Column(
