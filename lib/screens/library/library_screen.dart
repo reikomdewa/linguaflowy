@@ -509,6 +509,8 @@ import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/services/lesson_service.dart';
 
 class LibraryScreen extends StatelessWidget {
+  const LibraryScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     final user = (context.watch<AuthBloc>().state as AuthAuthenticated).user;

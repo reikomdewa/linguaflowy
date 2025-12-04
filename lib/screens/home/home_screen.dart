@@ -13,6 +13,8 @@ import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/services/lesson_service.dart';
 
 class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
@@ -1121,8 +1123,9 @@ class _HomeScreenState extends State<HomeScreen> {
   ) {
     final filtered =
         lessons.where((l) {
-          if (_selectedGlobalFilter == 'Videos')
+          if (_selectedGlobalFilter == 'Videos') {
             return l.type == 'video' || l.type == 'video_native';
+          }
           if (_selectedGlobalFilter == 'Audio') return l.type == 'audio';
           if (_selectedGlobalFilter == 'Text') return l.type == 'text';
           return true;

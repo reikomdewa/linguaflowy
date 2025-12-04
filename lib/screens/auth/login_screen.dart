@@ -9,6 +9,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
   @override
   _LoginScreenState createState() => _LoginScreenState();
 }
@@ -92,10 +94,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         }
                         return ElevatedButton(
                           onPressed: _submitForm,
-                          child: Text(_isLogin ? 'Login' : 'Sign Up'),
                           style: ElevatedButton.styleFrom(
                             padding: EdgeInsets.symmetric(vertical: 16),
                           ),
+                          child: Text(_isLogin ? 'Login' : 'Sign Up'),
                         );
                       },
                     ),

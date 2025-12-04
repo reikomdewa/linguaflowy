@@ -37,6 +37,8 @@ void main() async {
 }
 
 class LanguageLearningApp extends StatelessWidget {
+  const LanguageLearningApp({super.key});
+
   @override
   Widget build(BuildContext context) {
       // await dotenv.load();
@@ -137,6 +139,8 @@ class LanguageLearningApp extends StatelessWidget {
 }
 
 class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<AuthBloc, AuthState>(

@@ -1,6 +1,4 @@
 import 'package:bloc/bloc.dart';
-import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/services/lesson_service.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 // Import the Repository
 import 'lesson_event.dart';

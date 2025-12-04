@@ -1,15 +1,11 @@
-
-
 // File: lib/screens/profile/profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
-import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 
 class ProfileScreen extends StatelessWidget {
-  
   // Available Languages
   final Map<String, String> languages = {
     'en': 'English',
@@ -23,11 +19,13 @@ class ProfileScreen extends StatelessWidget {
     'zh': 'Chinese',
   };
 
+  ProfileScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return SizedBox();
-    
+
     final user = authState.user;
     final settings = context.watch<SettingsBloc>().state;
 
@@ -54,26 +52,29 @@ class ProfileScreen extends StatelessWidget {
                   radius: 50,
                   backgroundColor: Theme.of(context).primaryColor,
                   child: Text(
-                    user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
+                    user.displayName.isNotEmpty
+                        ? user.displayName[0].toUpperCase()
+                        : '?',
                     style: TextStyle(fontSize: 40, color: Colors.white),
                   ),
                 ),
                 SizedBox(height: 16),
                 Text(
                   user.displayName,
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textColor),
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
                 ),
                 SizedBox(height: 4),
-                Text(
-                  user.email,
-                  style: TextStyle(color: subTextColor),
-                ),
+                Text(user.email, style: TextStyle(color: subTextColor)),
               ],
             ),
           ),
-          
+
           SizedBox(height: 32),
-          
+
           // --- LEARNING SETTINGS ---
           _ProfileSection(
             title: 'Learning Settings',
@@ -81,22 +82,31 @@ class ProfileScreen extends StatelessWidget {
               ListTile(
                 leading: Icon(Icons.language),
                 title: Text('Native Language'),
-                subtitle: Text(languages[user.nativeLanguage] ?? user.nativeLanguage),
+                subtitle: Text(
+                  languages[user.nativeLanguage] ?? user.nativeLanguage,
+                ),
                 trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => _showNativeLanguageDialog(context, user.nativeLanguage),
+                onTap: () =>
+                    _showNativeLanguageDialog(context, user.nativeLanguage),
               ),
               ListTile(
                 leading: Icon(Icons.translate),
                 title: Text('Current Target Language'),
-                subtitle: Text(languages[user.currentLanguage] ?? user.currentLanguage),
+                subtitle: Text(
+                  languages[user.currentLanguage] ?? user.currentLanguage,
+                ),
                 trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => _showTargetLanguageDialog(context, user.currentLanguage, user.id),
+                onTap: () => _showTargetLanguageDialog(
+                  context,
+                  user.currentLanguage,
+                  user.id,
+                ),
               ),
             ],
           ),
-          
+
           SizedBox(height: 16),
-          
+
           // --- APP SETTINGS ---
           _ProfileSection(
             title: 'App Settings',
@@ -113,13 +123,14 @@ class ProfileScreen extends StatelessWidget {
                 title: Text('Font Size'),
                 subtitle: Text(_getFontSizeName(settings.fontSizeScale)),
                 trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => _showFontSizeDialog(context, settings.fontSizeScale),
+                onTap: () =>
+                    _showFontSizeDialog(context, settings.fontSizeScale),
               ),
             ],
           ),
-          
+
           SizedBox(height: 16),
-          
+
           // --- DATA & DANGER ZONE ---
           _ProfileSection(
             title: 'Data',
@@ -136,15 +147,22 @@ class ProfileScreen extends StatelessWidget {
               ),
               ListTile(
                 leading: Icon(Icons.delete_forever, color: Colors.red),
-                title: Text('Delete Account', style: TextStyle(color: Colors.red)),
-                trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.red),
+                title: Text(
+                  'Delete Account',
+                  style: TextStyle(color: Colors.red),
+                ),
+                trailing: Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Colors.red,
+                ),
                 onTap: () => _showDeleteConfirmation(context),
               ),
             ],
           ),
-          
+
           SizedBox(height: 32),
-          
+
           // --- LOGOUT ---
           ElevatedButton.icon(
             onPressed: () {
@@ -156,7 +174,9 @@ class ProfileScreen extends StatelessWidget {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
               minimumSize: Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
           SizedBox(height: 16),
@@ -178,7 +198,7 @@ class ProfileScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text("Select Native Language"),
-        content: Container(
+        content: SizedBox(
           width: double.maxFinite,
           child: ListView(
             shrinkWrap: true,
@@ -189,7 +209,9 @@ class ProfileScreen extends StatelessWidget {
                 groupValue: current,
                 onChanged: (val) {
                   if (val != null) {
-                    context.read<AuthBloc>().add(AuthUpdateUser(nativeLanguage: val));
+                    context.read<AuthBloc>().add(
+                      AuthUpdateUser(nativeLanguage: val),
+                    );
                     Navigator.pop(ctx);
                   }
                 },
@@ -202,12 +224,16 @@ class ProfileScreen extends StatelessWidget {
   }
 
   // UPDATED: Now uses single selection Radio to sync with user.currentLanguage
-  void _showTargetLanguageDialog(BuildContext context, String current, String userId) {
+  void _showTargetLanguageDialog(
+    BuildContext context,
+    String current,
+    String userId,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text("Switch Target Language"),
-        content: Container(
+        content: SizedBox(
           width: double.maxFinite,
           child: ListView(
             shrinkWrap: true,
@@ -219,11 +245,15 @@ class ProfileScreen extends StatelessWidget {
                 onChanged: (val) {
                   if (val != null) {
                     // 1. Update Auth Bloc (Persists to Firestore)
-                    context.read<AuthBloc>().add(AuthTargetLanguageChanged(val));
-                    
+                    context.read<AuthBloc>().add(
+                      AuthTargetLanguageChanged(val),
+                    );
+
                     // 2. Reload Lessons for new language
-                    context.read<LessonBloc>().add(LessonLoadRequested(userId, val));
-                    
+                    context.read<LessonBloc>().add(
+                      LessonLoadRequested(userId, val),
+                    );
+
                     // 3. Reload Vocabulary for new language (optional, or filter in UI)
                     // context.read<VocabularyBloc>().add(VocabularyLoadRequested(userId));
 
@@ -246,7 +276,13 @@ class ProfileScreen extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildThemeRadio(ctx, context, ThemeMode.system, "System Default", current),
+            _buildThemeRadio(
+              ctx,
+              context,
+              ThemeMode.system,
+              "System Default",
+              current,
+            ),
             _buildThemeRadio(ctx, context, ThemeMode.light, "Light", current),
             _buildThemeRadio(ctx, context, ThemeMode.dark, "Dark", current),
           ],
@@ -255,7 +291,13 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildThemeRadio(BuildContext ctx, BuildContext mainContext, ThemeMode val, String label, ThemeMode group) {
+  Widget _buildThemeRadio(
+    BuildContext ctx,
+    BuildContext mainContext,
+    ThemeMode val,
+    String label,
+    ThemeMode group,
+  ) {
     return RadioListTile<ThemeMode>(
       title: Text(label),
       value: val,
@@ -285,7 +327,13 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFontRadio(BuildContext ctx, BuildContext mainContext, double val, String label, double group) {
+  Widget _buildFontRadio(
+    BuildContext ctx,
+    BuildContext mainContext,
+    double val,
+    String label,
+    double group,
+  ) {
     return RadioListTile<double>(
       title: Text(label, textScaleFactor: val),
       value: val,
@@ -308,18 +356,23 @@ class ProfileScreen extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text("This action is irreversible. All your lessons and progress will be lost."),
+            Text(
+              "This action is irreversible. All your lessons and progress will be lost.",
+            ),
             SizedBox(height: 16),
             Text("Type 'DELETE' to confirm:"),
             TextField(
-              controller: emailController, 
+              controller: emailController,
               decoration: InputDecoration(hintText: 'DELETE'),
               style: TextStyle(color: isDark ? Colors.white : Colors.black),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text("Cancel"),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
@@ -328,7 +381,10 @@ class ProfileScreen extends StatelessWidget {
                 Navigator.pop(ctx);
               }
             },
-            child: Text("Delete Forever", style: TextStyle(color: Colors.white)),
+            child: Text(
+              "Delete Forever",
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -337,9 +393,12 @@ class ProfileScreen extends StatelessWidget {
 
   String _getThemeName(ThemeMode mode) {
     switch (mode) {
-      case ThemeMode.light: return 'Light';
-      case ThemeMode.dark: return 'Dark';
-      default: return 'System Default';
+      case ThemeMode.light:
+        return 'Light';
+      case ThemeMode.dark:
+        return 'Dark';
+      default:
+        return 'System Default';
     }
   }
 
@@ -355,15 +414,12 @@ class _ProfileSection extends StatelessWidget {
   final String title;
   final List<Widget> children;
 
-  const _ProfileSection({
-    required this.title,
-    required this.children,
-  });
+  const _ProfileSection({required this.title, required this.children});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -383,7 +439,9 @@ class _ProfileSection extends StatelessWidget {
           color: isDark ? Colors.white10 : Colors.grey[50],
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: isDark ? Colors.transparent : Colors.grey.withOpacity(0.2)),
+            side: BorderSide(
+              color: isDark ? Colors.transparent : Colors.grey.withOpacity(0.2),
+            ),
           ),
           child: Column(children: children),
         ),

@@ -57,6 +57,8 @@ class SRSAlgorithm {
 // 📱 MAIN SCREEN
 // ==========================================
 class VocabularyScreen extends StatefulWidget {
+  const VocabularyScreen({super.key});
+
   @override
   _VocabularyScreenState createState() => _VocabularyScreenState();
 }
@@ -131,7 +133,7 @@ class ReviewSessionView extends StatefulWidget {
   final List<VocabularyItem> dueItems;
   final List<VocabularyItem> allItems;
 
-  const ReviewSessionView({required this.dueItems, required this.allItems});
+  const ReviewSessionView({super.key, required this.dueItems, required this.allItems});
 
   @override
   _ReviewSessionViewState createState() => _ReviewSessionViewState();
@@ -332,7 +334,7 @@ class Flashcard extends StatefulWidget {
   final VocabularyItem item;
   final Function(int) onRated;
 
-  const Flashcard({Key? key, required this.item, required this.onRated}) : super(key: key);
+  const Flashcard({super.key, required this.item, required this.onRated});
 
   @override
   _FlashcardState createState() => _FlashcardState();
@@ -515,7 +517,7 @@ class _FlashcardState extends State<Flashcard> with SingleTickerProviderStateMix
 class LibraryView extends StatelessWidget {
   final List<VocabularyItem> items;
 
-  const LibraryView({required this.items});
+  const LibraryView({super.key, required this.items});
 
   @override
   Widget build(BuildContext context) {

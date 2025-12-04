@@ -7,6 +7,8 @@ import 'package:linguaflow/screens/profile/profile_screen.dart';
 import 'package:linguaflow/screens/vocabulary/vocabulary_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
+  const MainNavigationScreen({super.key});
+
   @override
   _MainNavigationScreenState createState() => _MainNavigationScreenState();
 }

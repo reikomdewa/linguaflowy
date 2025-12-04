@@ -4,7 +4,6 @@
 // ==========================================
 // File: lib/blocs/vocabulary/vocabulary_bloc.dart
 import 'package:bloc/bloc.dart';
-import 'package:equatable/equatable.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
 

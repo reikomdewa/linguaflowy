@@ -19,7 +19,7 @@ class TranslationSheet extends StatefulWidget {
   final VoidCallback onClose;
 
   const TranslationSheet({
-    Key? key,
+    super.key,
     required this.originalText,
     required this.translationFuture,
     required this.geminiFuture,
@@ -31,7 +31,7 @@ class TranslationSheet extends StatefulWidget {
     required this.onUpdateStatus,
     required this.onSaveToFirebase,
     required this.onClose,
-  }) : super(key: key);
+  });
 
   @override
   _TranslationSheetState createState() => _TranslationSheetState();

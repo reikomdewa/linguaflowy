@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class GeminiFormattedText extends StatelessWidget {
   final String text;
-  const GeminiFormattedText({Key? key, required this.text}) : super(key: key);
+  const GeminiFormattedText({super.key, required this.text});
 
   @override
   Widget build(BuildContext context) {

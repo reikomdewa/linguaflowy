@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gemini/flutter_gemini.dart';
@@ -19,7 +18,7 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 class ReaderScreen extends StatefulWidget {
   final LessonModel lesson;
 
-  const ReaderScreen({required this.lesson});
+  const ReaderScreen({super.key, required this.lesson});
 
   @override
   _ReaderScreenState createState() => _ReaderScreenState();
@@ -37,7 +36,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // --- TTS STATE ---
   final FlutterTts _flutterTts = FlutterTts();
   bool _isTtsPlaying = false;
-  double _ttsSpeed = 0.5;
+  final double _ttsSpeed = 0.5;
 
   // --- SYNC & SCROLL STATE ---
   int _activeSentenceIndex = -1;
@@ -607,14 +606,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 isActive,
                 isDark,
               );
-            }).toList()
+            })
           else
             ...widget.lesson.sentences.asMap().entries.map((entry) {
               final index = entry.key;
               final sentence = entry.value;
               final isActive = index == _activeSentenceIndex;
               return _buildTextRow(index, sentence, isActive, isDark);
-            }).toList(),
+            }),
           SizedBox(height: 100),
         ],
       ),

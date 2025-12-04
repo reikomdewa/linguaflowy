@@ -47,7 +47,7 @@ class VideoLessonCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onOptionTap;
 
-  const VideoLessonCard({
+  const VideoLessonCard({super.key, 
     required this.lesson,
     required this.vocabMap,
     required this.isDark,
@@ -65,7 +65,7 @@ class VideoLessonCard extends StatelessWidget {
         ? 0
         : knownCount / (knownCount + newCount);
 
-    return Container(
+    return SizedBox(
       width: 280,
       child: InkWell(
         onTap: onTap,
@@ -180,7 +180,7 @@ class TextLessonCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onOptionTap;
 
-  const TextLessonCard({
+  const TextLessonCard({super.key, 
     required this.lesson,
     required this.vocabMap,
     required this.isDark,

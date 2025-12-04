@@ -20,7 +20,7 @@ class LessonService {
           .toList();
     } catch (e) {
       print("DEBUG: FirestoreService -> ❌ Error fetching lessons: $e");
-      throw e;
+      rethrow;
     }
   }
 
@@ -31,7 +31,7 @@ class LessonService {
       print("DEBUG: FirestoreService -> ✅ Created successfully with ID: ${ref.id}");
     } catch (e) {
       print("DEBUG: FirestoreService -> ❌ Error creating lesson: $e");
-      throw e;
+      rethrow;
     }
   }
 
@@ -50,7 +50,7 @@ class LessonService {
       print("DEBUG: FirestoreService -> ✅ Updated successfully");
     } catch (e) {
       print("DEBUG: FirestoreService -> ❌ Error updating lesson: $e");
-      throw e;
+      rethrow;
     }
   }
 
@@ -61,7 +61,7 @@ class LessonService {
       print("DEBUG: FirestoreService -> ✅ Deleted successfully");
     } catch (e) {
       print("DEBUG: FirestoreService -> ❌ Error deleting: $e");
-      throw e;
+      rethrow;
     }
   }
 
