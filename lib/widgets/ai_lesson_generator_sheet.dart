@@ -227,7 +227,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
 
                   const SizedBox(height: 24),
 
-                  Text("Your Prompt", style: TextStyle(color: textColor.withOpacity(0.7), fontWeight: FontWeight.bold)),
+                  Text("What kind of story do you want?", style: TextStyle(color: textColor.withOpacity(0.7), fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _promptController,

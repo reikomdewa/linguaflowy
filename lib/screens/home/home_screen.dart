@@ -493,11 +493,94 @@ class _HomeScreenState extends State<HomeScreen> {
                                 isDark,
                                 textColor,
                               ),
-                              TextButton(
-                                onPressed: () {
-                                  _openAiGenerator(context);
+                              Builder(
+                                builder: (context) {
+                                  final isDark =
+                                      Theme.of(context).brightness ==
+                                      Brightness.dark;
+
+                                  // Define colors based on theme for high contrast
+                                  // Dark Mode = White Button | Light Mode = Black Button
+                                  final List<Color> gradientColors = isDark
+                                      ? [
+                                          const Color(0xFFFFFFFF),
+                                          const Color(0xFFE0E0E0),
+                                        ] // Pearl White gradient
+                                      : [
+                                          const Color(0xFF2C3E50),
+                                          const Color(0xFF000000),
+                                        ]; // Midnight Black gradient
+
+                                  final Color textColor = isDark
+                                      ? Colors.black
+                                      : Colors.white;
+                                  final Color shadowColor = isDark
+                                      ? Colors.white.withOpacity(0.15)
+                                      : Colors.black.withOpacity(0.3);
+
+                                  return Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 16.0,
+                                      right: 16,
+                                    ),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: gradientColors,
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        borderRadius: BorderRadius.circular(30),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: shadowColor,
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                            spreadRadius: 1, // Subtle glow
+                                          ),
+                                        ],
+                                      ),
+                                      child: ElevatedButton(
+                                        onPressed: () {
+                                          _linguaflowAiStoryGenerator(context);
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.transparent,
+                                          shadowColor: Colors.transparent,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 24,
+                                            vertical: 14,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              30,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.auto_awesome,
+                                              color: textColor,
+                                              size: 20,
+                                            ), // AI Sparkle
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              "Personalized Story Lesson",
+                                              style: TextStyle(
+                                                color: textColor,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
                                 },
-                                child: Text("Personalized Lesson"),
                               ),
                               // 3. IMMERSION / TRENDING (Horizontal)
                               _buildNativeSection(
@@ -623,7 +706,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openAiGenerator(BuildContext context) {
+  void _linguaflowAiStoryGenerator(BuildContext context) {
     // Assuming you have AuthBloc to get User ID and Lang
     final authState = context.read<AuthBloc>().state;
 
