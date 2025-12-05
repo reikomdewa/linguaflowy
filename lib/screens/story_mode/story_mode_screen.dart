@@ -584,7 +584,7 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
           nativeLanguage: user.nativeLanguage,
           currentStatus: existingItem?.status ?? 0,
           anchorPosition: tapPosition, // Passes the defined tapPosition
-          onSpeak: () => _flutterTts.speak(originalText),
+          // onSpeak: () => _flutterTts.speak(originalText),
           onUpdateStatus: (status, translation) => _updateWordStatus(cleanId, originalText, translation, status),
           onClose: () => Navigator.of(context).pop(),
         );

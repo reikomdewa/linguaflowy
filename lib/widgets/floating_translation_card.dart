@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter_tts/flutter_tts.dart'; // REQUIRED: Add internal TTS
 import 'package:linguaflow/widgets/gemini_formatted_text.dart';
 
 class FloatingTranslationCard extends StatefulWidget {
@@ -13,7 +14,7 @@ class FloatingTranslationCard extends StatefulWidget {
   final String nativeLanguage;
   final int currentStatus;
   final Offset anchorPosition;
-  final VoidCallback onSpeak;
+  // Removed 'onSpeak' callback from parent
   final Function(int, String) onUpdateStatus;
   final VoidCallback onClose;
 
@@ -26,7 +27,6 @@ class FloatingTranslationCard extends StatefulWidget {
     required this.nativeLanguage,
     required this.currentStatus,
     required this.anchorPosition,
-    required this.onSpeak,
     required this.onUpdateStatus,
     required this.onClose,
   }) : super(key: key);
@@ -37,6 +37,9 @@ class FloatingTranslationCard extends StatefulWidget {
 
 class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   String _translationText = "Loading...";
+  
+  // Internal TTS for the card specifically
+  final FlutterTts _cardTts = FlutterTts();
   
   // Dragging State
   Offset _dragOffset = Offset.zero;
@@ -55,9 +58,36 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   @override
   void initState() {
     super.initState();
+    // Initialize Translation
     widget.translationFuture.then((value) {
       if (mounted) setState(() => _translationText = value);
     });
+    // Initialize Local TTS
+    _initTts();
+  }
+
+  void _initTts() async {
+    await _cardTts.setLanguage(widget.targetLanguage);
+    await _cardTts.setSpeechRate(0.5); // Slower for individual words
+    // iOS requires setting this to allow mixing or pausing others
+    await _cardTts.setIosAudioCategory(IosTextToSpeechAudioCategory.playback,
+        [
+          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+          IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+          IosTextToSpeechAudioCategoryOptions.mixWithOthers
+        ],
+        IosTextToSpeechAudioMode.voicePrompt
+    );
+  }
+
+  void _speakWord() {
+    _cardTts.speak(widget.originalText);
+  }
+
+  @override
+  void dispose() {
+    _cardTts.stop();
+    super.dispose();
   }
 
   // --- API LOGIC ---
@@ -216,7 +246,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.volume_up, color: Colors.blue),
-                                onPressed: widget.onSpeak,
+                                onPressed: _speakWord, // Use internal method
                                 padding: EdgeInsets.zero, constraints: const BoxConstraints(),
                               ),
                               const SizedBox(width: 12),
@@ -241,7 +271,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
 
                     // --- 2. BODY CONTENT ---
                     _isExpanded 
-                      ? Expanded(child: _buildBodyContent(flagAsset)) // Use Expanded to fill screen
+                      ? Expanded(child: _buildBodyContent(flagAsset)) 
                       : Flexible(fit: FlexFit.loose, child: _buildBodyContent(flagAsset)),
                   ],
                 ),
@@ -254,13 +284,11 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   }
 
   Widget _buildBodyContent(String flagAsset) {
-    // Shared Metadata Widget (Translation, Ranks, Tabs)
     Widget metadata = Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Translation
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -274,10 +302,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
               Text(flagAsset, style: const TextStyle(fontSize: 20)),
             ],
           ),
-
           const SizedBox(height: 16),
-          
-          // Rank Bar
           const Text("RANK WORD KNOWLEDGE", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
           const SizedBox(height: 8),
           Row(
@@ -291,10 +316,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
               _buildRankButton("Known", 5, Colors.green),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // Tabs
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -315,19 +337,14 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
       ),
     );
 
-    // --- CASE 1: WEBVIEW MODE (Expanded) ---
-    // We use a Column structure so the WebView takes up remaining space
-    // WITHOUT being wrapped in a SingleChildScrollView
     if (_isExpanded && _selectedTabIndex > 1) {
       return Column(
         children: [
-          metadata, // Metadata at the top
-          Expanded( // WebView takes all remaining space
+          metadata,
+          Expanded(
             child: Container(
               width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-              ),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.05)),
               child: _buildExpandedContent(),
             ),
           ),
@@ -335,8 +352,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
       );
     }
 
-    // --- CASE 2: NORMAL TEXT MODE (or Compact) ---
-    // We wrap everything in SingleChildScrollView so it scrolls together
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
       child: Column(
@@ -347,9 +362,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
           if (_isExpanded) 
             Container(
               width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-              ),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.05)),
               child: _buildExpandedContent(),
             ),
         ],
@@ -358,7 +371,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   }
 
   Widget _buildExpandedContent() {
-    // 0 = Editor (Gemini)
     if (_selectedTabIndex == 0) {
       return FutureBuilder<String?>(
         future: widget.geminiFuture,
@@ -369,15 +381,11 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
           if (snapshot.hasData && snapshot.data != null) {
             return Padding(padding: const EdgeInsets.all(16), child: GeminiFormattedText(text: snapshot.data!));
           }
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text("AI explanation unavailable.", style: TextStyle(color: Colors.grey))
-          );
+          return const Padding(padding: EdgeInsets.all(16), child: Text("AI explanation unavailable.", style: TextStyle(color: Colors.grey)));
         },
       );
     }
     
-    // 1 = MyMemory (Text API)
     if (_selectedTabIndex == 1) {
       if (!_externalDictFutures.containsKey(1)) {
         _externalDictFutures[1] = _fetchTextDefinition(1);
@@ -391,17 +399,14 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
       );
     }
 
-    // 2, 3, 4 = Embedded WebView
     if (_webViewController != null) {
       return Stack(
         children: [
           WebViewWidget(controller: _webViewController!),
-          if (_isLoadingWeb)
-            const Center(child: CircularProgressIndicator(color: Colors.blue)),
+          if (_isLoadingWeb) const Center(child: CircularProgressIndicator(color: Colors.blue)),
         ],
       );
     }
-    
     return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("Initializing Browser...", style: TextStyle(color: Colors.grey))));
   }
 
