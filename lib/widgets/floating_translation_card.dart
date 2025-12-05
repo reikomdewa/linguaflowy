@@ -121,14 +121,11 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   void _onTabSelected(int index) {
     setState(() {
       if (_isExpanded && _selectedTabIndex == index) {
-        // Collapse
         _isExpanded = false;
         _webViewController = null;
       } else {
-        // Expand
         _selectedTabIndex = index;
         _isExpanded = true;
-        
         if (index > 1) {
           _initializeWebView(index);
         } else {
@@ -149,7 +146,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
 
     if (_isExpanded) {
       // FULL SCREEN MODE
-      // Anchor to top (below SafeArea) and bottom (0).
       topPos = padding.top + 10;
       bottomPos = 0; 
       leftPos = 0; 
@@ -157,22 +153,17 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     } else {
       // COMPACT MODE
       width = screenSize.width * 0.9;
-      
-      // Calculate Dragged Left Position
       leftPos = ((screenSize.width - width) / 2) + _dragOffset.dx;
 
-      // Determine Above/Below
       final bool showAbove = widget.anchorPosition.dy > (screenSize.height * 0.6);
       const double verticalPadding = 24.0; 
 
       if (showAbove) {
-        // Grow Upwards
         bottomPos = (screenSize.height - widget.anchorPosition.dy) + verticalPadding - _dragOffset.dy;
-        topPos = null; // Important: leave null so it's not over-constrained
+        topPos = null; 
       } else {
-        // Grow Downwards
         topPos = widget.anchorPosition.dy + verticalPadding + _dragOffset.dy;
-        bottomPos = null; // Important: leave null
+        bottomPos = null;
       }
     }
 
@@ -188,16 +179,12 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
           bottom: bottomPos,
           left: leftPos,
           width: width,
-          // height is NOT set here. 
-          // In Expanded: top+bottom determines height.
-          // In Compact: top OR bottom is set, height is determined by child content.
           child: GestureDetector(
             onPanUpdate: _isExpanded ? null : (details) => setState(() => _dragOffset += details.delta),
             child: Material(
               color: Colors.transparent,
               child: Container(
                 constraints: BoxConstraints(
-                  // Limit max height in compact mode so it doesn't go off screen
                   maxHeight: _isExpanded ? double.infinity : screenSize.height * 0.6,
                 ),
                 decoration: BoxDecoration(
@@ -209,7 +196,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
                   ],
                 ),
                 child: Column(
-                  // Compact: min (wrap content). Expanded: max (fill screen).
                   mainAxisSize: _isExpanded ? MainAxisSize.max : MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -253,12 +239,10 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
 
                     const Divider(color: Colors.white10, height: 1),
 
-                    // --- 2. SCROLLABLE CONTENT ---
-                    // Expanded: Takes all remaining space.
-                    // Flexible: Takes needed space (up to max).
+                    // --- 2. BODY CONTENT ---
                     _isExpanded 
-                      ? Expanded(child: _buildScrollableBody(flagAsset))
-                      : Flexible(fit: FlexFit.loose, child: _buildScrollableBody(flagAsset)),
+                      ? Expanded(child: _buildBodyContent(flagAsset)) // Use Expanded to fill screen
+                      : Flexible(fit: FlexFit.loose, child: _buildBodyContent(flagAsset)),
                   ],
                 ),
               ),
@@ -269,89 +253,104 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     );
   }
 
-  Widget _buildScrollableBody(String flagAsset) {
+  Widget _buildBodyContent(String flagAsset) {
+    // Shared Metadata Widget (Translation, Ranks, Tabs)
+    Widget metadata = Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Translation
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  _translationText,
+                  style: const TextStyle(fontSize: 18, color: Colors.white70, height: 1.4),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(flagAsset, style: const TextStyle(fontSize: 20)),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+          
+          // Rank Bar
+          const Text("RANK WORD KNOWLEDGE", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildRankButton("New", 0, Colors.blue),
+              _buildRankButton("1", 1, const Color(0xFFFBC02D)),
+              _buildRankButton("2", 2, const Color(0xFFFFA726)),
+              _buildRankButton("3", 3, const Color(0xFFF57C00)),
+              _buildRankButton("4", 4, const Color(0xFFEF5350)),
+              _buildRankButton("Known", 5, Colors.green),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Tabs
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildTabChip("Editor", 0),
+                const SizedBox(width: 8),
+                _buildTabChip("MyMemory", 1),
+                const SizedBox(width: 8),
+                _buildTabChip("WordRef", 2),
+                const SizedBox(width: 8),
+                _buildTabChip("Glosbe", 3),
+                const SizedBox(width: 8),
+                _buildTabChip("Reverso", 4),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // --- CASE 1: WEBVIEW MODE (Expanded) ---
+    // We use a Column structure so the WebView takes up remaining space
+    // WITHOUT being wrapped in a SingleChildScrollView
+    if (_isExpanded && _selectedTabIndex > 1) {
+      return Column(
+        children: [
+          metadata, // Metadata at the top
+          Expanded( // WebView takes all remaining space
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+              ),
+              child: _buildExpandedContent(),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // --- CASE 2: NORMAL TEXT MODE (or Compact) ---
+    // We wrap everything in SingleChildScrollView so it scrolls together
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Translation
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _translationText,
-                        style: const TextStyle(fontSize: 18, color: Colors.white70, height: 1.4),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(flagAsset, style: const TextStyle(fontSize: 20)),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-                
-                // Rank Bar
-                const Text("RANK WORD KNOWLEDGE", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildRankButton("New", 0, Colors.blue),
-                    _buildRankButton("1", 1, const Color(0xFFFBC02D)),
-                    _buildRankButton("2", 2, const Color(0xFFFFA726)),
-                    _buildRankButton("3", 3, const Color(0xFFF57C00)),
-                    _buildRankButton("4", 4, const Color(0xFFEF5350)),
-                    _buildRankButton("Known", 5, Colors.green),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // Tabs
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildTabChip("Editor", 0),
-                      const SizedBox(width: 8),
-                      _buildTabChip("MyMemory", 1),
-                      const SizedBox(width: 8),
-                      _buildTabChip("WordRef", 2),
-                      const SizedBox(width: 8),
-                      _buildTabChip("Glosbe", 3),
-                      const SizedBox(width: 8),
-                      _buildTabChip("Reverso", 4),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // --- EXPANDED CONTENT AREA (WebView/Editor) ---
+          metadata,
           if (_isExpanded) 
-            SizedBox(
-              // Give explicit height to WebView when in compact mode if expanded.
-              // BUT in full screen mode, this needs to be constrained properly.
-              // Since we are inside SingleChildScrollView, we use a fixed height or calculate.
-              // For a simple UX, fixed height for webview is safest inside ScrollView.
-              height: _selectedTabIndex > 1 ? 550 : null, 
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                ),
-                clipBehavior: Clip.hardEdge, 
-                child: _buildExpandedContent(),
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
               ),
+              child: _buildExpandedContent(),
             ),
         ],
       ),
