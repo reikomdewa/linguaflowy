@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
+import 'package:linguaflow/services/gemini_service.dart';
 import 'package:linguaflow/services/local_lesson_service.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/utils/utils.dart';
@@ -24,11 +26,17 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 void main() async {
   // Enable verbose logging
   await dotenv.load(fileName: ".env");
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+  if (apiKey != null) {
+    Gemini.init(apiKey: apiKey);
+  } else {
+    print("WARNING: GEMINI_API_KEY is missing in .env");
+  }
 
-  Logger.root.level = Level.ALL;
-  Logger.root.onRecord.listen((record) {
-    print('[${record.level.name}] ${record.time}: ${record.message}');
-  });
+  // Logger.root.level = Level.ALL;
+  // Logger.root.onRecord.listen((record) {
+  //   print('[${record.level.name}] ${record.time}: ${record.message}');
+  // });
 
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -51,11 +59,17 @@ class LanguageLearningApp extends StatelessWidget {
     //   firestoreService: firestoreService,
     //   localService: localLessonService,
     // );
+
+     // 1. Load Environment variables
+ 
+
+  // 2. Initialize Gemini GLOBALLY here
+
     final lessonRepository = LessonRepository(
       firestoreService: LessonService(),
       localService: LocalLessonService(),
     );
-    printFirestoreSchema();
+    // printFirestoreSchema();
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider.value(value: lessonRepository),
@@ -80,6 +94,7 @@ class LanguageLearningApp extends StatelessWidget {
           // 3. LESSON BLOC
           BlocProvider<LessonBloc>(
             create: (context) => LessonBloc(
+              geminiService: GeminiService(), // Inject Gemini Service
               lessonRepository: lessonRepository, // Inject Repo, NOT services
             ),
           ),

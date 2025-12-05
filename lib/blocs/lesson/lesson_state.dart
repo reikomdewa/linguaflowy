@@ -29,3 +29,12 @@ class LessonError extends LessonState {
   @override
   List<Object?> get props => [message];
 }
+
+// Add this to your existing lesson_state.dart
+class LessonGenerationSuccess extends LessonState {
+  final LessonModel lesson;
+  LessonGenerationSuccess(this.lesson);
+
+  @override
+  List<Object> get props => [lesson];
+}

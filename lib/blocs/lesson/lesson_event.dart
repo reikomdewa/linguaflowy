@@ -60,3 +60,19 @@ class LessonDeleteRequested extends LessonEvent {
   @override
   List<Object?> get props => [lessonId];
 }
+
+
+
+class LessonGenerateRequested extends LessonEvent {
+  final String userId;
+  final String topic;
+  final String level;
+  final String targetLanguage;
+
+   LessonGenerateRequested({
+    required this.userId,
+    required this.topic,
+    required this.level,
+    required this.targetLanguage,
+  });
+}

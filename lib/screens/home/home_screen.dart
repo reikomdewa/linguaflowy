@@ -8,6 +8,7 @@ import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/services/lesson_service.dart';
 import 'package:linguaflow/widgets/practice_banner_button.dart';
+import 'package:linguaflow/widgets/ai_lesson_generator_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -492,6 +493,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 isDark,
                                 textColor,
                               ),
+                              TextButton(
+                                onPressed: () {
+                                  _openAiGenerator(context);
+                                },
+                                child: Text("Personalized Lesson"),
+                              ),
                               // 3. IMMERSION / TRENDING (Horizontal)
                               _buildNativeSection(
                                 nativeLessons,
@@ -616,6 +623,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openAiGenerator(BuildContext context) {
+    // Assuming you have AuthBloc to get User ID and Lang
+    final authState = context.read<AuthBloc>().state;
+
+    if (authState is AuthAuthenticated) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true, // Crucial for text inputs
+        backgroundColor: Colors.transparent,
+        builder: (_) => BlocProvider.value(
+          value: context.read<LessonBloc>(), // Pass existing bloc
+          child: AILessonGeneratorSheet(
+            userId: authState.user.id,
+            targetLanguage: authState.user.currentLanguage,
+          ),
+        ),
+      );
+    }
+  }
+
   // --- GUIDED COURSES SECTION (with Imported Tab) ---
   Widget _buildGuidedSection(
     List<LessonModel> guidedLessons,
@@ -652,7 +679,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: isDark ? Colors.white70 : Colors.black45,
                 ),
               ),
-              Expanded(child:  PracticeBannerButton()),
+              Expanded(child: PracticeBannerButton()),
             ],
           ),
         ),
