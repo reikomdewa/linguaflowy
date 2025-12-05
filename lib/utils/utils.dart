@@ -5,7 +5,103 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+// Place this inside your User App code
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:device_info_plus/device_info_plus.dart'; // Optional
+// import 'package:package_info_plus/package_info_plus.dart'; // Optional
 
+void showReportBugDialog(BuildContext context, String userId, String userEmail) {
+  final titleCtrl = TextEditingController();
+  final descCtrl = TextEditingController();
+  String severity = 'medium';
+
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text("Report a Problem"),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(
+                  labelText: "Subject", 
+                  hintText: "e.g., Audio not playing",
+                  border: OutlineInputBorder()
+                ),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: descCtrl,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: "Description",
+                  hintText: "Explain what happened step by step...",
+                  border: OutlineInputBorder()
+                ),
+              ),
+              const SizedBox(height: 15),
+              DropdownButtonFormField<String>(
+                value: severity,
+                decoration: const InputDecoration(labelText: "Impact"),
+                items: ['low', 'medium', 'high', 'critical'].map((s) => 
+                  DropdownMenuItem(value: s, child: Text(s.toUpperCase()))
+                ).toList(),
+                onChanged: (v) => setState(() => severity = v!),
+              )
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              if (titleCtrl.text.isEmpty) return;
+
+              // 1. Gather Device Info (Optional but recommended)
+              String deviceInfo = "Unknown Device";
+              String appVersion = "1.0.0";
+              
+              /* UNCOMMENT THIS IF YOU INSTALLED THE PACKAGES
+              try {
+                final info = await DeviceInfoPlugin().deviceInfo;
+                if (info is AndroidDeviceInfo) deviceInfo = "${info.brand} ${info.model} (SDK ${info.version.sdkInt})";
+                if (info is IosDeviceInfo) deviceInfo = "${info.name} (${info.systemVersion})";
+                final pkg = await PackageInfo.fromPlatform();
+                appVersion = "${pkg.version} (${pkg.buildNumber})";
+              } catch (_) {} 
+              */
+
+              // 2. Write to Firestore
+              await FirebaseFirestore.instance.collection('bug_reports').add({
+                'title': titleCtrl.text,
+                'description': descCtrl.text,
+                'severity': severity,
+                'status': 'open',
+                'userId': userId,
+                'userEmail': userEmail,
+                'deviceInfo': deviceInfo,
+                'appVersion': appVersion,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Report sent! Thank you.")),
+                );
+              }
+            },
+            child: const Text("Submit Report"),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
      Color getLevelShade(int level, MaterialColor color) {
           if (level == 0) {
@@ -163,12 +259,12 @@ Future<void> printFirestoreSchema() async {
   final firestore = FirebaseFirestore.instance;
 
   final collections = <CollectionReference>[
-    firestore.collection('posts'),
+    // firestore.collection('posts'),
     firestore.collection('users'),
-    firestore.collection('activities'),
-    firestore.collection('content_preferences'),
-    firestore.collection('reported_posts'),
-    firestore.collection('reports'),
+    // firestore.collection('activities'),
+    // firestore.collection('content_preferences'),
+    // firestore.collection('reported_posts'),
+    // firestore.collection('reports'),
     // add other collections if needed
   ];
 

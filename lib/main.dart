@@ -6,6 +6,7 @@ import 'package:linguaflow/blocs/settings/settings_bloc.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
 import 'package:linguaflow/services/local_lesson_service.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
+import 'package:linguaflow/utils/utils.dart';
 
 // Import all screens and services
 import 'screens/auth/login_screen.dart';
@@ -54,6 +55,7 @@ class LanguageLearningApp extends StatelessWidget {
       firestoreService: LessonService(),
       localService: LocalLessonService(),
     );
+    printFirestoreSchema();
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider.value(value: lessonRepository),

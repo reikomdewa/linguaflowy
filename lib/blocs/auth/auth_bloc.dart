@@ -1,10 +1,9 @@
 
 
 
-
 import 'package:bloc/bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Needed for account deletion
+import 'package:firebase_auth/firebase_auth.dart'; // Needed for account deletion & profile update
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/auth_service.dart';
 
@@ -33,11 +32,17 @@ class AuthTargetLanguageChanged extends AuthEvent {
   AuthTargetLanguageChanged(this.languageCode);
 }
 
-// NEW EVENTS FOR PROFILE SCREEN
+// UPDATED EVENT: Added displayName
 class AuthUpdateUser extends AuthEvent {
   final String? nativeLanguage;
   final List<String>? targetLanguages;
-  AuthUpdateUser({this.nativeLanguage, this.targetLanguages});
+  final String? displayName; // <-- Added this
+
+  AuthUpdateUser({
+    this.nativeLanguage, 
+    this.targetLanguages, 
+    this.displayName, // <-- Added this
+  });
 }
 
 class AuthDeleteAccount extends AuthEvent {}
@@ -142,7 +147,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  // --- NEW HANDLERS FOR PROFILE ---
+  // --- UPDATED HANDLER FOR PROFILE ---
 
   Future<void> _onAuthUpdateUser(
     AuthUpdateUser event,
@@ -155,6 +160,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final updatedUser = currentUser.copyWith(
         nativeLanguage: event.nativeLanguage ?? currentUser.nativeLanguage,
         targetLanguages: event.targetLanguages ?? currentUser.targetLanguages,
+        displayName: event.displayName ?? currentUser.displayName, // Update display name model
       );
       
       emit(AuthAuthenticated(updatedUser));
@@ -164,11 +170,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         final updates = <String, dynamic>{};
         if (event.nativeLanguage != null) updates['nativeLanguage'] = event.nativeLanguage;
         if (event.targetLanguages != null) updates['targetLanguages'] = event.targetLanguages;
+        if (event.displayName != null) updates['displayName'] = event.displayName;
 
+        // 1. Update Firestore Database
         await FirebaseFirestore.instance
             .collection('users')
             .doc(currentUser.id)
             .update(updates);
+
+        // 2. Update Firebase Auth Profile (so it syncs with Google/Apple sign in visuals if needed)
+        if (event.displayName != null) {
+          await FirebaseAuth.instance.currentUser?.updateDisplayName(event.displayName);
+        }
       } catch (e) {
         // Revert on error or show snackbar (simplified here)
         print("Error updating profile: $e");
