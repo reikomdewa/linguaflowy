@@ -34,10 +34,10 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
           transactions: const [
             {
               "amount": {
-                "total": '5.99',
+                "total": '9.99',
                 "currency": 'USD',
                 "details": {
-                  "subtotal": '5.99',
+                  "subtotal": '9.99',
                   "shipping": '0',
                   "shipping_discount": 0,
                 },
@@ -48,7 +48,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
                   {
                     "name": "Premium Access",
                     "quantity": 1,
-                    "price": '5.99',
+                    "price": '9.99',
                     "currency": 'USD',
                   },
                 ],

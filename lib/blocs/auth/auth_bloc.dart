@@ -196,7 +196,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         await user.sendEmailVerification();
         _lastEmailSentTime = DateTime.now(); // Update timestamp
         await authService.signOut(); // Log out immediately
-        emit(AuthMessage("Verification email resent! Check your spam folder."));
+        emit(AuthMessage("Verification email resent! Check your spam folder. Mark email as not spam"));
         emit(AuthUnauthenticated()); // Go back to login form
       } else if (user != null && user.emailVerified) {
          // Already verified? Login properly
