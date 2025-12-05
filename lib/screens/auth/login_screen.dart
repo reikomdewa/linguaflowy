@@ -1,9 +1,3 @@
-
-// ==========================================
-// SCREENS
-// ==========================================
-// File: lib/screens/auth/login_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -18,9 +12,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _nameController = TextEditingController();
+  
   final _formKey = GlobalKey<FormState>();
   bool _isLogin = true;
-  final _nameController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -28,33 +23,70 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: BlocListener<AuthBloc, AuthState>(
           listener: (context, state) {
-            if (state is AuthError) {
+            
+            // --- HANDLE SUCCESS ---
+            if (state is AuthMessage) {
+              if (!_isLogin) setState(() => _isLogin = true); // Switch to login after register
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.message)),
+                SnackBar(
+                  content: Text(state.message),
+                  backgroundColor: Colors.green,
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            }
+
+            // --- HANDLE ERRORS ---
+            if (state is AuthError) {
+              final bool isVerificationError = state.isVerificationError;
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.message),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 6), // Longer for them to read and click
+                  action: isVerificationError 
+                    ? SnackBarAction(
+                        label: 'RESEND EMAIL',
+                        textColor: Colors.white,
+                        onPressed: () {
+                          // Trigger Resend Logic
+                          context.read<AuthBloc>().add(
+                            AuthResendVerificationEmail(
+                              _emailController.text, 
+                              _passwordController.text
+                            )
+                          );
+                        },
+                      )
+                    : SnackBarAction(label: 'OK', textColor: Colors.white, onPressed: () {}),
+                ),
               );
             }
           },
           child: Center(
             child: SingleChildScrollView(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(24),
               child: Form(
                 key: _formKey,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Icon(Icons.language, size: 80, color: Colors.blue),
-                    SizedBox(height: 24),
-                    Text(
-                      'Language Learning',
+                    const Icon(Icons.language, size: 80, color: Colors.blue),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'LinguaFlow, learning the natural way',
                       style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),
-                    SizedBox(height: 48),
+                    const SizedBox(height: 48),
+                    
+                    // Register Name Field
                     if (!_isLogin)
                       TextFormField(
                         controller: _nameController,
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Name',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.person),
@@ -62,10 +94,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         validator: (value) =>
                             value?.isEmpty ?? true ? 'Enter your name' : null,
                       ),
-                    if (!_isLogin) SizedBox(height: 16),
+                    if (!_isLogin) const SizedBox(height: 16),
+                    
+                    // Email
                     TextFormField(
                       controller: _emailController,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Email',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.email),
@@ -74,10 +108,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       validator: (value) =>
                           value?.isEmpty ?? true ? 'Enter email' : null,
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                    
+                    // Password
                     TextFormField(
                       controller: _passwordController,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Password',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.lock),
@@ -86,24 +122,42 @@ class _LoginScreenState extends State<LoginScreen> {
                       validator: (value) =>
                           value?.isEmpty ?? true ? 'Enter password' : null,
                     ),
-                    SizedBox(height: 24),
+                    
+                    // Forgot Password
+                    if (_isLogin)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _showForgotPasswordDialog,
+                          child: const Text("Forgot Password?"),
+                        ),
+                      ),
+
+                    const SizedBox(height: 24),
+                    
+                    // Submit Button
                     BlocBuilder<AuthBloc, AuthState>(
                       builder: (context, state) {
                         if (state is AuthLoading) {
-                          return Center(child: CircularProgressIndicator());
+                          return const Center(child: CircularProgressIndicator());
                         }
                         return ElevatedButton(
                           onPressed: _submitForm,
                           style: ElevatedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(vertical: 16),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
                           child: Text(_isLogin ? 'Login' : 'Sign Up'),
                         );
                       },
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     TextButton(
-                      onPressed: () => setState(() => _isLogin = !_isLogin),
+                      onPressed: () {
+                        setState(() {
+                          _isLogin = !_isLogin;
+                          _formKey.currentState?.reset();
+                        });
+                      },
                       child: Text(
                         _isLogin
                             ? 'Don\'t have an account? Sign up'
@@ -125,20 +179,62 @@ class _LoginScreenState extends State<LoginScreen> {
       if (_isLogin) {
         context.read<AuthBloc>().add(
               AuthLoginRequested(
-                _emailController.text,
+                _emailController.text.trim(),
                 _passwordController.text,
               ),
             );
       } else {
         context.read<AuthBloc>().add(
               AuthRegisterRequested(
-                _emailController.text,
+                _emailController.text.trim(),
                 _passwordController.text,
-                _nameController.text,
+                _nameController.text.trim(),
               ),
             );
       }
     }
+  }
+
+  void _showForgotPasswordDialog() {
+    final resetEmailController = TextEditingController(text: _emailController.text);
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Reset Password"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Enter your email address to receive a password reset link."),
+            const SizedBox(height: 15),
+            TextField(
+              controller: resetEmailController,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (resetEmailController.text.isNotEmpty) {
+                context.read<AuthBloc>().add(
+                  AuthResetPasswordRequested(resetEmailController.text.trim())
+                );
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text("Send Link"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
