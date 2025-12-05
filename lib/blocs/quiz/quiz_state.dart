@@ -7,6 +7,7 @@ class QuizState {
   final List<QuizQuestion> questions;
   final int currentIndex;
   final int hearts;
+   final bool isPremium; 
   
   // Word Bank Logic
   final List<String> selectedWords; // Words currently in the sentence line
@@ -27,6 +28,7 @@ class QuizState {
     this.hearts = 5,
     this.selectedWords = const [],
     this.availableWords = const [],
+     this.isPremium = false, 
   });
 
   QuizState copyWith({
@@ -36,6 +38,7 @@ class QuizState {
     int? hearts,
     List<String>? selectedWords,
     List<String>? availableWords,
+      bool? isPremium,
   }) {
     return QuizState(
       status: status ?? this.status,
@@ -44,6 +47,7 @@ class QuizState {
       hearts: hearts ?? this.hearts,
       selectedWords: selectedWords ?? this.selectedWords,
       availableWords: availableWords ?? this.availableWords,
+         isPremium: isPremium ?? this.isPremium, 
     );
   }
 }

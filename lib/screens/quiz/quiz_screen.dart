@@ -1,13 +1,12 @@
-
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-// Removed: import 'package:flutter_gemini/flutter_gemini.dart'; 
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/services/translation_service.dart';
+// Ensure this import exists
+import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 class QuizScreen extends StatefulWidget {
   const QuizScreen({super.key});
@@ -28,10 +27,13 @@ class _QuizScreenState extends State<QuizScreen> {
     final authState = context.read<AuthBloc>().state;
     String targetLang = 'es';
     String nativeLang = 'en';
+    bool isPremium = false;
 
     if (authState is AuthAuthenticated) {
       targetLang = authState.user.currentLanguage;
       nativeLang = authState.user.nativeLanguage;
+      isPremium = authState.user.isPremium; // Check premium status
+      
       _targetLangCode = targetLang;
       _targetLangName = targetLang.toUpperCase();
     }
@@ -39,7 +41,11 @@ class _QuizScreenState extends State<QuizScreen> {
     _tts.setLanguage(_targetLangCode);
 
     context.read<QuizBloc>().add(
-      QuizLoadRequested(targetLanguage: targetLang, nativeLanguage: nativeLang),
+      QuizLoadRequested(
+        targetLanguage: targetLang, 
+        nativeLanguage: nativeLang,
+        isPremium: isPremium // Pass status to Bloc
+      ),
     );
   }
 
@@ -50,7 +56,7 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
-  // --- MODIFIED: GOOGLE TRANSLATE POPUP (NO GEMINI) ---
+  // --- GOOGLE TRANSLATE POPUP ---
   void _showWordHint(String cleanWord, String originalWord) {
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return;
@@ -58,12 +64,9 @@ class _QuizScreenState extends State<QuizScreen> {
     final user = authState.user;
     final translationService = context.read<TranslationService>();
 
-    // 1. Fetch Translation using your TranslationService (Google/MyMemory)
-    // translate(text, targetLang, sourceLang)
     final translationFuture = translationService
         .translate(originalWord, user.nativeLanguage, user.currentLanguage);
 
-    // 2. Show Custom Dialog
     showDialog(
       context: context,
       barrierColor: Colors.black12, 
@@ -111,6 +114,8 @@ class _QuizScreenState extends State<QuizScreen> {
           BlocBuilder<QuizBloc, QuizState>(
             builder: (context, state) {
               if (state.status == QuizStatus.loading) return const SizedBox();
+              
+              // Use state.isPremium to decide what to show
               return Padding(
                 padding: const EdgeInsets.only(right: 20.0),
                 child: Row(
@@ -118,7 +123,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     const Icon(Icons.favorite, color: Colors.redAccent, size: 20),
                     const SizedBox(width: 6),
                     Text(
-                      "${state.hearts}",
+                      state.isPremium ? "∞" : "${state.hearts}", // Infinite for Premium
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -137,7 +142,9 @@ class _QuizScreenState extends State<QuizScreen> {
           if (state.status == QuizStatus.completed) {
             _showCompletionDialog(context, isDark);
           }
-          if (state.hearts <= 0) {
+          // Only show Game Over if hearts <= 0 AND user is NOT premium
+          // (Double check state.isPremium here to be safe)
+          if (state.hearts <= 0 && !state.isPremium && state.status != QuizStatus.loading) {
             _showGameOverDialog(context, isDark);
           }
         },
@@ -515,8 +522,8 @@ class _QuizScreenState extends State<QuizScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context); // Close Dialog
-              Navigator.pop(context); // Close Quiz Screen
+              Navigator.pop(context); 
+              Navigator.pop(context); 
             },
             child: const Text(
               "Finish",
@@ -528,6 +535,7 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 
+  // --- UPDATED GAME OVER DIALOG ---
   void _showGameOverDialog(BuildContext context, bool isDark) {
     showDialog(
       context: context,
@@ -546,10 +554,11 @@ class _QuizScreenState extends State<QuizScreen> {
           ],
         ),
         content: const Text(
-          "You made too many mistakes. Take a break and try again later!",
+          "You made too many mistakes. Upgrade to Premium for infinite hearts and continue learning!",
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.grey),
         ),
+        actionsAlignment: MainAxisAlignment.center,
         actions: [
           TextButton(
             onPressed: () {
@@ -561,13 +570,42 @@ class _QuizScreenState extends State<QuizScreen> {
               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent),
             ),
           ),
+          
+          // PREMIUM BUTTON
+          ElevatedButton(
+            onPressed: () {
+              // Open Premium Dialog
+              showDialog(
+                context: context,
+                builder: (context) => const PremiumLockDialog(),
+              ).then((unlocked) {
+                if (unlocked == true) {
+                  // User Bought Premium:
+                  // 1. Refresh Auth
+                  context.read<AuthBloc>().add(AuthCheckRequested());
+                  
+                  // 2. Revive Quiz (Reset Hearts & Set Premium)
+                  context.read<QuizBloc>().add(QuizReviveRequested()); 
+                  
+                  // 3. Close Game Over Dialog
+                  Navigator.pop(context);
+                }
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6C63FF),
+              foregroundColor: Colors.white,
+              elevation: 4,
+            ),
+            child: const Text("Get Unlimited Hearts"),
+          ),
         ],
       ),
     );
   }
 }
 
-// --- SIMPLIFIED POPUP: TRANSLATION ONLY (NO GEMINI TIP) ---
+// --- POPUP DIALOG ---
 class _HintDialog extends StatelessWidget {
   final String originalWord;
   final Future<String> translationFuture;
@@ -595,7 +633,6 @@ class _HintDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Header with Speaker
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -616,8 +653,6 @@ class _HintDialog extends StatelessWidget {
               ],
             ),
             const Divider(height: 20),
-
-            // 2. Translation (From Google/MyMemory via Service)
             const Text(
               "Meaning:",
               style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),
@@ -653,6 +688,7 @@ class _HintDialog extends StatelessWidget {
   }
 }
 
+// --- LOADING TIPS ---
 class _LoadingWithTips extends StatefulWidget {
   final String languageName;
 
