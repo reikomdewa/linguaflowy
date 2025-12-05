@@ -652,7 +652,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: isDark ? Colors.white70 : Colors.black45,
                 ),
               ),
-              Expanded(child: const PracticeBannerButton()),
+              Expanded(child:  PracticeBannerButton()),
             ],
           ),
         ),

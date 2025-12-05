@@ -168,7 +168,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
                   child: Column(
                     children: [
                       Text(
-                        "\$5.99",
+                        "\$9.99",
                         style: TextStyle(
                           fontSize: 36,
                           fontWeight: FontWeight.bold,

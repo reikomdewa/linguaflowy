@@ -134,7 +134,7 @@ class _PremiumLockDialogState extends State<PremiumLockDialog> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.paypal, color: Colors.white),
-                  label: const Text("Instant Unlock (\$5.99)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  label: const Text("Instant Unlock (\$9.99)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF003087), // PayPal Blue
                     padding: const EdgeInsets.symmetric(vertical: 12),

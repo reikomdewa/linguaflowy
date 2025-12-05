@@ -31,7 +31,7 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
 
       // A. Construct the Prompt for Bidirectional Questions
       final prompt = """
-        Generate 5 beginner-level language translation exercises.
+        Generate 10 beginner-level language translation exercises.
         Language A (Target): ${event.targetLanguage}
         Language B (Native): ${event.nativeLanguage}
         

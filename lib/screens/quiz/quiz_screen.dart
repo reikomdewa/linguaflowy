@@ -1,8 +1,13 @@
+
+
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+// Removed: import 'package:flutter_gemini/flutter_gemini.dart'; 
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
-import 'package:linguaflow/blocs/quiz/quiz_bloc.dart'; 
+import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
+import 'package:linguaflow/services/translation_service.dart';
 
 class QuizScreen extends StatefulWidget {
   const QuizScreen({super.key});
@@ -14,11 +19,12 @@ class QuizScreen extends StatefulWidget {
 class _QuizScreenState extends State<QuizScreen> {
   final FlutterTts _tts = FlutterTts();
   String _targetLangCode = 'en';
+  String _targetLangName = 'Target Language'; 
 
   @override
   void initState() {
     super.initState();
-    
+
     final authState = context.read<AuthBloc>().state;
     String targetLang = 'es';
     String nativeLang = 'en';
@@ -26,27 +32,49 @@ class _QuizScreenState extends State<QuizScreen> {
     if (authState is AuthAuthenticated) {
       targetLang = authState.user.currentLanguage;
       nativeLang = authState.user.nativeLanguage;
-      _targetLangCode = targetLang; 
+      _targetLangCode = targetLang;
+      _targetLangName = targetLang.toUpperCase();
     }
 
-    // Initialize TTS
     _tts.setLanguage(_targetLangCode);
 
     context.read<QuizBloc>().add(
-      QuizLoadRequested(
-        targetLanguage: targetLang,
-        nativeLanguage: nativeLang,
-      ),
+      QuizLoadRequested(targetLanguage: targetLang, nativeLanguage: nativeLang),
     );
   }
 
-  // --- SMART SPEAK HELPER ---
-  // Only speaks if the text is in the target language.
   void _speakIfTargetLanguage(String text, bool isTargetLanguage) async {
     if (isTargetLanguage) {
       await _tts.setLanguage(_targetLangCode);
       await _tts.speak(text);
     }
+  }
+
+  // --- MODIFIED: GOOGLE TRANSLATE POPUP (NO GEMINI) ---
+  void _showWordHint(String cleanWord, String originalWord) {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return;
+    
+    final user = authState.user;
+    final translationService = context.read<TranslationService>();
+
+    // 1. Fetch Translation using your TranslationService (Google/MyMemory)
+    // translate(text, targetLang, sourceLang)
+    final translationFuture = translationService
+        .translate(originalWord, user.nativeLanguage, user.currentLanguage);
+
+    // 2. Show Custom Dialog
+    showDialog(
+      context: context,
+      barrierColor: Colors.black12, 
+      builder: (context) {
+        return _HintDialog(
+          originalWord: originalWord,
+          translationFuture: translationFuture,
+          onSpeak: () => _speakIfTargetLanguage(originalWord, true),
+        );
+      },
+    );
   }
 
   @override
@@ -66,13 +94,15 @@ class _QuizScreenState extends State<QuizScreen> {
         ),
         title: BlocBuilder<QuizBloc, QuizState>(
           builder: (context, state) {
+            if (state.status == QuizStatus.loading) return const SizedBox();
+
             return ClipRRect(
               borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
-                value: state.progress, 
+                value: state.progress,
                 minHeight: 6,
                 backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation(Colors.blueAccent),
+                valueColor: const AlwaysStoppedAnimation(Colors.blueAccent),
               ),
             );
           },
@@ -80,21 +110,26 @@ class _QuizScreenState extends State<QuizScreen> {
         actions: [
           BlocBuilder<QuizBloc, QuizState>(
             builder: (context, state) {
+              if (state.status == QuizStatus.loading) return const SizedBox();
               return Padding(
                 padding: const EdgeInsets.only(right: 20.0),
                 child: Row(
                   children: [
-                    Icon(Icons.favorite, color: Colors.redAccent, size: 20),
-                    SizedBox(width: 6),
+                    const Icon(Icons.favorite, color: Colors.redAccent, size: 20),
+                    const SizedBox(width: 6),
                     Text(
-                      "${state.hearts}", 
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)
+                      "${state.hearts}",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
                     ),
                   ],
                 ),
               );
             },
-          )
+          ),
         ],
       ),
       body: BlocConsumer<QuizBloc, QuizState>(
@@ -102,18 +137,18 @@ class _QuizScreenState extends State<QuizScreen> {
           if (state.status == QuizStatus.completed) {
             _showCompletionDialog(context, isDark);
           }
+          if (state.hearts <= 0) {
+            _showGameOverDialog(context, isDark);
+          }
         },
         builder: (context, state) {
           if (state.status == QuizStatus.loading) {
-            return Center(child: CircularProgressIndicator());
+            return _LoadingWithTips(languageName: _targetLangName);
           }
 
           final question = state.currentQuestion;
-          if (question == null) return SizedBox();
+          if (question == null) return const SizedBox();
 
-          // --- DETERMINE AUDIO LOGIC ---
-          // target_to_native: Question is Target (Speak), Options are Native (Silent)
-          // native_to_target: Question is Native (Silent), Options are Target (Speak)
           final bool isQuestionTargetLang = question.type == 'target_to_native';
           final bool areOptionsTargetLang = question.type == 'native_to_target';
 
@@ -125,50 +160,102 @@ class _QuizScreenState extends State<QuizScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(height: 20),
-                      Text(
-                        "Translate this sentence", 
-                        style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w500)
+                      const SizedBox(height: 20),
+                      const Text(
+                        "Translate this sentence",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                      SizedBox(height: 24),
-                      
-                      // TARGET SENTENCE
+                      const SizedBox(height: 24),
+
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Only show speaker if question is in Target Language
-                          if (isQuestionTargetLang) 
+                          if (isQuestionTargetLang)
                             GestureDetector(
-                              onTap: () => _speakIfTargetLanguage(question.targetSentence, true),
+                              onTap: () => _speakIfTargetLanguage(
+                                question.targetSentence,
+                                true,
+                              ),
                               child: Container(
-                                margin: EdgeInsets.only(right: 16),
-                                padding: EdgeInsets.all(8),
+                                margin: const EdgeInsets.only(right: 16),
+                                padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: Colors.blueAccent.withOpacity(0.1),
                                   shape: BoxShape.circle,
                                 ),
-                                child: Icon(Icons.volume_up, color: Colors.blueAccent, size: 24),
+                                child: const Icon(
+                                  Icons.volume_up,
+                                  color: Colors.blueAccent,
+                                  size: 24,
+                                ),
                               ),
                             ),
                           
+                          // CLICKABLE WORDS WRAP
                           Expanded(
-                            child: Text(
-                              question.targetSentence,
-                              style: TextStyle(fontSize: 22, height: 1.4, color: textColor),
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: question.targetSentence.split(' ').map((word) {
+                                final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
+                                
+                                if (isQuestionTargetLang) {
+                                  return GestureDetector(
+                                    onTap: () => _showWordHint(cleanWord, word),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        border: Border(
+                                          bottom: BorderSide(
+                                            color: Colors.grey.withOpacity(0.5),
+                                            width: 1.5,
+                                            style: BorderStyle.solid
+                                          )
+                                        )
+                                      ),
+                                      child: Text(
+                                        word,
+                                        style: TextStyle(
+                                          fontSize: 22,
+                                          height: 1.4,
+                                          color: textColor,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  return Text(
+                                    word,
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      height: 1.4,
+                                      color: textColor,
+                                    ),
+                                  );
+                                }
+                              }).toList(),
                             ),
                           ),
                         ],
                       ),
-                      
-                      Spacer(),
+
+                      const Spacer(),
 
                       // SENTENCE BUILDER AREA
                       Container(
                         width: double.infinity,
-                        constraints: BoxConstraints(minHeight: 80),
-                        padding: EdgeInsets.symmetric(vertical: 10),
+                        constraints: const BoxConstraints(minHeight: 80),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
-                          border: Border(bottom: BorderSide(color: isDark ? Colors.white24 : Colors.black12, width: 1)),
+                          border: Border(
+                            bottom: BorderSide(
+                              color: isDark ? Colors.white24 : Colors.black12,
+                              width: 1,
+                            ),
+                          ),
                         ),
                         child: Wrap(
                           spacing: 8,
@@ -176,17 +263,18 @@ class _QuizScreenState extends State<QuizScreen> {
                           children: state.selectedWords.map((word) {
                             return _buildWordChip(
                               context,
-                              word, 
+                              word,
                               isSelectedArea: true,
-                              // Generally don't speak on deselect, or logic gets annoying
-                              shouldSpeak: false, 
-                              onTap: () => context.read<QuizBloc>().add(QuizOptionDeselected(word)),
+                              shouldSpeak: false,
+                              onTap: () => context.read<QuizBloc>().add(
+                                QuizOptionDeselected(word),
+                              ),
                             );
                           }).toList(),
                         ),
                       ),
-                      
-                      Spacer(),
+
+                      const Spacer(),
 
                       // WORD BANK
                       Center(
@@ -197,23 +285,24 @@ class _QuizScreenState extends State<QuizScreen> {
                           children: state.availableWords.map((word) {
                             return _buildWordChip(
                               context,
-                              word, 
+                              word,
                               isSelectedArea: false,
                               shouldSpeak: areOptionsTargetLang,
                               onTap: () {
-                                context.read<QuizBloc>().add(QuizOptionSelected(word));
+                                context.read<QuizBloc>().add(
+                                  QuizOptionSelected(word),
+                                );
                               },
                             );
                           }).toList(),
                         ),
                       ),
-                      SizedBox(height: 40),
+                      const SizedBox(height: 40),
                     ],
                   ),
                 ),
               ),
 
-              // BOTTOM INTERACTION BAR
               _buildBottomBar(context, state, isDark),
             ],
           );
@@ -223,15 +312,14 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   Widget _buildWordChip(
-    BuildContext context, 
-    String word, 
-    {
-      required VoidCallback onTap, 
-      required bool isSelectedArea,
-      required bool shouldSpeak
-    }) {
+    BuildContext context,
+    String word, {
+    required VoidCallback onTap,
+    required bool isSelectedArea,
+    required bool shouldSpeak,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return GestureDetector(
       onTap: () {
         if (shouldSpeak) {
@@ -240,35 +328,37 @@ class _QuizScreenState extends State<QuizScreen> {
         onTap();
       },
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelectedArea 
-              ? (isDark ? Colors.blueAccent.withOpacity(0.2) : Colors.blue[50]) 
+          color: isSelectedArea
+              ? (isDark ? Colors.blueAccent.withOpacity(0.2) : Colors.blue[50])
               : (isDark ? Colors.grey[800] : Colors.white),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelectedArea 
-                ? Colors.transparent 
+            color: isSelectedArea
+                ? Colors.transparent
                 : (isDark ? Colors.grey[700]! : Colors.grey[300]!),
             width: 1,
           ),
-          boxShadow: isSelectedArea ? [] : [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 2,
-              offset: Offset(0, 2),
-            )
-          ]
+          boxShadow: isSelectedArea
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 2,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Text(
-          word, 
+          word,
           style: TextStyle(
-            fontSize: 16, 
+            fontSize: 16,
             fontWeight: FontWeight.w500,
-            color: isSelectedArea 
-                ? Colors.blueAccent 
-                : (isDark ? Colors.white : Colors.black87)
-          )
+            color: isSelectedArea
+                ? Colors.blueAccent
+                : (isDark ? Colors.white : Colors.black87),
+          ),
         ),
       ),
     );
@@ -276,35 +366,45 @@ class _QuizScreenState extends State<QuizScreen> {
 
   Widget _buildBottomBar(BuildContext context, QuizState state, bool isDark) {
     Widget content;
-    Color bgColor = isDark ? Color(0xFF1E1E1E) : Colors.white;
+    Color bgColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     Color borderColor = isDark ? Colors.white10 : Colors.grey[200]!;
 
-    // 1. ANSWERING
     if (state.status == QuizStatus.answering) {
       content = SizedBox(
         width: double.infinity,
         child: ElevatedButton(
-          onPressed: state.selectedWords.isEmpty 
-              ? null 
+          onPressed: state.selectedWords.isEmpty
+              ? null
               : () => context.read<QuizBloc>().add(QuizCheckAnswer()),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.blueAccent,
-            disabledBackgroundColor: isDark ? Colors.grey[800] : Colors.grey[300],
+            disabledBackgroundColor: isDark
+                ? Colors.grey[800]
+                : Colors.grey[300],
             disabledForegroundColor: Colors.grey[500],
-            padding: EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             elevation: 0,
           ),
-          child: Text("Check Answer", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          child: const Text(
+            "Check Answer",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
       );
-    } 
-    // 2. RESULT (Correct/Incorrect)
-    else {
+    } else {
       final isCorrect = state.status == QuizStatus.correct;
       final correctTranslation = state.currentQuestion?.correctAnswer ?? "";
-      
-      bgColor = isCorrect ? (isDark ? Color(0xFF0F291E) : Color(0xFFE8F5E9)) : (isDark ? Color(0xFF2C1515) : Color(0xFFFFEBEE));
+
+      bgColor = isCorrect
+          ? (isDark ? const Color(0xFF0F291E) : const Color(0xFFE8F5E9))
+          : (isDark ? const Color(0xFF2C1515) : const Color(0xFFFFEBEE));
       borderColor = Colors.transparent;
 
       content = Column(
@@ -314,46 +414,67 @@ class _QuizScreenState extends State<QuizScreen> {
           Row(
             children: [
               Icon(
-                isCorrect ? Icons.check_circle_outline : Icons.error_outline, 
-                color: isCorrect ? Colors.green : Colors.redAccent, 
-                size: 28
+                isCorrect ? Icons.check_circle_outline : Icons.error_outline,
+                color: isCorrect ? Colors.green : Colors.redAccent,
+                size: 28,
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Text(
                 isCorrect ? "Correct!" : "Incorrect",
                 style: TextStyle(
-                  fontSize: 20, 
-                  fontWeight: FontWeight.bold, 
-                  color: isCorrect ? Colors.green : Colors.redAccent
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: isCorrect ? Colors.green : Colors.redAccent,
                 ),
               ),
             ],
           ),
           if (!isCorrect) ...[
-            SizedBox(height: 8),
-            Text("Correct solution:", style: TextStyle(color: isCorrect ? Colors.green[800] : Colors.red[900], fontSize: 12, fontWeight: FontWeight.bold)),
-            SizedBox(height: 4),
-            Text(correctTranslation, style: TextStyle(color: isCorrect ? Colors.green[800] : Colors.red[900], fontSize: 16)),
+            const SizedBox(height: 8),
+            Text(
+              "Correct solution:",
+              style: TextStyle(
+                color: isCorrect ? Colors.green[800] : Colors.red[900],
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              correctTranslation,
+              style: TextStyle(
+                color: isCorrect ? Colors.green[800] : Colors.red[900],
+                fontSize: 16,
+              ),
+            ),
           ],
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () => context.read<QuizBloc>().add(QuizNextQuestion()),
               style: ElevatedButton.styleFrom(
                 backgroundColor: isCorrect ? Colors.green : Colors.redAccent,
-                padding: EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 elevation: 0,
               ),
-              child: Text("Continue", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              child: const Text(
+                "Continue",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],
       );
     }
 
-    // Wrap in SafeArea to avoid overlap with Home Indicator on iOS
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -374,25 +495,256 @@ class _QuizScreenState extends State<QuizScreen> {
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        backgroundColor: isDark ? Color(0xFF2C2C2C) : Colors.white,
+        backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Column(
           children: [
-            Icon(Icons.emoji_events, size: 48, color: Colors.amber),
-            SizedBox(height: 16),
-            Text("Practice Complete", style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+            const Icon(Icons.emoji_events, size: 48, color: Colors.amber),
+            const SizedBox(height: 16),
+            Text(
+              "Practice Complete",
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+            ),
           ],
         ),
-        content: Text("You've reviewed these words successfully!", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+        content: const Text(
+          "You've reviewed these words successfully!",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey),
+        ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.pop(context); // Close Dialog
               Navigator.pop(context); // Close Quiz Screen
             },
-            child: Text("Finish", style: TextStyle(fontWeight: FontWeight.bold)),
-          )
+            child: const Text(
+              "Finish",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  void _showGameOverDialog(BuildContext context, bool isDark) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Column(
+          children: [
+            const Icon(Icons.heart_broken, size: 48, color: Colors.redAccent),
+            const SizedBox(height: 16),
+            Text(
+              "Out of Hearts!",
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+            ),
+          ],
+        ),
+        content: const Text(
+          "You made too many mistakes. Take a break and try again later!",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); 
+              Navigator.pop(context); 
+            },
+            child: const Text(
+              "Quit",
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- SIMPLIFIED POPUP: TRANSLATION ONLY (NO GEMINI TIP) ---
+class _HintDialog extends StatelessWidget {
+  final String originalWord;
+  final Future<String> translationFuture;
+  final VoidCallback onSpeak;
+
+  const _HintDialog({
+    required this.originalWord,
+    required this.translationFuture,
+    required this.onSpeak,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Dialog(
+      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 4,
+      alignment: Alignment.center,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Header with Speaker
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  originalWord,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                IconButton(
+                  onPressed: onSpeak,
+                  icon: const Icon(Icons.volume_up, color: Colors.blueAccent),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                )
+              ],
+            ),
+            const Divider(height: 20),
+
+            // 2. Translation (From Google/MyMemory via Service)
+            const Text(
+              "Meaning:",
+              style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            FutureBuilder<String>(
+              future: translationFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(
+                    height: 20, 
+                    width: 20, 
+                    child: CircularProgressIndicator(strokeWidth: 2)
+                  );
+                }
+                if (snapshot.hasError) {
+                  return const Text("-", style: TextStyle(color: Colors.grey));
+                }
+                return Text(
+                  snapshot.data ?? "...",
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.blueAccent,
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingWithTips extends StatefulWidget {
+  final String languageName;
+
+  const _LoadingWithTips({required this.languageName});
+
+  @override
+  State<_LoadingWithTips> createState() => _LoadingWithTipsState();
+}
+
+class _LoadingWithTipsState extends State<_LoadingWithTips> {
+  int _currentTipIndex = 0;
+  Timer? _timer;
+  late final List<String> _tips;
+
+  @override
+  void initState() {
+    super.initState();
+    _tips = [
+      "Speaking out loud helps your memory retain words up to 50% better.",
+      "Don't worry about making mistakes. They are just proof that you are learning.",
+      "Consistency is key! 15 minutes a day is better than 2 hours once a week.",
+      "Sleep is crucial. Your brain processes new vocabulary while you rest.",
+      "Set small, achievable goals. 'Learn 5 words today' is better than 'Learn ${widget.languageName} this year'.",
+      "Learning a language changes your brain structure and improves cognitive flexibility.",
+      "Try to think in ${widget.languageName} for just 1 minute a day.",
+      "Immersion is the fastest way to learn. Watch videos in ${widget.languageName}!",
+      "Spaced Repetition helps move words from short-term to long-term memory.",
+      "Polyglots often talk to themselves in their target language. Give it a try!",
+      "Try the 'Shadowing' technique: Repeat audio immediately after hearing it to improve your accent.",
+      "Label items in your house with post-it notes in ${widget.languageName}.",
+      "Record yourself speaking ${widget.languageName} and compare it to a native speaker.",
+      "Switch your phone's interface language to ${widget.languageName} for constant exposure.",
+      "Listening to music in ${widget.languageName} helps you master the rhythm and intonation.",
+      "Watch movies with ${widget.languageName} subtitles to connect spoken sounds with written words.",
+      "Learn the 1,000 most common words first. They make up 80% of daily conversation.",
+      "Look for 'cognates'—words that look and sound similar in your native language and ${widget.languageName}.",
+      "Try to guess a word's meaning from the context before looking up the translation.",
+      "Don't just learn words; learn phrases. Context makes memory stickier!",
+    ];
+
+    _tips.shuffle();
+
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted) {
+        setState(() {
+          _currentTipIndex = (_currentTipIndex + 1) % _tips.length;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              "Loading...",
+              style: TextStyle(fontSize: 24, color: Colors.grey[400]),
+            ),
+            const SizedBox(height: 20),
+
+            SizedBox(
+              height: 100,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                child: Text(
+                  _tips[_currentTipIndex],
+                  key: ValueKey<int>(_currentTipIndex),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    height: 1.5,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
