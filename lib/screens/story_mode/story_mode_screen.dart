@@ -13,6 +13,8 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
+// Ensure this file exists based on previous steps
+import 'package:linguaflow/widgets/floating_translation_card.dart'; 
 import 'package:linguaflow/widgets/translation_sheet.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
@@ -100,91 +102,74 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
         markedAny = true;
       }
     }
-    
-    // Optional: Fail silently or show subtle UI indicator if needed
   }
 
-  // --- 2. IMPROVED DISPLAY METHOD WITH READER-STYLE COLORING ---
   Widget _buildInteractiveText(String content, bool isDark) {
     final words = content.split(' ');
     List<InlineSpan> spans = [];
-
-    // Default text color based on theme (White in Dark Mode, Black in Light Mode)
     final Color baseTextColor = isDark ? Colors.white : Colors.black87;
 
     for (int i = 0; i < words.length; i++) {
       final word = words[i];
       if (word.isEmpty) continue;
-
       final cleanWord = _generateCleanId(word);
-      
-      // --- COLORING LOGIC ---
-      Color bgColor = Colors.transparent;
+
+      Color? highlightColor;
       Color wordColor = baseTextColor;
       FontWeight wordWeight = FontWeight.normal;
 
       final vocabItem = _vocabulary[cleanWord];
-
-      if (cleanWord.isNotEmpty) {
-        if (vocabItem == null || vocabItem.status == 0) {
-          // STATUS 0 / NULL: Unknown Word (Blue Tint)
-          bgColor = Colors.blue.withOpacity(0.15);
-        } else {
-          // STATUS 1-5: Known/Learning Logic
-          switch (vocabItem.status) {
-            case 1: bgColor = const Color(0xFFFFF9C4); break; // Yellow 100
-            case 2: bgColor = const Color(0xFFFFF59D); break; // Yellow 200
-            case 3: bgColor = const Color(0xFFFFCC80); break; // Orange 200
-            case 4: bgColor = const Color(0xFFFFB74D); break; // Orange 300
-            case 5: bgColor = Colors.transparent; break;      // Known
-          }
-        }
-      }
-
-      // --- TEXT CONTRAST LOGIC ---
-      // If it is a "Learning Word" (Status 1-4, Yellow/Orange), force Black Text & Bold
-      // If it is "New Word" (Blue Tint) or "Known" (Transparent), keep theme text color
       if (vocabItem != null && vocabItem.status >= 1 && vocabItem.status <= 4) {
+        highlightColor = _getStatusColor(vocabItem.status); 
         wordColor = Colors.black87;
         wordWeight = FontWeight.w600;
+      } else if (vocabItem == null || vocabItem.status == 0) {
+        highlightColor = Colors.blue.withOpacity(0.15);
       }
 
-      // --- SPAN CONSTRUCTION ---
       if (cleanWord.isEmpty) {
-        // Punctuation (No interaction)
         spans.add(TextSpan(text: word, style: TextStyle(color: baseTextColor)));
       } else {
-        // Interactive Word
         spans.add(
           TextSpan(
             text: word,
             style: TextStyle(
-              backgroundColor: bgColor,
+              backgroundColor: highlightColor,
               color: wordColor,
               fontWeight: wordWeight,
             ),
+            // Use TapGestureRecognizer with onTapUp to capture the global position
             recognizer: TapGestureRecognizer()
-              ..onTap = () => _handleWordTap(cleanWord, word.trim(), isPhrase: false),
+              ..onTapUp = (TapUpDetails details) {
+                // PASS global position to the handler
+                _handleWordTap(
+                  cleanWord, 
+                  word.trim(), 
+                  isPhrase: false, 
+                  tapPosition: details.globalPosition
+                );
+              },
           ),
         );
       }
-
-      // Add natural spacing
-      if (i < words.length - 1) {
-        spans.add(const TextSpan(text: ' '));
-      }
+      if (i < words.length - 1) spans.add(const TextSpan(text: ' '));
     }
-
+    
     return Text.rich(
       TextSpan(
-        style: TextStyle(
-          fontSize: 19,
-          height: 1.6,
-          color: baseTextColor,
-        ),
-        children: spans,
-      ),
+        style: TextStyle(fontSize: 19, height: 1.6, color: baseTextColor), 
+        children: spans
+      )
     );
+  }
+
+  // Helper for color
+  Color _getStatusColor(int s) {
+    if (s == 1) return const Color(0xFFFFF9C4);
+    if (s == 2) return const Color(0xFFFFF59D);
+    if (s == 3) return const Color(0xFFFFCC80);
+    if (s == 4) return const Color(0xFFFFB74D);
+    return Colors.transparent;
   }
 
   void _initializeTts() async {
@@ -244,7 +229,6 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
             icon: const Icon(Icons.more_vert),
             onSelected: (value) => _handleMenuAction(value),
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              // --- TOGGLE: Mark on Swipe ---
               PopupMenuItem<String>(
                 value: 'toggle_mark_swipe',
                 child: Row(
@@ -301,7 +285,6 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
         controller: _pageController,
         itemCount: totalPages,
         onPageChanged: (index) {
-          // Logic: If moving forward, mark previous page as known
           if (index > _currentPage && _currentPage < _storyPages.length) {
             _markPageAsKnown(_storyPages[_currentPage]);
           }
@@ -496,7 +479,17 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
               ),
               onTap: () => _flutterTts.speak(sentence),
               onLongPress: () {
-                _handleWordTap(_generateCleanId(sentence), sentence, isPhrase: true);
+                // For key phrases, we don't have a specific word position.
+                // Pass the center of the screen as the tap position.
+                final size = MediaQuery.of(context).size;
+                final centerPos = Offset(size.width / 2, size.height / 2);
+                
+                _handleWordTap(
+                  _generateCleanId(sentence), 
+                  sentence, 
+                  isPhrase: true, 
+                  tapPosition: centerPos // Passed Center Position
+                );
               },
             ),
           );
@@ -507,14 +500,16 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
   }
 
   // --- CORE LOGIC ---
-  Future<void> _handleWordTap(String cleanWord, String originalWord, {required bool isPhrase}) async {
+  // FIXED: Added required Offset tapPosition parameter
+  Future<void> _handleWordTap(String cleanWord, String originalWord, {required bool isPhrase, required Offset tapPosition}) async {
     if (_isCheckingLimit) return;
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return;
     final user = authState.user;
 
     if (user.isPremium) {
-      _showDefinitionDialog(cleanWord, originalWord, isPhrase, user);
+      // Pass tapPosition
+      _showDefinitionDialog(cleanWord, originalWord, isPhrase, user, tapPosition);
       return;
     }
 
@@ -523,7 +518,8 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
       final canAccess = await _checkAndIncrementFreeLimit(user.id);
       setState(() => _isCheckingLimit = false);
       if (canAccess) {
-        _showDefinitionDialog(cleanWord, originalWord, isPhrase, user);
+        // Pass tapPosition
+        _showDefinitionDialog(cleanWord, originalWord, isPhrase, user, tapPosition);
       } else {
         _showLimitDialog();
       }
@@ -562,38 +558,35 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
     }
   }
 
-  void _showDefinitionDialog(String cleanId, String originalText, bool isPhrase, dynamic user) {
+  // FIXED: Added Offset tapPosition parameter to receive coordinates
+  void _showDefinitionDialog(String cleanId, String originalText, bool isPhrase, dynamic user, Offset tapPosition) {
     if (_isTtsPlaying) _flutterTts.stop();
 
     final translationService = context.read<TranslationService>();
     final VocabularyItem? existingItem = isPhrase ? null : _vocabulary[cleanId];
-
+    
     final translationFuture = existingItem != null
         ? Future.value(existingItem.translation)
         : translationService.translate(originalText, user.nativeLanguage, widget.lesson.language);
 
     final geminiPrompt = "Translate and explain: '$originalText' (Language: ${widget.lesson.language} -> ${user.nativeLanguage}).";
-    final geminiFuture = Gemini.instance
-        .prompt(parts: [Part.text(geminiPrompt)])
-        .then((v) => v?.output);
+    final geminiFuture = Gemini.instance.prompt(parts: [Part.text(geminiPrompt)]).then((v) => v?.output);
 
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      barrierColor: Colors.transparent, // Transparent so you can see the text behind
       builder: (context) {
-        return TranslationSheet(
+        return FloatingTranslationCard(
           originalText: originalText,
           translationFuture: translationFuture,
           geminiFuture: geminiFuture,
-          isPhrase: isPhrase,
-          existingItem: existingItem,
           targetLanguage: widget.lesson.language,
           nativeLanguage: user.nativeLanguage,
+          currentStatus: existingItem?.status ?? 0,
+          anchorPosition: tapPosition, // Passes the defined tapPosition
           onSpeak: () => _flutterTts.speak(originalText),
           onUpdateStatus: (status, translation) => _updateWordStatus(cleanId, originalText, translation, status),
-          onSaveToFirebase: () => _saveWordToFirebase(originalText),
-          onClose: () => Navigator.pop(context),
+          onClose: () => Navigator.of(context).pop(),
         );
       },
     );
