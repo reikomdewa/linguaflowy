@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -14,8 +15,6 @@ import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
 import 'package:linguaflow/widgets/translation_sheet.dart'; 
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-
-// NOTE: ReaderTopBar and ReaderModeToggleButton are defined at the bottom of this file
 
 class ReaderScreen extends StatefulWidget {
   final LessonModel lesson;
@@ -34,6 +33,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   bool _isVideo = false;
   bool _isAudioMode = false;
   bool _isPlaying = false;
+  bool _isFullScreen = false;
 
   // --- TTS STATE ---
   final FlutterTts _flutterTts = FlutterTts();
@@ -82,7 +82,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
 
     _loadVocabulary();
-    
     _generateSmartChunks();
 
     final maxCount = (_smartChunks.length > widget.lesson.sentences.length) 
@@ -173,6 +172,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _pageController.dispose();
     _flutterTts.stop();
     _stableWordKeys.clear();
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
   }
 
@@ -198,12 +199,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.id)
-          .collection('vocabulary')
-          .get();
-
+      final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.id).collection('vocabulary').get();
       final Map<String, VocabularyItem> loadedVocab = {};
       for (var doc in snapshot.docs) {
         final data = doc.data();
@@ -222,7 +218,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
       if (mounted) setState(() => _vocabulary = loadedVocab);
     } catch (e) {
-      print("Error loading vocabulary: $e");
       try {
         final vocabService = context.read<VocabularyService>();
         final items = await vocabService.getVocabulary(user.id);
@@ -234,74 +229,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Color _getWordColor(VocabularyItem? item) {
     if (item == null || item.status == 0) return Colors.blue.withOpacity(0.15); 
     switch (item.status) {
-      case 1: return Color(0xFFFFF9C4); 
-      case 2: return Color(0xFFFFF59D); 
-      case 3: return Color(0xFFFFCC80); 
-      case 4: return Color(0xFFFFB74D); 
+      case 1: return const Color(0xFFFFF9C4); 
+      case 2: return const Color(0xFFFFF59D); 
+      case 3: return const Color(0xFFFFCC80); 
+      case 4: return const Color(0xFFFFB74D); 
       case 5: return Colors.transparent; 
       default: return Colors.transparent;
     }
   }
 
-  // --- SELECTION LOGIC ---
-  void _handleDragUpdate(int sentenceIndex, int maxWords, Offset globalPosition) {
-    for (int i = 0; i < maxWords; i++) {
-      final key = _getWordKey(sentenceIndex, i);
-      final context = key.currentContext;
-      if (context != null) {
-        final renderBox = context.findRenderObject() as RenderBox?;
-        if (renderBox != null) {
-          final rect = (renderBox.localToGlobal(Offset.zero) & renderBox.size).inflate(10.0);
-          if (rect.contains(globalPosition)) {
-            if (_selectionEndIndex != i) setState(() => _selectionEndIndex = i);
-            return;
-          }
-        }
-      }
-    }
-  }
-
-  void _finishSelection(String fullSentence) {
-    if (_selectionStartIndex == -1 || _selectionEndIndex == -1) { _clearSelection(); return; }
-    final start = _selectionStartIndex < _selectionEndIndex ? _selectionStartIndex : _selectionEndIndex;
-    final end = _selectionStartIndex < _selectionEndIndex ? _selectionEndIndex : _selectionStartIndex;
-    final words = fullSentence.split(RegExp(r'(\s+)'));
-    if (start < 0 || end >= words.length) { _clearSelection(); return; }
-    final phrase = words.sublist(start, end + 1).join(" ");
-    _showLingQDialog(_generateCleanId(phrase), phrase.trim(), isPhrase: words.sublist(start, end + 1).length > 1);
-  }
-
-  void _clearSelection() {
-    setState(() {
-      _isSelectionMode = false;
-      _selectionSentenceIndex = -1;
-      _selectionStartIndex = -1;
-      _selectionEndIndex = -1;
-    });
-  }
-
-  void _startSelection(int sentenceIndex, int wordIndex) {
-    if (_isVideo) _videoController?.pause();
-    if (_isTtsPlaying) _flutterTts.stop();
-    setState(() {
-      _isSelectionMode = true;
-      _selectionSentenceIndex = sentenceIndex;
-      _selectionStartIndex = wordIndex;
-      _selectionEndIndex = wordIndex;
-    });
-  }
-
   // --- MEDIA CONTROLS ---
   void _initializeVideoPlayer() {
     String? videoId;
-    if (widget.lesson.id.startsWith('yt_')) videoId = widget.lesson.id.replaceAll('yt_', '');
-    else if (widget.lesson.videoUrl != null) videoId = YoutubePlayer.convertUrlToId(widget.lesson.videoUrl!);
+    if (widget.lesson.id.startsWith('yt_')) {
+      videoId = widget.lesson.id.replaceAll('yt_', '');
+    } else if (widget.lesson.videoUrl != null) {
+      videoId = YoutubePlayer.convertUrlToId(widget.lesson.videoUrl!);
+    }
 
     if (videoId != null) {
       _isVideo = true;
       _videoController = YoutubePlayerController(
         initialVideoId: videoId,
-        flags: const YoutubePlayerFlags(autoPlay: false, mute: false, enableCaption: false),
+        flags: const YoutubePlayerFlags(
+          autoPlay: false, 
+          mute: false, 
+          enableCaption: false,
+          disableDragSeek: false,
+        ),
       );
       _videoController!.addListener(_videoListener);
     }
@@ -309,7 +264,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _videoListener() {
     if (_videoController == null) return;
-    if (_videoController!.value.isPlaying != _isPlaying) setState(() => _isPlaying = _videoController!.value.isPlaying);
+    
+    // NOTE: We do NOT update _isFullScreen here based on controller value.
+    // We control it manually to ensure our custom UI is used.
+
+    if (_videoController!.value.isPlaying != _isPlaying) {
+      setState(() => _isPlaying = _videoController!.value.isPlaying);
+    }
+    
     if (widget.lesson.transcript.isEmpty) return;
     
     final currentSeconds = _videoController!.value.position.inMilliseconds / 1000;
@@ -333,7 +295,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
       if (_activeSentenceIndex >= 0 && _activeSentenceIndex < widget.lesson.transcript.length) {
         final activeLine = widget.lesson.transcript[_activeSentenceIndex];
         if (_isPlaying && currentSeconds >= activeLine.end && currentSeconds < activeLine.end + 0.5) {
-          if (realTimeIndex == _activeSentenceIndex) _videoController!.pause();
+          if (realTimeIndex == _activeSentenceIndex) {
+            _videoController!.pause();
+          }
         }
       }
     } else if (!_isSelectionMode) {
@@ -344,8 +308,35 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
+  // --- CUSTOM FULLSCREEN TOGGLE ---
+  void _toggleCustomFullScreen() {
+    final wasPlaying = _videoController?.value.isPlaying ?? false;
+
+    setState(() {
+      _isFullScreen = !_isFullScreen;
+    });
+
+    if (_isFullScreen) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft, 
+        DeviceOrientation.landscapeRight
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+    }
+
+    // Force Resume if it was playing
+    if (wasPlaying) {
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if(mounted) _videoController?.play();
+      });
+    }
+  }
+
   void _scrollToActiveLine(int index) {
-    if (!_isSentenceMode && index < _itemKeys.length && _itemKeys[index].currentContext != null) {
+    if (!_isSentenceMode && !_isFullScreen && index < _itemKeys.length && _itemKeys[index].currentContext != null) {
       Scrollable.ensureVisible(_itemKeys[index].currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut, alignment: 0.5);
     }
   }
@@ -362,18 +353,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     await _flutterTts.setSpeechRate(_ttsSpeed);
     
     _flutterTts.setCompletionHandler(() {
-      // If we are in Chunk Mode, we stop after one chunk.
       if (_isSentenceMode) {
         setState(() => _isTtsPlaying = false);
-      } 
-      // If we are in Paragraph Mode, we Auto-Advance to next sentence.
-      else {
+      } else {
         if (_activeSentenceIndex < widget.lesson.sentences.length - 1) {
-          // Play next
           int nextIndex = _activeSentenceIndex + 1;
-          // Check if next sentence is on a new page, if so flip page
           if (_bookPages.isNotEmpty) {
-             // Calculate which page the next sentence belongs to
              for(int i=0; i<_bookPages.length; i++) {
                if (_bookPages[i].contains(nextIndex)) {
                  if(_currentPage != i) {
@@ -386,11 +371,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           }
           _speakSentence(widget.lesson.sentences[nextIndex], nextIndex);
         } else {
-          // End of lesson
-          setState(() {
-             _isTtsPlaying = false;
-             _activeSentenceIndex = -1;
-          });
+          setState(() { _isTtsPlaying = false; _activeSentenceIndex = -1; });
         }
       }
     });
@@ -402,12 +383,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _isTtsPlaying = true;
       _currentSentenceTranslation = null;
     });
-    
-    // Scroll to active sentence in paragraph mode
     if (!_isSentenceMode && !_isVideo) {
-       _scrollToActiveLine(index);
+      _scrollToActiveLine(index);
     }
-    
     await _flutterTts.speak(text);
   }
 
@@ -422,7 +400,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     } else {
       int startIndex = _activeSentenceIndex == -1 ? 0 : _activeSentenceIndex;
       if(startIndex >= widget.lesson.sentences.length) startIndex = 0;
-      
       _speakSentence(widget.lesson.sentences[startIndex], startIndex);
     }
   }
@@ -442,17 +419,70 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _togglePlaybackInMode() {
     if (_isVideo && _videoController != null) {
-      if (_isPlaying) {
-        _videoController!.pause();
-      } else {
-        _videoController!.play();
+      _isPlaying ? _videoController!.pause() : _videoController!.play();
+    } else {
+      _isTtsPlaying ? _stopTts() : _playCurrentSentenceInMode();
+    }
+  }
+
+  void _playCurrentSentenceInMode() {
+    if (_activeSentenceIndex == -1) return;
+    if (_isVideo && widget.lesson.transcript.isNotEmpty) {
+      if (_activeSentenceIndex < widget.lesson.transcript.length) {
+        _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
       }
     } else {
-      if (_isTtsPlaying) {
-        _stopTts();
-      } else {
-        _playCurrentSentenceInMode();
+      if (_activeSentenceIndex < _smartChunks.length) {
+        _speakSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex);
       }
+    }
+  }
+
+  Future<void> _translateCurrentSentence() async {
+    String text = "";
+    if (_activeSentenceIndex < _smartChunks.length) {
+      text = _smartChunks[_activeSentenceIndex];
+    }
+    if (text.isEmpty) return;
+
+    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+    final translationService = context.read<TranslationService>();
+
+    try {
+      final translated = await translationService.translate(text, user.nativeLanguage, widget.lesson.language);
+      setState(() => _currentSentenceTranslation = translated);
+    } catch (e) {
+      setState(() => _currentSentenceTranslation = "Translation unavailable");
+    }
+  }
+
+  void _onSliderChanged(double value) {
+    if (_isSentenceMode || (_isVideo && widget.lesson.transcript.isNotEmpty)) {
+      final newIndex = value.toInt();
+      setState(() { _activeSentenceIndex = newIndex; _currentSentenceTranslation = null; });
+    } else {
+      final newPage = value.toInt();
+      setState(() => _currentPage = newPage);
+      _pageController.jumpToPage(newPage);
+    }
+  }
+
+  void _nextSentence() {
+    if (_activeSentenceIndex < _smartChunks.length - 1) {
+      _handleSwipeMarking(_activeSentenceIndex);
+      setState(() {
+        _activeSentenceIndex++;
+        _currentSentenceTranslation = null;
+      });
+    }
+  }
+
+  void _prevSentence() {
+    if (_activeSentenceIndex > 0) {
+      setState(() {
+        _activeSentenceIndex--;
+        _currentSentenceTranslation = null;
+      });
     }
   }
 
@@ -476,76 +506,128 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     if (markedAny && !_hasShownSwipeHint) {
       _hasShownSwipeHint = true;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Swiping marks blue words as known"), duration: Duration(seconds: 3), behavior: SnackBarBehavior.floating));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Swiping marks blue words as known"), duration: Duration(seconds: 3), behavior: SnackBarBehavior.floating));
     }
   }
 
-  void _nextSentence() {
-    if (_activeSentenceIndex < _smartChunks.length - 1) {
-      _handleSwipeMarking(_activeSentenceIndex);
-      setState(() {
-        _activeSentenceIndex++;
-        _currentSentenceTranslation = null;
-      });
-    }
-  }
-
-  void _prevSentence() {
-    if (_activeSentenceIndex > 0) {
-      setState(() {
-        _activeSentenceIndex--;
-        _currentSentenceTranslation = null;
-      });
-    }
-  }
-
-  void _playCurrentSentenceInMode() {
-    if (_activeSentenceIndex == -1) return;
-    if (_isVideo && widget.lesson.transcript.isNotEmpty) {
-      if (_activeSentenceIndex < widget.lesson.transcript.length) {
-        final line = widget.lesson.transcript[_activeSentenceIndex];
-        _seekToTime(line.start);
-      }
-    } else {
-      if (_activeSentenceIndex < _smartChunks.length) {
-        final chunk = _smartChunks[_activeSentenceIndex];
-        _speakSentence(chunk, _activeSentenceIndex);
+  // --- SELECTION HANDLERS ---
+  void _handleDragUpdate(int sentenceIndex, int maxWords, Offset globalPosition) {
+    for (int i = 0; i < maxWords; i++) {
+      final key = _getWordKey(sentenceIndex, i);
+      final context = key.currentContext;
+      if (context != null) {
+        final renderBox = context.findRenderObject() as RenderBox?;
+        if (renderBox != null) {
+          final rect = (renderBox.localToGlobal(Offset.zero) & renderBox.size).inflate(10.0);
+          if (rect.contains(globalPosition)) {
+            if (_selectionEndIndex != i) {
+              setState(() => _selectionEndIndex = i);
+            }
+            return;
+          }
+        }
       }
     }
   }
 
-  Future<void> _translateCurrentSentence() async {
-    String text = "";
-    if (_activeSentenceIndex < _smartChunks.length) text = _smartChunks[_activeSentenceIndex];
-    if (text.isEmpty) return;
-
-    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    final translationService = context.read<TranslationService>();
-
-    try {
-      final translated = await translationService.translate(text, user.nativeLanguage, widget.lesson.language);
-      setState(() => _currentSentenceTranslation = translated);
-    } catch (e) {
-      setState(() => _currentSentenceTranslation = "Translation unavailable");
+  void _finishSelection(String fullSentence) {
+    if (_selectionStartIndex == -1 || _selectionEndIndex == -1) { 
+      _clearSelection(); 
+      return; 
     }
+    final start = _selectionStartIndex < _selectionEndIndex ? _selectionStartIndex : _selectionEndIndex;
+    final end = _selectionStartIndex < _selectionEndIndex ? _selectionEndIndex : _selectionStartIndex;
+    final words = fullSentence.split(RegExp(r'(\s+)'));
+    if (start < 0 || end >= words.length) { 
+      _clearSelection(); 
+      return; 
+    }
+    final phrase = words.sublist(start, end + 1).join(" ");
+    _showLingQDialog(_generateCleanId(phrase), phrase.trim(), isPhrase: words.sublist(start, end + 1).length > 1);
   }
 
-  void _onSliderChanged(double value) {
-    if (_isSentenceMode || (_isVideo && widget.lesson.transcript.isNotEmpty)) {
-      final newIndex = value.toInt();
-      setState(() {
-        _activeSentenceIndex = newIndex;
-        _currentSentenceTranslation = null;
-      });
-    } else {
-      final newPage = value.toInt();
-      setState(() => _currentPage = newPage);
-      _pageController.jumpToPage(newPage);
-    }
+  void _clearSelection() {
+    setState(() { _isSelectionMode = false; _selectionSentenceIndex = -1; _selectionStartIndex = -1; _selectionEndIndex = -1; });
   }
 
+  void _startSelection(int sentenceIndex, int wordIndex) {
+    if (_isVideo) _videoController?.pause();
+    if (_isTtsPlaying) _flutterTts.stop();
+    setState(() { _isSelectionMode = true; _selectionSentenceIndex = sentenceIndex; _selectionStartIndex = wordIndex; _selectionEndIndex = wordIndex; });
+  }
+
+  // --- MAIN BUILD METHOD ---
   @override
   Widget build(BuildContext context) {
+    // --- FULLSCREEN MODE ---
+    if (_isFullScreen && _isVideo && _videoController != null) {
+       return WillPopScope(
+         onWillPop: () async {
+           _toggleCustomFullScreen();
+           return false; 
+         },
+         child: Scaffold(
+           backgroundColor: Colors.black,
+           // Use Center -> AspectRatio to prevent "Stretched" look
+           body: Stack(
+             children: [
+               Center(
+                 child: FittedBox(
+                   fit: BoxFit.contain, // Ensures 16:9 is respected
+                   child: SizedBox(
+                     width: 16 * 100.0,
+                     height: 9 * 100.0,
+                     child: YoutubePlayer(
+                       controller: _videoController!,
+                       showVideoProgressIndicator: true,
+                       progressIndicatorColor: Colors.red,
+                       // REPLACEMENT BOTTOM ACTIONS (With Play Button)
+                       bottomActions: [
+                         const SizedBox(width: 14.0),
+                         const PlayPauseButton(),
+                         CurrentPosition(),
+                         const SizedBox(width: 8.0),
+                         ProgressBar(isExpanded: true),
+                         RemainingDuration(),
+                         const PlaybackSpeedButton(),
+                         IconButton(
+                           icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+                           onPressed: _toggleCustomFullScreen,
+                         ),
+                       ],
+                     ),
+                   ),
+                 ),
+               ),
+               
+               // FULLSCREEN OVERLAY (Subtitles) - MOVED DOWN
+               if (_activeSentenceIndex != -1 && _activeSentenceIndex < _smartChunks.length)
+                 Positioned(
+                   left: 40,
+                   right: 40,
+                   bottom: 35, 
+                   child: Center(
+                     child: Container(
+                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                       decoration: BoxDecoration(
+                         color: Colors.black.withOpacity(0.6),
+                         borderRadius: BorderRadius.circular(12),
+                       ),
+                       child: _buildSentence(
+                         _smartChunks[_activeSentenceIndex],
+                         _activeSentenceIndex,
+                         isOverlay: true
+                       ),
+                     ),
+                   ),
+                 ),
+             ],
+           ),
+         ),
+       );
+    }
+
+    // --- NORMAL PORTRAIT UI ---
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
@@ -562,19 +644,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
       sliderMax = (totalPages > 0) ? (totalPages - 1).toDouble() : 0.0;
       sliderValue = _currentPage.toDouble();
     }
-    
     if (sliderValue > sliderMax) sliderValue = sliderMax;
     if (sliderValue < 0) sliderValue = 0;
 
     return Scaffold(
       backgroundColor: bgColor,
-      appBar: null, 
       body: SafeArea(
         child: Stack(
           children: [
             Column(
               children: [
-                // --- TOP BAR ---
                 ReaderTopBar(
                   isDark: isDark,
                   isVideo: _isVideo,
@@ -583,10 +662,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   sliderMax: sliderMax,
                   onSliderChanged: _onSliderChanged,
                   onBackPressed: () => Navigator.pop(context),
-                  // Show play button ONLY if NOT video and NOT Chunk mode
                   showPlayButton: !_isVideo && !_isSentenceMode,
-                  isPlaying: _isTtsPlaying,
-                  onPlayPressed: _toggleTtsFullLesson,
+                  isPlaying: _isPlaying || _isTtsPlaying,
+                  onPlayPressed: _isVideo ? () {} : _toggleTtsFullLesson,
                 ),
 
                 if (_isVideo) _buildVideoHeader(isDark),
@@ -598,8 +676,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 ),
               ],
             ),
-
-            // --- FLOATING BUTTON ---
             if (!_isSelectionMode)
               Positioned(
                 bottom: 24,
@@ -616,27 +692,75 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
+  // --- WIDGET BUILDERS ---
+  
+  Widget _buildVideoHeader(bool isDark) {
+    if (_videoController == null) return const SizedBox.shrink();
+    return Column(children: [
+      SizedBox(
+        height: _isAudioMode ? 1 : 220, 
+        child: YoutubePlayer(
+          controller: _videoController!, 
+          showVideoProgressIndicator: true, 
+          progressIndicatorColor: Colors.red,
+          // REPLACEMENT BOTTOM ACTIONS (Clean - No Extra Play Button here in Portrait)
+          bottomActions: [
+            const SizedBox(width: 14.0),
+            CurrentPosition(),
+            const SizedBox(width: 8.0),
+            ProgressBar(isExpanded: true),
+            RemainingDuration(),
+            const PlaybackSpeedButton(),
+            IconButton(
+              icon: const Icon(Icons.fullscreen, color: Colors.white),
+              onPressed: _toggleCustomFullScreen, 
+            ),
+          ],
+        )
+      ), 
+      if (_isAudioMode) _buildAudioPlayerUI(isDark)
+    ]);
+  }
+
+  Widget _buildAudioPlayerUI(bool isDark) {
+    return Container(
+      color: isDark ? const Color(0xFF1E1E1E) : Colors.grey[100],
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      child: Row(
+        children: [
+          IconButton(
+            iconSize: 42,
+            icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: Colors.blue),
+            onPressed: () => _isPlaying ? _videoController!.pause() : _videoController!.play()
+          ),
+          const SizedBox(width: 8),
+          const Text("Audio Mode", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))
+        ]
+      )
+    );
+  }
+
   Widget _buildParagraphModeView(bool isDark) {
     if (widget.lesson.transcript.isNotEmpty) {
       return SingleChildScrollView(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           ...widget.lesson.transcript.asMap().entries.map((entry) {
             return _buildTranscriptRow(entry.key, entry.value.text, entry.value.start, entry.key == _activeSentenceIndex, isDark);
           }),
-          SizedBox(height: 100),
+          const SizedBox(height: 100),
         ]),
       );
     }
-    if (_bookPages.isEmpty) return Center(child: CircularProgressIndicator());
+    if (_bookPages.isEmpty) return const Center(child: CircularProgressIndicator());
     return PageView.builder(
       controller: _pageController, itemCount: _bookPages.length, onPageChanged: (index) => setState(() => _currentPage = index),
       itemBuilder: (context, pageIndex) {
         return SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             ..._bookPages[pageIndex].map((index) => _buildTextRow(index, widget.lesson.sentences[index], index == _activeSentenceIndex, isDark)).toList(),
-            SizedBox(height: 100),
+            const SizedBox(height: 100),
           ]),
         );
       },
@@ -645,7 +769,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   Widget _buildSentenceModeView(bool isDark, Color? textColor) {
     final count = _smartChunks.length;
-    if (count == 0) return Center(child: Text("No content"));
+    if (count == 0) return const Center(child: Text("No content"));
     if (_activeSentenceIndex < 0) _activeSentenceIndex = 0;
     if (_activeSentenceIndex >= count) _activeSentenceIndex = count - 1;
 
@@ -653,12 +777,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     return Column(
       children: [
-        SizedBox(height: 40),
+        const SizedBox(height: 40),
         Center(
           child: GestureDetector(
             onTap: _togglePlaybackInMode,
             child: Container(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withOpacity(0.5), width: 2)),
               child: Icon(
                 _isVideo 
@@ -669,29 +793,35 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
           ),
         ),
-        Spacer(),
+        const Spacer(),
         Expanded(
           flex: 3,
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onHorizontalDragEnd: (details) {
-              if (details.primaryVelocity! < 0) _nextSentence();
-              else if (details.primaryVelocity! > 0) _prevSentence();
+              if (details.primaryVelocity! < 0) {
+                _nextSentence();
+              } else if (details.primaryVelocity! > 0) {
+                _prevSentence();
+              }
             },
             onVerticalDragEnd: (details) {
-              if (details.primaryVelocity! < 0) _nextSentence();
-              else if (details.primaryVelocity! > 0) _prevSentence();
+              if (details.primaryVelocity! < 0) {
+                _nextSentence();
+              } else if (details.primaryVelocity! > 0) {
+                _prevSentence();
+              }
             },
             child: Container(
-              width: double.infinity, padding: EdgeInsets.symmetric(horizontal: 24), alignment: Alignment.center,
+              width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 24), alignment: Alignment.center,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     _buildSentence(currentText, _activeSentenceIndex, isBigMode: true),
-                    SizedBox(height: 24),
+                    const SizedBox(height: 24),
                     if (_currentSentenceTranslation == null)
-                      TextButton.icon(icon: Icon(Icons.translate, size: 16, color: Colors.grey), label: Text("Translate Sentence", style: TextStyle(color: Colors.grey)), onPressed: _translateCurrentSentence)
+                      TextButton.icon(icon: const Icon(Icons.translate, size: 16, color: Colors.grey), label: const Text("Translate Sentence", style: TextStyle(color: Colors.grey)), onPressed: _translateCurrentSentence)
                     else
                       Padding(padding: const EdgeInsets.all(8.0), child: Text(_currentSentenceTranslation!, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[400], fontStyle: FontStyle.italic, fontSize: 16))),
                   ],
@@ -700,8 +830,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
           ),
         ),
-        Spacer(),
-        Padding(padding: const EdgeInsets.only(bottom: 20), child: Text("Swipe LEFT/UP for next • RIGHT/DOWN for previous", style: TextStyle(color: Colors.grey, fontSize: 12))),
+        const Spacer(),
+        const Padding(padding: EdgeInsets.only(bottom: 20), child: Text("Swipe LEFT/UP for next • RIGHT/DOWN for previous", style: TextStyle(color: Colors.grey, fontSize: 12))),
       ],
     );
   }
@@ -709,10 +839,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // --- ROWS ---
   Widget _buildTranscriptRow(int index, String text, double startTime, bool isActive, bool isDark) {
     return Container(
-      key: _itemKeys[index], margin: EdgeInsets.only(bottom: 12), padding: isActive ? EdgeInsets.all(12) : EdgeInsets.zero,
+      key: _itemKeys[index], margin: const EdgeInsets.only(bottom: 12), padding: isActive ? const EdgeInsets.all(12) : EdgeInsets.zero,
       decoration: BoxDecoration(color: isActive ? (isDark ? Colors.white10 : Colors.grey[100]) : Colors.transparent, borderRadius: BorderRadius.circular(8)),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (_isVideo) GestureDetector(onTap: () => _seekToTime(startTime), child: Padding(padding: EdgeInsets.only(top: 4, right: 12), child: Icon(isActive ? Icons.play_arrow : Icons.play_arrow_outlined, color: isActive ? Colors.blue : Colors.grey[400], size: 24))),
+        if (_isVideo) GestureDetector(onTap: () => _seekToTime(startTime), child: Padding(padding: const EdgeInsets.only(top: 4, right: 12), child: Icon(isActive ? Icons.play_arrow : Icons.play_arrow_outlined, color: isActive ? Colors.blue : Colors.grey[400], size: 24))),
         Expanded(child: GestureDetector(onLongPress: () => _showLingQDialog("sentence_$index", text, isPhrase: true), child: _buildSentence(text, index))),
       ]),
     );
@@ -723,40 +853,64 @@ class _ReaderScreenState extends State<ReaderScreen> {
       onLongPress: () => _showLingQDialog("sentence_$index", sentence, isPhrase: true),
       onDoubleTap: () => _speakSentence(sentence, index),
       child: Container(
-        key: _itemKeys[index], margin: EdgeInsets.only(bottom: 24), padding: isActive ? EdgeInsets.all(12) : EdgeInsets.zero,
+        key: _itemKeys[index], margin: const EdgeInsets.only(bottom: 24), padding: isActive ? const EdgeInsets.all(12) : EdgeInsets.zero,
         decoration: BoxDecoration(color: isActive ? Colors.yellow.withOpacity(0.1) : Colors.transparent, borderRadius: BorderRadius.circular(8)),
         child: _buildSentence(sentence, index),
       ),
     );
   }
 
-  Widget _buildSentence(String sentence, int sentenceIndex, {bool isBigMode = false}) {
+  Widget _buildSentence(String sentence, int sentenceIndex, {bool isBigMode = false, bool isOverlay = false}) {
     final words = sentence.split(RegExp(r'(\s+)'));
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     double fontSize = 18;
     if (isBigMode) fontSize = _isVideo ? 26 : 22;
+    if (isOverlay) fontSize = 20;
+
     final double lineHeight = isBigMode ? 1.6 : 1.5;
 
     return Wrap(
-      spacing: 0, runSpacing: isBigMode ? 12 : 6, alignment: isBigMode ? WrapAlignment.center : WrapAlignment.start,
+      spacing: 0, 
+      runSpacing: isBigMode ? 12 : 6, 
+      alignment: (isBigMode || isOverlay) ? WrapAlignment.center : WrapAlignment.start,
       children: words.asMap().entries.map((entry) {
         final int wordIndex = entry.key;
         final String word = entry.value;
         final cleanWord = _generateCleanId(word);
         final GlobalKey wordKey = GlobalKey(); 
 
-        if (cleanWord.isEmpty || word.trim().isEmpty) return Container(key: wordKey, padding: EdgeInsets.symmetric(horizontal: 2, vertical: 1), child: Text(word, style: TextStyle(fontSize: fontSize, height: lineHeight, color: isDark ? Colors.white : Colors.black87)));
+        if (cleanWord.isEmpty || word.trim().isEmpty) {
+          return Container(
+            key: wordKey, 
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1), 
+            child: Text(word, style: TextStyle(fontSize: fontSize, height: lineHeight, color: isOverlay ? Colors.white : (isDark ? Colors.white : Colors.black87)))
+          );
+        }
 
         bool isSelected = false;
         if (_isSelectionMode && _selectionSentenceIndex == sentenceIndex) {
           int start = _selectionStartIndex < _selectionEndIndex ? _selectionStartIndex : _selectionEndIndex;
           int end = _selectionStartIndex < _selectionEndIndex ? _selectionEndIndex : _selectionStartIndex;
-          if (wordIndex >= start && wordIndex <= end) isSelected = true;
+          if (wordIndex >= start && wordIndex <= end) {
+            isSelected = true;
+          }
         }
 
         final vocabItem = _vocabulary[cleanWord];
         Color bgColor = _getWordColor(vocabItem);
-        Color textColor = (isSelected || vocabItem?.status == 5 || vocabItem == null) ? (isDark ? Colors.white : Colors.black87) : Colors.black87;
+        
+        Color textColor;
+        if (isOverlay) {
+           textColor = Colors.white; 
+           if (bgColor != Colors.transparent && bgColor != Colors.blue.withOpacity(0.15)) {
+              bgColor = bgColor.withOpacity(0.8);
+              textColor = Colors.black; 
+           }
+        } else {
+           textColor = (isSelected || vocabItem?.status == 5 || vocabItem == null) ? (isDark ? Colors.white : Colors.black87) : Colors.black87;
+        }
+
         if(isSelected) { bgColor = Colors.purple.withOpacity(0.3); textColor = Colors.white; }
 
         return GestureDetector(
@@ -767,8 +921,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
           onTap: () { if (_isSelectionMode) _clearSelection(); else _onWordTap(cleanWord, word); },
           child: Container(
             decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(4), border: isSelected ? Border.all(color: Colors.purple.withOpacity(0.5), width: 1) : null),
-            padding: EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-            child: Text(word, style: TextStyle(fontSize: fontSize, height: lineHeight, color: textColor, fontFamily: 'Roboto')),
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+            child: Text(word, style: TextStyle(fontSize: fontSize, height: lineHeight, color: textColor, fontFamily: 'Roboto', shadows: isOverlay ? [const Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black)] : null)),
           ),
         );
       }).toList(),
@@ -777,16 +931,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _onWordTap(String cleanWord, String originalWord) {
     if (_isTtsPlaying) _flutterTts.stop();
+    if(_isVideo && _isPlaying) _videoController!.pause();
     _showLingQDialog(cleanWord, originalWord, isPhrase: false);
-  }
-
-  Widget _buildVideoHeader(bool isDark) {
-    if (_videoController == null) return SizedBox.shrink();
-    return Column(children: [SizedBox(height: _isAudioMode ? 1 : 220, child: YoutubePlayer(controller: _videoController!, showVideoProgressIndicator: true, progressIndicatorColor: Colors.red)), if (_isAudioMode) _buildAudioPlayerUI(isDark)]);
-  }
-
-  Widget _buildAudioPlayerUI(bool isDark) {
-    return Container(color: isDark ? Color(0xFF1E1E1E) : Colors.grey[100], padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16), child: Row(children: [IconButton(iconSize: 42, icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: Colors.blue), onPressed: () => _isPlaying ? _videoController!.pause() : _videoController!.play()), SizedBox(width: 8), Text("Audio Mode", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))]));
   }
 
   void _showLingQDialog(String cleanId, String originalText, {required bool isPhrase}) {
@@ -802,14 +948,55 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final geminiPrompt = isPhrase ? "Translate this ${user.currentLanguage} phrase to ${user.nativeLanguage}: \"$originalText\"..." : "Translate this ${user.currentLanguage} word to ${user.nativeLanguage}: \"$originalText\"...";
     final Future<String?> geminiFuture = Gemini.instance.prompt(parts: [Part.text(geminiPrompt)]).then((value) => value?.output).catchError((e) => "Gemini unavailable");
 
-    showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (context) {
-      return TranslationSheet(originalText: originalText, translationFuture: translationFuture, geminiFuture: geminiFuture, isPhrase: isPhrase, existingItem: existingItem, targetLanguage: widget.lesson.language, nativeLanguage: user.nativeLanguage, onSpeak: () => _flutterTts.speak(originalText), onUpdateStatus: (status, translation) => _updateWordStatus(cleanId, originalText, translation, status), onSaveToFirebase: () => _saveWordToFirebase(originalText), onClose: () => Navigator.pop(context));
-    }).then((_) => _clearSelection());
+    // --- NICE COMPACT FLOATING DIALOG FOR FULLSCREEN (RESIZED TO 350x250) ---
+    if (_isFullScreen) {
+      showDialog(
+        context: context,
+        barrierColor: Colors.black12, 
+        builder: (ctx) => Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: 350, // Small width
+              height: 250, // Small height
+              padding: EdgeInsets.zero,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E), 
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white24, width: 1),
+                boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 20)],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: TranslationSheet(
+                  originalText: originalText,
+                  translationFuture: translationFuture,
+                  geminiFuture: geminiFuture,
+                  isPhrase: isPhrase,
+                  existingItem: existingItem,
+                  targetLanguage: widget.lesson.language,
+                  nativeLanguage: user.nativeLanguage,
+                  onSpeak: () => _flutterTts.speak(originalText),
+                  onUpdateStatus: (status, translation) => _updateWordStatus(cleanId, originalText, translation, status),
+                  onSaveToFirebase: () => _saveWordToFirebase(originalText),
+                  onClose: () => Navigator.pop(ctx),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ).then((_) => _clearSelection());
+    } else {
+      // --- NORMAL PORTRAIT SHEET ---
+      showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (context) {
+        return TranslationSheet(originalText: originalText, translationFuture: translationFuture, geminiFuture: geminiFuture, isPhrase: isPhrase, existingItem: existingItem, targetLanguage: widget.lesson.language, nativeLanguage: user.nativeLanguage, onSpeak: () => _flutterTts.speak(originalText), onUpdateStatus: (status, translation) => _updateWordStatus(cleanId, originalText, translation, status), onSaveToFirebase: () => _saveWordToFirebase(originalText), onClose: () => Navigator.pop(context));
+      }).then((_) => _clearSelection());
+    }
   }
 
   void _saveWordToFirebase(String word) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    try { await FirebaseFirestore.instance.collection('users').doc(user.id).collection('saved_words').add({'word': word, 'added_at': FieldValue.serverTimestamp(), 'source_lesson': widget.lesson.id}); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Saved to your list!"))); } catch (e) { print("Error saving word: $e"); }
+    try { await FirebaseFirestore.instance.collection('users').doc(user.id).collection('saved_words').add({'word': word, 'added_at': FieldValue.serverTimestamp(), 'source_lesson': widget.lesson.id}); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Saved to your list!"))); } catch (e) { print("Error saving word: $e"); }
   }
 
   Future<void> _updateWordStatus(String cleanWord, String originalWord, String translation, int status, {bool showDialog = true}) async {
@@ -824,6 +1011,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     else context.read<VocabularyBloc>().add(VocabularyAddRequested(newItem));
 
     try { await FirebaseFirestore.instance.collection('users').doc(user.id).collection('vocabulary').doc(cleanWord).set({'id': cleanWord, 'userId': user.id, 'word': cleanWord, 'baseForm': cleanWord, 'language': widget.lesson.language, 'translation': translation, 'status': status, 'timesEncountered': newItem.timesEncountered, 'lastReviewed': FieldValue.serverTimestamp(), 'createdAt': existingItem != null ? existingItem.createdAt : FieldValue.serverTimestamp()}, SetOptions(merge: true)); } catch (e) { print("Error saving ranking to Firestore: $e"); }
-    if (showDialog) { ScaffoldMessenger.of(context).hideCurrentSnackBar(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Word status updated"), duration: Duration(seconds: 1), behavior: SnackBarBehavior.floating)); }
+    if (showDialog) { ScaffoldMessenger.of(context).hideCurrentSnackBar(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Word status updated"), duration: Duration(seconds: 1), behavior: SnackBarBehavior.floating)); }
   }
 }

@@ -1,6 +1,3 @@
-
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -45,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- NATIVE / IMMERSION TABS ---
   String _nativeDifficultyTab = 'All';
-  
+
   // --- LIBRARY TABS ---
   String _libraryDifficultyTab = 'All';
 
@@ -80,9 +77,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     for (var word in words) {
       final cleanWord = word.toLowerCase().trim().replaceAll(
-            RegExp(r'[^\w\s]'),
-            '',
-          );
+        RegExp(r'[^\w\s]'),
+        '',
+      );
       if (cleanWord.isEmpty) continue;
       if (uniqueWords.contains(cleanWord)) continue;
 
@@ -323,14 +320,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   onChanged: (String? newValue) {
                     if (newValue != null) {
                       context.read<AuthBloc>().add(
-                            AuthTargetLanguageChanged(newValue),
-                          );
+                        AuthTargetLanguageChanged(newValue),
+                      );
                       context.read<LessonBloc>().add(
-                            LessonLoadRequested(user.id, newValue),
-                          );
+                        LessonLoadRequested(user.id, newValue),
+                      );
                       context.read<VocabularyBloc>().add(
-                            VocabularyLoadRequested(user.id),
-                          );
+                        VocabularyLoadRequested(user.id),
+                      );
                     }
                   },
                   items: [
@@ -353,25 +350,22 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context, vocabState) {
                 int knownCount = 0;
                 if (vocabState is VocabularyLoaded) {
-                  knownCount =
-                      vocabState.items
-                          .where(
-                            (v) =>
-                                v.status > 0 &&
-                                v.language == user.currentLanguage,
-                          )
-                          .length;
+                  knownCount = vocabState.items
+                      .where(
+                        (v) =>
+                            v.status > 0 && v.language == user.currentLanguage,
+                      )
+                      .length;
                 }
                 return Material(
                   color: Colors.transparent,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(20),
-                    onTap:
-                        () => _showStatsDialog(
-                          context,
-                          knownCount,
-                          user.currentLanguage,
-                        ),
+                    onTap: () => _showStatsDialog(
+                      context,
+                      knownCount,
+                      user.currentLanguage,
+                    ),
                     child: Container(
                       padding: EdgeInsets.symmetric(
                         horizontal: 12,
@@ -439,27 +433,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     if (lessonState is LessonLoaded) {
                       // --- SPLIT DATA ---
-                      
-                      final nativeLessons =
-                          lessonState.lessons
-                              .where((l) => l.type == 'video_native')
-                              .toList();
 
-                      final guidedLessons =
-                          lessonState.lessons
-                              .where((l) => l.type == 'video')
-                              .toList();
+                      final nativeLessons = lessonState.lessons
+                          .where((l) => l.type == 'video_native')
+                          .toList();
 
-                      final importedLessons =
-                          lessonState.lessons
-                              .where((l) => l.type == 'text' && !l.userId.startsWith('system'))
-                              .toList();
+                      final guidedLessons = lessonState.lessons
+                          .where((l) => l.type == 'video')
+                          .toList();
+
+                      final importedLessons = lessonState.lessons
+                          .where(
+                            (l) =>
+                                l.type == 'text' &&
+                                !l.userId.startsWith('system'),
+                          )
+                          .toList();
 
                       // Identify system books by prefix
-                      final libraryLessons = 
-                          lessonState.lessons
-                              .where((l) => l.type == 'text' && l.userId.startsWith('system'))
-                              .toList();
+                      final libraryLessons = lessonState.lessons
+                          .where(
+                            (l) =>
+                                l.type == 'text' &&
+                                l.userId.startsWith('system'),
+                          )
+                          .toList();
 
                       // --- VIEW LOGIC ---
                       if (_selectedGlobalFilter != 'All' &&
@@ -482,7 +480,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         },
                         child: SingleChildScrollView(
-                          padding: EdgeInsets.only(bottom: 80),
+                          padding: EdgeInsets.only(bottom: 20),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -494,7 +492,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 isDark,
                                 textColor,
                               ),
-                          const PracticeBannerButton(),
                               // 3. IMMERSION / TRENDING (Horizontal)
                               _buildNativeSection(
                                 nativeLessons,
@@ -590,29 +587,25 @@ class _HomeScreenState extends State<HomeScreen> {
               duration: Duration(milliseconds: 200),
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               decoration: BoxDecoration(
-                color:
-                    isSelected
-                        ? (isDark ? Colors.white : Colors.black)
-                        : (isDark ? Colors.white10 : Colors.grey[100]),
+                color: isSelected
+                    ? (isDark ? Colors.white : Colors.black)
+                    : (isDark ? Colors.white10 : Colors.grey[100]),
                 borderRadius: BorderRadius.circular(20),
-                border:
-                    isSelected
-                        ? null
-                        : Border.all(
-                          color:
-                              isDark
-                                  ? Colors.transparent
-                                  : Colors.grey.shade300,
-                        ),
+                border: isSelected
+                    ? null
+                    : Border.all(
+                        color: isDark
+                            ? Colors.transparent
+                            : Colors.grey.shade300,
+                      ),
               ),
               alignment: Alignment.center,
               child: Text(
                 category,
                 style: TextStyle(
-                  color:
-                      isSelected
-                          ? (isDark ? Colors.black : Colors.white)
-                          : (isDark ? Colors.white70 : Colors.black),
+                  color: isSelected
+                      ? (isDark ? Colors.black : Colors.white)
+                      : (isDark ? Colors.white70 : Colors.black),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -638,12 +631,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (_guidedTab == 'All') {
       displayLessons = guidedLessons;
     } else {
-      displayLessons =
-          guidedLessons
-              .where(
-                (l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase(),
-              )
-              .toList();
+      displayLessons = guidedLessons
+          .where((l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase())
+          .toList();
     }
 
     return Column(
@@ -651,14 +641,19 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         // Title
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: Text(
-            "Guided Courses",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white70 : Colors.black45,
-            ),
+          padding: const EdgeInsets.fromLTRB(16, 8, 0, 8),
+          child: Row(
+            children: [
+              Text(
+                "Guided Courses",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white70 : Colors.black45,
+                ),
+              ),
+              Expanded(child: const PracticeBannerButton()),
+            ],
           ),
         ),
 
@@ -667,41 +662,38 @@ class _HomeScreenState extends State<HomeScreen> {
           scrollDirection: Axis.horizontal,
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            children:
-                _guidedTabsList.map((tab) {
-                  final isSelected = _guidedTab == tab;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-                    child: InkWell(
-                      onTap: () => setState(() => _guidedTab = tab),
-                      child: Column(
-                        children: [
-                          Text(
-                            tab,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight:
-                                  isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                              color:
-                                  isSelected
-                                      ? (isDark ? Colors.white : Colors.black)
-                                      : Colors.grey[500],
-                            ),
-                          ),
-                          if (isSelected)
-                            Container(
-                              margin: EdgeInsets.only(top: 4),
-                              height: 2,
-                              width: 20,
-                              color: Colors.blue,
-                            ),
-                        ],
+            children: _guidedTabsList.map((tab) {
+              final isSelected = _guidedTab == tab;
+              return Padding(
+                padding: const EdgeInsets.only(right: 24.0, bottom: 12),
+                child: InkWell(
+                  onTap: () => setState(() => _guidedTab = tab),
+                  child: Column(
+                    children: [
+                      Text(
+                        tab,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: isSelected
+                              ? (isDark ? Colors.white : Colors.black)
+                              : Colors.grey[500],
+                        ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                      if (isSelected)
+                        Container(
+                          margin: EdgeInsets.only(top: 4),
+                          height: 2,
+                          width: 20,
+                          color: Colors.blue,
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ),
 
@@ -719,7 +711,7 @@ class _HomeScreenState extends State<HomeScreen> {
           )
         else
           SizedBox(
-            height: 260,
+            height: 240,
             child: ListView.separated(
               padding: EdgeInsets.symmetric(horizontal: 16),
               scrollDirection: Axis.horizontal,
@@ -747,16 +739,15 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isDark,
     Color? textColor,
   ) {
-    final displayVideos =
-        _nativeDifficultyTab == 'All'
-            ? lessons
-            : lessons
-                .where(
-                  (l) =>
-                      l.difficulty.toLowerCase() ==
-                      _nativeDifficultyTab.toLowerCase(),
-                )
-                .toList();
+    final displayVideos = _nativeDifficultyTab == 'All'
+        ? lessons
+        : lessons
+              .where(
+                (l) =>
+                    l.difficulty.toLowerCase() ==
+                    _nativeDifficultyTab.toLowerCase(),
+              )
+              .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -779,41 +770,38 @@ class _HomeScreenState extends State<HomeScreen> {
           scrollDirection: Axis.horizontal,
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            children:
-                _difficultyTabs.map((tab) {
-                  final isSelected = _nativeDifficultyTab == tab;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-                    child: InkWell(
-                      onTap: () => setState(() => _nativeDifficultyTab = tab),
-                      child: Column(
-                        children: [
-                          Text(
-                            tab,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight:
-                                  isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                              color:
-                                  isSelected
-                                      ? (isDark ? Colors.white : Colors.black)
-                                      : Colors.grey[500],
-                            ),
-                          ),
-                          if (isSelected)
-                            Container(
-                              margin: EdgeInsets.only(top: 4),
-                              height: 2,
-                              width: 20,
-                              color: Colors.red,
-                            ),
-                        ],
+            children: _difficultyTabs.map((tab) {
+              final isSelected = _nativeDifficultyTab == tab;
+              return Padding(
+                padding: const EdgeInsets.only(right: 24.0, bottom: 12),
+                child: InkWell(
+                  onTap: () => setState(() => _nativeDifficultyTab = tab),
+                  child: Column(
+                    children: [
+                      Text(
+                        tab,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: isSelected
+                              ? (isDark ? Colors.white : Colors.black)
+                              : Colors.grey[500],
+                        ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                      if (isSelected)
+                        Container(
+                          margin: EdgeInsets.only(top: 4),
+                          height: 2,
+                          width: 20,
+                          color: Colors.red,
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ),
 
@@ -865,16 +853,15 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     // 2. Filter by tab
-    final displayBooks =
-        _libraryDifficultyTab == 'All'
-            ? lessons
-            : lessons
-                .where(
-                  (l) =>
-                      l.difficulty.toLowerCase() ==
-                      _libraryDifficultyTab.toLowerCase(),
-                )
-                .toList();
+    final displayBooks = _libraryDifficultyTab == 'All'
+        ? lessons
+        : lessons
+              .where(
+                (l) =>
+                    l.difficulty.toLowerCase() ==
+                    _libraryDifficultyTab.toLowerCase(),
+              )
+              .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -897,41 +884,38 @@ class _HomeScreenState extends State<HomeScreen> {
           scrollDirection: Axis.horizontal,
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            children:
-                _difficultyTabs.map((tab) {
-                  final isSelected = _libraryDifficultyTab == tab;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-                    child: InkWell(
-                      onTap: () => setState(() => _libraryDifficultyTab = tab),
-                      child: Column(
-                        children: [
-                          Text(
-                            tab,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight:
-                                  isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                              color:
-                                  isSelected
-                                      ? (isDark ? Colors.white : Colors.black)
-                                      : Colors.grey[500],
-                            ),
-                          ),
-                          if (isSelected)
-                            Container(
-                              margin: EdgeInsets.only(top: 4),
-                              height: 2,
-                              width: 20,
-                              color: Colors.green, // Differentiate with green
-                            ),
-                        ],
+            children: _difficultyTabs.map((tab) {
+              final isSelected = _libraryDifficultyTab == tab;
+              return Padding(
+                padding: const EdgeInsets.only(right: 24.0, bottom: 12),
+                child: InkWell(
+                  onTap: () => setState(() => _libraryDifficultyTab = tab),
+                  child: Column(
+                    children: [
+                      Text(
+                        tab,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: isSelected
+                              ? (isDark ? Colors.white : Colors.black)
+                              : Colors.grey[500],
+                        ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                      if (isSelected)
+                        Container(
+                          margin: EdgeInsets.only(top: 4),
+                          height: 2,
+                          width: 20,
+                          color: Colors.green, // Differentiate with green
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ),
 
@@ -940,10 +924,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             height: 150,
             alignment: Alignment.center,
-            child: Text(
-              "No books found",
-              style: TextStyle(color: Colors.grey),
-            ),
+            child: Text("No books found", style: TextStyle(color: Colors.grey)),
           )
         else
           SizedBox(
@@ -1010,18 +991,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     height: 160,
                     width: 280,
                     color: isDark ? Colors.white10 : Colors.grey[200],
-                    child:
-                        lesson.imageUrl != null
-                            ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
-                            : (lesson.type == 'text'
-                                ? Center(
+                    child: lesson.imageUrl != null
+                        ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
+                        : (lesson.type == 'text'
+                              ? Center(
                                   child: Icon(
                                     Icons.menu_book_rounded,
                                     size: 64,
                                     color: Colors.blue.withOpacity(0.5),
                                   ),
                                 )
-                                : Center(
+                              : Center(
                                   child: Icon(
                                     Icons.play_circle,
                                     size: 64,
@@ -1112,7 +1092,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: Icon(Icons.more_vert, color: Colors.grey, size: 16),
                     padding: EdgeInsets.zero,
                     constraints: BoxConstraints(minWidth: 32, minHeight: 32),
-                    onPressed: () => _showLessonOptions(context, lesson, isDark),
+                    onPressed: () =>
+                        _showLessonOptions(context, lesson, isDark),
                   ),
                 ],
               ),
@@ -1133,10 +1114,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final stats = _getLessonStats(lesson, vocabMap);
     final int newCount = stats['new']!;
     final int knownCount = stats['known']!;
-    final double progress =
-        (knownCount + newCount) == 0
-            ? 0
-            : knownCount / (knownCount + newCount);
+    final double progress = (knownCount + newCount) == 0
+        ? 0
+        : knownCount / (knownCount + newCount);
 
     return Card(
       elevation: 0,
@@ -1216,8 +1196,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: LinearProgressIndicator(
                         value: progress,
                         minHeight: 6,
-                        backgroundColor:
-                            isDark ? Colors.black26 : Colors.grey[300],
+                        backgroundColor: isDark
+                            ? Colors.black26
+                            : Colors.grey[300],
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
                       ),
                     ),
@@ -1253,14 +1234,13 @@ class _HomeScreenState extends State<HomeScreen> {
     Map<String, VocabularyItem> vocabMap,
     bool isDark,
   ) {
-    final filtered =
-        lessons.where((l) {
-          if (_selectedGlobalFilter == 'Videos')
-            return l.type == 'video' || l.type == 'video_native';
-          if (_selectedGlobalFilter == 'Audio') return l.type == 'audio';
-          if (_selectedGlobalFilter == 'Text') return l.type == 'text';
-          return true;
-        }).toList();
+    final filtered = lessons.where((l) {
+      if (_selectedGlobalFilter == 'Videos')
+        return l.type == 'video' || l.type == 'video_native';
+      if (_selectedGlobalFilter == 'Audio') return l.type == 'audio';
+      if (_selectedGlobalFilter == 'Text') return l.type == 'text';
+      return true;
+    }).toList();
 
     return ListView.separated(
       padding: EdgeInsets.all(16),
@@ -1281,100 +1261,94 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder:
-          (builderContext) => Container(
-            decoration: BoxDecoration(
-              color: isDark ? Color(0xFF1E1E1E) : Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: EdgeInsets.only(
-              top: 20,
-              left: 0,
-              right: 0,
-              bottom: MediaQuery.of(builderContext).viewPadding.bottom + 20,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[600],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+      builder: (builderContext) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? Color(0xFF1E1E1E) : Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: EdgeInsets.only(
+          top: 20,
+          left: 0,
+          right: 0,
+          bottom: MediaQuery.of(builderContext).viewPadding.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                ListTile(
-                  leading: Container(
-                    padding: EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color:
-                          lesson.isFavorite
-                              ? Colors.amber.withOpacity(0.1)
-                              : (isDark ? Colors.white10 : Colors.grey[100]),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      lesson.isFavorite ? Icons.star : Icons.star_border,
-                      color: lesson.isFavorite ? Colors.amber : Colors.grey,
-                    ),
-                  ),
-                  title: Text(
-                    lesson.isFavorite
-                        ? 'Remove from Favorites'
-                        : 'Add to Favorites',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black,
-                    ),
-                  ),
-                  subtitle: Text(
-                    lesson.isFavorite
-                        ? 'Removed from library.'
-                        : 'Saved to library.',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  onTap: () {
-                    final user =
-                        (context.read<AuthBloc>().state as AuthAuthenticated)
-                            .user;
-                    final updatedLesson = lesson.copyWith(
-                      isFavorite: !lesson.isFavorite,
-                      userId: user.id,
-                    );
-                    context.read<LessonBloc>().add(
-                      LessonUpdateRequested(updatedLesson),
-                    );
-                    Navigator.pop(builderContext);
-                  },
-                ),
-                Divider(color: Colors.grey[800]),
-                ListTile(
-                  leading: Container(
-                    padding: EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.delete_outline, color: Colors.red),
-                  ),
-                  title: Text(
-                    'Delete Lesson',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  onTap: () {
-                    context.read<LessonBloc>().add(
-                      LessonDeleteRequested(lesson.id),
-                    );
-                    Navigator.pop(builderContext);
-                  },
-                ),
-              ],
+              ),
             ),
-          ),
+            ListTile(
+              leading: Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: lesson.isFavorite
+                      ? Colors.amber.withOpacity(0.1)
+                      : (isDark ? Colors.white10 : Colors.grey[100]),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  lesson.isFavorite ? Icons.star : Icons.star_border,
+                  color: lesson.isFavorite ? Colors.amber : Colors.grey,
+                ),
+              ),
+              title: Text(
+                lesson.isFavorite
+                    ? 'Remove from Favorites'
+                    : 'Add to Favorites',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+              subtitle: Text(
+                lesson.isFavorite
+                    ? 'Removed from library.'
+                    : 'Saved to library.',
+                style: TextStyle(color: Colors.grey),
+              ),
+              onTap: () {
+                final user =
+                    (context.read<AuthBloc>().state as AuthAuthenticated).user;
+                final updatedLesson = lesson.copyWith(
+                  isFavorite: !lesson.isFavorite,
+                  userId: user.id,
+                );
+                context.read<LessonBloc>().add(
+                  LessonUpdateRequested(updatedLesson),
+                );
+                Navigator.pop(builderContext);
+              },
+            ),
+            Divider(color: Colors.grey[800]),
+            ListTile(
+              leading: Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.delete_outline, color: Colors.red),
+              ),
+              title: Text('Delete Lesson', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                context.read<LessonBloc>().add(
+                  LessonDeleteRequested(lesson.id),
+                );
+                Navigator.pop(builderContext);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1390,80 +1364,76 @@ class _HomeScreenState extends State<HomeScreen> {
     final lessonService = context.read<LessonService>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final fullLangName = _languageNames[currentLanguage] ?? currentLanguage.toUpperCase();
+    final fullLangName =
+        _languageNames[currentLanguage] ?? currentLanguage.toUpperCase();
 
     showDialog(
       context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            backgroundColor: isDark ? Color(0xFF1E1E1E) : Colors.white,
-            title: Text(
-              'Create New Lesson for $fullLangName',
-              style: TextStyle(color: isDark ? Colors.white : Colors.black),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: titleController,
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'Title',
-                      border: OutlineInputBorder(),
-                      labelStyle: TextStyle(color: Colors.grey),
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  TextField(
-                    controller: contentController,
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'Content',
-                      border: OutlineInputBorder(),
-                      labelStyle: TextStyle(color: Colors.grey),
-                    ),
-                    maxLines: 6,
-                  ),
-                ],
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: isDark ? Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          'Create New Lesson for $fullLangName',
+          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                decoration: InputDecoration(
+                  labelText: 'Title',
+                  border: OutlineInputBorder(),
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (titleController.text.isNotEmpty &&
-                      contentController.text.isNotEmpty) {
-                    final sentences = lessonService.splitIntoSentences(
-                      contentController.text,
-                    );
-                    final lesson = LessonModel(
-                      id: '',
-                      userId: userId,
-                      title: titleController.text,
-                      language: currentLanguage,
-                      content: contentController.text,
-                      sentences: sentences,
-                      createdAt: DateTime.now(),
-                      progress: 0,
-                      isFavorite: isFavoriteByDefault,
-                      type: 'text',
-                    );
-                    lessonBloc.add(LessonCreateRequested(lesson));
-                    Navigator.pop(dialogContext);
-                  }
-                },
-                child: Text('Create'),
+              SizedBox(height: 16),
+              TextField(
+                controller: contentController,
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                decoration: InputDecoration(
+                  labelText: 'Content',
+                  border: OutlineInputBorder(),
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+                maxLines: 6,
               ),
             ],
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (titleController.text.isNotEmpty &&
+                  contentController.text.isNotEmpty) {
+                final sentences = lessonService.splitIntoSentences(
+                  contentController.text,
+                );
+                final lesson = LessonModel(
+                  id: '',
+                  userId: userId,
+                  title: titleController.text,
+                  language: currentLanguage,
+                  content: contentController.text,
+                  sentences: sentences,
+                  createdAt: DateTime.now(),
+                  progress: 0,
+                  isFavorite: isFavoriteByDefault,
+                  type: 'text',
+                );
+                lessonBloc.add(LessonCreateRequested(lesson));
+                Navigator.pop(dialogContext);
+              }
+            },
+            child: Text('Create'),
+          ),
+        ],
+      ),
     );
   }
 }

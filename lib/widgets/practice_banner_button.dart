@@ -12,7 +12,7 @@ class PracticeBannerButton extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Container(
-        height: 60,
+        height: 40,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [Color(0xFF6C63FF), Color(0xFF5A4FCF)],
@@ -34,7 +34,7 @@ class PracticeBannerButton extends StatelessWidget {
             onTap: () {
               // 1. GET USER STATE
               final authState = context.read<AuthBloc>().state;
-              
+
               if (authState is AuthAuthenticated) {
                 if (authState.user.isPremium) {
                   // --- USER IS PREMIUM: GO TO QUIZ ---
@@ -61,13 +61,13 @@ class PracticeBannerButton extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.sports_esports, color: Colors.white, size: 28),
-                SizedBox(width: 12),
+                Icon(Icons.sports_esports, color: Colors.white, size: 20),
+                SizedBox(width: 6),
                 Text(
                   "Practice Words",
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
                   ),
@@ -78,12 +78,16 @@ class PracticeBannerButton extends StatelessWidget {
                     if (state is AuthAuthenticated && !state.user.isPremium) {
                       return Padding(
                         padding: const EdgeInsets.only(left: 8.0),
-                        child: Icon(Icons.lock, color: Colors.white70, size: 20),
+                        child: Icon(
+                          Icons.lock,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
                       );
                     }
                     return SizedBox();
                   },
-                )
+                ),
               ],
             ),
           ),
