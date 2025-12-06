@@ -1,6 +1,6 @@
 class LessonAIContent {
   final List<LessonVocabulary> vocabulary;
-  final LessonGrammar grammar;
+  final List<LessonGrammar> grammar; // <--- CHANGED to List
 
   LessonAIContent({required this.vocabulary, required this.grammar});
 
@@ -9,7 +9,10 @@ class LessonAIContent {
       vocabulary: (json['vocabulary'] as List?)
           ?.map((e) => LessonVocabulary.fromJson(e))
           .toList() ?? [],
-      grammar: LessonGrammar.fromJson(json['grammar'] ?? {}),
+      // <--- CHANGED: Logic to map a List of grammar objects
+      grammar: (json['grammar'] as List?)
+          ?.map((e) => LessonGrammar.fromJson(e))
+          .toList() ?? [],
     );
   }
 }
@@ -18,7 +21,7 @@ class LessonVocabulary {
   final String word;
   final String translation;
   final String contextSentence;
-  final String contextTranslation; // <--- NEW FIELD
+  final String contextTranslation;
 
   LessonVocabulary({
     required this.word,
@@ -32,7 +35,7 @@ class LessonVocabulary {
       word: json['word']?.toString() ?? '',
       translation: json['translation']?.toString() ?? '',
       contextSentence: json['contextSentence']?.toString() ?? '',
-      contextTranslation: json['contextTranslation']?.toString() ?? '', // <--- Map it
+      contextTranslation: json['contextTranslation']?.toString() ?? '',
     );
   }
 }
