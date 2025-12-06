@@ -1,5 +1,3 @@
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -96,15 +94,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         // Handle Loading States
                         if (lessonState is LessonInitial) {
                           context.read<LessonBloc>().add(
-                                LessonLoadRequested(
-                                    user.id, user.currentLanguage),
-                              );
+                            LessonLoadRequested(user.id, user.currentLanguage),
+                          );
                           return const Center(
-                              child: CircularProgressIndicator());
+                            child: CircularProgressIndicator(),
+                          );
                         }
                         if (lessonState is LessonLoading) {
                           return const Center(
-                              child: CircularProgressIndicator());
+                            child: CircularProgressIndicator(),
+                          );
                         }
 
                         if (lessonState is LessonLoaded) {
@@ -134,27 +133,33 @@ class _HomeScreenState extends State<HomeScreen> {
                               .toList();
                           // 4. System Text (Books)
                           final libraryLessons = processedLessons
-                              .where((l) =>
-                                  l.type == 'text' &&
-                                  l.userId.startsWith('system'))
+                              .where(
+                                (l) =>
+                                    l.type == 'text' &&
+                                    l.userId.startsWith('system'),
+                              )
                               .toList();
                           // 5. User Text (Imported)
                           final importedLessons = processedLessons
-                              .where((l) =>
-                                  l.type == 'text' &&
-                                  !l.userId.startsWith('system'))
+                              .where(
+                                (l) =>
+                                    l.type == 'text' &&
+                                    !l.userId.startsWith('system'),
+                              )
                               .toList();
 
                           // --- VIEW: Scrollable List with Sections ---
                           return RefreshIndicator(
                             onRefresh: () async {
                               context.read<LessonBloc>().add(
-                                    LessonLoadRequested(
-                                        user.id, user.currentLanguage),
-                                  );
+                                LessonLoadRequested(
+                                  user.id,
+                                  user.currentLanguage,
+                                ),
+                              );
                               context.read<VocabularyBloc>().add(
-                                    VocabularyLoadRequested(user.id),
-                                  );
+                                VocabularyLoadRequested(user.id),
+                              );
                             },
                             child: SingleChildScrollView(
                               // Add padding at bottom so MiniPlayer & FABs don't cover content
@@ -199,7 +204,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }
                         return const Center(
-                            child: Text('Something went wrong'));
+                          child: Text('Something went wrong'),
+                        );
                       },
                     ),
                   ),
@@ -872,7 +878,7 @@ class _HomeScreenState extends State<HomeScreen> {
             lesson: lesson,
             vocabMap: vocabMap,
             isDark: isDark,
-            onTap: () => _navigateToReader(context, lesson),
+            onTap: () => _handleLessonTap(lesson),
             onOptionTap: () =>
                 HomeDialogs.showLessonOptions(context, lesson, isDark),
           );
@@ -887,7 +893,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   lesson: lesson,
                   vocabMap: vocabMap,
                   isDark: isDark,
-                  onTap: () => _navigateToReader(context, lesson),
+                  onTap: () => _handleLessonTap(lesson),
                   onOptionTap: () =>
                       HomeDialogs.showLessonOptions(context, lesson, isDark),
                 ),
@@ -899,10 +905,32 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _navigateToReader(BuildContext context, LessonModel lesson) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)),
-    );
+  // Inside _HomeScreenState
+
+  void _handleLessonTap(LessonModel lesson) {
+    final audioManager = AudioGlobalManager();
+
+    // --- LOGIC: Distinguish by Source/ID ---
+
+    // CASE 1: LibriVox (Pure Audio) -> Use Overlay
+    // We check if the userId matches the tag you assigned in fetchAudioLessons
+    if (lesson.userId == 'system_librivox') {
+      audioManager.playLesson(lesson);
+      // Optional: audioManager.expand(); // If you want it to pop up immediately
+      return;
+    }
+    // CASE 2: Everything else (YouTube Audiobooks, Video, Text) -> Use ReaderScreen
+    // This captures 'system_audiobook' which you said should go to Reader
+    else {
+      // IMPORTANT: Stop the overlay player so audio doesn't overlap
+      if (audioManager.isPlaying || audioManager.currentLesson != null) {
+        audioManager.stopAndClose();
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)),
+      );
+    }
   }
 }
