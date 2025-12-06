@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
+import 'package:linguaflow/services/quiz_service.dart';
 import 'package:linguaflow/services/translation_service.dart';
 // Ensure this import exists
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
@@ -18,7 +19,7 @@ class QuizScreen extends StatefulWidget {
 class _QuizScreenState extends State<QuizScreen> {
   final FlutterTts _tts = FlutterTts();
   String _targetLangCode = 'en';
-  String _targetLangName = 'Target Language'; 
+  String _targetLangName = 'Target Language';
 
   @override
   void initState() {
@@ -27,13 +28,15 @@ class _QuizScreenState extends State<QuizScreen> {
     final authState = context.read<AuthBloc>().state;
     String targetLang = 'es';
     String nativeLang = 'en';
+    String userId = '';
     bool isPremium = false;
 
     if (authState is AuthAuthenticated) {
       targetLang = authState.user.currentLanguage;
       nativeLang = authState.user.nativeLanguage;
+      userId = authState.user.id;
       isPremium = authState.user.isPremium; // Check premium status
-      
+
       _targetLangCode = targetLang;
       _targetLangName = targetLang.toUpperCase();
     }
@@ -42,9 +45,11 @@ class _QuizScreenState extends State<QuizScreen> {
 
     context.read<QuizBloc>().add(
       QuizLoadRequested(
-        targetLanguage: targetLang, 
+         promptType: QuizPromptType.dailyPractice,
+        userId: userId,
+        targetLanguage: targetLang,
         nativeLanguage: nativeLang,
-        isPremium: isPremium // Pass status to Bloc
+        isPremium: isPremium, // Pass status to Bloc
       ),
     );
   }
@@ -60,16 +65,19 @@ class _QuizScreenState extends State<QuizScreen> {
   void _showWordHint(String cleanWord, String originalWord) {
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return;
-    
+
     final user = authState.user;
     final translationService = context.read<TranslationService>();
 
-    final translationFuture = translationService
-        .translate(originalWord, user.nativeLanguage, user.currentLanguage);
+    final translationFuture = translationService.translate(
+      originalWord,
+      user.nativeLanguage,
+      user.currentLanguage,
+    );
 
     showDialog(
       context: context,
-      barrierColor: Colors.black12, 
+      barrierColor: Colors.black12,
       builder: (context) {
         return _HintDialog(
           originalWord: originalWord,
@@ -114,16 +122,22 @@ class _QuizScreenState extends State<QuizScreen> {
           BlocBuilder<QuizBloc, QuizState>(
             builder: (context, state) {
               if (state.status == QuizStatus.loading) return const SizedBox();
-              
+
               // Use state.isPremium to decide what to show
               return Padding(
                 padding: const EdgeInsets.only(right: 20.0),
                 child: Row(
                   children: [
-                    const Icon(Icons.favorite, color: Colors.redAccent, size: 20),
+                    const Icon(
+                      Icons.favorite,
+                      color: Colors.redAccent,
+                      size: 20,
+                    ),
                     const SizedBox(width: 6),
                     Text(
-                      state.isPremium ? "∞" : "${state.hearts}", // Infinite for Premium
+                      state.isPremium
+                          ? "∞"
+                          : "${state.hearts}", // Infinite for Premium
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -144,7 +158,9 @@ class _QuizScreenState extends State<QuizScreen> {
           }
           // Only show Game Over if hearts <= 0 AND user is NOT premium
           // (Double check state.isPremium here to be safe)
-          if (state.hearts <= 0 && !state.isPremium && state.status != QuizStatus.loading) {
+          if (state.hearts <= 0 &&
+              !state.isPremium &&
+              state.status != QuizStatus.loading) {
             _showGameOverDialog(context, isDark);
           }
         },
@@ -201,15 +217,20 @@ class _QuizScreenState extends State<QuizScreen> {
                                 ),
                               ),
                             ),
-                          
+
                           // CLICKABLE WORDS WRAP
                           Expanded(
                             child: Wrap(
                               spacing: 6,
                               runSpacing: 6,
-                              children: question.targetSentence.split(' ').map((word) {
-                                final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
-                                
+                              children: question.targetSentence.split(' ').map((
+                                word,
+                              ) {
+                                final cleanWord = word.replaceAll(
+                                  RegExp(r'[^\w\s]'),
+                                  '',
+                                );
+
                                 if (isQuestionTargetLang) {
                                   return GestureDetector(
                                     onTap: () => _showWordHint(cleanWord, word),
@@ -219,9 +240,9 @@ class _QuizScreenState extends State<QuizScreen> {
                                           bottom: BorderSide(
                                             color: Colors.grey.withOpacity(0.5),
                                             width: 1.5,
-                                            style: BorderStyle.solid
-                                          )
-                                        )
+                                            style: BorderStyle.solid,
+                                          ),
+                                        ),
                                       ),
                                       child: Text(
                                         word,
@@ -522,8 +543,8 @@ class _QuizScreenState extends State<QuizScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context); 
-              Navigator.pop(context); 
+              Navigator.pop(context);
+              Navigator.pop(context);
             },
             child: const Text(
               "Finish",
@@ -562,15 +583,18 @@ class _QuizScreenState extends State<QuizScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context); 
-              Navigator.pop(context); 
+              Navigator.pop(context);
+              Navigator.pop(context);
             },
             child: const Text(
               "Quit",
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.redAccent,
+              ),
             ),
           ),
-          
+
           // PREMIUM BUTTON
           ElevatedButton(
             onPressed: () {
@@ -583,10 +607,10 @@ class _QuizScreenState extends State<QuizScreen> {
                   // User Bought Premium:
                   // 1. Refresh Auth
                   context.read<AuthBloc>().add(AuthCheckRequested());
-                  
+
                   // 2. Revive Quiz (Reset Hearts & Set Premium)
-                  context.read<QuizBloc>().add(QuizReviveRequested()); 
-                  
+                  context.read<QuizBloc>().add(QuizReviveRequested());
+
                   // 3. Close Game Over Dialog
                   Navigator.pop(context);
                 }
@@ -620,7 +644,7 @@ class _HintDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Dialog(
       backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -649,13 +673,17 @@ class _HintDialog extends StatelessWidget {
                   icon: const Icon(Icons.volume_up, color: Colors.blueAccent),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                )
+                ),
               ],
             ),
             const Divider(height: 20),
             const Text(
               "Meaning:",
-              style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 4),
             FutureBuilder<String>(
@@ -663,9 +691,9 @@ class _HintDialog extends StatelessWidget {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const SizedBox(
-                    height: 20, 
-                    width: 20, 
-                    child: CircularProgressIndicator(strokeWidth: 2)
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   );
                 }
                 if (snapshot.hasError) {

@@ -8,13 +8,14 @@ import 'package:linguaflow/services/quiz_service.dart';
 class PlacementTestScreen extends StatelessWidget {
   final String nativeLanguage;
   final String targetLanguage;
+  final String userId;
   final String targetLevelToCheck;
 
   const PlacementTestScreen({
     super.key,
     required this.nativeLanguage,
     required this.targetLanguage,
-    required this.targetLevelToCheck,
+    required this.targetLevelToCheck, required this.userId,
   });
 
   @override
@@ -23,6 +24,7 @@ class PlacementTestScreen extends StatelessWidget {
       create: (_) => QuizBloc()
         ..add(
           QuizLoadRequested(
+            userId: userId,
             targetLanguage: targetLanguage,
             nativeLanguage: nativeLanguage,
             isPremium: true,

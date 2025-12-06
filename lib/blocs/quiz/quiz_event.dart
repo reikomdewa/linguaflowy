@@ -1,25 +1,62 @@
+// part of 'quiz_bloc.dart';
+
+// abstract class QuizEvent {}
+
+// class QuizLoadRequested extends QuizEvent {
+//   final String nativeLanguage;
+//   final String targetLanguage;
+//   final bool isPremium;
+//   final QuizPromptType promptType;
+//   final String? topic;
+
+//   QuizLoadRequested({
+//     required this.nativeLanguage,
+//     required this.targetLanguage,
+//     required this.isPremium,
+//     this.promptType = QuizPromptType.dailyPractice,
+//     this.topic,
+//   });
+// }
+
+// class QuizOptionSelected extends QuizEvent { final String word; QuizOptionSelected(this.word); }
+// class QuizOptionDeselected extends QuizEvent { final String word; QuizOptionDeselected(this.word); }
+// class QuizCheckAnswer extends QuizEvent {}
+// class QuizNextQuestion extends QuizEvent {}
+// class QuizReviveRequested extends QuizEvent {}
+
 part of 'quiz_bloc.dart';
 
-abstract class QuizEvent {}
+abstract class QuizEvent {
+  const QuizEvent();
+}
 
 class QuizLoadRequested extends QuizEvent {
-  final String nativeLanguage;
   final String targetLanguage;
-  final bool isPremium;
+  final String nativeLanguage;
   final QuizPromptType promptType;
   final String? topic;
+  final bool isPremium;
+  final String userId; // <--- ADD THIS FIELD
 
-  QuizLoadRequested({
-    required this.nativeLanguage,
+  const QuizLoadRequested({
+    required this.userId, // <--- ADD TO CONSTRUCTOR
     required this.targetLanguage,
+    required this.nativeLanguage,
+    required this.promptType,
     required this.isPremium,
-    this.promptType = QuizPromptType.dailyPractice,
     this.topic,
   });
 }
 
-class QuizOptionSelected extends QuizEvent { final String word; QuizOptionSelected(this.word); }
-class QuizOptionDeselected extends QuizEvent { final String word; QuizOptionDeselected(this.word); }
-class QuizCheckAnswer extends QuizEvent {}
-class QuizNextQuestion extends QuizEvent {}
-class QuizReviveRequested extends QuizEvent {}
+// ... (keep your other events like QuizOptionSelected, etc. the same)
+class QuizOptionSelected extends QuizEvent {
+  final String word;
+  const QuizOptionSelected(this.word);
+}
+class QuizOptionDeselected extends QuizEvent {
+  final String word;
+  const QuizOptionDeselected(this.word);
+}
+class QuizCheckAnswer extends QuizEvent { const QuizCheckAnswer(); }
+class QuizNextQuestion extends QuizEvent { const QuizNextQuestion(); }
+class QuizReviveRequested extends QuizEvent { const QuizReviveRequested(); }

@@ -709,6 +709,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => PlacementTestScreen(
+                    userId: user.id,
                     nativeLanguage: user.nativeLanguage,
                     targetLanguage: user.currentLanguage,
                     targetLevelToCheck: targetLevel,
