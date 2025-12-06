@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 // IMPORT THE NEW WRAPPER SCREEN HERE
-import 'package:linguaflow/screens/story_mode/widgets/story_generation_wrapper.dart'; 
+import 'package:linguaflow/screens/story_mode/widgets/loading_view.dart';
 
 class AILessonGeneratorSheet extends StatefulWidget {
   final String userId;
@@ -38,7 +38,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
     "Negotiating with a merchant",
     "Superhero laundry day",
     "Time traveler lost in 2024",
-    "Robot learning to love"
+    "Robot learning to love",
   ];
 
   @override
@@ -47,9 +47,9 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
     super.dispose();
   }
 
- void _generateLesson() {
+  void _generateLesson() {
     if (_promptController.text.trim().isEmpty) return;
-    
+
     // 1. Unfocus keyboard
     FocusScope.of(context).unfocus();
 
@@ -58,13 +58,13 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
 
     // 3. Fire the Generation Event
     lessonBloc.add(
-          LessonGenerateRequested(
-            userId: widget.userId,
-            topic: _promptController.text,
-            level: _selectedLevel,
-            targetLanguage: widget.targetLanguage,
-          ),
-        );
+      LessonGenerateRequested(
+        userId: widget.userId,
+        topic: _promptController.text,
+        level: _selectedLevel,
+        targetLanguage: widget.targetLanguage,
+      ),
+    );
 
     // 4. Close the Bottom Sheet
     Navigator.pop(context);
@@ -75,16 +75,14 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
       MaterialPageRoute(
         builder: (_) => BlocProvider.value(
           value: lessonBloc, // Pass the existing bloc
-          child: const StoryGenerationWrapper(),
+          child: LoadingView(tip: 'Making your story...'),
         ),
       ),
     ).then((_) {
       // --- THE FIX IS HERE ---
       // When the user presses "Back" and returns to the Home Screen,
       // we must reload the list to get back to 'LessonLoaded' state.
-      lessonBloc.add(
-        LessonLoadRequested(widget.userId, widget.targetLanguage)
-      );
+      lessonBloc.add(LessonLoadRequested(widget.userId, widget.targetLanguage));
     });
   }
 
@@ -101,11 +99,11 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
+
     final mediaQuery = MediaQuery.of(context);
     final screenHeight = mediaQuery.size.height;
     final keyboardHeight = mediaQuery.viewInsets.bottom;
-    final topPadding = mediaQuery.padding.top; 
+    final topPadding = mediaQuery.padding.top;
     final isKeyboardOpen = keyboardHeight > 0;
 
     final backgroundColor = theme.scaffoldBackgroundColor;
@@ -123,7 +121,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(top: isKeyboardOpen ? topPadding : 0),
-      
+
       child: Column(
         children: [
           const SizedBox(height: 12),
@@ -137,7 +135,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
               ),
             ),
           ),
-          
+
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -152,7 +150,13 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                   ),
                   const SizedBox(height: 20),
 
-                  Text("Difficulty", style: TextStyle(color: textColor.withOpacity(0.7), fontWeight: FontWeight.bold)),
+                  Text(
+                    "Difficulty",
+                    style: TextStyle(
+                      color: textColor.withOpacity(0.7),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -169,14 +173,18 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                             },
                             selectedColor: theme.primaryColor,
                             labelStyle: TextStyle(
-                              color: isSelected ? Colors.white : theme.textTheme.bodyLarge?.color,
+                              color: isSelected
+                                  ? Colors.white
+                                  : theme.textTheme.bodyLarge?.color,
                               fontWeight: FontWeight.bold,
                             ),
                             backgroundColor: cardColor,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),
                               side: BorderSide(
-                                color: isSelected ? Colors.transparent : borderColor!,
+                                color: isSelected
+                                    ? Colors.transparent
+                                    : borderColor!,
                               ),
                             ),
                           ),
@@ -188,15 +196,16 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                   const SizedBox(height: 20),
 
                   SizedBox(
-                    height: 140, 
+                    height: 140,
                     child: GridView.builder(
                       scrollDirection: Axis.horizontal,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3, 
-                        childAspectRatio: 0.3,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            childAspectRatio: 0.3,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                          ),
                       itemCount: _prompts.length,
                       itemBuilder: (context, index) {
                         final text = _prompts[index];
@@ -208,7 +217,10 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                             decoration: BoxDecoration(
                               color: cardColor,
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: borderColor!, width: 0.5),
+                              border: Border.all(
+                                color: borderColor!,
+                                width: 0.5,
+                              ),
                             ),
                             child: Text(
                               text,
@@ -227,15 +239,22 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
 
                   const SizedBox(height: 24),
 
-                  Text("What kind of story do you want?", style: TextStyle(color: textColor.withOpacity(0.7), fontWeight: FontWeight.bold)),
+                  Text(
+                    "What kind of story do you want?",
+                    style: TextStyle(
+                      color: textColor.withOpacity(0.7),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _promptController,
-                    maxLines: isKeyboardOpen ? 8 : 5, 
+                    maxLines: isKeyboardOpen ? 8 : 5,
                     style: theme.textTheme.bodyLarge,
                     textInputAction: TextInputAction.newline,
                     decoration: InputDecoration(
-                      hintText: 'e.g., A sci-fi story about a robot learning to paint...',
+                      hintText:
+                          'e.g., A sci-fi story about a robot learning to paint...',
                       hintStyle: TextStyle(color: Colors.grey.withOpacity(0.5)),
                       filled: true,
                       fillColor: cardColor,
@@ -254,10 +273,12 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
 
           Container(
             padding: EdgeInsets.only(
-              left: 20, 
-              right: 20, 
+              left: 20,
+              right: 20,
               top: 16,
-              bottom: isKeyboardOpen ? keyboardHeight + 16 : mediaQuery.padding.bottom + 16,
+              bottom: isKeyboardOpen
+                  ? keyboardHeight + 16
+                  : mediaQuery.padding.bottom + 16,
             ),
             decoration: BoxDecoration(
               color: backgroundColor,
@@ -267,7 +288,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                   color: Colors.black.withOpacity(0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -5),
-                )
+                ),
               ],
             ),
             child: SizedBox(

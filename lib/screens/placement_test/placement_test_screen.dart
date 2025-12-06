@@ -1,11 +1,13 @@
+import 'dart:math'; // For random tip
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
+import 'package:linguaflow/screens/story_mode/widgets/loading_view.dart';
 
 class PlacementTestScreen extends StatelessWidget {
   final String nativeLanguage;
   final String targetLanguage;
-  final String targetLevelToCheck; // e.g. "B2 - Upper Intermediate"
+  final String targetLevelToCheck;
 
   const PlacementTestScreen({
     super.key,
@@ -23,8 +25,6 @@ class PlacementTestScreen extends StatelessWidget {
             targetLanguage: targetLanguage,
             nativeLanguage: nativeLanguage,
             isPremium: true,
-            // In a real app, you might pass the 'level' to the API here
-            // level: targetLevelToCheck 
           ),
         ),
       child: _PlacementTestView(targetLevel: targetLevelToCheck),
@@ -32,43 +32,70 @@ class PlacementTestScreen extends StatelessWidget {
   }
 }
 
-class _PlacementTestView extends StatelessWidget {
+class _PlacementTestView extends StatefulWidget {
   final String targetLevel;
   const _PlacementTestView({required this.targetLevel});
+
+  @override
+  State<_PlacementTestView> createState() => _PlacementTestViewState();
+}
+
+class _PlacementTestViewState extends State<_PlacementTestView> {
+  late String _randomTip;
+
+  final List<String> _placementTips = [
+    "This test helps us recommend the perfect content for you.",
+    "Don't worry about mistakes. They help us gauge your level accurately.",
+    "Accuracy is more important than speed right now.",
+    "We are calibrating your vocabulary and grammar profile.",
+    "You can always change your difficulty level later in settings.",
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Pick a random tip when the screen loads
+    _randomTip = _placementTips[Random().nextInt(_placementTips.length)];
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
 
-    return Scaffold(
-      backgroundColor: bgColor,
-      appBar: AppBar(
-        title: Text("Placement Test: $targetLevel"),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-      ),
-      body: BlocConsumer<QuizBloc, QuizState>(
-        listener: (context, state) {
-          if (state.status == QuizStatus.completed) {
-            _calculateAndReturnLevel(context, state);
-          }
-        },
-        builder: (context, state) {
-          if (state.status == QuizStatus.loading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return BlocConsumer<QuizBloc, QuizState>(
+      listener: (context, state) {
+        if (state.status == QuizStatus.completed) {
+          _calculateAndReturnLevel(context, state);
+        }
+      },
+      builder: (context, state) {
+        // --- 1. USE THE REUSABLE LOADING VIEW ---
+        if (state.status == QuizStatus.loading) {
+          return LoadingView(
+            tip: _randomTip,
+            title: "Preparing Test...",
+            subtitle: "Calibrating questions for ${widget.targetLevel}",
+          );
+        }
 
-          final question = state.currentQuestion;
-          if (question == null) {
-            return const Center(child: Text("Preparing test..."));
-          }
+        final question = state.currentQuestion;
+        if (question == null) {
+          return const Center(child: Text("Preparing test..."));
+        }
 
-          // --- UI LAYOUT ---
-          return Column(
+        // --- 2. REGULAR QUIZ UI ---
+        return Scaffold(
+          backgroundColor: bgColor,
+          appBar: AppBar(
+            title: Text("Placement Test: ${widget.targetLevel}"),
+            centerTitle: true,
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+          ),
+          body: Column(
             children: [
-              // 1. Progress Bar
+              // Progress Bar
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: ClipRRect(
@@ -84,7 +111,7 @@ class _PlacementTestView extends StatelessWidget {
 
               const Spacer(flex: 1),
 
-              // 2. Target Sentence (Prompt)
+              // Prompt
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Text(
@@ -100,7 +127,7 @@ class _PlacementTestView extends StatelessWidget {
 
               const SizedBox(height: 30),
 
-              // 3. Sentence Builder Area
+              // Selection Area
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 padding: const EdgeInsets.all(16),
@@ -132,19 +159,14 @@ class _PlacementTestView extends StatelessWidget {
                           )
                         ]
                       : state.selectedWords.map((word) {
-                          return _buildWordChip(
-                            context, 
-                            word, 
-                            isDark, 
-                            isSelectedArea: true,
-                          );
+                          return _buildWordChip(context, word, isDark, isSelectedArea: true);
                         }).toList(),
                 ),
               ),
 
               const Spacer(flex: 1),
 
-              // 4. Word Bank
+              // Word Bank
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Wrap(
@@ -152,26 +174,23 @@ class _PlacementTestView extends StatelessWidget {
                   spacing: 12,
                   runSpacing: 12,
                   children: state.availableWords.map((word) {
-                    return _buildWordChip(
-                      context, 
-                      word, 
-                      isDark, 
-                      isSelectedArea: false
-                    );
+                    return _buildWordChip(context, word, isDark, isSelectedArea: false);
                   }).toList(),
                 ),
               ),
 
               const Spacer(flex: 2),
 
-              // 5. Action Area (Bottom Sheet style)
+              // Bottom Area
               _buildBottomActionArea(context, state, isDark),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
+
+  // ... (Keep existing _buildWordChip and _calculateAndReturnLevel methods) ...
 
   Widget _buildWordChip(BuildContext context, String word, bool isDark, {required bool isSelectedArea}) {
     return GestureDetector(
@@ -194,9 +213,6 @@ class _PlacementTestView extends StatelessWidget {
             color: isSelectedArea ? Colors.transparent : (isDark ? Colors.grey[700]! : Colors.grey[300]!),
             width: 1.5,
           ),
-          boxShadow: isSelectedArea ? [] : [
-             BoxShadow(color: Colors.black.withOpacity(0.05), offset: const Offset(0, 3), blurRadius: 0)
-          ],
         ),
         child: Text(
           word,
@@ -224,97 +240,88 @@ class _PlacementTestView extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: isAnswered ? feedbackColor : Colors.transparent,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (isAnswered) ...[
-            Row(
-              children: [
-                Icon(
-                  isCorrect ? Icons.check_circle : Icons.error,
-                  color: feedbackTextColor,
-                  size: 28,
+      // SAFE AREA FIX for bottom button
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isAnswered) ...[
+                Row(
+                  children: [
+                    Icon(
+                      isCorrect ? Icons.check_circle : Icons.error,
+                      color: feedbackTextColor,
+                      size: 28,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      isCorrect ? "Excellent!" : "Not quite right",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: feedbackTextColor,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  isCorrect ? "Excellent!" : "Not quite right",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: feedbackTextColor,
+                const SizedBox(height: 16),
+              ],
+              
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (isAnswered) {
+                      context.read<QuizBloc>().add(QuizNextQuestion());
+                    } else {
+                      context.read<QuizBloc>().add(QuizCheckAnswer());
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isAnswered 
+                        ? (isCorrect ? Colors.green : Colors.red) 
+                        : (state.selectedWords.isNotEmpty ? Colors.blue : Colors.grey),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    isAnswered ? "Continue" : "Check Answer",
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-          
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              onPressed: () {
-                if (isAnswered) {
-                  context.read<QuizBloc>().add(QuizNextQuestion());
-                } else {
-                  context.read<QuizBloc>().add(QuizCheckAnswer());
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isAnswered 
-                    ? (isCorrect ? Colors.green : Colors.red) 
-                    : (state.selectedWords.isNotEmpty ? Colors.blue : Colors.grey),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 0,
               ),
-              child: Text(
-                isAnswered ? "Continue" : "Check Answer",
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   void _calculateAndReturnLevel(BuildContext context, QuizState state) {
-    // 1. Calculate Score (Assuming QuizState tracks 'correctCount' or we derive it)
-    // If QuizBloc doesn't expose score directly, assume simpler logic or update Bloc.
-    // Here we use the user's previous logic of progress/accuracy approximation.
-    
-    // For a placement test, we compare correctness vs total questions.
-    // Let's assume state has `correctAnswersCount` added to it, 
-    // OR we approximate that if they finished, we calculate accuracy.
-    
-    // MOCK CALCULATION based on "completion":
-    // Ideally, pass the actual score from the Bloc.
-    double scorePercentage = 0.85; // REPLACE THIS with `state.score / state.totalQuestions`
+    // Mock Calculation logic
+    double scorePercentage = 0.85; 
     
     String finalLevel;
-
-    // 2. Determine Level based on the Target they wanted
-    // If they ace the test (>80%), they get the level they asked for.
-    // If they struggle (40-80%), they get one level lower.
-    // If they fail (<40%), they get Beginner.
-    
     if (scorePercentage > 0.8) {
-      finalLevel = targetLevel; // e.g. "B2 - Upper Intermediate"
+      finalLevel = widget.targetLevel; 
     } else if (scorePercentage > 0.4) {
-      finalLevel = _getLevelBelow(targetLevel);
+      finalLevel = _getLevelBelow(widget.targetLevel);
     } else {
       finalLevel = "A1 - Newcomer";
     }
-
     Navigator.of(context).pop(finalLevel);
   }
-  
+
   String _getLevelBelow(String current) {
     if (current.contains("C1")) return "B2 - Upper Intermediate";
     if (current.contains("B2")) return "B1 - Intermediate";
