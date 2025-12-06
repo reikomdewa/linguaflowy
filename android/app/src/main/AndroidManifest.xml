@@ -16,6 +16,7 @@
             <data android:scheme="mailto" />
         </intent>
     </queries>
+    <uses-permission android:name="android.permission.RECORD_AUDIO" /> and <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="linguaflow"
         android:name="${applicationName}"
