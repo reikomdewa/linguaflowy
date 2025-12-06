@@ -29,10 +29,9 @@ class AuthResetPasswordRequested extends AuthEvent {
   AuthResetPasswordRequested(this.email);
 }
 
-// --- NEW: Resend Verification Event ---
 class AuthResendVerificationEmail extends AuthEvent {
   final String email;
-  final String password; // Need password to re-authenticate temporarily to send email
+  final String password; 
   AuthResendVerificationEmail(this.email, this.password);
 }
 
@@ -41,6 +40,12 @@ class AuthLogoutRequested extends AuthEvent {}
 class AuthTargetLanguageChanged extends AuthEvent {
   final String languageCode;
   AuthTargetLanguageChanged(this.languageCode);
+}
+
+// --- NEW: Event to change the level (e.g., A1, B2) for the current language ---
+class AuthLanguageLevelChanged extends AuthEvent {
+  final String level;
+  AuthLanguageLevelChanged(this.level);
 }
 
 class AuthUpdateUser extends AuthEvent {
@@ -75,7 +80,7 @@ class AuthUnauthenticated extends AuthState {}
 
 class AuthError extends AuthState {
   final String message;
-  final bool isVerificationError; // Helper to show Resend button
+  final bool isVerificationError; 
   AuthError(this.message, {this.isVerificationError = false});
 }
 
@@ -89,8 +94,6 @@ class AuthMessage extends AuthState {
 // ==========================================
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthService authService;
-  
-  // Rate Limiting Variable
   DateTime? _lastEmailSentTime;
 
   AuthBloc(this.authService) : super(AuthInitial()) {
@@ -98,9 +101,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLoginRequested>(_onAuthLoginRequested);
     on<AuthRegisterRequested>(_onAuthRegisterRequested);
     on<AuthResetPasswordRequested>(_onAuthResetPasswordRequested);
-    on<AuthResendVerificationEmail>(_onAuthResendVerificationEmail); // Register new handler
+    on<AuthResendVerificationEmail>(_onAuthResendVerificationEmail);
     on<AuthLogoutRequested>(_onAuthLogoutRequested);
     on<AuthTargetLanguageChanged>(_onAuthTargetLanguageChanged);
+    on<AuthLanguageLevelChanged>(_onAuthLanguageLevelChanged); // Register new handler
     on<AuthUpdateUser>(_onAuthUpdateUser);
     on<AuthDeleteAccount>(_onAuthDeleteAccount);
   }
@@ -134,7 +138,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       
       if (firebaseUser != null && !firebaseUser.emailVerified) {
         await authService.signOut();
-        // Return specific error type so UI can show Resend button
         emit(AuthError("Email not verified. Please check your inbox.", isVerificationError: true));
       } else {
         final user = await authService.getCurrentUser();
@@ -158,7 +161,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await authService.signUp(event.email, event.password, event.displayName);
       try {
         await FirebaseAuth.instance.currentUser?.sendEmailVerification();
-        _lastEmailSentTime = DateTime.now(); // Mark time
+        _lastEmailSentTime = DateTime.now();
       } catch (_) {}
 
       await authService.signOut();
@@ -169,12 +172,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  // --- NEW: Resend Logic with Rate Limiting ---
   Future<void> _onAuthResendVerificationEmail(
     AuthResendVerificationEmail event,
     Emitter<AuthState> emit,
   ) async {
-    // 1. Rate Check (60 seconds)
     if (_lastEmailSentTime != null) {
       final difference = DateTime.now().difference(_lastEmailSentTime!);
       if (difference.inSeconds < 60) {
@@ -185,7 +186,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     emit(AuthLoading());
     try {
-      // 2. We must sign in temporarily to send the email
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: event.email, 
         password: event.password
@@ -194,12 +194,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null && !user.emailVerified) {
         await user.sendEmailVerification();
-        _lastEmailSentTime = DateTime.now(); // Update timestamp
-        await authService.signOut(); // Log out immediately
-        emit(AuthMessage("Verification email resent! Check your spam folder. Mark email as not spam"));
-        emit(AuthUnauthenticated()); // Go back to login form
+        _lastEmailSentTime = DateTime.now(); 
+        await authService.signOut(); 
+        emit(AuthMessage("Verification email resent! Check your spam folder."));
+        emit(AuthUnauthenticated()); 
       } else if (user != null && user.emailVerified) {
-         // Already verified? Login properly
          final userModel = await authService.getCurrentUser();
          if (userModel != null) {
             emit(AuthAuthenticated(userModel));
@@ -246,6 +245,39 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             .update({'currentLanguage': event.languageCode});
       } catch (e) {
         print("Error updating language: $e");
+      }
+    }
+  }
+
+  // --- NEW: Logic to Update and Persist Level ---
+  Future<void> _onAuthLanguageLevelChanged(
+    AuthLanguageLevelChanged event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
+      
+      // 1. Create a copy of the levels map
+      final updatedLevels = Map<String, String>.from(currentUser.languageLevels);
+      
+      // 2. Update the level for the CURRENT language
+      updatedLevels[currentUser.currentLanguage] = event.level;
+
+      // 3. Create updated User object
+      final updatedUser = currentUser.copyWith(languageLevels: updatedLevels);
+
+      // 4. Update UI immediately
+      emit(AuthAuthenticated(updatedUser));
+
+      // 5. Persist to Firestore
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.id)
+            .update({'languageLevels': updatedLevels});
+      } catch (e) {
+        print("Error updating language level: $e");
+        // Optionally emit an error or revert state
       }
     }
   }

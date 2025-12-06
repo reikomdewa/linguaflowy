@@ -6,9 +6,11 @@ import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
-import 'package:linguaflow/services/lesson_service.dart';
-import 'package:linguaflow/widgets/practice_banner_button.dart';
-import 'package:linguaflow/widgets/ai_lesson_generator_sheet.dart';
+import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
+import 'package:linguaflow/screens/home/widgets/home_sections.dart';
+import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
+import 'package:linguaflow/screens/home/utils/home_utils.dart';
+import 'package:linguaflow/screens/placement_test/placement_test_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -18,41 +20,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   // --- SHARED CONSTANTS ---
   final Map<String, String> _languageNames = {
-    'es': 'Spanish',
-    'fr': 'French',
-    'de': 'German',
-    'en': 'English',
-    'it': 'Italian',
-    'pt': 'Portuguese',
-    'ja': 'Japanese',
+    'es': 'Spanish', 'fr': 'French', 'de': 'German',
+    'en': 'English', 'it': 'Italian', 'pt': 'Portuguese', 'ja': 'Japanese',
   };
 
+  final List<String> _proficiencyLevels = [
+    'A1 - Newcomer',
+    'A1 - Beginner',
+    'A2 - Elementary',
+    'B1 - Intermediate',
+    'B2 - Upper Intermediate',
+    'C1 - Advanced',
+  ];
+
   // --- FILTERS ---
-  String _selectedGlobalFilter = 'All';
+  String _selectedGlobalFilter = 'All'; // Filters Type (Video/Audio/Text)
   final List<String> _globalFilters = ['All', 'Videos', 'Audio', 'Text'];
-
-  // --- GUIDED / IMPORTED TABS ---
-  String _guidedTab = 'All';
-  final List<String> _guidedTabsList = [
-    'All',
-    'Beginner',
-    'Intermediate',
-    'Advanced',
-    'Imported',
-  ];
-
-  // --- NATIVE / IMMERSION TABS ---
-  String _nativeDifficultyTab = 'All';
-
-  // --- LIBRARY TABS ---
-  String _libraryDifficultyTab = 'All';
-
-  final List<String> _difficultyTabs = [
-    'All',
-    'Beginner',
-    'Intermediate',
-    'Advanced',
-  ];
 
   @override
   void initState() {
@@ -61,221 +44,9 @@ class _HomeScreenState extends State<HomeScreen> {
     context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
   }
 
-  /// Calculates stats based on the lesson content vs the user's vocabulary map
-  Map<String, int> _getLessonStats(
-    LessonModel lesson,
-    Map<String, VocabularyItem> vocabMap,
-  ) {
-    String fullText = lesson.content;
-    if (lesson.transcript.isNotEmpty) {
-      fullText = lesson.transcript.map((e) => e.text).join(" ");
-    }
-
-    final List<String> words = fullText.split(RegExp(r'(\s+)'));
-    int newWords = 0;
-    int knownWords = 0;
-    final Set<String> uniqueWords = {};
-
-    for (var word in words) {
-      final cleanWord = word.toLowerCase().trim().replaceAll(
-        RegExp(r'[^\w\s]'),
-        '',
-      );
-      if (cleanWord.isEmpty) continue;
-      if (uniqueWords.contains(cleanWord)) continue;
-
-      uniqueWords.add(cleanWord);
-      final vocabItem = vocabMap[cleanWord];
-
-      if (vocabItem == null || vocabItem.status == 0) {
-        newWords++;
-      } else {
-        knownWords++;
-      }
-    }
-    return {'new': newWords, 'known': knownWords};
-  }
-
-  void _showStatsDialog(
-    BuildContext context,
-    int knownWords,
-    String languageCode,
-  ) {
-    String currentLevel = "Beginner";
-    String nextLevel = "A1";
-    int nextGoal = 500;
-    double progress = 0.0;
-
-    if (knownWords < 500) {
-      currentLevel = "Newcomer";
-      nextLevel = "A1";
-      nextGoal = 500;
-      progress = knownWords / 500;
-    } else if (knownWords < 1000) {
-      currentLevel = "A1 (Beginner)";
-      nextLevel = "A2";
-      nextGoal = 1000;
-      progress = (knownWords - 500) / 500;
-    } else if (knownWords < 2000) {
-      currentLevel = "A2 (Elementary)";
-      nextLevel = "B1";
-      nextGoal = 2000;
-      progress = (knownWords - 1000) / 1000;
-    } else if (knownWords < 4000) {
-      currentLevel = "B1 (Intermediate)";
-      nextLevel = "B2";
-      nextGoal = 4000;
-      progress = (knownWords - 2000) / 2000;
-    } else if (knownWords < 8000) {
-      currentLevel = "B2 (Upper Int.)";
-      nextLevel = "C1";
-      nextGoal = 8000;
-      progress = (knownWords - 4000) / 4000;
-    } else {
-      currentLevel = "C1 (Advanced)";
-      nextLevel = "C2";
-      nextGoal = 16000;
-      progress = (knownWords - 8000) / 8000;
-    }
-
-    final langName = _languageNames[languageCode] ?? 'Target Language';
-
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = Theme.of(context).textTheme.bodyLarge?.color;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: isDark ? Color(0xFF1E1E1E) : Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: EdgeInsets.fromLTRB(
-          24,
-          24,
-          24,
-          24 + MediaQuery.of(context).viewPadding.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.auto_graph,
-                    color: Colors.amber[800],
-                    size: 28,
-                  ),
-                ),
-                SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "$langName Progress",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
-                    ),
-                    Text(
-                      "You probably know more words.",
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            Divider(height: 32),
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    "Current Level",
-                    style: TextStyle(
-                      color: Colors.grey,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    currentLevel,
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Next Goal: $nextLevel",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
-                ),
-                Text(
-                  "${nextGoal - knownWords} words to go",
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 10,
-                backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation(Colors.blue),
-              ),
-            ),
-            Text(
-              "$knownWords words known",
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isDark ? Colors.white : Colors.black,
-                  foregroundColor: isDark ? Colors.black : Colors.white,
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text("Keep Learning"),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Watch AuthBloc: Re-builds entire screen when User Level changes in Firebase
     final user = (context.watch<AuthBloc>().state as AuthAuthenticated).user;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
@@ -283,128 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: bgColor,
-        foregroundColor: textColor,
-        title: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white10 : Colors.grey[50],
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isDark ? Colors.white24 : Colors.grey.shade300,
-                  width: 1,
-                ),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: user.currentLanguage,
-                  icon: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 20,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  isDense: true,
-                  dropdownColor: isDark ? Color(0xFF2C2C2C) : Colors.white,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: textColor,
-                    fontFamily: 'Roboto',
-                  ),
-                  onChanged: (String? newValue) {
-                    if (newValue != null) {
-                      context.read<AuthBloc>().add(
-                        AuthTargetLanguageChanged(newValue),
-                      );
-                      context.read<LessonBloc>().add(
-                        LessonLoadRequested(user.id, newValue),
-                      );
-                      context.read<VocabularyBloc>().add(
-                        VocabularyLoadRequested(user.id),
-                      );
-                    }
-                  },
-                  items: [
-                    DropdownMenuItem(value: 'es', child: Text('🇪🇸 Spanish')),
-                    DropdownMenuItem(value: 'fr', child: Text('🇫🇷 French')),
-                    DropdownMenuItem(value: 'de', child: Text('🇩🇪 German')),
-                    DropdownMenuItem(value: 'en', child: Text('🇬🇧 English')),
-                    DropdownMenuItem(value: 'it', child: Text('🇮🇹 Italian')),
-                    DropdownMenuItem(
-                      value: 'pt',
-                      child: Text('🇵🇹 Portuguese'),
-                    ),
-                    DropdownMenuItem(value: 'ja', child: Text('🇯🇵 Japanese')),
-                  ],
-                ),
-              ),
-            ),
-            Spacer(),
-            BlocBuilder<VocabularyBloc, VocabularyState>(
-              builder: (context, vocabState) {
-                int knownCount = 0;
-                if (vocabState is VocabularyLoaded) {
-                  knownCount = vocabState.items
-                      .where(
-                        (v) =>
-                            v.status > 0 && v.language == user.currentLanguage,
-                      )
-                      .length;
-                }
-                return Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: () => _showStatsDialog(
-                      context,
-                      knownCount,
-                      user.currentLanguage,
-                    ),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.amber.withOpacity(0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.emoji_events_rounded,
-                            size: 16,
-                            color: Colors.amber[800],
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            knownCount.toString(),
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.amber[900],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
+      appBar: _buildAppBar(context, user, isDark, textColor),
       body: BlocBuilder<VocabularyBloc, VocabularyState>(
         builder: (context, vocabState) {
           Map<String, VocabularyItem> vocabMap = {};
@@ -416,193 +66,72 @@ class _HomeScreenState extends State<HomeScreen> {
 
           return Column(
             children: [
-              // 1. GLOBAL FILTERS
               _buildGlobalFilterChips(isDark),
-
               Expanded(
                 child: BlocBuilder<LessonBloc, LessonState>(
                   builder: (context, lessonState) {
                     if (lessonState is LessonInitial) {
-                      context.read<LessonBloc>().add(
-                        LessonLoadRequested(user.id, user.currentLanguage),
-                      );
-                      return Center(child: CircularProgressIndicator());
+                      context.read<LessonBloc>().add(LessonLoadRequested(user.id, user.currentLanguage));
+                      return const Center(child: CircularProgressIndicator());
                     }
                     if (lessonState is LessonLoading) {
-                      return Center(child: CircularProgressIndicator());
+                      return const Center(child: CircularProgressIndicator());
                     }
 
                     if (lessonState is LessonLoaded) {
-                      // --- SPLIT DATA ---
-
-                      final nativeLessons = lessonState.lessons
-                          .where((l) => l.type == 'video_native')
-                          .toList();
-
-                      final guidedLessons = lessonState.lessons
-                          .where((l) => l.type == 'video')
-                          .toList();
-
-                      final importedLessons = lessonState.lessons
-                          .where(
-                            (l) =>
-                                l.type == 'text' &&
-                                !l.userId.startsWith('system'),
-                          )
-                          .toList();
-
-                      // Identify system books by prefix
-                      final libraryLessons = lessonState.lessons
-                          .where(
-                            (l) =>
-                                l.type == 'text' &&
-                                l.userId.startsWith('system'),
-                          )
-                          .toList();
-
-                      // --- VIEW LOGIC ---
-                      if (_selectedGlobalFilter != 'All' &&
-                          _selectedGlobalFilter != 'Videos') {
-                        return _buildFilteredList(
-                          lessonState.lessons,
-                          vocabMap,
-                          isDark,
-                        );
+                      // 1. FILTER BY USER LEVEL (Optional: Strict filtering)
+                      // We map the user's specific "A1 - Newcomer" to broader categories "beginner", etc.
+                      // If you want to show ALL content regardless of level, comment out lines A & B below.
+                      String difficultyCategory = _mapLevelToDifficulty(user.currentLevel); 
+                      
+                      var processedLessons = lessonState.lessons;
+                      // Line A: Filter lessons to match user's general difficulty level
+                      // processedLessons = processedLessons.where((l) => l.difficulty.toLowerCase() == difficultyCategory).toList(); 
+                      
+                      // 2. FILTER BY TYPE (Chip Filter)
+                      if (_selectedGlobalFilter != 'All') {
+                        return _buildFilteredList(processedLessons, vocabMap, isDark);
                       }
 
-                      // --- DEFAULT VIEW ---
+                      // 3. SPLIT DATA FOR SECTIONS
+                      final nativeLessons = processedLessons.where((l) => l.type == 'video_native').toList();
+                      final guidedLessons = processedLessons.where((l) => l.type == 'video').toList();
+                      final importedLessons = processedLessons.where((l) => l.type == 'text' && !l.userId.startsWith('system')).toList();
+                      final libraryLessons = processedLessons.where((l) => l.type == 'text' && l.userId.startsWith('system')).toList();
+
                       return RefreshIndicator(
                         onRefresh: () async {
-                          context.read<LessonBloc>().add(
-                            LessonLoadRequested(user.id, user.currentLanguage),
-                          );
-                          context.read<VocabularyBloc>().add(
-                            VocabularyLoadRequested(user.id),
-                          );
+                          context.read<LessonBloc>().add(LessonLoadRequested(user.id, user.currentLanguage));
+                          context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
                         },
                         child: SingleChildScrollView(
-                          padding: EdgeInsets.only(bottom: 20),
+                          padding: const EdgeInsets.only(bottom: 100), // Padding for FABs
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // 2. GUIDED COURSES (Includes Imported Tab)
-                              _buildGuidedSection(
-                                guidedLessons,
-                                importedLessons,
-                                vocabMap,
-                                isDark,
-                                textColor,
+                              GuidedCoursesSection(
+                                guidedLessons: guidedLessons,
+                                importedLessons: importedLessons,
+                                vocabMap: vocabMap,
+                                isDark: isDark,
                               ),
-                              Builder(
-                                builder: (context) {
-                                  final isDark =
-                                      Theme.of(context).brightness ==
-                                      Brightness.dark;
-
-                                  // Define colors based on theme for high contrast
-                                  // Dark Mode = White Button | Light Mode = Black Button
-                                  final List<Color> gradientColors = isDark
-                                      ? [
-                                          const Color(0xFFFFFFFF),
-                                          const Color(0xFFE0E0E0),
-                                        ] // Pearl White gradient
-                                      : [
-                                          const Color(0xFF2C3E50),
-                                          const Color(0xFF000000),
-                                        ]; // Midnight Black gradient
-
-                                  final Color textColor = isDark
-                                      ? Colors.black
-                                      : Colors.white;
-                                  final Color shadowColor = isDark
-                                      ? Colors.white.withOpacity(0.15)
-                                      : Colors.black.withOpacity(0.3);
-
-                                  return Padding(
-                                    padding: const EdgeInsets.only(
-                                      left: 16.0,
-                                      right: 16,
-                                    ),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: gradientColors,
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                        ),
-                                        borderRadius: BorderRadius.circular(30),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: shadowColor,
-                                            blurRadius: 12,
-                                            offset: const Offset(0, 4),
-                                            spreadRadius: 1, // Subtle glow
-                                          ),
-                                        ],
-                                      ),
-                                      child: ElevatedButton(
-                                        onPressed: () {
-                                          _linguaflowAiStoryGenerator(context);
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.transparent,
-                                          shadowColor: Colors.transparent,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 24,
-                                            vertical: 14,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              30,
-                                            ),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.auto_awesome,
-                                              color: textColor,
-                                              size: 20,
-                                            ), // AI Sparkle
-                                            const SizedBox(width: 10),
-                                            Text(
-                                              "Personalized Story Lesson",
-                                              style: TextStyle(
-                                                color: textColor,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
+                              _buildAIStoryButton(context, isDark),
+                              ImmersionSection(
+                                lessons: nativeLessons,
+                                vocabMap: vocabMap,
+                                isDark: isDark,
                               ),
-                              // 3. IMMERSION / TRENDING (Horizontal)
-                              _buildNativeSection(
-                                nativeLessons,
-                                vocabMap,
-                                isDark,
-                                textColor,
-                              ),
-
-                              // 4. READING LIBRARY (New Section - Horizontal)
-                              _buildLibrarySection(
-                                libraryLessons,
-                                vocabMap,
-                                isDark,
-                                textColor,
+                              LibrarySection(
+                                lessons: libraryLessons,
+                                vocabMap: vocabMap,
+                                isDark: isDark,
                               ),
                             ],
                           ),
                         ),
                       );
                     }
-                    return Center(child: Text('Something went wrong'));
+                    return const Center(child: Text('Something went wrong'));
                   },
                 ),
               ),
@@ -610,92 +139,386 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
-      floatingActionButton: Material(
-        color: Colors.transparent,
-        elevation: 10,
-        shadowColor: Colors.black.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(30),
-        child: InkWell(
-          onTap: () {
-            _showCreateLessonDialog(
-              context,
-              user.id,
-              user.currentLanguage,
-              isFavoriteByDefault: false,
-            );
-          },
-          borderRadius: BorderRadius.circular(30),
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E).withOpacity(0.90),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.15),
-                width: 1,
+      
+      // --- DUAL FLOATING ACTION BUTTONS ---
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            HomeUtils.buildFloatingButton(
+              label: "Learn",
+              icon: Icons.school_rounded,
+              onTap: () => HomeUtils.navigateToLearnScreen(context),
+            ),
+            HomeUtils.buildFloatingButton(
+              label: "Import",
+              icon: Icons.add_rounded,
+              onTap: () => HomeDialogs.showCreateLessonDialog(
+                context, 
+                user.id, 
+                user.currentLanguage, 
+                _languageNames, 
+                isFavoriteByDefault: false
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.add_rounded, color: Colors.white, size: 22),
-                SizedBox(width: 8),
-                Text(
-                  'Import',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- APP BAR & STATS ---
+
+  PreferredSizeWidget _buildAppBar(BuildContext context, dynamic user, bool isDark, Color? textColor) {
+    return AppBar(
+      elevation: 0,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      foregroundColor: textColor,
+      toolbarHeight: 70, 
+      title: BlocBuilder<VocabularyBloc, VocabularyState>(
+        builder: (context, vocabState) {
+          // Calculate known words
+          int knownCount = 0;
+          if (vocabState is VocabularyLoaded) {
+            knownCount = vocabState.items
+                .where((v) => v.status > 0 && v.language == user.currentLanguage)
+                .length;
+          }
+
+          // Get the User's Saved Level (e.g. "A1 - Newcomer")
+          final String currentLevel = user.currentLevel;
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // --- SECTION 1: FLAG (Switch Language) ---
+              GestureDetector(
+                onTap: () => _showLanguageSelector(context, user),
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : Colors.grey.shade300, 
+                      width: 2
+                    ),
+                    color: isDark ? Colors.black26 : Colors.white,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    _getFlagEmoji(user.currentLanguage),
+                    style: const TextStyle(fontSize: 28),
                   ),
                 ),
-              ],
-            ),
+              ),
+              
+              const SizedBox(width: 16),
+
+              // --- SECTION 2: LEVEL & STATS (Switch Level) ---
+              Expanded(
+                child: InkWell(
+                  onTap: () => _showLevelSelector(context, currentLevel, user.currentLanguage),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // User's Current Level + Arrow
+                      Row(
+                        children: [
+                          Text(
+                            currentLevel, 
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.keyboard_arrow_down_rounded, 
+                            size: 20, 
+                            color: isDark ? Colors.white54 : Colors.grey.shade600
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 4),
+
+                      // Stats Row
+                      Row(
+                        children: [
+                          const Icon(Icons.star_rounded, size: 18, color: Color(0xFFFFC107)),
+                          const SizedBox(width: 6),
+                          Text(
+                            "$knownCount / ${_getNextGoal(knownCount)} words",
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // --- LOGIC HELPERS ---
+
+  /// Helper to map verbose levels to database difficulty keys
+  String _mapLevelToDifficulty(String fullLevel) {
+    if (fullLevel.contains("Newcomer")) return "beginner";
+    if (fullLevel.contains("Beginner")) return "beginner";
+    if (fullLevel.contains("Elementary")) return "beginner"; 
+    if (fullLevel.contains("Intermediate")) return "intermediate";
+    if (fullLevel.contains("Advanced")) return "advanced";
+    return "beginner"; // Fallback
+  }
+
+  int _getNextGoal(int count) {
+    if (count < 500) return 500;
+    if (count < 1000) return 1000;
+    if (count < 2000) return 2000;
+    if (count < 4000) return 4000;
+    if (count < 8000) return 8000;
+    return 16000;
+  }
+
+  String _getFlagEmoji(String langCode) {
+    switch (langCode) {
+      case 'es': return '🇪🇸';
+      case 'fr': return '🇫🇷';
+      case 'de': return '🇩🇪';
+      case 'en': return '🇬🇧';
+      case 'it': return '🇮🇹';
+      case 'pt': return '🇵🇹';
+      case 'ja': return '🇯🇵';
+      default: return '🏳️';
+    }
+  }
+
+  // --- DIALOGS ---
+
+  void _showLanguageSelector(BuildContext context, dynamic user) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true, // Important for wrapping content correctly
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        // FIX: Wrap in SafeArea to avoid system nav bar
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text("Switch Language", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
+              ),
+              Flexible( // Use Flexible to allow scrolling if list is long
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: _languageNames.entries.map((entry) {
+                      final isSelected = user.currentLanguage == entry.key;
+                      return ListTile(
+                        leading: Text(_getFlagEmoji(entry.key), style: const TextStyle(fontSize: 24)),
+                        title: Text(entry.value, style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+                        trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.blue) : null,
+                        onTap: () {
+                          context.read<AuthBloc>().add(AuthTargetLanguageChanged(entry.key));
+                          context.read<LessonBloc>().add(LessonLoadRequested(user.id, entry.key));
+                          context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // --- WIDGETS & SECTIONS ---
+  void _showLevelSelector(BuildContext context, String currentLevel, String langCode) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.only(top: 16),
+        // FIX: Wrap in SafeArea
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+                child: Text("Select Your Level", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
+              ),
+              Divider(color: Colors.grey.withOpacity(0.2)),
+              
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: _proficiencyLevels.map((level) {
+                      final isSelected = currentLevel == level;
+                      return ListTile(
+                        leading: Icon(
+                          isSelected ? Icons.check_circle : Icons.circle_outlined, 
+                          color: isSelected ? Colors.blue : Colors.grey
+                        ),
+                        title: Text(
+                          level, 
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
+                          )
+                        ),
+                        onTap: () {
+                          Navigator.pop(ctx); 
+                          
+                          if (level == currentLevel) return;
+
+                          if (level == 'A1 - Newcomer') {
+                             context.read<AuthBloc>().add(AuthLanguageLevelChanged(level));
+                          } else {
+                            _showPlacementTestDialog(context, level, langCode);
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+void _showPlacementTestDialog(BuildContext context, String targetLevel, String langCode) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text("Change Level?", style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+        content: Text(
+          "You selected $targetLevel. We recommend taking a quick placement test to ensure this is the right fit, or you can switch immediately.",
+          style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+        ),
+        actions: [
+          // Option 1: Skip Test
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx); 
+              context.read<AuthBloc>().add(AuthLanguageLevelChanged(targetLevel));
+            },
+            child: const Text("Just switch"),
+          ),
+          
+          // Option 2: Take Test
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx); // Close Dialog
+              
+              // 1. Navigate and Wait for Result
+              final resultLevel = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PlacementTestScreen(
+                    nativeLanguage: user.nativeLanguage,
+                    targetLanguage: user.currentLanguage,
+                    targetLevelToCheck: targetLevel,
+                  ),
+                ),
+              );
+
+              // 2. If Test Completed (result is not null)
+              if (resultLevel != null && resultLevel is String) {
+                if (mounted) {
+                  // 3. Update Firebase via Bloc
+                  context.read<AuthBloc>().add(AuthLanguageLevelChanged(resultLevel));
+
+                  // 4. Show Feedback SnackBar
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Level set to: $resultLevel"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white
+            ),
+            child: const Text("Take Test"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- FILTER CHIPS & AI BUTTON ---
 
   Widget _buildGlobalFilterChips(bool isDark) {
     return Container(
       height: 60,
-      padding: EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: ListView.separated(
-        padding: EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         scrollDirection: Axis.horizontal,
         itemCount: _globalFilters.length,
-        separatorBuilder: (ctx, i) => SizedBox(width: 8),
+        separatorBuilder: (ctx, i) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final category = _globalFilters[index];
           final isSelected = _selectedGlobalFilter == category;
           return GestureDetector(
             onTap: () => setState(() => _selectedGlobalFilter = category),
             child: AnimatedContainer(
-              duration: Duration(milliseconds: 200),
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected
-                    ? (isDark ? Colors.white : Colors.black)
-                    : (isDark ? Colors.white10 : Colors.grey[100]),
+                color: isSelected ? (isDark ? Colors.white : Colors.black) : (isDark ? Colors.white10 : Colors.grey[100]),
                 borderRadius: BorderRadius.circular(20),
-                border: isSelected
-                    ? null
-                    : Border.all(
-                        color: isDark
-                            ? Colors.transparent
-                            : Colors.grey.shade300,
-                      ),
+                border: isSelected ? null : Border.all(color: isDark ? Colors.transparent : Colors.grey.shade300),
               ),
               alignment: Alignment.center,
               child: Text(
                 category,
                 style: TextStyle(
-                  color: isSelected
-                      ? (isDark ? Colors.black : Colors.white)
-                      : (isDark ? Colors.white70 : Colors.black),
+                  color: isSelected ? (isDark ? Colors.black : Colors.white) : (isDark ? Colors.white70 : Colors.black),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -706,630 +529,39 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _linguaflowAiStoryGenerator(BuildContext context) {
-    // Assuming you have AuthBloc to get User ID and Lang
-    final authState = context.read<AuthBloc>().state;
+  Widget _buildAIStoryButton(BuildContext context, bool isDark) {
+    final List<Color> gradientColors = isDark
+        ? [const Color(0xFFFFFFFF), const Color(0xFFE0E0E0)]
+        : [const Color(0xFF2C3E50), const Color(0xFF000000)];
+    final Color textColor = isDark ? Colors.black : Colors.white;
+    final Color shadowColor = isDark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.3);
 
-    if (authState is AuthAuthenticated) {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true, // Crucial for text inputs
-        backgroundColor: Colors.transparent,
-        builder: (_) => BlocProvider.value(
-          value: context.read<LessonBloc>(), // Pass existing bloc
-          child: AILessonGeneratorSheet(
-            userId: authState.user.id,
-            targetLanguage: authState.user.currentLanguage,
-          ),
-        ),
-      );
-    }
-  }
-
-  // --- GUIDED COURSES SECTION (with Imported Tab) ---
-  Widget _buildGuidedSection(
-    List<LessonModel> guidedLessons,
-    List<LessonModel> importedLessons,
-    Map<String, VocabularyItem> vocabMap,
-    bool isDark,
-    Color? textColor,
-  ) {
-    List<LessonModel> displayLessons = [];
-
-    if (_guidedTab == 'Imported') {
-      displayLessons = importedLessons;
-    } else if (_guidedTab == 'All') {
-      displayLessons = guidedLessons;
-    } else {
-      displayLessons = guidedLessons
-          .where((l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase())
-          .toList();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Title
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 0, 8),
-          child: Row(
-            children: [
-              Text(
-                "Guided Courses",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white70 : Colors.black45,
-                ),
-              ),
-              Expanded(child: PracticeBannerButton()),
-            ],
-          ),
-        ),
-
-        // Tabs (Includes "Imported")
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: _guidedTabsList.map((tab) {
-              final isSelected = _guidedTab == tab;
-              return Padding(
-                padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-                child: InkWell(
-                  onTap: () => setState(() => _guidedTab = tab),
-                  child: Column(
-                    children: [
-                      Text(
-                        tab,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: isSelected
-                              ? (isDark ? Colors.white : Colors.black)
-                              : Colors.grey[500],
-                        ),
-                      ),
-                      if (isSelected)
-                        Container(
-                          margin: EdgeInsets.only(top: 4),
-                          height: 2,
-                          width: 20,
-                          color: Colors.blue,
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-
-        // Horizontal List
-        if (displayLessons.isEmpty)
-          Container(
-            height: 260,
-            alignment: Alignment.center,
-            child: Text(
-              _guidedTab == 'Imported'
-                  ? "No imported lessons yet."
-                  : "No guided courses found.",
-              style: TextStyle(color: Colors.grey),
-            ),
-          )
-        else
-          SizedBox(
-            height: 240,
-            child: ListView.separated(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              itemCount: displayLessons.length,
-              separatorBuilder: (ctx, i) => SizedBox(width: 16),
-              itemBuilder: (context, index) {
-                return _buildVideoCardLarge(
-                  context,
-                  displayLessons[index],
-                  vocabMap,
-                  isDark,
-                  textColor,
-                );
-              },
-            ),
-          ),
-      ],
-    );
-  }
-
-  // --- IMMERSION / TRENDING SECTION ---
-  Widget _buildNativeSection(
-    List<LessonModel> lessons,
-    Map<String, VocabularyItem> vocabMap,
-    bool isDark,
-    Color? textColor,
-  ) {
-    final displayVideos = _nativeDifficultyTab == 'All'
-        ? lessons
-        : lessons
-              .where(
-                (l) =>
-                    l.difficulty.toLowerCase() ==
-                    _nativeDifficultyTab.toLowerCase(),
-              )
-              .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Title
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text(
-            "Immersion",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white70 : Colors.black45,
-            ),
-          ),
-        ),
-
-        // Tabs
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: _difficultyTabs.map((tab) {
-              final isSelected = _nativeDifficultyTab == tab;
-              return Padding(
-                padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-                child: InkWell(
-                  onTap: () => setState(() => _nativeDifficultyTab = tab),
-                  child: Column(
-                    children: [
-                      Text(
-                        tab,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: isSelected
-                              ? (isDark ? Colors.white : Colors.black)
-                              : Colors.grey[500],
-                        ),
-                      ),
-                      if (isSelected)
-                        Container(
-                          margin: EdgeInsets.only(top: 4),
-                          height: 2,
-                          width: 20,
-                          color: Colors.red,
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-
-        // Horizontal List
-        if (displayVideos.isEmpty)
-          Container(
-            height: 150,
-            alignment: Alignment.center,
-            child: Text(
-              "No videos found",
-              style: TextStyle(color: Colors.grey),
-            ),
-          )
-        else
-          SizedBox(
-            height: 260, // Fixed height for horizontal list
-            child: ListView.separated(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              itemCount: displayVideos.length,
-              separatorBuilder: (ctx, i) => SizedBox(width: 16),
-              itemBuilder: (context, index) {
-                return _buildVideoCardLarge(
-                  context,
-                  displayVideos[index],
-                  vocabMap,
-                  isDark,
-                  textColor,
-                );
-              },
-            ),
-          ),
-      ],
-    );
-  }
-
-  // --- NEW: READING LIBRARY SECTION ---
-  Widget _buildLibrarySection(
-    List<LessonModel> lessons,
-    Map<String, VocabularyItem> vocabMap,
-    bool isDark,
-    Color? textColor,
-  ) {
-    // 1. Sort: Beginner first, then others
-    lessons.sort((a, b) {
-      if (a.difficulty == 'beginner' && b.difficulty != 'beginner') return -1;
-      if (a.difficulty != 'beginner' && b.difficulty == 'beginner') return 1;
-      return 0;
-    });
-
-    // 2. Filter by tab
-    final displayBooks = _libraryDifficultyTab == 'All'
-        ? lessons
-        : lessons
-              .where(
-                (l) =>
-                    l.difficulty.toLowerCase() ==
-                    _libraryDifficultyTab.toLowerCase(),
-              )
-              .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Title
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-          child: Text(
-            "Reading Library",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white70 : Colors.black45,
-            ),
-          ),
-        ),
-
-        // Tabs
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: _difficultyTabs.map((tab) {
-              final isSelected = _libraryDifficultyTab == tab;
-              return Padding(
-                padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-                child: InkWell(
-                  onTap: () => setState(() => _libraryDifficultyTab = tab),
-                  child: Column(
-                    children: [
-                      Text(
-                        tab,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: isSelected
-                              ? (isDark ? Colors.white : Colors.black)
-                              : Colors.grey[500],
-                        ),
-                      ),
-                      if (isSelected)
-                        Container(
-                          margin: EdgeInsets.only(top: 4),
-                          height: 2,
-                          width: 20,
-                          color: Colors.green, // Differentiate with green
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-
-        // Horizontal List
-        if (displayBooks.isEmpty)
-          Container(
-            height: 150,
-            alignment: Alignment.center,
-            child: Text("No books found", style: TextStyle(color: Colors.grey)),
-          )
-        else
-          SizedBox(
-            height: 260, // Fixed height for horizontal list
-            child: ListView.separated(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              itemCount: displayBooks.length,
-              separatorBuilder: (ctx, i) => SizedBox(width: 16),
-              itemBuilder: (context, index) {
-                return _buildVideoCardLarge(
-                  context,
-                  displayBooks[index],
-                  vocabMap,
-                  isDark,
-                  textColor,
-                );
-              },
-            ),
-          ),
-      ],
-    );
-  }
-
-  // --- CARD WIDGETS ---
-
-  Widget _buildVideoCardLarge(
-    BuildContext context,
-    LessonModel lesson,
-    Map<String, VocabularyItem> vocabMap,
-    bool isDark,
-    Color? textColor,
-  ) {
-    final stats = _getLessonStats(lesson, vocabMap);
-    final int newCount = stats['new']!;
-    final int knownCount = stats['known']!;
-
-    double progress = lesson.progress > 0 ? lesson.progress / 100 : 0.0;
-    if (progress == 0 && (knownCount + newCount) > 0) {
-      progress = knownCount / (knownCount + newCount);
-    }
-
-    return Container(
-      width: 280,
-      margin: EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ReaderScreen(lesson: lesson),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    height: 160,
-                    width: 280,
-                    color: isDark ? Colors.white10 : Colors.grey[200],
-                    child: lesson.imageUrl != null
-                        ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
-                        : (lesson.type == 'text'
-                              ? Center(
-                                  child: Icon(
-                                    Icons.menu_book_rounded,
-                                    size: 64,
-                                    color: Colors.blue.withOpacity(0.5),
-                                  ),
-                                )
-                              : Center(
-                                  child: Icon(
-                                    Icons.play_circle,
-                                    size: 64,
-                                    color: Colors.grey,
-                                  ),
-                                )),
-                  ),
-                ),
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      lesson.difficulty.toUpperCase(),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(12),
-                    ),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 4,
-                      backgroundColor: Colors.transparent,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 10),
-            Text(
-              lesson.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                height: 1.2,
-                color: isDark ? Colors.grey[400] : Colors.grey[600],
-              ),
-            ),
-            SizedBox(
-              height: 20,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Icon(Icons.circle, size: 8, color: Colors.blue),
-                        SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            "$newCount New",
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Icon(Icons.circle, size: 8, color: Colors.green),
-                        SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            "$knownCount known",
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.more_vert, color: Colors.grey, size: 16),
-                    padding: EdgeInsets.zero,
-                    constraints: BoxConstraints(minWidth: 32, minHeight: 32),
-                    onPressed: () =>
-                        _showLessonOptions(context, lesson, isDark),
-                  ),
-                ],
-              ),
-            ),
+    return Padding(
+      padding: const EdgeInsets.only(left: 16.0, right: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: gradientColors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(color: shadowColor, blurRadius: 12, offset: const Offset(0, 4), spreadRadius: 1),
           ],
         ),
-      ),
-    );
-  }
-
-  // Text card used for specific filters
-  Widget _buildTextLessonCard(
-    BuildContext context,
-    LessonModel lesson,
-    Map<String, VocabularyItem> vocabMap,
-    bool isDark,
-  ) {
-    final stats = _getLessonStats(lesson, vocabMap);
-    final int newCount = stats['new']!;
-    final int knownCount = stats['known']!;
-    final double progress = (knownCount + newCount) == 0
-        ? 0
-        : knownCount / (knownCount + newCount);
-
-    return Card(
-      elevation: 0,
-      color: isDark ? Colors.white10 : Colors.grey[50],
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isDark ? Colors.transparent : Colors.grey.shade200,
-        ),
-      ),
-      margin: EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ReaderScreen(lesson: lesson),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
+        child: ElevatedButton(
+          onPressed: () => HomeUtils.showAIStoryGenerator(context), 
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.article, color: Colors.blue),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          lesson.title,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white70 : Colors.grey[800],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          lesson.content.replaceAll('\n', ' '),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: Colors.grey, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.more_vert, color: Colors.grey, size: 16),
-                    constraints: BoxConstraints(),
-                    padding: EdgeInsets.zero,
-                    onPressed: () =>
-                        _showLessonOptions(context, lesson, isDark),
-                  ),
-                ],
-              ),
-              SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 6,
-                        backgroundColor: isDark
-                            ? Colors.black26
-                            : Colors.grey[300],
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Text(
-                    "${(progress * 100).toInt()}%",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  Container(width: 1, height: 12, color: Colors.grey),
-                  SizedBox(width: 8),
-                  Text(
-                    "$newCount New",
-                    style: TextStyle(fontSize: 11, color: Colors.blue),
-                  ),
-                ],
+              Icon(Icons.auto_awesome, color: textColor, size: 20),
+              const SizedBox(width: 10),
+              Text(
+                "Personalized Story Lesson",
+                style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.5),
               ),
             ],
           ),
@@ -1338,211 +570,55 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Updated to accept vocabMap
-  Widget _buildFilteredList(
-    List<LessonModel> lessons,
-    Map<String, VocabularyItem> vocabMap,
-    bool isDark,
-  ) {
+  Widget _buildFilteredList(List<LessonModel> lessons, Map<String, VocabularyItem> vocabMap, bool isDark) {
     final filtered = lessons.where((l) {
-      if (_selectedGlobalFilter == 'Videos')
-        return l.type == 'video' || l.type == 'video_native';
+      if (_selectedGlobalFilter == 'Videos') return l.type == 'video' || l.type == 'video_native';
       if (_selectedGlobalFilter == 'Audio') return l.type == 'audio';
       if (_selectedGlobalFilter == 'Text') return l.type == 'text';
       return true;
     }).toList();
 
     return ListView.separated(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       itemCount: filtered.length,
-      separatorBuilder: (ctx, i) => SizedBox(height: 16),
+      separatorBuilder: (ctx, i) => const SizedBox(height: 16),
       itemBuilder: (context, index) {
-        return _buildTextLessonCard(context, filtered[index], vocabMap, isDark);
+        final lesson = filtered[index];
+        if (lesson.type == 'text') {
+          return TextLessonCard(
+            lesson: lesson, 
+            vocabMap: vocabMap, 
+            isDark: isDark,
+            onTap: () => _navigateToReader(context, lesson),
+            onOptionTap: () => HomeDialogs.showLessonOptions(context, lesson, isDark),
+          );
+        } else {
+          return Center(
+            child: SizedBox(
+              width: double.infinity,
+              child: FittedBox( 
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.center,
+                child: VideoLessonCard(
+                  lesson: lesson,
+                  vocabMap: vocabMap,
+                  isDark: isDark,
+                  onTap: () => _navigateToReader(context, lesson),
+                  onOptionTap: () => HomeDialogs.showLessonOptions(context, lesson, isDark),
+                ),
+              ),
+            ),
+          );
+        }
       },
     );
   }
 
-  void _showLessonOptions(
-    BuildContext context,
-    LessonModel lesson,
-    bool isDark,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (builderContext) => Container(
-        decoration: BoxDecoration(
-          color: isDark ? Color(0xFF1E1E1E) : Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: EdgeInsets.only(
-          top: 20,
-          left: 0,
-          right: 0,
-          bottom: MediaQuery.of(builderContext).viewPadding.bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Colors.grey[600],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            ListTile(
-              leading: Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: lesson.isFavorite
-                      ? Colors.amber.withOpacity(0.1)
-                      : (isDark ? Colors.white10 : Colors.grey[100]),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  lesson.isFavorite ? Icons.star : Icons.star_border,
-                  color: lesson.isFavorite ? Colors.amber : Colors.grey,
-                ),
-              ),
-              title: Text(
-                lesson.isFavorite
-                    ? 'Remove from Favorites'
-                    : 'Add to Favorites',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black,
-                ),
-              ),
-              subtitle: Text(
-                lesson.isFavorite
-                    ? 'Removed from library.'
-                    : 'Saved to library.',
-                style: TextStyle(color: Colors.grey),
-              ),
-              onTap: () {
-                final user =
-                    (context.read<AuthBloc>().state as AuthAuthenticated).user;
-                final updatedLesson = lesson.copyWith(
-                  isFavorite: !lesson.isFavorite,
-                  userId: user.id,
-                );
-                context.read<LessonBloc>().add(
-                  LessonUpdateRequested(updatedLesson),
-                );
-                Navigator.pop(builderContext);
-              },
-            ),
-            Divider(color: Colors.grey[800]),
-            ListTile(
-              leading: Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.delete_outline, color: Colors.red),
-              ),
-              title: Text('Delete Lesson', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                context.read<LessonBloc>().add(
-                  LessonDeleteRequested(lesson.id),
-                );
-                Navigator.pop(builderContext);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showCreateLessonDialog(
-    BuildContext context,
-    String userId,
-    String currentLanguage, {
-    required bool isFavoriteByDefault,
-  }) {
-    final titleController = TextEditingController();
-    final contentController = TextEditingController();
-    final lessonBloc = context.read<LessonBloc>();
-    final lessonService = context.read<LessonService>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final fullLangName =
-        _languageNames[currentLanguage] ?? currentLanguage.toUpperCase();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: isDark ? Color(0xFF1E1E1E) : Colors.white,
-        title: Text(
-          'Create New Lesson for $fullLangName',
-          style: TextStyle(color: isDark ? Colors.white : Colors.black),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                decoration: InputDecoration(
-                  labelText: 'Title',
-                  border: OutlineInputBorder(),
-                  labelStyle: TextStyle(color: Colors.grey),
-                ),
-              ),
-              SizedBox(height: 16),
-              TextField(
-                controller: contentController,
-                style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                decoration: InputDecoration(
-                  labelText: 'Content',
-                  border: OutlineInputBorder(),
-                  labelStyle: TextStyle(color: Colors.grey),
-                ),
-                maxLines: 6,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (titleController.text.isNotEmpty &&
-                  contentController.text.isNotEmpty) {
-                final sentences = lessonService.splitIntoSentences(
-                  contentController.text,
-                );
-                final lesson = LessonModel(
-                  id: '',
-                  userId: userId,
-                  title: titleController.text,
-                  language: currentLanguage,
-                  content: contentController.text,
-                  sentences: sentences,
-                  createdAt: DateTime.now(),
-                  progress: 0,
-                  isFavorite: isFavoriteByDefault,
-                  type: 'text',
-                );
-                lessonBloc.add(LessonCreateRequested(lesson));
-                Navigator.pop(dialogContext);
-              }
-            },
-            child: Text('Create'),
-          ),
-        ],
+  void _navigateToReader(BuildContext context, LessonModel lesson) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ReaderScreen(lesson: lesson),
       ),
     );
   }
