@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
+// Add this import for the dialog
+import 'package:linguaflow/screens/home/widgets/home_dialogs.dart'; 
 
 class AudioLibrarySection extends StatefulWidget {
   final List<LessonModel> lessons;
@@ -29,18 +31,15 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
       return lesson.difficulty.toLowerCase() == _selectedLevel.toLowerCase();
     }).toList();
 
-    // 2. Split Data (Robust Filtering)
-    // Synced = YouTube Audiobooks (system_audiobook)
+    // 2. Split Data
     final syncedLessons = filteredLessons
         .where((l) => l.userId == 'system_audiobook')
         .toList();
 
-    // Pure = LibriVox (system_librivox) OR anything else marked as audio
     final pureAudioLessons = filteredLessons
         .where((l) => l.userId != 'system_audiobook')
         .toList();
 
-    // Hide section only if absolutely no data exists
     if (syncedLessons.isEmpty && pureAudioLessons.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -64,7 +63,7 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
           ),
         ),
 
-        // --- NEW TABS (Text + Underline) ---
+        // --- TABS ---
         Container(
           height: 40,
           margin: const EdgeInsets.only(bottom: 10),
@@ -86,12 +85,13 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
                       level,
                       style: TextStyle(
                         color: isSelected ? textColor : secondaryColor,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                         fontSize: 15,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    // Blue Underline Indicator
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       height: 3,
@@ -108,14 +108,14 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
           ),
         ),
 
-        // --- SECTION 1: READ & LISTEN (Synced) ---
+        // --- SECTION 1: READ & LISTEN ---
         if (syncedLessons.isNotEmpty) ...[
           _buildSubHeader("Read & Listen", Icons.subtitles),
           _buildHorizontalList(syncedLessons, isSynced: true),
           const SizedBox(height: 24),
         ],
 
-        // --- SECTION 2: LISTEN ONLY (Pure Audio) ---
+        // --- SECTION 2: LISTEN ONLY ---
         if (pureAudioLessons.isNotEmpty) ...[
           _buildSubHeader("Podcasts & Stories", Icons.headphones),
           _buildHorizontalList(pureAudioLessons, isSynced: false),
@@ -137,7 +137,9 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: widget.isDark ? Colors.grey.shade300 : Colors.grey.shade800,
+              color: widget.isDark
+                  ? Colors.grey.shade300
+                  : Colors.grey.shade800,
             ),
           ),
         ],
@@ -145,8 +147,10 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
     );
   }
 
-  Widget _buildHorizontalList(List<LessonModel> lessons, {required bool isSynced}) {
-    // Height 220 prevents overflow
+  Widget _buildHorizontalList(
+    List<LessonModel> lessons, {
+    required bool isSynced,
+  }) {
     return SizedBox(
       height: 220,
       child: ListView.separated(
@@ -167,10 +171,12 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
         if (isSynced) {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)),
+            MaterialPageRoute(
+              builder: (context) => ReaderScreen(lesson: lesson),
+            ),
           );
         } else {
-         AudioGlobalManager().playLesson(lesson);
+          AudioGlobalManager().playLesson(lesson);
         }
       },
       child: Container(
@@ -183,100 +189,129 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
               color: Colors.black.withOpacity(0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
-            )
+            ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        // --- CHANGED: Wrapped content in a Stack to overlay the menu button ---
+        child: Stack(
           children: [
-            // Image Area
-            Expanded(
-              flex: 5,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ClipRRect(
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(16)),
-                    child: lesson.imageUrl != null
-                        ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
-                        : Container(
-                            color: isSynced
-                                ? Colors.orange.shade100
-                                : Colors.purple.shade100,
-                            child: Icon(
-                              isSynced ? Icons.menu_book : Icons.headphones,
-                              color: isSynced ? Colors.orange : Colors.purple,
-                              size: 40,
-                            ),
+            // 1. The original content (Image + Text)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Image Area
+                Expanded(
+                  flex: 5,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                        child: lesson.imageUrl != null
+                            ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
+                            : Container(
+                                color: isSynced
+                                    ? Colors.orange.shade100
+                                    : Colors.purple.shade100,
+                                child: Icon(
+                                  isSynced ? Icons.menu_book : Icons.headphones,
+                                  color: isSynced ? Colors.orange : Colors.purple,
+                                  size: 40,
+                                ),
+                              ),
+                      ),
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.4),
+                            shape: BoxShape.circle,
                           ),
-                  ),
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.4),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        isSynced
-                            ? Icons.visibility_rounded
-                            : Icons.play_arrow_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Text Area
-            Expanded(
-              flex: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        lesson.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: widget.isDark ? Colors.white : Colors.black87,
-                          height: 1.2,
+                          child: Icon(
+                            Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 24,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
+                    ],
+                  ),
+                ),
+
+                // Text Area
+                Expanded(
+                  flex: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.all(10.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        if (isSynced)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 4.0),
-                            child: Icon(Icons.abc,
-                                size: 14, color: Colors.orange.shade400),
-                          ),
-                        Expanded(
+                        Flexible(
                           child: Text(
-                            lesson.difficulty,
+                            lesson.title,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 11,
-                              color: isSynced
-                                  ? Colors.orange.shade400
-                                  : Colors.purple.shade400,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: widget.isDark ? Colors.white : Colors.black87,
+                              height: 1.2,
                             ),
                           ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            if (isSynced)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 4.0),
+                                child: Icon(
+                                  Icons.abc,
+                                  size: 14,
+                                  color: Colors.orange.shade400,
+                                ),
+                              ),
+                            Expanded(
+                              child: Text(
+                                lesson.difficulty,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isSynced
+                                      ? Colors.orange.shade400
+                                      : Colors.purple.shade400,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
+                ),
+              ],
+            ),
+
+            // 2. The Menu Button (Bottom Right)
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Material(
+                color: Colors.transparent,
+                child: IconButton(
+                  icon: const Icon(Icons.more_vert),
+                  iconSize: 20,
+                  // Subtle color for the icon
+                  color: widget.isDark ? Colors.white60 : Colors.grey[500],
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(), // Removes default padding
+                  onPressed: () {
+                    // Open the options dialog
+                    HomeDialogs.showLessonOptions(context, lesson, widget.isDark);
+                  },
                 ),
               ),
             ),
