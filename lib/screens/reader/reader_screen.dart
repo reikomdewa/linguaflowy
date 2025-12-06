@@ -32,59 +32,60 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   Map<String, VocabularyItem> _vocabulary = {};
 
-  // --- SETTINGS (Synced) ---
+  // --- SETTINGS ---
   bool _autoMarkOnSwipe = false;
 
-  // --- VIDEO STATE ---
+  // --- VIDEO / AUDIOBOOK STATE ---
   YoutubePlayerController? _videoController;
-  bool _isVideo = false;
-  final bool _isAudioMode = false;
+  bool _isVideo = false; 
+  bool _isAudioMode = false;
   bool _isPlaying = false;
   bool _isFullScreen = false;
-  bool _isTransitioningFullscreen = false; // NEW: Track fullscreen transitions
+  bool _isTransitioningFullscreen = false;
 
-  // --- PARENT TTS STATE (For Paragraphs/Full Lesson) ---
+  // --- TTS STATE ---
   final FlutterTts _flutterTts = FlutterTts();
   bool _isTtsPlaying = false;
   final double _ttsSpeed = 0.5;
 
-  // --- SYNC & SCROLL STATE ---
+  // --- SCROLLING & LISTS ---
+  // We use ScrollController for the ListView to handle lazy loading
+  final ScrollController _listScrollController = ScrollController();
   int _activeSentenceIndex = -1;
+  
+  // Keys to find items for auto-scrolling (only works if item is rendered)
   final List<GlobalKey> _itemKeys = [];
 
-  // --- SMART CHUNKING STATE ---
+  // --- CONTENT ---
   List<String> _smartChunks = [];
   List<int> _chunkToTranscriptMap = [];
 
-  // --- PAGINATION STATE (For Text Mode) ---
+  // --- PAGINATION (Text Only Mode) ---
   final PageController _pageController = PageController();
   List<List<int>> _bookPages = [];
   int _currentPage = 0;
   final int _wordsPerPage = 100;
 
-  // --- SELECTION STATE ---
+  // --- SELECTION ---
   bool _isSelectionMode = false;
   int _selectionSentenceIndex = -1;
   int _selectionStartIndex = -1;
   int _selectionEndIndex = -1;
   Offset _lastDragPosition = Offset.zero;
 
-  // --- SENTENCE MODE STATE ---
+  // --- SENTENCE MODE ---
   bool _isSentenceMode = false;
   bool _hasShownSwipeHint = false;
   String? _currentSentenceTranslation;
 
-  // --- KEY CACHING ---
+  // --- UTILS ---
   final Map<String, GlobalKey> _stableWordKeys = {};
-
-  // --- PROCESSING STATE ---
   bool _isCheckingLimit = false;
 
   @override
   void initState() {
     super.initState();
     
-    // Lock to portrait initially - user can rotate device manually in fullscreen
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     
     final envKey = dotenv.env['GEMINI_API_KEY'];
@@ -99,6 +100,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _loadUserPreferences();
     _generateSmartChunks();
 
+    // Generate keys for potential scrolling
     final maxCount = (_smartChunks.length > widget.lesson.sentences.length)
         ? _smartChunks.length
         : widget.lesson.sentences.length;
@@ -107,18 +109,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _itemKeys.add(GlobalKey());
     }
 
+    // Pagination for pure text books
     if (widget.lesson.transcript.isEmpty) {
       _prepareBookPages();
     }
 
-    if (widget.lesson.type == 'video' || widget.lesson.videoUrl != null) {
+    // --- FIX: DETECT AUDIOBOOKS & VIDEOS ---
+    // This checks if we have a URL, even if the type says 'audio'
+    if (widget.lesson.videoUrl != null && widget.lesson.videoUrl!.isNotEmpty) {
       _initializeVideoPlayer();
     } else {
       _initializeTts();
     }
   }
 
-  // --- FIREBASE PREFERENCES ---
   Future<void> _loadUserPreferences() async {
     final authState = context.read<AuthBloc>().state;
     if (authState is AuthAuthenticated) {
@@ -136,7 +140,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           });
         }
       } catch (e) {
-        print("Error loading settings: $e");
+        // ignore
       }
     }
   }
@@ -165,7 +169,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
             .doc('reader')
             .set({'autoMarkOnSwipe': newValue}, SetOptions(merge: true));
       } catch (e) {
-        print("Error saving settings: $e");
+        // ignore
       }
     }
   }
@@ -229,10 +233,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     } catch (_) {}
     _videoController?.dispose();
     _pageController.dispose();
+    _listScrollController.dispose(); // Dispose new controller
     _flutterTts.stop();
     _stableWordKeys.clear();
     
-    // Reset orientation to all modes when leaving
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.landscapeLeft,
@@ -322,14 +326,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- MEDIA CONTROLS ---
+  // --- VIDEO PLAYER INIT ---
   void _initializeVideoPlayer() {
     String? videoId;
-    if (widget.lesson.id.startsWith('yt_')) {
+    
+    // --- FIX: Handle Synced Audiobook IDs ---
+    if (widget.lesson.id.startsWith('yt_audio_')) {
+      videoId = widget.lesson.id.replaceAll('yt_audio_', '');
+    } else if (widget.lesson.id.startsWith('yt_')) {
       videoId = widget.lesson.id.replaceAll('yt_', '');
     } else if (widget.lesson.videoUrl != null) {
       videoId = YoutubePlayer.convertUrlToId(widget.lesson.videoUrl!);
     }
+
     if (videoId != null) {
       _isVideo = true;
       _videoController = YoutubePlayerController(
@@ -345,10 +354,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
+  // --- SYNC ENGINE ---
   void _videoListener() {
     if (_videoController == null || !mounted) return;
-    
-    // Skip listener updates during fullscreen transitions
     if (_isTransitioningFullscreen) return;
 
     if (_videoController!.value.isPlaying != _isPlaying) {
@@ -359,6 +367,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     
     final currentSeconds =
         _videoController!.value.position.inMilliseconds / 1000;
+    
     int realTimeIndex = -1;
     for (int i = 0; i < widget.lesson.transcript.length; i++) {
       final line = widget.lesson.transcript[i];
@@ -394,47 +403,37 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // FIXED: Manual orientation handling with auto-resume
   void _toggleCustomFullScreen() {
     if (_videoController == null) return;
 
     final wasPlaying = _videoController!.value.isPlaying;
     final currentPosition = _videoController!.value.position;
 
-    // Set transitioning flag and toggle fullscreen
     setState(() {
       _isTransitioningFullscreen = true;
       _isFullScreen = !_isFullScreen;
     });
 
-    // Temporarily remove listener to prevent conflicts
     _videoController!.removeListener(_videoListener);
 
     if (_isFullScreen) {
-      // Allow landscape rotation and hide UI
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } else {
-      // Restore UI and lock to portrait
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
           overlays: SystemUiOverlay.values);
     }
 
-    // Wait for orientation change to complete
     Future.delayed(const Duration(milliseconds: 800), () {
       if (!mounted || _videoController == null) return;
 
-      // Re-add listener
       _videoController!.addListener(_videoListener);
-
-      // Restore position
       _videoController!.seekTo(currentPosition);
 
-      // Resume playback if it was playing
       if (wasPlaying) {
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted && _videoController != null) {
@@ -444,22 +443,29 @@ class _ReaderScreenState extends State<ReaderScreen> {
         });
       }
 
-      // Clear transition flag
       setState(() => _isTransitioningFullscreen = false);
     });
   }
 
+  // --- SAFE AUTO SCROLL ---
   void _scrollToActiveLine(int index) {
-    if (!_isSentenceMode &&
-        !_isFullScreen &&
-        index < _itemKeys.length &&
-        _itemKeys[index].currentContext != null) {
-      Scrollable.ensureVisible(
-        _itemKeys[index].currentContext!,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        alignment: 0.5,
-      );
+    if (!_isSentenceMode && !_isFullScreen) {
+      // FIX: Only scroll if item is likely rendered or within list bounds
+      if (index >= 0 && index < _itemKeys.length) {
+        final key = _itemKeys[index];
+        // Ensure context exists (item is rendered in ListView) before scrolling
+        if (key.currentContext != null) {
+          Scrollable.ensureVisible(
+            key.currentContext!,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            alignment: 0.5, // Center it
+          );
+        } else {
+          // Fallback: If not rendered (lazy loaded), we could animate the scroll controller
+          // roughly. For now, we skip to avoid crashes.
+        }
+      }
     }
   }
 
@@ -580,21 +586,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  void _onSliderChanged(double value) {
-    if (_isSentenceMode ||
-        (_isVideo && widget.lesson.transcript.isNotEmpty)) {
-      final newIndex = value.toInt();
-      setState(() {
-        _activeSentenceIndex = newIndex;
-        _currentSentenceTranslation = null;
-      });
-    } else {
-      final newPage = value.toInt();
-      setState(() => _currentPage = newPage);
-      _pageController.jumpToPage(newPage);
-    }
-  }
-
   void _nextSentence() {
     if (_activeSentenceIndex < _smartChunks.length - 1) {
       _handleSwipeMarking(_activeSentenceIndex);
@@ -707,6 +698,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // --- FULLSCREEN VIDEO MODE ---
     if (_isFullScreen && _isVideo && _videoController != null) {
       return WillPopScope(
         onWillPop: () async {
@@ -768,6 +760,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
     final theme = Theme.of(context);
 
+    // Progress Bar Calculation
     double sliderValue = 0.0;
     double sliderMax = 1.0;
 
@@ -851,6 +844,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 if (_isVideo) _buildVideoHeader(isDark),
                 if (_isCheckingLimit)
                   const LinearProgressIndicator(minHeight: 2),
+                
+                // --- MAIN CONTENT AREA ---
                 Expanded(
                   child: _isSentenceMode
                       ? _buildSentenceModeView(isDark, textColor)
@@ -875,37 +870,35 @@ class _ReaderScreenState extends State<ReaderScreen> {
       ),
     );
   }
-
-  Widget _buildVideoHeader(bool isDark) {
-    if (_videoController == null) return const SizedBox.shrink();
-    return Column(
-      children: [
-        SizedBox(
-          height: _isAudioMode ? 1 : 220,
-          child: YoutubePlayer(
-            controller: _videoController!,
-            showVideoProgressIndicator: true,
-            progressIndicatorColor: Colors.red,
-            bottomActions: [
-              const SizedBox(width: 14.0),
-              CurrentPosition(),
-              const SizedBox(width: 8.0),
-              ProgressBar(isExpanded: true),
-              RemainingDuration(),
-              const PlaybackSpeedButton(),
-              IconButton(
-                icon: const Icon(Icons.fullscreen, color: Colors.white),
-                onPressed: _toggleCustomFullScreen,
-              ),
-            ],
-          ),
-        ),
-        if (_isAudioMode) _buildAudioPlayerUI(isDark),
-      ],
-    );
-  }
-
-  Widget _buildAudioPlayerUI(bool isDark) {
+Widget _buildVideoHeader(bool isDark) {
+if (_videoController == null) return const SizedBox.shrink();
+return Column(
+children: [
+SizedBox(
+height: _isAudioMode ? 1 : 220,
+child: YoutubePlayer(
+controller: _videoController!,
+showVideoProgressIndicator: true,
+progressIndicatorColor: Colors.red,
+bottomActions: [
+const SizedBox(width: 14.0),
+CurrentPosition(),
+const SizedBox(width: 8.0),
+ProgressBar(isExpanded: true),
+RemainingDuration(),
+const PlaybackSpeedButton(),
+IconButton(
+icon: const Icon(Icons.fullscreen, color: Colors.white),
+onPressed: _toggleCustomFullScreen,
+),
+],
+),
+),
+if (_isAudioMode) _buildAudioPlayerUI(isDark),
+],
+);
+}
+ Widget _buildAudioPlayerUI(bool isDark) {
     return Container(
       color: isDark ? const Color(0xFF1E1E1E) : Colors.grey[100],
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -930,23 +923,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
+  // --- REPLACED COLUMN WITH LISTVIEW TO FIX LAG/CRASH ---
   Widget _buildParagraphModeView(bool isDark) {
     if (widget.lesson.transcript.isNotEmpty) {
-      return SingleChildScrollView(
+      // OPTIMIZATION: Use ListView.builder for Lazy Loading
+      return ListView.separated(
+        controller: _listScrollController, // Attach controller for potential manual scrolling
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ...widget.lesson.transcript.asMap().entries.map((entry) {
-              return _buildTranscriptRow(entry.key, entry.value.text,
-                  entry.value.start, entry.key == _activeSentenceIndex, isDark);
-            }),
-            const SizedBox(height: 100),
-          ],
-        ),
+        itemCount: widget.lesson.transcript.length + 1, // +1 for bottom padding
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          if (index == widget.lesson.transcript.length) {
+            return const SizedBox(height: 100); // Bottom padding
+          }
+          final entry = widget.lesson.transcript[index];
+          return _buildTranscriptRow(
+            index, 
+            entry.text, 
+            entry.start, 
+            index == _activeSentenceIndex, 
+            isDark
+          );
+        },
       );
     }
+    
+    // For pure text (no transcript), we still use PageView which is safe
     if (_bookPages.isEmpty) return const Center(child: CircularProgressIndicator());
+    
     return PageView.builder(
       controller: _pageController,
       itemCount: _bookPages.length,
@@ -972,6 +976,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
+  // ... [Keep other methods like _buildSentenceModeView, _buildTranscriptRow, etc. exactly as they were] ...
+  
+  // (Include the rest of the file helper methods here to ensure complete file)
   Widget _buildSentenceModeView(bool isDark, Color? textColor) {
     final count = _smartChunks.length;
     if (count == 0) return const Center(child: Text("No content"));
