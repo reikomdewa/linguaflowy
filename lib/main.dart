@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_gemini/flutter_gemini.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
 import 'package:linguaflow/services/gemini_service.dart';
 import 'package:linguaflow/services/local_lesson_service.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
-import 'package:linguaflow/utils/utils.dart';
 
 // Import all screens and services
 import 'screens/auth/login_screen.dart';
@@ -20,13 +20,12 @@ import 'services/translation_service.dart';
 import 'blocs/auth/auth_bloc.dart';
 import 'blocs/lesson/lesson_bloc.dart';
 import 'blocs/vocabulary/vocabulary_bloc.dart';
-import 'package:logging/logging.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   // Enable verbose logging
   await dotenv.load(fileName: ".env");
-    final apiKey = dotenv.env['GEMINI_API_KEY'];
+  final apiKey = dotenv.env['GEMINI_API_KEY'];
   if (apiKey != null) {
     Gemini.init(apiKey: apiKey);
   } else {
@@ -40,6 +39,20 @@ void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+
+  await JustAudioBackground.init(
+    androidNotificationChannelId: 'com.ryanheise.bg_demo.channel.audio',
+    androidNotificationChannelName: 'Audio playback',
+    androidNotificationOngoing: true,
+
+    // --- ADD THIS ---
+    // This color controls the Play/Pause buttons and notification icon.
+    // Using your primary Purple ensures it matches your app's brand.
+    notificationColor: const Color(0xFF6A11CB),
+
+    // Optional: Point to a specific icon in your drawable folder
+    androidNotificationIcon: 'mipmap/ic_launcher',
+  );
 
   runApp(LanguageLearningApp());
 }
@@ -60,10 +73,9 @@ class LanguageLearningApp extends StatelessWidget {
     //   localService: localLessonService,
     // );
 
-     // 1. Load Environment variables
- 
+    // 1. Load Environment variables
 
-  // 2. Initialize Gemini GLOBALLY here
+    // 2. Initialize Gemini GLOBALLY here
 
     final lessonRepository = LessonRepository(
       firestoreService: LessonService(),

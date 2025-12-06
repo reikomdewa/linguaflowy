@@ -38,7 +38,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // --- VIDEO STATE ---
   YoutubePlayerController? _videoController;
   bool _isVideo = false;
-  bool _isAudioMode = false;
+  final bool _isAudioMode = false;
   bool _isPlaying = false;
   bool _isFullScreen = false;
   bool _isTransitioningFullscreen = false; // NEW: Track fullscreen transitions
@@ -864,10 +864,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 right: 24,
                 child: FloatingActionButton(
                   backgroundColor: theme.primaryColor,
+                  onPressed: _toggleSentenceMode,
                   child: Icon(
                       _isSentenceMode ? Icons.menu_book : Icons.short_text,
                       color: Colors.white),
-                  onPressed: _toggleSentenceMode,
                 ),
               ),
           ],
@@ -963,7 +963,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       widget.lesson.sentences[index],
                       index == _activeSentenceIndex,
                       isDark))
-                  .toList(),
+                  ,
               const SizedBox(height: 100),
             ],
           ),

@@ -8,6 +8,8 @@ import 'package:linguaflow/screens/learn/active_lesson_screen.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart'; 
 
 class LearnScreen extends StatefulWidget {
+  const LearnScreen({super.key});
+
   @override
   _LearnScreenState createState() => _LearnScreenState();
 }

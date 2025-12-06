@@ -381,7 +381,7 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 15),
                 DropdownButtonFormField<String>(
-                  value: severity,
+                  initialValue: severity,
                   decoration: const InputDecoration(labelText: "Impact"),
                   items: ['low', 'medium', 'high', 'critical']
                       .map(

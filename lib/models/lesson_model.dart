@@ -33,7 +33,7 @@ class LessonModel {
     this.difficulty = 'intermediate',
     this.videoUrl,
   });
-
+String? get mediaUrl => videoUrl; 
   factory LessonModel.fromMap(Map<String, dynamic> map, String id) {
     return LessonModel(
       id: id,

@@ -59,8 +59,12 @@ class _UserManagementTabState extends State<UserManagementTab> {
       final results = await Future.wait([emailFuture, nameFuture]);
       final Map<String, DocumentSnapshot> mergedDocs = {};
 
-      for (var doc in results[0].docs) mergedDocs[doc.id] = doc;
-      for (var doc in results[1].docs) mergedDocs[doc.id] = doc;
+      for (var doc in results[0].docs) {
+        mergedDocs[doc.id] = doc;
+      }
+      for (var doc in results[1].docs) {
+        mergedDocs[doc.id] = doc;
+      }
 
       // Special Case: specific User ID search (IDs are usually 20+ chars)
       if (mergedDocs.isEmpty && cleanQuery.length > 20) {
@@ -216,7 +220,7 @@ class _UserManagementTabState extends State<UserManagementTab> {
                                  ),
                                  Switch(
                                    value: isPremium,
-                                   activeColor: Colors.amber,
+                                   activeThumbColor: Colors.amber,
                                    onChanged: (val) => _togglePremium(userId, isPremium),
                                  ),
                                ],

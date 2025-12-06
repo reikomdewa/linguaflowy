@@ -11,13 +11,13 @@ class VideoLessonCard extends StatelessWidget {
   final VoidCallback onOptionTap; // <--- REQUIRED
 
   const VideoLessonCard({
-    Key? key,
+    super.key,
     required this.lesson,
     required this.vocabMap,
     required this.isDark,
     required this.onTap,
     required this.onOptionTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -121,13 +121,13 @@ class TextLessonCard extends StatelessWidget {
   final VoidCallback onOptionTap; // <--- REQUIRED
 
   const TextLessonCard({
-    Key? key,
+    super.key,
     required this.lesson,
     required this.vocabMap,
     required this.isDark,
     required this.onTap,
     required this.onOptionTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

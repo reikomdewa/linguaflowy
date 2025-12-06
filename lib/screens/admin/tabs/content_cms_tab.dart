@@ -123,7 +123,7 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
 // -----------------------------------------------------------------------------
 class _LessonEditorDialog extends StatefulWidget {
   final DocumentSnapshot? doc;
-  const _LessonEditorDialog({super.key, this.doc});
+  const _LessonEditorDialog({this.doc});
 
   @override
   State<_LessonEditorDialog> createState() => _LessonEditorDialogState();

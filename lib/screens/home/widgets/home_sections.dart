@@ -33,7 +33,7 @@ class GuidedCoursesSection extends StatefulWidget {
   final Map<String, VocabularyItem> vocabMap;
   final bool isDark;
 
-  const GuidedCoursesSection({Key? key, required this.guidedLessons, required this.importedLessons, required this.vocabMap, required this.isDark}) : super(key: key);
+  const GuidedCoursesSection({super.key, required this.guidedLessons, required this.importedLessons, required this.vocabMap, required this.isDark});
   
   @override
   _GuidedCoursesSectionState createState() => _GuidedCoursesSectionState();
@@ -114,7 +114,7 @@ class ImmersionSection extends StatefulWidget {
   final List<LessonModel> lessons;
   final Map<String, VocabularyItem> vocabMap;
   final bool isDark;
-  const ImmersionSection({Key? key, required this.lessons, required this.vocabMap, required this.isDark}) : super(key: key);
+  const ImmersionSection({super.key, required this.lessons, required this.vocabMap, required this.isDark});
 
   @override
   _ImmersionSectionState createState() => _ImmersionSectionState();
@@ -180,7 +180,7 @@ class LibrarySection extends StatefulWidget {
   final List<LessonModel> lessons;
   final Map<String, VocabularyItem> vocabMap;
   final bool isDark;
-  const LibrarySection({Key? key, required this.lessons, required this.vocabMap, required this.isDark}) : super(key: key);
+  const LibrarySection({super.key, required this.lessons, required this.vocabMap, required this.isDark});
 
   @override
   _LibrarySectionState createState() => _LibrarySectionState();

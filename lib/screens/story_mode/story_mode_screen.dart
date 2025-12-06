@@ -15,13 +15,12 @@ import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
 // Ensure this file exists based on previous steps
 import 'package:linguaflow/widgets/floating_translation_card.dart'; 
-import 'package:linguaflow/widgets/translation_sheet.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 class StoryModeScreen extends StatefulWidget {
   final LessonModel lesson;
 
-  const StoryModeScreen({Key? key, required this.lesson}) : super(key: key);
+  const StoryModeScreen({super.key, required this.lesson});
 
   @override
   State<StoryModeScreen> createState() => _StoryModeScreenState();
@@ -261,7 +260,7 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
                 child: Row(
                   children: [
                     Icon(Icons.copy, color: Colors.grey),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     Text('Copy Story Text'),
                   ],
                 ),
@@ -493,7 +492,7 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
               },
             ),
           );
-        }).toList(),
+        }),
         const SizedBox(height: 100),
       ],
     );

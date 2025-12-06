@@ -169,10 +169,12 @@ class _BugViewTabState extends State<BugViewTab> {
                 .orderBy('createdAt', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
-              if (snapshot.hasError)
+              if (snapshot.hasError) {
                 return Center(child: Text("Error: ${snapshot.error}"));
-              if (!snapshot.hasData)
+              }
+              if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
+              }
 
               if (snapshot.data!.docs.isEmpty) {
                 return Center(

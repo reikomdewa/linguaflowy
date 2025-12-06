@@ -6,8 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 // Place this inside your User App code
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 // import 'package:device_info_plus/device_info_plus.dart'; // Optional
 // import 'package:package_info_plus/package_info_plus.dart'; // Optional
 
@@ -45,7 +43,7 @@ void showReportBugDialog(BuildContext context, String userId, String userEmail) 
               ),
               const SizedBox(height: 15),
               DropdownButtonFormField<String>(
-                value: severity,
+                initialValue: severity,
                 decoration: const InputDecoration(labelText: "Impact"),
                 items: ['low', 'medium', 'high', 'critical'].map((s) => 
                   DropdownMenuItem(value: s, child: Text(s.toUpperCase()))

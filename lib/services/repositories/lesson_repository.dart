@@ -20,6 +20,7 @@ class LessonRepository {
         _localService.fetchNativeVideos(languageCode),
         _localService.fetchTextBooks(languageCode),
         _localService.fetchBeginnerBooks(languageCode),
+            _localService.fetchAudioLessons(languageCode),
       ]);
 
       final userLessons = results[0];
@@ -27,6 +28,7 @@ class LessonRepository {
       final systemNative = results[2];
       final systemBooks = results[3];
       final beginnerBooks = results[4];
+        final systemAudio = results[5];
 
       final Map<String, LessonModel> combinedMap = {};
 
@@ -48,7 +50,9 @@ class LessonRepository {
       for (var lesson in beginnerBooks) {
         combinedMap[lesson.id] = lesson;
       }
-
+ for (var lesson in systemAudio) {
+   combinedMap[lesson.id] = lesson;
+ }
       final allLessons = combinedMap.values.toList();
       allLessons.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 

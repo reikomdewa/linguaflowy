@@ -19,7 +19,7 @@ class FloatingTranslationCard extends StatefulWidget {
   final VoidCallback onClose;
 
   const FloatingTranslationCard({
-    Key? key,
+    super.key,
     required this.originalText,
     required this.translationFuture,
     required this.geminiFuture,
@@ -29,7 +29,7 @@ class FloatingTranslationCard extends StatefulWidget {
     required this.anchorPosition,
     required this.onUpdateStatus,
     required this.onClose,
-  }) : super(key: key);
+  });
 
   @override
   State<FloatingTranslationCard> createState() => _FloatingTranslationCardState();
@@ -199,8 +199,9 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
 
     // Flag logic
     String flagAsset = "🇬🇧"; 
-    if (widget.nativeLanguage == 'es') flagAsset = "🇪🇸";
-    else if (widget.nativeLanguage == 'fr') flagAsset = "🇫🇷";
+    if (widget.nativeLanguage == 'es') {
+      flagAsset = "🇪🇸";
+    } else if (widget.nativeLanguage == 'fr') flagAsset = "🇫🇷";
 
     return Stack(
       children: [

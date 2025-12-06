@@ -1716,8 +1716,9 @@ class _ActiveLessonScreenState extends State<ActiveLessonScreen> {
                       GestureDetector(
                         onTap: () {
                           if (_isPronunciationCorrect == true ||
-                              _attemptsCount >= 3)
+                              _attemptsCount >= 3) {
                             return;
+                          }
                           _listenToUser(currentWord.word);
                         },
                         child: Container(

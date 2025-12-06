@@ -9,10 +9,10 @@ class AILessonGeneratorSheet extends StatefulWidget {
   final String targetLanguage;
 
   const AILessonGeneratorSheet({
-    Key? key,
+    super.key,
     required this.userId,
     required this.targetLanguage,
-  }) : super(key: key);
+  });
 
   @override
   State<AILessonGeneratorSheet> createState() => _AILessonGeneratorSheetState();
