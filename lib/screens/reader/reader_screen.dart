@@ -12,8 +12,7 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
-// Ensure this import points to your new card widget file
-import 'package:linguaflow/widgets/floating_translation_card.dart'; 
+import 'package:linguaflow/widgets/floating_translation_card.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
@@ -34,7 +33,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Map<String, VocabularyItem> _vocabulary = {};
 
   // --- SETTINGS (Synced) ---
-  bool _autoMarkOnSwipe = false; 
+  bool _autoMarkOnSwipe = false;
 
   // --- VIDEO STATE ---
   YoutubePlayerController? _videoController;
@@ -42,6 +41,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   bool _isAudioMode = false;
   bool _isPlaying = false;
   bool _isFullScreen = false;
+  bool _isTransitioningFullscreen = false; // NEW: Track fullscreen transitions
 
   // --- PARENT TTS STATE (For Paragraphs/Full Lesson) ---
   final FlutterTts _flutterTts = FlutterTts();
@@ -83,6 +83,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Lock to portrait initially - user can rotate device manually in fullscreen
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    
     final envKey = dotenv.env['GEMINI_API_KEY'];
     if (envKey != null && envKey.isNotEmpty) {
       try {
@@ -92,7 +96,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
     }
     _loadVocabulary();
-    _loadUserPreferences(); 
+    _loadUserPreferences();
     _generateSmartChunks();
 
     final maxCount = (_smartChunks.length > widget.lesson.sentences.length)
@@ -125,7 +129,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
             .collection('preferences')
             .doc('reader')
             .get();
-        
+
         if (doc.exists && mounted) {
           setState(() {
             _autoMarkOnSwipe = doc.data()?['autoMarkOnSwipe'] ?? false;
@@ -140,12 +144,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Future<void> _toggleAutoMarkOnSwipe() async {
     final authState = context.read<AuthBloc>().state;
     final newValue = !_autoMarkOnSwipe;
-    
+
     setState(() => _autoMarkOnSwipe = newValue);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(newValue ? "Mark known on swipe enabled" : "Mark known on swipe disabled"),
+        content: Text(newValue
+            ? "Mark known on swipe enabled"
+            : "Mark known on swipe disabled"),
         duration: const Duration(seconds: 1),
       ),
     );
@@ -204,7 +210,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     for (int i = 0; i < widget.lesson.sentences.length; i++) {
       String s = widget.lesson.sentences[i];
       int wordCount = s.split(' ').length;
-      if (currentWordCount + wordCount > _wordsPerPage && currentPageIndices.isNotEmpty) {
+      if (currentWordCount + wordCount > _wordsPerPage &&
+          currentPageIndices.isNotEmpty) {
         _bookPages.add(currentPageIndices);
         currentPageIndices = [];
         currentWordCount = 0;
@@ -217,19 +224,31 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
-    try { _videoController?.removeListener(_videoListener); } catch (_) {}
+    try {
+      _videoController?.removeListener(_videoListener);
+    } catch (_) {}
     _videoController?.dispose();
     _pageController.dispose();
     _flutterTts.stop();
     _stableWordKeys.clear();
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+    
+    // Reset orientation to all modes when leaving
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.portraitDown,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: SystemUiOverlay.values);
     super.dispose();
   }
 
   GlobalKey _getWordKey(int sentenceIndex, int wordIndex) {
     final key = "s${sentenceIndex}_w$wordIndex";
-    if (!_stableWordKeys.containsKey(key)) _stableWordKeys[key] = GlobalKey();
+    if (!_stableWordKeys.containsKey(key)) {
+      _stableWordKeys[key] = GlobalKey();
+    }
     return _stableWordKeys[key]!;
   }
 
@@ -263,7 +282,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
           language: data['language']?.toString() ?? '',
           translation: data['translation']?.toString() ?? '',
           status: (data['status'] is int) ? data['status'] : 0,
-          timesEncountered: (data['timesEncountered'] is int) ? data['timesEncountered'] : 1,
+          timesEncountered:
+              (data['timesEncountered'] is int) ? data['timesEncountered'] : 1,
           lastReviewed: _parseDateTime(data['lastReviewed']),
           createdAt: _parseDateTime(data['createdAt']),
         );
@@ -273,21 +293,32 @@ class _ReaderScreenState extends State<ReaderScreen> {
       try {
         final vocabService = context.read<VocabularyService>();
         final items = await vocabService.getVocabulary(user.id);
-        if (mounted)
-          setState(() => _vocabulary = {for (var item in items) item.word.toLowerCase(): item});
+        if (mounted) {
+          setState(() => _vocabulary = {
+                for (var item in items) item.word.toLowerCase(): item
+              });
+        }
       } catch (_) {}
     }
   }
 
   Color _getWordColor(VocabularyItem? item) {
-    if (item == null || item.status == 0) return Colors.blue.withOpacity(0.15); 
+    if (item == null || item.status == 0) {
+      return Colors.blue.withOpacity(0.15);
+    }
     switch (item.status) {
-      case 1: return const Color(0xFFFFF9C4);
-      case 2: return const Color(0xFFFFF59D);
-      case 3: return const Color(0xFFFFCC80);
-      case 4: return const Color(0xFFFFB74D);
-      case 5: return Colors.transparent;
-      default: return Colors.transparent;
+      case 1:
+        return const Color(0xFFFFF9C4);
+      case 2:
+        return const Color(0xFFFFF59D);
+      case 3:
+        return const Color(0xFFFFCC80);
+      case 4:
+        return const Color(0xFFFFB74D);
+      case 5:
+        return Colors.transparent;
+      default:
+        return Colors.transparent;
     }
   }
 
@@ -303,19 +334,31 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _isVideo = true;
       _videoController = YoutubePlayerController(
         initialVideoId: videoId,
-        flags: const YoutubePlayerFlags(autoPlay: false, mute: false, enableCaption: false, disableDragSeek: false),
+        flags: const YoutubePlayerFlags(
+          autoPlay: false,
+          mute: false,
+          enableCaption: false,
+          disableDragSeek: false,
+        ),
       );
       _videoController!.addListener(_videoListener);
     }
   }
 
   void _videoListener() {
-    if (_videoController == null) return;
+    if (_videoController == null || !mounted) return;
+    
+    // Skip listener updates during fullscreen transitions
+    if (_isTransitioningFullscreen) return;
+
     if (_videoController!.value.isPlaying != _isPlaying) {
       setState(() => _isPlaying = _videoController!.value.isPlaying);
     }
+    
     if (widget.lesson.transcript.isEmpty) return;
-    final currentSeconds = _videoController!.value.position.inMilliseconds / 1000;
+    
+    final currentSeconds =
+        _videoController!.value.position.inMilliseconds / 1000;
     int realTimeIndex = -1;
     for (int i = 0; i < widget.lesson.transcript.length; i++) {
       final line = widget.lesson.transcript[i];
@@ -324,6 +367,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         break;
       }
     }
+    
     if (_isSentenceMode) {
       if (realTimeIndex != -1 && realTimeIndex != _activeSentenceIndex) {
         setState(() {
@@ -331,10 +375,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
           _currentSentenceTranslation = null;
         });
       }
-      if (_activeSentenceIndex >= 0 && _activeSentenceIndex < widget.lesson.transcript.length) {
+      if (_activeSentenceIndex >= 0 &&
+          _activeSentenceIndex < widget.lesson.transcript.length) {
         final activeLine = widget.lesson.transcript[_activeSentenceIndex];
-        if (_isPlaying && currentSeconds >= activeLine.end && currentSeconds < activeLine.end + 0.5) {
-          if (realTimeIndex == _activeSentenceIndex) _videoController!.pause();
+        if (_isPlaying &&
+            currentSeconds >= activeLine.end &&
+            currentSeconds < activeLine.end + 0.5) {
+          if (realTimeIndex == _activeSentenceIndex) {
+            _videoController!.pause();
+          }
         }
       }
     } else if (!_isSelectionMode) {
@@ -345,28 +394,66 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
+  // FIXED: Manual orientation handling with auto-resume
   void _toggleCustomFullScreen() {
-    final wasPlaying = _videoController?.value.isPlaying ?? false;
-    setState(() => _isFullScreen = !_isFullScreen);
+    if (_videoController == null) return;
+
+    final wasPlaying = _videoController!.value.isPlaying;
+    final currentPosition = _videoController!.value.position;
+
+    // Set transitioning flag and toggle fullscreen
+    setState(() {
+      _isTransitioningFullscreen = true;
+      _isFullScreen = !_isFullScreen;
+    });
+
+    // Temporarily remove listener to prevent conflicts
+    _videoController!.removeListener(_videoListener);
+
     if (_isFullScreen) {
-      SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+      // Allow landscape rotation and hide UI
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } else {
+      // Restore UI and lock to portrait
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+          overlays: SystemUiOverlay.values);
     }
-    if (wasPlaying) {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted && _videoController != null) {
-          _videoController!.play();
-          setState(() => _isPlaying = true);
-        }
-      });
-    }
+
+    // Wait for orientation change to complete
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (!mounted || _videoController == null) return;
+
+      // Re-add listener
+      _videoController!.addListener(_videoListener);
+
+      // Restore position
+      _videoController!.seekTo(currentPosition);
+
+      // Resume playback if it was playing
+      if (wasPlaying) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted && _videoController != null) {
+            _videoController!.play();
+            setState(() => _isPlaying = true);
+          }
+        });
+      }
+
+      // Clear transition flag
+      setState(() => _isTransitioningFullscreen = false);
+    });
   }
 
   void _scrollToActiveLine(int index) {
-    if (!_isSentenceMode && !_isFullScreen && index < _itemKeys.length && _itemKeys[index].currentContext != null) {
+    if (!_isSentenceMode &&
+        !_isFullScreen &&
+        index < _itemKeys.length &&
+        _itemKeys[index].currentContext != null) {
       Scrollable.ensureVisible(
         _itemKeys[index].currentContext!,
         duration: const Duration(milliseconds: 300),
@@ -378,7 +465,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _seekToTime(double seconds) {
     if (_videoController != null) {
-      _videoController!.seekTo(Duration(milliseconds: (seconds * 1000).toInt()));
+      _videoController!
+          .seekTo(Duration(milliseconds: (seconds * 1000).toInt()));
       _videoController!.play();
     }
   }
@@ -446,7 +534,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (_isTtsPlaying) _stopTts();
     setState(() {
       _isSentenceMode = !_isSentenceMode;
-      if (_activeSentenceIndex == -1 || _activeSentenceIndex >= _smartChunks.length) _activeSentenceIndex = 0;
+      if (_activeSentenceIndex == -1 ||
+          _activeSentenceIndex >= _smartChunks.length) {
+        _activeSentenceIndex = 0;
+      }
       _currentSentenceTranslation = null;
     });
   }
@@ -474,12 +565,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   Future<void> _translateCurrentSentence() async {
     String text = "";
-    if (_activeSentenceIndex < _smartChunks.length) text = _smartChunks[_activeSentenceIndex];
+    if (_activeSentenceIndex < _smartChunks.length) {
+      text = _smartChunks[_activeSentenceIndex];
+    }
     if (text.isEmpty) return;
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final translationService = context.read<TranslationService>();
     try {
-      final translated = await translationService.translate(text, user.nativeLanguage, widget.lesson.language);
+      final translated = await translationService.translate(
+          text, user.nativeLanguage, widget.lesson.language);
       setState(() => _currentSentenceTranslation = translated);
     } catch (e) {
       setState(() => _currentSentenceTranslation = "Translation unavailable");
@@ -487,7 +581,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _onSliderChanged(double value) {
-    if (_isSentenceMode || (_isVideo && widget.lesson.transcript.isNotEmpty)) {
+    if (_isSentenceMode ||
+        (_isVideo && widget.lesson.transcript.isNotEmpty)) {
       final newIndex = value.toInt();
       setState(() {
         _activeSentenceIndex = newIndex;
@@ -537,11 +632,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
     if (markedAny && !_hasShownSwipeHint) {
       _hasShownSwipeHint = true;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Marked previous words as known"), duration: Duration(seconds: 1), behavior: SnackBarBehavior.floating));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Marked previous words as known"),
+          duration: Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating));
     }
   }
 
-  void _handleDragUpdate(int sentenceIndex, int maxWords, Offset globalPosition) {
+  void _handleDragUpdate(
+      int sentenceIndex, int maxWords, Offset globalPosition) {
     _lastDragPosition = globalPosition;
     for (int i = 0; i < maxWords; i++) {
       final key = _getWordKey(sentenceIndex, i);
@@ -549,7 +648,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
       if (context != null) {
         final renderBox = context.findRenderObject() as RenderBox?;
         if (renderBox != null) {
-          final rect = (renderBox.localToGlobal(Offset.zero) & renderBox.size).inflate(10.0);
+          final rect =
+              (renderBox.localToGlobal(Offset.zero) & renderBox.size)
+                  .inflate(10.0);
           if (rect.contains(globalPosition)) {
             if (_selectionEndIndex != i) {
               setState(() => _selectionEndIndex = i);
@@ -566,21 +667,22 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _clearSelection();
       return;
     }
-    final start = _selectionStartIndex < _selectionEndIndex ? _selectionStartIndex : _selectionEndIndex;
-    final end = _selectionStartIndex < _selectionEndIndex ? _selectionEndIndex : _selectionStartIndex;
+    final start = _selectionStartIndex < _selectionEndIndex
+        ? _selectionStartIndex
+        : _selectionEndIndex;
+    final end = _selectionStartIndex < _selectionEndIndex
+        ? _selectionEndIndex
+        : _selectionStartIndex;
     final words = fullSentence.split(RegExp(r'(\s+)'));
     if (start < 0 || end >= words.length) {
       _clearSelection();
       return;
     }
     final phrase = words.sublist(start, end + 1).join(" ");
-    
-    _showDefinitionDialog(
-      _generateCleanId(phrase), 
-      phrase.trim(), 
-      isPhrase: words.sublist(start, end + 1).length > 1,
-      tapPosition: _lastDragPosition
-    );
+
+    _showDefinitionDialog(_generateCleanId(phrase), phrase.trim(),
+        isPhrase: words.sublist(start, end + 1).length > 1,
+        tapPosition: _lastDragPosition);
   }
 
   void _clearSelection() {
@@ -628,20 +730,30 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     RemainingDuration(),
                     const PlaybackSpeedButton(),
                     IconButton(
-                      icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+                      icon: const Icon(Icons.fullscreen_exit,
+                          color: Colors.white),
                       onPressed: _toggleCustomFullScreen,
                     ),
                   ],
                 ),
               ),
-              if (_activeSentenceIndex != -1 && _activeSentenceIndex < _smartChunks.length)
+              if (_activeSentenceIndex != -1 &&
+                  _activeSentenceIndex < _smartChunks.length)
                 Positioned(
-                  left: 40, right: 40, bottom: 35,
+                  left: 40,
+                  right: 40,
+                  bottom: 35,
                   child: Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(12)),
-                      child: _buildSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex, isOverlay: true),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: _buildSentence(
+                          _smartChunks[_activeSentenceIndex],
+                          _activeSentenceIndex,
+                          isOverlay: true),
                     ),
                   ),
                 ),
@@ -659,10 +771,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     double sliderValue = 0.0;
     double sliderMax = 1.0;
 
-    if (_isSentenceMode || (_isVideo && widget.lesson.transcript.isNotEmpty)) {
+    if (_isSentenceMode ||
+        (_isVideo && widget.lesson.transcript.isNotEmpty)) {
       final total = _smartChunks.length;
       sliderMax = (total > 0) ? (total - 1).toDouble() : 0.0;
-      sliderValue = (_activeSentenceIndex >= 0) ? _activeSentenceIndex.toDouble() : 0.0;
+      sliderValue =
+          (_activeSentenceIndex >= 0) ? _activeSentenceIndex.toDouble() : 0.0;
     } else {
       final totalPages = _bookPages.length;
       sliderMax = (totalPages > 0) ? (totalPages - 1).toDouble() : 0.0;
@@ -677,14 +791,22 @@ class _ReaderScreenState extends State<ReaderScreen> {
         elevation: 0,
         backgroundColor: bgColor,
         iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
-        title: Text(widget.lesson.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+        title: Text(widget.lesson.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                color: isDark ? Colors.white : Colors.black,
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
         actions: [
           if (!_isVideo && !_isSentenceMode)
-             IconButton(
-               icon: Icon(_isPlaying || _isTtsPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-               color: Colors.blue,
-               onPressed: _isVideo ? () {} : _toggleTtsFullLesson,
-             ),
+            IconButton(
+              icon: Icon(_isPlaying || _isTtsPlaying
+                  ? Icons.pause_circle_filled
+                  : Icons.play_circle_filled),
+              color: Colors.blue,
+              onPressed: _isVideo ? () {} : _toggleTtsFullLesson,
+            ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
@@ -697,7 +819,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 value: 'toggle_mark_swipe',
                 child: Row(
                   children: [
-                    Icon(_autoMarkOnSwipe ? Icons.check_box : Icons.check_box_outline_blank, color: _autoMarkOnSwipe ? theme.primaryColor : Colors.grey),
+                    Icon(
+                        _autoMarkOnSwipe
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
+                        color: _autoMarkOnSwipe
+                            ? theme.primaryColor
+                            : Colors.grey),
                     const SizedBox(width: 8),
                     const Text('Mark known on swipe'),
                   ],
@@ -708,7 +836,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(4.0),
-          child: LinearProgressIndicator(value: (sliderMax > 0) ? (sliderValue / sliderMax) : 0, backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200], valueColor: AlwaysStoppedAnimation<Color>(theme.primaryColor), minHeight: 4),
+          child: LinearProgressIndicator(
+              value: (sliderMax > 0) ? (sliderValue / sliderMax) : 0,
+              backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+              valueColor: AlwaysStoppedAnimation<Color>(theme.primaryColor),
+              minHeight: 4),
         ),
       ),
       body: SafeArea(
@@ -717,7 +849,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
             Column(
               children: [
                 if (_isVideo) _buildVideoHeader(isDark),
-                if (_isCheckingLimit) const LinearProgressIndicator(minHeight: 2),
+                if (_isCheckingLimit)
+                  const LinearProgressIndicator(minHeight: 2),
                 Expanded(
                   child: _isSentenceMode
                       ? _buildSentenceModeView(isDark, textColor)
@@ -727,10 +860,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
             if (!_isSelectionMode)
               Positioned(
-                bottom: 24, right: 24,
+                bottom: 24,
+                right: 24,
                 child: FloatingActionButton(
                   backgroundColor: theme.primaryColor,
-                  child: Icon(_isSentenceMode ? Icons.menu_book : Icons.short_text, color: Colors.white),
+                  child: Icon(
+                      _isSentenceMode ? Icons.menu_book : Icons.short_text,
+                      color: Colors.white),
                   onPressed: _toggleSentenceMode,
                 ),
               ),
@@ -740,7 +876,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  // --- MISSING VIDEO HEADER WIDGETS ---
   Widget _buildVideoHeader(bool isDark) {
     if (_videoController == null) return const SizedBox.shrink();
     return Column(
@@ -782,16 +917,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
               _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
               color: Colors.blue,
             ),
-            onPressed: () => _isPlaying ? _videoController!.pause() : _videoController!.play(),
+            onPressed: () => _isPlaying
+                ? _videoController!.pause()
+                : _videoController!.play(),
           ),
           const SizedBox(width: 8),
-          const Text("Audio Mode", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+          const Text("Audio Mode",
+              style:
+                  TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
         ],
       ),
     );
   }
 
-  // --- MISSING PARAGRAPH MODE WIDGETS ---
   Widget _buildParagraphModeView(bool isDark) {
     if (widget.lesson.transcript.isNotEmpty) {
       return SingleChildScrollView(
@@ -800,7 +938,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ...widget.lesson.transcript.asMap().entries.map((entry) {
-              return _buildTranscriptRow(entry.key, entry.value.text, entry.value.start, entry.key == _activeSentenceIndex, isDark);
+              return _buildTranscriptRow(entry.key, entry.value.text,
+                  entry.value.start, entry.key == _activeSentenceIndex, isDark);
             }),
             const SizedBox(height: 100),
           ],
@@ -818,7 +957,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ..._bookPages[pageIndex].map((index) => _buildTextRow(index, widget.lesson.sentences[index], index == _activeSentenceIndex, isDark)).toList(),
+              ..._bookPages[pageIndex]
+                  .map((index) => _buildTextRow(
+                      index,
+                      widget.lesson.sentences[index],
+                      index == _activeSentenceIndex,
+                      isDark))
+                  .toList(),
               const SizedBox(height: 100),
             ],
           ),
@@ -827,7 +972,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  // --- MISSING SENTENCE MODE WIDGET ---
   Widget _buildSentenceModeView(bool isDark, Color? textColor) {
     final count = _smartChunks.length;
     if (count == 0) return const Center(child: Text("No content"));
@@ -846,10 +990,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                border: Border.all(
+                    color: Colors.white.withOpacity(0.5), width: 2),
               ),
               child: Icon(
-                _isVideo ? (_isPlaying ? Icons.pause : Icons.play_arrow) : (_isTtsPlaying ? Icons.stop : Icons.play_arrow),
+                _isVideo
+                    ? (_isPlaying ? Icons.pause : Icons.play_arrow)
+                    : (_isTtsPlaying ? Icons.stop : Icons.play_arrow),
                 size: 40,
                 color: isDark ? Colors.white : Colors.black87,
               ),
@@ -883,12 +1030,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildSentence(currentText, _activeSentenceIndex, isBigMode: true),
+                    _buildSentence(currentText, _activeSentenceIndex,
+                        isBigMode: true),
                     const SizedBox(height: 24),
                     if (_currentSentenceTranslation == null)
                       TextButton.icon(
-                        icon: const Icon(Icons.translate, size: 16, color: Colors.grey),
-                        label: const Text("Translate Sentence", style: TextStyle(color: Colors.grey)),
+                        icon: const Icon(Icons.translate,
+                            size: 16, color: Colors.grey),
+                        label: const Text("Translate Sentence",
+                            style: TextStyle(color: Colors.grey)),
                         onPressed: _translateCurrentSentence,
                       )
                     else
@@ -897,7 +1047,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                         child: Text(
                           _currentSentenceTranslation!,
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey[400], fontStyle: FontStyle.italic, fontSize: 16),
+                          style: TextStyle(
+                              color: Colors.grey[400],
+                              fontStyle: FontStyle.italic,
+                              fontSize: 16),
                         ),
                       ),
                   ],
@@ -918,14 +1071,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  // --- HELPER ROWS ---
-  Widget _buildTranscriptRow(int index, String text, double startTime, bool isActive, bool isDark) {
+  Widget _buildTranscriptRow(
+      int index, String text, double startTime, bool isActive, bool isDark) {
     return Container(
       key: _itemKeys[index],
       margin: const EdgeInsets.only(bottom: 12),
       padding: isActive ? const EdgeInsets.all(12) : EdgeInsets.zero,
       decoration: BoxDecoration(
-        color: isActive ? (isDark ? Colors.white10 : Colors.grey[100]) : Colors.transparent,
+        color: isActive
+            ? (isDark ? Colors.white10 : Colors.grey[100])
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -936,19 +1091,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
               onTap: () => _seekToTime(startTime),
               child: Padding(
                 padding: const EdgeInsets.only(top: 4, right: 12),
-                child: Icon(isActive ? Icons.play_arrow : Icons.play_arrow_outlined, color: isActive ? Colors.blue : Colors.grey[400], size: 24),
+                child: Icon(
+                    isActive ? Icons.play_arrow : Icons.play_arrow_outlined,
+                    color: isActive ? Colors.blue : Colors.grey[400],
+                    size: 24),
               ),
             ),
           Expanded(
             child: GestureDetector(
               onLongPress: () {
                 final size = MediaQuery.of(context).size;
-                _showDefinitionDialog(
-                  "sentence_$index", 
-                  text, 
-                  isPhrase: true, 
-                  tapPosition: Offset(size.width / 2, size.height / 2)
-                );
+                _showDefinitionDialog("sentence_$index", text,
+                    isPhrase: true,
+                    tapPosition: Offset(size.width / 2, size.height / 2));
               },
               child: _buildSentence(text, index),
             ),
@@ -958,16 +1113,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  Widget _buildTextRow(int index, String sentence, bool isActive, bool isDark) {
+  Widget _buildTextRow(
+      int index, String sentence, bool isActive, bool isDark) {
     return GestureDetector(
       onLongPress: () {
         final size = MediaQuery.of(context).size;
-        _showDefinitionDialog(
-          "sentence_$index", 
-          sentence, 
-          isPhrase: true,
-          tapPosition: Offset(size.width / 2, size.height / 2)
-        );
+        _showDefinitionDialog("sentence_$index", sentence,
+            isPhrase: true,
+            tapPosition: Offset(size.width / 2, size.height / 2));
       },
       onDoubleTap: () => _speakSentence(sentence, index),
       child: Container(
@@ -975,7 +1128,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
         margin: const EdgeInsets.only(bottom: 24),
         padding: isActive ? const EdgeInsets.all(12) : EdgeInsets.zero,
         decoration: BoxDecoration(
-          color: isActive ? Colors.yellow.withOpacity(0.1) : Colors.transparent,
+          color: isActive
+              ? Colors.yellow.withOpacity(0.1)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: _buildSentence(sentence, index),
@@ -983,7 +1138,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  Widget _buildSentence(String sentence, int sentenceIndex, {bool isBigMode = false, bool isOverlay = false}) {
+  Widget _buildSentence(String sentence, int sentenceIndex,
+      {bool isBigMode = false, bool isOverlay = false}) {
     final words = sentence.split(RegExp(r'(\s+)'));
     final isDark = Theme.of(context).brightness == Brightness.dark;
     double fontSize = 18;
@@ -994,7 +1150,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return Wrap(
       spacing: 0,
       runSpacing: isBigMode ? 12 : 6,
-      alignment: (isBigMode || isOverlay) ? WrapAlignment.center : WrapAlignment.start,
+      alignment:
+          (isBigMode || isOverlay) ? WrapAlignment.center : WrapAlignment.start,
       children: words.asMap().entries.map((entry) {
         final int wordIndex = entry.key;
         final String word = entry.value;
@@ -1005,14 +1162,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
           return Container(
             key: wordKey,
             padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-            child: Text(word, style: TextStyle(fontSize: fontSize, height: lineHeight, color: isOverlay ? Colors.white : (isDark ? Colors.white : Colors.black87))),
+            child: Text(word,
+                style: TextStyle(
+                    fontSize: fontSize,
+                    height: lineHeight,
+                    color: isOverlay
+                        ? Colors.white
+                        : (isDark ? Colors.white : Colors.black87))),
           );
         }
 
         bool isSelected = false;
         if (_isSelectionMode && _selectionSentenceIndex == sentenceIndex) {
-          int start = _selectionStartIndex < _selectionEndIndex ? _selectionStartIndex : _selectionEndIndex;
-          int end = _selectionStartIndex < _selectionEndIndex ? _selectionEndIndex : _selectionStartIndex;
+          int start = _selectionStartIndex < _selectionEndIndex
+              ? _selectionStartIndex
+              : _selectionEndIndex;
+          int end = _selectionStartIndex < _selectionEndIndex
+              ? _selectionEndIndex
+              : _selectionStartIndex;
           if (wordIndex >= start && wordIndex <= end) isSelected = true;
         }
 
@@ -1021,12 +1188,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
         Color textColor;
         if (isOverlay) {
           textColor = Colors.white;
-          if (bgColor != Colors.transparent && bgColor != Colors.blue.withOpacity(0.15)) {
+          if (bgColor != Colors.transparent &&
+              bgColor != Colors.blue.withOpacity(0.15)) {
             bgColor = bgColor.withOpacity(0.8);
             textColor = Colors.black;
           }
         } else {
-          textColor = (isSelected || vocabItem?.status == 5 || vocabItem == null) ? (isDark ? Colors.white : Colors.black87) : Colors.black87;
+          textColor = (isSelected ||
+                  vocabItem?.status == 5 ||
+                  vocabItem == null)
+              ? (isDark ? Colors.white : Colors.black87)
+              : Colors.black87;
         }
         if (isSelected) {
           bgColor = Colors.purple.withOpacity(0.3);
@@ -1037,19 +1209,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
           key: wordKey,
           behavior: HitTestBehavior.translucent,
           onLongPressStart: (_) => _startSelection(sentenceIndex, wordIndex),
-          onLongPressMoveUpdate: (details) => _handleDragUpdate(sentenceIndex, words.length, details.globalPosition),
+          onLongPressMoveUpdate: (details) =>
+              _handleDragUpdate(sentenceIndex, words.length, details.globalPosition),
           onLongPressEnd: (_) => _finishSelection(sentence),
           onTapUp: (details) {
-            if (_isSelectionMode)
+            if (_isSelectionMode) {
               _clearSelection();
-            else
-              _handleWordTap(cleanWord, word, tapPosition: details.globalPosition);
+            } else {
+              _handleWordTap(cleanWord, word,
+                  tapPosition: details.globalPosition);
+            }
           },
           child: Container(
             decoration: BoxDecoration(
               color: bgColor,
               borderRadius: BorderRadius.circular(4),
-              border: isSelected ? Border.all(color: Colors.purple.withOpacity(0.5), width: 1) : null,
+              border: isSelected
+                  ? Border.all(color: Colors.purple.withOpacity(0.5), width: 1)
+                  : null,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
             child: Text(
@@ -1058,9 +1235,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 fontSize: fontSize,
                 height: lineHeight,
                 color: textColor,
-                fontWeight: (bgColor != Colors.transparent && bgColor != Colors.blue.withOpacity(0.15)) ? FontWeight.w600 : FontWeight.normal,
+                fontWeight: (bgColor != Colors.transparent &&
+                        bgColor != Colors.blue.withOpacity(0.15))
+                    ? FontWeight.w600
+                    : FontWeight.normal,
                 fontFamily: 'Roboto',
-                shadows: isOverlay ? [const Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black)] : null,
+                shadows: isOverlay
+                    ? [
+                        const Shadow(
+                            offset: Offset(0, 1),
+                            blurRadius: 2,
+                            color: Colors.black)
+                      ]
+                    : null,
               ),
             ),
           ),
@@ -1069,17 +1256,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  // --- LOGIC ---
-  Future<void> _handleWordTap(String cleanWord, String originalWord, {Offset? tapPosition}) async {
+  Future<void> _handleWordTap(String cleanWord, String originalWord,
+      {Offset? tapPosition}) async {
     if (_isCheckingLimit) return;
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return;
     final user = authState.user;
-    
-    final safePosition = tapPosition ?? MediaQuery.of(context).size.center(Offset.zero);
+
+    final safePosition =
+        tapPosition ?? MediaQuery.of(context).size.center(Offset.zero);
 
     if (user.isPremium) {
-      _showDefinitionDialog(cleanWord, originalWord, isPhrase: false, tapPosition: safePosition);
+      _showDefinitionDialog(cleanWord, originalWord,
+          isPhrase: false, tapPosition: safePosition);
       return;
     }
 
@@ -1088,7 +1277,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
       final canAccess = await _checkAndIncrementFreeLimit(user.id);
       setState(() => _isCheckingLimit = false);
       if (canAccess) {
-        _showDefinitionDialog(cleanWord, originalWord, isPhrase: false, tapPosition: safePosition);
+        _showDefinitionDialog(cleanWord, originalWord,
+            isPhrase: false, tapPosition: safePosition);
       } else {
         _showLimitDialog();
       }
@@ -1099,18 +1289,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   Future<bool> _checkAndIncrementFreeLimit(String userId) async {
-    final docRef = FirebaseFirestore.instance.collection('users').doc(userId).collection('limits').doc('dictionary');
+    final docRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('limits')
+        .doc('dictionary');
     final snapshot = await docRef.get();
     final now = DateTime.now();
     if (!snapshot.exists) {
-      await docRef.set({'count': 1, 'lastReset': FieldValue.serverTimestamp()});
+      await docRef
+          .set({'count': 1, 'lastReset': FieldValue.serverTimestamp()});
       return true;
     }
     final data = snapshot.data()!;
-    final DateTime lastReset = (data['lastReset'] as Timestamp?)?.toDate() ?? now;
+    final DateTime lastReset =
+        (data['lastReset'] as Timestamp?)?.toDate() ?? now;
     final int count = data['count'] ?? 0;
     if (now.difference(lastReset).inMinutes >= _kResetMinutes) {
-      await docRef.set({'count': 1, 'lastReset': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+      await docRef.set(
+          {'count': 1, 'lastReset': FieldValue.serverTimestamp()},
+          SetOptions(merge: true));
       return true;
     } else {
       if (count < _kFreeLookupLimit) {
@@ -1121,7 +1319,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  void _showDefinitionDialog(String cleanId, String originalText, {required bool isPhrase, required Offset tapPosition}) {
+  void _showDefinitionDialog(String cleanId, String originalText,
+      {required bool isPhrase, required Offset tapPosition}) {
     if (_isVideo) _videoController!.pause();
     if (_isTtsPlaying) _flutterTts.stop();
 
@@ -1131,12 +1330,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     final translationFuture = existingItem != null
         ? Future.value(existingItem.translation)
-        : translationService.translate(originalText, user.nativeLanguage, widget.lesson.language).catchError((e) => "Translation unavailable");
+        : translationService
+            .translate(
+                originalText, user.nativeLanguage, widget.lesson.language)
+            .catchError((e) => "Translation unavailable");
 
     final geminiPrompt = isPhrase
         ? "Translate this ${user.currentLanguage} phrase to ${user.nativeLanguage}: \"$originalText\"..."
         : "Translate this ${user.currentLanguage} word to ${user.nativeLanguage}: \"$originalText\"...";
-    final Future<String?> geminiFuture = Gemini.instance.prompt(parts: [Part.text(geminiPrompt)]).then((value) => value?.output).catchError((e) => "Gemini unavailable");
+    final Future<String?> geminiFuture = Gemini.instance
+        .prompt(parts: [Part.text(geminiPrompt)])
+        .then((value) => value?.output)
+        .catchError((e) => "Gemini unavailable");
 
     showDialog(
       context: context,
@@ -1150,10 +1355,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
           nativeLanguage: user.nativeLanguage,
           currentStatus: existingItem?.status ?? 0,
           anchorPosition: tapPosition,
-          onUpdateStatus: (status, translation) => _updateWordStatus(cleanId, originalText, translation, status),
+          onUpdateStatus: (status, translation) =>
+              _updateWordStatus(cleanId, originalText, translation, status),
           onClose: () {
-             Navigator.of(context).pop();
-             _clearSelection();
+            Navigator.of(context).pop();
+            _clearSelection();
           },
         );
       },
@@ -1167,13 +1373,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Free Limit Reached"),
-        content: const Text("Limit reached. Upgrade to Premium for unlimited access."),
+        content: const Text(
+            "Limit reached. Upgrade to Premium for unlimited access."),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Wait")),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Wait")),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              showDialog(context: context, builder: (context) => const PremiumLockDialog());
+              showDialog(
+                  context: context,
+                  builder: (context) => const PremiumLockDialog());
             },
             child: const Text("Upgrade Now"),
           ),
@@ -1185,42 +1396,83 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _saveWordToFirebase(String word) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.id).collection('saved_words').add({
-        'word': word, 'added_at': FieldValue.serverTimestamp(), 'source_lesson': widget.lesson.id,
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.id)
+          .collection('saved_words')
+          .add({
+        'word': word,
+        'added_at': FieldValue.serverTimestamp(),
+        'source_lesson': widget.lesson.id,
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Saved to your list!")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Saved to your list!")));
     } catch (e) {}
   }
 
-  Future<void> _updateWordStatus(String cleanWord, String originalWord, String translation, int status, {bool showDialog = true}) async {
+  Future<void> _updateWordStatus(String cleanWord, String originalWord,
+      String translation, int status,
+      {bool showDialog = true}) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     VocabularyItem? existingItem = _vocabulary[cleanWord];
     VocabularyItem newItem;
-    if (existingItem != null)
-      newItem = existingItem.copyWith(status: status, translation: translation.isNotEmpty ? translation : existingItem.translation, timesEncountered: existingItem.timesEncountered + 1, lastReviewed: DateTime.now());
-    else
+    if (existingItem != null) {
+      newItem = existingItem.copyWith(
+          status: status,
+          translation:
+              translation.isNotEmpty ? translation : existingItem.translation,
+          timesEncountered: existingItem.timesEncountered + 1,
+          lastReviewed: DateTime.now());
+    } else {
       newItem = VocabularyItem(
-        id: cleanWord, userId: user.id, word: cleanWord, baseForm: cleanWord, language: widget.lesson.language,
-        translation: translation, status: status, timesEncountered: 1, lastReviewed: DateTime.now(), createdAt: DateTime.now(),
+        id: cleanWord,
+        userId: user.id,
+        word: cleanWord,
+        baseForm: cleanWord,
+        language: widget.lesson.language,
+        translation: translation,
+        status: status,
+        timesEncountered: 1,
+        lastReviewed: DateTime.now(),
+        createdAt: DateTime.now(),
       );
+    }
 
     setState(() => _vocabulary[cleanWord] = newItem);
-    if (existingItem != null)
+    if (existingItem != null) {
       context.read<VocabularyBloc>().add(VocabularyUpdateRequested(newItem));
-    else
+    } else {
       context.read<VocabularyBloc>().add(VocabularyAddRequested(newItem));
+    }
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.id).collection('vocabulary').doc(cleanWord).set({
-        'id': cleanWord, 'userId': user.id, 'word': cleanWord, 'baseForm': cleanWord, 'language': widget.lesson.language,
-        'translation': translation, 'status': status, 'timesEncountered': newItem.timesEncountered,
-        'lastReviewed': FieldValue.serverTimestamp(), 'createdAt': existingItem != null ? existingItem.createdAt : FieldValue.serverTimestamp(),
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.id)
+          .collection('vocabulary')
+          .doc(cleanWord)
+          .set({
+        'id': cleanWord,
+        'userId': user.id,
+        'word': cleanWord,
+        'baseForm': cleanWord,
+        'language': widget.lesson.language,
+        'translation': translation,
+        'status': status,
+        'timesEncountered': newItem.timesEncountered,
+        'lastReviewed': FieldValue.serverTimestamp(),
+        'createdAt': existingItem != null
+            ? existingItem.createdAt
+            : FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {}
-    
+
     if (showDialog) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Word status updated"), duration: Duration(seconds: 1), behavior: SnackBarBehavior.floating));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Word status updated"),
+          duration: Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating));
     }
   }
 }
