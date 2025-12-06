@@ -4,6 +4,8 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/course_service.dart';
 import 'package:linguaflow/screens/learn/active_lesson_screen.dart';
+// Ensure you import the ReaderScreen
+import 'package:linguaflow/screens/reader/reader_screen.dart'; 
 
 class LearnScreen extends StatefulWidget {
   @override
@@ -21,9 +23,12 @@ class _LearnScreenState extends State<LearnScreen> {
   bool _isLoading = true;
   
   // --- PROGRESS TRACKING ---
-  // _maxReachedStep: The furthest step the user has actually finished (0-4).
-  // _expandedStepIndex: The specific card currently open on screen.
-  int _maxReachedStep = 0; 
+  // For demo purposes, we will simulate that the first 2 steps of the 
+  // first lesson are "Completed" to show the checkmark logic.
+  final int _demoCompletedSteps = 2; 
+
+  // To track which specific card (LessonIndex + StepIndex) is expanded
+  int _expandedLessonIndex = 0;
   int _expandedStepIndex = 0;
 
   @override
@@ -49,9 +54,6 @@ class _LearnScreenState extends State<LearnScreen> {
         setState(() {
           _lessons = lessons;
           _isLoading = false;
-          // Reset progress for demo purposes when filter changes
-          _maxReachedStep = 0; 
-          _expandedStepIndex = 0;
         });
       }
     }
@@ -59,18 +61,17 @@ class _LearnScreenState extends State<LearnScreen> {
 
   // --- LESSON STEPS CONFIGURATION ---
   final List<Map<String, dynamic>> _lessonSteps = [
-    {'title': 'Vocabulary', 'time': '5 minutes', 'icon': Icons.copy_all_rounded, 'color': Color(0xFF26C6DA)},
-    {'title': 'Pronunciation', 'time': '3 minutes', 'icon': Icons.mic_rounded, 'color': Color(0xFFFF7043)},
-    {'title': 'Video Context', 'time': '7 minutes', 'icon': Icons.videocam_rounded, 'color': Color(0xFF9CCC65)},
-    {'title': 'Grammar Rules', 'time': '8 minutes', 'icon': Icons.book_rounded, 'color': Color(0xFFEF5350)},
-    {'title': 'AI Conversation', 'time': '5 minutes', 'icon': Icons.chat_bubble_rounded, 'color': Color(0xFF42A5F5)},
+    {'title': 'Vocabulary', 'time': '5 min', 'icon': Icons.copy_all_rounded, 'color': Color(0xFF26C6DA)},
+    {'title': 'Pronunciation', 'time': '3 min', 'icon': Icons.mic_rounded, 'color': Color(0xFFFF7043)},
+    {'title': 'Video Context', 'time': '7 min', 'icon': Icons.videocam_rounded, 'color': Color(0xFF9CCC65)},
+    {'title': 'Grammar Rules', 'time': '8 min', 'icon': Icons.book_rounded, 'color': Color(0xFFEF5350)},
+    {'title': 'AI Conversation', 'time': '5 min', 'icon': Icons.chat_bubble_rounded, 'color': Color(0xFF42A5F5)},
   ];
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Theme helpers
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
-    final textColor = Theme.of(context).textTheme.bodyLarge?.color;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -88,38 +89,12 @@ class _LearnScreenState extends State<LearnScreen> {
                   _buildEmptyState()
                 else
                   Expanded(
-                    child: SingleChildScrollView(
+                    child: ListView.builder(
                       padding: const EdgeInsets.only(bottom: 100),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 1. HEADER (Unit & Title)
-                          _buildHeader(isDark, textColor, _lessons[0]),
-
-                          // 2. TIMELINE (Steps)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _lessonSteps.length,
-                              itemBuilder: (context, index) {
-                                return _buildTimelineItem(
-                                  context, 
-                                  index, 
-                                  isDark, 
-                                  textColor,
-                                  _lessons[0] // Pass current lesson data
-                                );
-                              },
-                            ),
-                          ),
-
-                          // 3. NEXT LESSON TEASER
-                          if (_lessons.length > 1)
-                            _buildNextLessonTeaser(isDark, textColor, _lessons[1]),
-                        ],
-                      ),
+                      itemCount: _lessons.length,
+                      itemBuilder: (context, index) {
+                        return _buildFullLessonGroup(index);
+                      },
                     ),
                   ),
               ],
@@ -187,58 +162,90 @@ class _LearnScreenState extends State<LearnScreen> {
     );
   }
 
-  Widget _buildHeader(bool isDark, Color? textColor, LessonModel lesson) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 30),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  // Renders a complete Lesson (Header + Timeline Steps)
+  Widget _buildFullLessonGroup(int lessonIndex) {
+    final lesson = _lessons[lessonIndex];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Header (Unit X - Title)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 24, height: 24,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(color: Colors.grey[800], shape: BoxShape.circle),
-                child: const Text("1", style: TextStyle(color: Colors.white, fontSize: 12)),
+              Row(
+                children: [
+                  Container(
+                    width: 24, height: 24,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: Colors.grey[800], shape: BoxShape.circle),
+                    child: Text("${lessonIndex + 1}", style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Unit ${lessonIndex + 1} • ${lesson.type}", 
+                    style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 14)
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              const Text("Unit 1", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 8),
+              Text(
+                lesson.title,
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textColor),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            lesson.title,
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: textColor),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+        ),
+
+        // 2. The Timeline Steps for this Lesson
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _lessonSteps.length,
+            itemBuilder: (context, stepIndex) {
+              return _buildTimelineItem(
+                context, 
+                lessonIndex,
+                stepIndex, 
+                isDark, 
+                textColor,
+                lesson
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildTimelineItem(BuildContext context, int index, bool isDark, Color? textColor, LessonModel lesson) {
-    final stepData = _lessonSteps[index];
-    final bool isLast = index == _lessonSteps.length - 1;
+  Widget _buildTimelineItem(
+    BuildContext context, 
+    int lessonIndex,
+    int stepIndex, 
+    bool isDark, 
+    Color? textColor, 
+    LessonModel lesson
+  ) {
+    final stepData = _lessonSteps[stepIndex];
+    final bool isLastStep = stepIndex == _lessonSteps.length - 1;
     
     // --- STATE LOGIC ---
-    // Expanded: The card currently showing details
-    bool isExpanded = index == _expandedStepIndex;
+    // Is this specific card expanded?
+    bool isExpanded = (lessonIndex == _expandedLessonIndex && stepIndex == _expandedStepIndex);
     
-    // Completed: Steps strictly BEFORE our current max progress
-    bool isCompleted = index < _maxReachedStep;
-    
-    // "Future": Steps AFTER our current max progress
-    // Visually Grey, but still clickable
-    bool isFutureStep = index > _maxReachedStep;
+    // Is Completed? (Simulated: First 2 steps of Lesson 0 are done)
+    bool isCompleted = (lessonIndex == 0 && stepIndex < _demoCompletedSteps);
 
-    // --- COLOR LOGIC ---
-    Color iconBgColor;
-    if (isFutureStep) {
-      iconBgColor = Colors.grey[800]!; // Grey out future steps
-    } else {
-      iconBgColor = stepData['color']; // Active or Completed get color
-    }
+    // --- COLOR LOGIC (Always Colorful) ---
+    Color baseColor = stepData['color']; 
 
     return IntrinsicHeight(
       child: Row(
@@ -251,38 +258,30 @@ class _LearnScreenState extends State<LearnScreen> {
               children: [
                 // Clickable Icon
                 GestureDetector(
-                  // ALLOW CLICKING ANY STEP
                   onTap: () {
                     setState(() {
-                      _expandedStepIndex = index;
+                      _expandedLessonIndex = lessonIndex;
+                      _expandedStepIndex = stepIndex;
                     });
                   },
                   child: Container(
                     width: 48, height: 48,
                     decoration: BoxDecoration(
-                      color: iconBgColor,
+                      color: baseColor,
                       shape: BoxShape.circle,
-                      boxShadow: isFutureStep ? [] : [
-                        // Only show shadow for active/completed
-                        BoxShadow(color: stepData['color'].withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 4))
+                      boxShadow: [
+                        BoxShadow(color: baseColor.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 4))
                       ],
                     ),
-                    child: Icon(
-                      // Show Checkmark ONLY if completed AND not currently open
-                      (isCompleted && !isExpanded) ? Icons.check : stepData['icon'], 
-                      color: Colors.white, 
-                      size: 24
-                    ),
+                    child: Icon(stepData['icon'], color: Colors.white, size: 24),
                   ),
                 ),
-                // Line
-                if (!isLast)
+                // Vertical Line
+                if (!isLastStep)
                   Expanded(
                     child: Container(
                       width: 2, 
-                      color: isCompleted 
-                          ? stepData['color'] // Colored line if segment passed
-                          : (isDark ? Colors.grey[800] : Colors.grey[300]),
+                      color: baseColor.withOpacity(0.3),
                     ),
                   ),
               ],
@@ -295,12 +294,12 @@ class _LearnScreenState extends State<LearnScreen> {
             child: Padding(
               padding: const EdgeInsets.only(bottom: 32.0),
               child: isExpanded 
-                  ? _buildActiveCard(stepData, isDark, index, lesson) // Show Card if expanded
+                  ? _buildActiveCard(stepData, isDark, lessonIndex, stepIndex, lesson) 
                   : GestureDetector(
-                      // Allow tapping text to expand too
                       onTap: () {
                         setState(() {
-                          _expandedStepIndex = index;
+                          _expandedLessonIndex = lessonIndex;
+                          _expandedStepIndex = stepIndex;
                         });
                       },
                       child: Column(
@@ -313,16 +312,29 @@ class _LearnScreenState extends State<LearnScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              // Grey text for future steps, Normal color for reached steps
-                              color: isFutureStep ? Colors.grey : textColor,
+                              color: textColor,
                             ),
                           ),
                           const SizedBox(height: 4),
-                          // Subtitle Logic
-                          if (isCompleted) 
-                            const Text("Completed", style: TextStyle(color: Colors.green, fontSize: 13, fontWeight: FontWeight.bold))
-                          else 
-                            Text(stepData['time'], style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                          
+                          // SUBTITLE: Time + Checkmark (if completed)
+                          Row(
+                            children: [
+                              Text(stepData['time'], style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                              
+                              if (isCompleted) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.green,
+                                    shape: BoxShape.circle
+                                  ),
+                                  child: const Icon(Icons.check, size: 10, color: Colors.white),
+                                )
+                              ]
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -333,7 +345,13 @@ class _LearnScreenState extends State<LearnScreen> {
     );
   }
 
-  Widget _buildActiveCard(Map<String, dynamic> stepData, bool isDark, int stepIndex, LessonModel lesson) {
+  Widget _buildActiveCard(
+    Map<String, dynamic> stepData, 
+    bool isDark, 
+    int lessonIndex,
+    int stepIndex, 
+    LessonModel lesson
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -363,25 +381,27 @@ class _LearnScreenState extends State<LearnScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              // Open Lesson at specific step
-              await Navigator.push(
-                context, 
-                MaterialPageRoute(
-                  builder: (_) => ActiveLessonScreen(
-                    lesson: lesson,
-                    initialStep: stepIndex, 
+              // --- UPDATED NAVIGATION LOGIC ---
+              if (stepData['title'] == 'Video Context') {
+                // Navigate to ReaderScreen for the Video module
+                await Navigator.push(
+                  context, 
+                  MaterialPageRoute(
+                    builder: (_) => ReaderScreen(lesson: lesson)
                   )
-                )
-              );
-              
-              // SIMULATED PROGRESS LOGIC
-              // When they return from a step, check if we should unlock the next
-              setState(() {
-                if (stepIndex == _maxReachedStep && _maxReachedStep < _lessonSteps.length - 1) {
-                  _maxReachedStep++;
-                  _expandedStepIndex = _maxReachedStep; // Auto-expand next step
-                }
-              });
+                );
+              } else {
+                // Navigate to ActiveLessonScreen for other modules
+                await Navigator.push(
+                  context, 
+                  MaterialPageRoute(
+                    builder: (_) => ActiveLessonScreen(
+                      lesson: lesson,
+                      initialStep: stepIndex, 
+                    )
+                  )
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white.withOpacity(0.1),
@@ -391,63 +411,6 @@ class _LearnScreenState extends State<LearnScreen> {
             ),
             child: const Text("Start", style: TextStyle(fontSize: 12)),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNextLessonTeaser(bool isDark, Color? textColor, LessonModel nextLesson) {
-    return Container(
-      margin: const EdgeInsets.only(top: 10, left: 20, right: 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-           SizedBox(
-            width: 50,
-            child: Column(
-              children: [
-                Container(
-                  width: 2, height: 30,
-                  color: isDark ? Colors.grey[800] : Colors.grey[300],
-                ),
-                Container(
-                  width: 48, height: 48,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.grey, width: 2)
-                  ),
-                  child: const Text("2", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 40),
-              child: Opacity(
-                opacity: 0.6,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("NEXT UP", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1, color: Colors.grey)),
-                    const SizedBox(height: 4),
-                    Text(
-                      nextLesson.title,
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "${nextLesson.type.toUpperCase()} • Beginner",
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          )
         ],
       ),
     );
