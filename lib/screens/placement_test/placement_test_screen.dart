@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/screens/story_mode/widgets/loading_view.dart';
+import 'package:linguaflow/services/quiz_service.dart';
 
 class PlacementTestScreen extends StatelessWidget {
   final String nativeLanguage;
@@ -25,6 +26,8 @@ class PlacementTestScreen extends StatelessWidget {
             targetLanguage: targetLanguage,
             nativeLanguage: nativeLanguage,
             isPremium: true,
+            // PASS THE TYPE HERE
+            promptType: QuizPromptType.placementTest,
           ),
         ),
       child: _PlacementTestView(targetLevel: targetLevelToCheck),
@@ -97,13 +100,18 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
             children: [
               // Progress Bar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: LinearProgressIndicator(
                     value: state.progress,
                     minHeight: 12,
-                    backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+                    backgroundColor: isDark
+                        ? Colors.grey[800]
+                        : Colors.grey[200],
                     valueColor: const AlwaysStoppedAnimation(Colors.blueAccent),
                   ),
                 ),
@@ -134,7 +142,9 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
                 width: double.infinity,
                 constraints: const BoxConstraints(minHeight: 80),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
+                  color: isDark
+                      ? Colors.white.withOpacity(0.05)
+                      : Colors.grey[100],
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: isDark ? Colors.white10 : Colors.grey[300]!,
@@ -152,14 +162,21 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
                             child: Text(
                               "Tap words to translate",
                               style: TextStyle(
-                                color: isDark ? Colors.white38 : Colors.grey[500],
+                                color: isDark
+                                    ? Colors.white38
+                                    : Colors.grey[500],
                                 fontSize: 16,
                               ),
                             ),
-                          )
+                          ),
                         ]
                       : state.selectedWords.map((word) {
-                          return _buildWordChip(context, word, isDark, isSelectedArea: true);
+                          return _buildWordChip(
+                            context,
+                            word,
+                            isDark,
+                            isSelectedArea: true,
+                          );
                         }).toList(),
                 ),
               ),
@@ -174,7 +191,12 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
                   spacing: 12,
                   runSpacing: 12,
                   children: state.availableWords.map((word) {
-                    return _buildWordChip(context, word, isDark, isSelectedArea: false);
+                    return _buildWordChip(
+                      context,
+                      word,
+                      isDark,
+                      isSelectedArea: false,
+                    );
                   }).toList(),
                 ),
               ),
@@ -192,7 +214,12 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
 
   // ... (Keep existing _buildWordChip and _calculateAndReturnLevel methods) ...
 
-  Widget _buildWordChip(BuildContext context, String word, bool isDark, {required bool isSelectedArea}) {
+  Widget _buildWordChip(
+    BuildContext context,
+    String word,
+    bool isDark, {
+    required bool isSelectedArea,
+  }) {
     return GestureDetector(
       onTap: () {
         if (isSelectedArea) {
@@ -205,12 +232,16 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isDark 
-              ? (isSelectedArea ? Colors.blueAccent.withOpacity(0.2) : Colors.grey[800]) 
+          color: isDark
+              ? (isSelectedArea
+                    ? Colors.blueAccent.withOpacity(0.2)
+                    : Colors.grey[800])
               : (isSelectedArea ? Colors.blue[50] : Colors.white),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelectedArea ? Colors.transparent : (isDark ? Colors.grey[700]! : Colors.grey[300]!),
+            color: isSelectedArea
+                ? Colors.transparent
+                : (isDark ? Colors.grey[700]! : Colors.grey[300]!),
             width: 1.5,
           ),
         ),
@@ -226,15 +257,25 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
     );
   }
 
-  Widget _buildBottomActionArea(BuildContext context, QuizState state, bool isDark) {
+  Widget _buildBottomActionArea(
+    BuildContext context,
+    QuizState state,
+    bool isDark,
+  ) {
     bool isCorrect = state.status == QuizStatus.correct;
     bool isIncorrect = state.status == QuizStatus.incorrect;
     bool isAnswered = isCorrect || isIncorrect;
 
-    Color feedbackColor = isCorrect ? Colors.green.shade100 : Colors.red.shade100;
-    Color feedbackTextColor = isCorrect ? Colors.green.shade900 : Colors.red.shade900;
+    Color feedbackColor = isCorrect
+        ? Colors.green.shade100
+        : Colors.red.shade100;
+    Color feedbackTextColor = isCorrect
+        ? Colors.green.shade900
+        : Colors.red.shade900;
     if (isDark) {
-      feedbackColor = isCorrect ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2);
+      feedbackColor = isCorrect
+          ? Colors.green.withOpacity(0.2)
+          : Colors.red.withOpacity(0.2);
       feedbackTextColor = isCorrect ? Colors.greenAccent : Colors.redAccent;
     }
 
@@ -274,7 +315,7 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
                 ),
                 const SizedBox(height: 16),
               ],
-              
+
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -287,16 +328,23 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
                     }
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isAnswered 
-                        ? (isCorrect ? Colors.green : Colors.red) 
-                        : (state.selectedWords.isNotEmpty ? Colors.blue : Colors.grey),
+                    backgroundColor: isAnswered
+                        ? (isCorrect ? Colors.green : Colors.red)
+                        : (state.selectedWords.isNotEmpty
+                              ? Colors.blue
+                              : Colors.grey),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     elevation: 0,
                   ),
                   child: Text(
                     isAnswered ? "Continue" : "Check Answer",
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -308,12 +356,16 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
   }
 
   void _calculateAndReturnLevel(BuildContext context, QuizState state) {
-    // Mock Calculation logic
-    double scorePercentage = 0.85; 
-    
+    // REAL LOGIC: Use the score from state
+    final total = state.questions.length;
+    final score = state.correctAnswersCount;
+
+    // Safety check div by zero
+    double scorePercentage = total > 0 ? score / total : 0.0;
+
     String finalLevel;
     if (scorePercentage > 0.8) {
-      finalLevel = widget.targetLevel; 
+      finalLevel = widget.targetLevel;
     } else if (scorePercentage > 0.4) {
       finalLevel = _getLevelBelow(widget.targetLevel);
     } else {

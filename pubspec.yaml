@@ -116,6 +116,7 @@ flutter:
      - assets/native_videos/
      - assets/text_lessons/
      - assets/beginner_books/
+     - assets/course_videos/
   # An image asset can be specified in either of two ways:
   
 

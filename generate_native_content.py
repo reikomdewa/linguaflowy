@@ -8,17 +8,16 @@ import time
 # --- CONFIGURATION FOR NATIVE CONTENT ---
 
 # 1. Change Output Directory so it doesn't mix with lessons
-OUTPUT_DIR = "assets/native_videos"
+OUTPUT_DIR = "assets/course_videos"
 
 # 2. Search Config: Native topics (Science, Tech, Vlogs, Culture)
 # Note: Queries are in the target language to find native content.
 SEARCH_CONFIG = {
     'es': [
-        ('Documentales interesantes en español', 'documentary'),
-        ('Reseñas de tecnología celulares', 'tech'),
-        ('Vlog de viajes méxico españa', 'vlog'),
-        ('Entrevistas a famosos españoles', 'interview'),
-        ('Cocina española recetas', 'cooking')
+        ('Documentales interesantes en español', 'Stories'),
+        ('Reseñas de tecnología celulares', 'News'),
+        ('Vlog de viajes méxico españa', 'Bites'),
+        ('Entrevistas a famosos españoles', 'Grammar tips'),
     ],
     'fr': [
         ('Documentaire arte français', 'documentary'),

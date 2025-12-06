@@ -1,16 +1,13 @@
-
-
-import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_gemini/flutter_gemini.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:linguaflow/models/quiz_model.dart';
+import 'package:linguaflow/models/quiz_model.dart'; // <--- CRITICAL IMPORT
+import 'package:linguaflow/services/quiz_service.dart';
 
 part 'quiz_event.dart';
 part 'quiz_state.dart';
 
 class QuizBloc extends Bloc<QuizEvent, QuizState> {
-  
+  final QuizService _quizService = QuizService();
+
   QuizBloc() : super(const QuizState()) {
     on<QuizLoadRequested>(_onLoadRequested);
     on<QuizOptionSelected>(_onOptionSelected);
@@ -25,60 +22,12 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
     emit(state.copyWith(status: QuizStatus.loading));
 
     try {
-      final apiKey = dotenv.env['GEMINI_API_KEY'];
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception("GEMINI_API_KEY missing in .env file");
-      }
-      Gemini.init(apiKey: apiKey);
-
-      final prompt = """
-        Generate 10 beginner-level language translation exercises.
-        Language A (Target): ${event.targetLanguage}
-        Language B (Native): ${event.nativeLanguage}
-        
-        Return ONLY valid JSON. Do not include markdown formatting like ```json.
-        
-        Generate a MIX of two types:
-        1. "target_to_native": Translate a sentence from ${event.targetLanguage} to ${event.nativeLanguage}.
-        2. "native_to_target": Translate a sentence from ${event.nativeLanguage} to ${event.targetLanguage}.
-        
-        Format:
-        [
-          {
-            "id": "1",
-            "type": "target_to_native",
-            "targetSentence": "Sentence in Source Language",
-            "correctAnswer": "Translation in Result Language",
-            "options": ["word1", "word2", "word3"] 
-          }
-        ]
-        
-        Rules:
-        1. 'options' must contain the words from 'correctAnswer' scattered plus 3-4 distractor words.
-        2. Ensure sentences are simple (A1 level).
-        3. For "native_to_target", the 'options' must be in ${event.targetLanguage}.
-        4. For "target_to_native", the 'options' must be in ${event.nativeLanguage}.
-      """;
-
-      final value = await Gemini.instance.prompt(parts: [Part.text(prompt)]);
-      String? responseText = value?.output;
-
-      if (responseText == null) throw Exception("Empty response from Gemini");
-
-      // Clean JSON
-      responseText = responseText.replaceAll('```json', '').replaceAll('```', '').trim();
-      
-      final List<dynamic> data = jsonDecode(responseText);
-
-      final questions = data.map((item) {
-        return QuizQuestion(
-          id: item['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
-          type: item['type'] ?? 'target_to_native',
-          targetSentence: item['targetSentence'],
-          correctAnswer: item['correctAnswer'],
-          options: List<String>.from(item['options']),
-        );
-      }).toList();
+      final questions = await _quizService.generateQuiz(
+        targetLanguage: event.targetLanguage,
+        nativeLanguage: event.nativeLanguage,
+        type: event.promptType,
+        topic: event.topic,
+      );
 
       if (questions.isEmpty) throw Exception("No questions generated");
 
@@ -92,58 +41,33 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
         selectedWords: [],
         availableWords: initialOptions,
         hearts: 5,
-        isPremium: event.isPremium, // <--- Store Premium Status
+        isPremium: event.isPremium,
+        correctAnswersCount: 0,
       ));
 
     } catch (e) {
-      print("Quiz Generation Error: $e");
-      _loadFallbackData(emit, event.isPremium);
+      print("Quiz Bloc Error: $e");
+      emit(state.copyWith(
+        status: QuizStatus.error, 
+        errorMessage: "Failed to load quiz. Please try again."
+      ));
     }
-  }
-
-  void _loadFallbackData(Emitter<QuizState> emit, bool isPremium) {
-    final mockQuestions = [
-      QuizQuestion(
-        id: '1',
-        type: 'target_to_native',
-        targetSentence: 'Error loading AI. Check connection.',
-        correctAnswer: 'Error',
-        options: ['Error', 'loading', 'AI', 'Check', 'Key'],
-      ),
-    ];
-    emit(state.copyWith(
-      status: QuizStatus.answering,
-      questions: mockQuestions,
-      availableWords: mockQuestions[0].options,
-      hearts: 5,
-      isPremium: isPremium,
-    ));
   }
 
   // 2. SELECT WORD
   void _onOptionSelected(QuizOptionSelected event, Emitter<QuizState> emit) {
     if (state.status != QuizStatus.answering) return;
-
     final newSelected = List<String>.from(state.selectedWords)..add(event.word);
     final newAvailable = List<String>.from(state.availableWords)..remove(event.word);
-
-    emit(state.copyWith(
-      selectedWords: newSelected,
-      availableWords: newAvailable,
-    ));
+    emit(state.copyWith(selectedWords: newSelected, availableWords: newAvailable));
   }
 
   // 3. DESELECT WORD
   void _onOptionDeselected(QuizOptionDeselected event, Emitter<QuizState> emit) {
     if (state.status != QuizStatus.answering) return;
-
     final newSelected = List<String>.from(state.selectedWords)..remove(event.word);
     final newAvailable = List<String>.from(state.availableWords)..add(event.word);
-
-    emit(state.copyWith(
-      selectedWords: newSelected,
-      availableWords: newAvailable,
-    ));
+    emit(state.copyWith(selectedWords: newSelected, availableWords: newAvailable));
   }
 
   // 4. CHECK ANSWER
@@ -153,19 +77,20 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
 
     final userSentence = state.selectedWords.join(" ");
     
-    // Normalize
+    // Normalize string for comparison (remove punctuation, lowercase)
     final cleanUser = userSentence.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\u00C0-\u017F]'), '');
     final cleanCorrect = currentQ.correctAnswer.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\u00C0-\u017F]'), '');
 
     if (cleanUser == cleanCorrect) {
-      emit(state.copyWith(status: QuizStatus.correct));
+      emit(state.copyWith(
+        status: QuizStatus.correct,
+        correctAnswersCount: state.correctAnswersCount + 1,
+      ));
     } else {
-      // --- LOGIC CHANGE: Only decrease hearts if NOT premium ---
       int newHearts = state.hearts;
       if (!state.isPremium) {
         newHearts = state.hearts - 1;
       }
-
       emit(state.copyWith(
         status: QuizStatus.incorrect, 
         hearts: newHearts < 0 ? 0 : newHearts
@@ -175,7 +100,6 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
 
   // 5. NEXT QUESTION
   void _onNextQuestion(QuizNextQuestion event, Emitter<QuizState> emit) {
-    // If hearts are 0 and not premium, block (UI handles this, but safety check)
     if (!state.isPremium && state.hearts <= 0) return;
 
     final nextIndex = state.currentIndex + 1;
@@ -195,12 +119,8 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
     }
   }
 
-  // 6. REVIVE (UPGRADED TO PRO)
+  // 6. REVIVE
   void _onReviveRequested(QuizReviveRequested event, Emitter<QuizState> emit) {
-    // Reset hearts to max and set premium to true so they don't decrease again
-    emit(state.copyWith(
-      hearts: 5,
-      isPremium: true,
-    ));
+    emit(state.copyWith(hearts: 5, isPremium: true));
   }
 }

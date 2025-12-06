@@ -1,17 +1,21 @@
 part of 'quiz_bloc.dart';
 
-enum QuizStatus { loading, answering, correct, incorrect, completed }
+enum QuizStatus { initial, loading, answering, correct, incorrect, completed, error }
 
 class QuizState {
   final QuizStatus status;
   final List<QuizQuestion> questions;
   final int currentIndex;
   final int hearts;
-   final bool isPremium; 
+  final bool isPremium;
   
   // Word Bank Logic
   final List<String> selectedWords; // Words currently in the sentence line
   final List<String> availableWords; // Words remaining in the bank
+
+  // --- NEW FIELDS ---
+  final int correctAnswersCount; // <--- This was missing in your copyWith
+  final String? errorMessage;
 
   // Computed properties
   QuizQuestion? get currentQuestion => 
@@ -22,13 +26,15 @@ class QuizState {
   double get progress => questions.isEmpty ? 0 : (currentIndex / questions.length);
 
   const QuizState({
-    this.status = QuizStatus.loading,
+    this.status = QuizStatus.initial,
     this.questions = const [],
     this.currentIndex = 0,
     this.hearts = 5,
     this.selectedWords = const [],
     this.availableWords = const [],
-     this.isPremium = false, 
+    this.isPremium = false,
+    this.correctAnswersCount = 0, // Default to 0
+    this.errorMessage,
   });
 
   QuizState copyWith({
@@ -38,7 +44,9 @@ class QuizState {
     int? hearts,
     List<String>? selectedWords,
     List<String>? availableWords,
-      bool? isPremium,
+    bool? isPremium,
+    int? correctAnswersCount, // <--- Added parameter here
+    String? errorMessage,
   }) {
     return QuizState(
       status: status ?? this.status,
@@ -47,7 +55,9 @@ class QuizState {
       hearts: hearts ?? this.hearts,
       selectedWords: selectedWords ?? this.selectedWords,
       availableWords: availableWords ?? this.availableWords,
-         isPremium: isPremium ?? this.isPremium, 
+      isPremium: isPremium ?? this.isPremium,
+      correctAnswersCount: correctAnswersCount ?? this.correctAnswersCount, // <--- Added assignment here
+      errorMessage: errorMessage ?? this.errorMessage,
     );
   }
 }
