@@ -1,4 +1,4 @@
-import 'dart:math'; // For random tip
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
@@ -15,7 +15,8 @@ class PlacementTestScreen extends StatelessWidget {
     super.key,
     required this.nativeLanguage,
     required this.targetLanguage,
-    required this.targetLevelToCheck, required this.userId,
+    required this.targetLevelToCheck,
+    required this.userId,
   });
 
   @override
@@ -28,18 +29,31 @@ class PlacementTestScreen extends StatelessWidget {
             targetLanguage: targetLanguage,
             nativeLanguage: nativeLanguage,
             isPremium: true,
-            // PASS THE TYPE HERE
             promptType: QuizPromptType.placementTest,
           ),
         ),
-      child: _PlacementTestView(targetLevel: targetLevelToCheck),
+      child: _PlacementTestView(
+        targetLevel: targetLevelToCheck,
+        userId: userId,
+        targetLanguage: targetLanguage,
+        nativeLanguage: nativeLanguage,
+      ),
     );
   }
 }
 
 class _PlacementTestView extends StatefulWidget {
   final String targetLevel;
-  const _PlacementTestView({required this.targetLevel});
+  final String userId;
+  final String targetLanguage;
+  final String nativeLanguage;
+
+  const _PlacementTestView({
+    required this.targetLevel,
+    required this.userId,
+    required this.targetLanguage,
+    required this.nativeLanguage,
+  });
 
   @override
   State<_PlacementTestView> createState() => _PlacementTestViewState();
@@ -47,6 +61,8 @@ class _PlacementTestView extends StatefulWidget {
 
 class _PlacementTestViewState extends State<_PlacementTestView> {
   late String _randomTip;
+  // Track how many times the user has hit "Retry"
+  int _retryCount = 0;
 
   final List<String> _placementTips = [
     "This test helps us recommend the perfect content for you.",
@@ -59,8 +75,40 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
   @override
   void initState() {
     super.initState();
-    // Pick a random tip when the screen loads
     _randomTip = _placementTips[Random().nextInt(_placementTips.length)];
+  }
+
+  /// Helper to convert technical exceptions into user-friendly text
+  String _getFriendlyErrorMessage(String error) {
+    // If we have already retried and failed again
+    if (_retryCount >= 1) {
+      return "The AI cannot make the test right now as it is busy. Please try again later.";
+    }
+
+    if (error.contains("429") || error.contains("Too Many Requests")) {
+      return "The AI server is currently busy. Please wait a moment and try again.";
+    }
+    if (error.contains("SocketException") || error.contains("Network")) {
+      return "Please check your internet connection.";
+    }
+    return "Unable to generate test due to api calls. Upgrade to premium to help us so solve this. Please try again later.";
+  }
+
+  void _retryQuizLoad() {
+    // Increment retry count so we know if this next attempt fails, it's the second time
+    setState(() {
+      _retryCount++;
+    });
+
+    context.read<QuizBloc>().add(
+      QuizLoadRequested(
+        userId: widget.userId,
+        targetLanguage: widget.targetLanguage,
+        nativeLanguage: widget.nativeLanguage,
+        isPremium: true,
+        promptType: QuizPromptType.placementTest,
+      ),
+    );
   }
 
   @override
@@ -73,9 +121,31 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
         if (state.status == QuizStatus.completed) {
           _calculateAndReturnLevel(context, state);
         }
+
+        // --- 1. SHOW SNACKBAR ON ERROR ---
+        if (state.status == QuizStatus.error) {
+          final message = _getFriendlyErrorMessage(state.errorMessage ?? "");
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 5),
+              // Only show the "Retry" button on the SnackBar if we haven't failed twice yet
+              action: _retryCount < 1
+                  ? SnackBarAction(
+                      label: "Retry",
+                      textColor: Colors.white,
+                      onPressed: _retryQuizLoad,
+                    )
+                  : null, // No retry action on second failure
+            ),
+          );
+        }
       },
       builder: (context, state) {
-        // --- 1. USE THE REUSABLE LOADING VIEW ---
+        // --- 2. LOADING STATE ---
         if (state.status == QuizStatus.loading) {
           return LoadingView(
             tip: _randomTip,
@@ -84,12 +154,80 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
           );
         }
 
-        final question = state.currentQuestion;
-        if (question == null) {
-          return const Center(child: Text("Preparing test..."));
+        // --- 3. ERROR STATE UI ---
+        if (state.status == QuizStatus.error) {
+          final bool isFinalFailure = _retryCount >= 1;
+          final errorMessage = _getFriendlyErrorMessage(
+            state.errorMessage ?? "",
+          );
+
+          return Scaffold(
+            backgroundColor: bgColor,
+            appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isFinalFailure
+                          ? Icons.sentiment_dissatisfied
+                          : Icons.cloud_off,
+                      size: 64,
+                      color: Colors.grey,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isFinalFailure ? "System Busy" : "Oops!",
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      errorMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Button Logic: Retry if first time, Go Back if second time
+                    ElevatedButton.icon(
+                      onPressed: isFinalFailure
+                          ? () => Navigator.of(context)
+                                .pop() // Close screen
+                          : _retryQuizLoad, // Try again
+                      icon: Icon(
+                        isFinalFailure ? Icons.arrow_back : Icons.refresh,
+                      ),
+                      label: Text(isFinalFailure ? "Go Back" : "Try Again"),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        backgroundColor: isFinalFailure
+                            ? Colors.grey
+                            : Colors.blueAccent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
         }
 
-        // --- 2. REGULAR QUIZ UI ---
+        final question = state.currentQuestion;
+
+        // Handle "initial" or empty state
+        if (question == null) {
+          if (state.status == QuizStatus.initial) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return const Center(child: Text("Initializing..."));
+        }
+
+        // --- 4. REGULAR QUIZ UI ---
         return Scaffold(
           backgroundColor: bgColor,
           appBar: AppBar(
@@ -214,8 +352,6 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
     );
   }
 
-  // ... (Keep existing _buildWordChip and _calculateAndReturnLevel methods) ...
-
   Widget _buildWordChip(
     BuildContext context,
     String word,
@@ -287,7 +423,6 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
         color: isAnswered ? feedbackColor : Colors.transparent,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      // SAFE AREA FIX for bottom button
       child: SafeArea(
         top: false,
         child: Padding(
@@ -317,7 +452,6 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
                 ),
                 const SizedBox(height: 16),
               ],
-
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -358,11 +492,9 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
   }
 
   void _calculateAndReturnLevel(BuildContext context, QuizState state) {
-    // REAL LOGIC: Use the score from state
     final total = state.questions.length;
     final score = state.correctAnswersCount;
 
-    // Safety check div by zero
     double scorePercentage = total > 0 ? score / total : 0.0;
 
     String finalLevel;
