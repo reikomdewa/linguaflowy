@@ -13,7 +13,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
-  
+
   final _formKey = GlobalKey<FormState>();
   bool _isLogin = true;
 
@@ -23,10 +23,9 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: BlocListener<AuthBloc, AuthState>(
           listener: (context, state) {
-            
             // --- HANDLE SUCCESS ---
             if (state is AuthMessage) {
-              if (!_isLogin) setState(() => _isLogin = true); // Switch to login after register
+              if (!_isLogin) setState(() => _isLogin = true);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(state.message),
@@ -39,27 +38,30 @@ class _LoginScreenState extends State<LoginScreen> {
             // --- HANDLE ERRORS ---
             if (state is AuthError) {
               final bool isVerificationError = state.isVerificationError;
-              
+
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(state.message),
                   backgroundColor: Colors.red,
-                  duration: const Duration(seconds: 6), // Longer for them to read and click
-                  action: isVerificationError 
-                    ? SnackBarAction(
-                        label: 'RESEND EMAIL',
-                        textColor: Colors.white,
-                        onPressed: () {
-                          // Trigger Resend Logic
-                          context.read<AuthBloc>().add(
-                            AuthResendVerificationEmail(
-                              _emailController.text, 
-                              _passwordController.text
-                            )
-                          );
-                        },
-                      )
-                    : SnackBarAction(label: 'OK', textColor: Colors.white, onPressed: () {}),
+                  duration: const Duration(seconds: 6),
+                  action: isVerificationError
+                      ? SnackBarAction(
+                          label: 'RESEND EMAIL',
+                          textColor: Colors.white,
+                          onPressed: () {
+                            context.read<AuthBloc>().add(
+                              AuthResendVerificationEmail(
+                                _emailController.text,
+                                _passwordController.text,
+                              ),
+                            );
+                          },
+                        )
+                      : SnackBarAction(
+                          label: 'OK',
+                          textColor: Colors.white,
+                          onPressed: () {},
+                        ),
                 ),
               );
             }
@@ -73,16 +75,31 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(Icons.language, size: 80, color: Colors.blue),
+                    Image.asset(
+                      'assets/images/linguaflow_logo_transparent.png',
+                      height: 100.0,
+                      width: 100.0,
+                    ),
                     const SizedBox(height: 24),
                     const Text(
-                      'LinguaFlow, learning the natural way',
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                      'LinguaFlow',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 8),
+                    const Text(
+                      'Learning the natural way',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 48),
-                    
-                    // Register Name Field
+
                     if (!_isLogin)
                       TextFormField(
                         controller: _nameController,
@@ -95,8 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             value?.isEmpty ?? true ? 'Enter your name' : null,
                       ),
                     if (!_isLogin) const SizedBox(height: 16),
-                    
-                    // Email
+
                     TextFormField(
                       controller: _emailController,
                       decoration: const InputDecoration(
@@ -109,8 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           value?.isEmpty ?? true ? 'Enter email' : null,
                     ),
                     const SizedBox(height: 16),
-                    
-                    // Password
+
                     TextFormField(
                       controller: _passwordController,
                       decoration: const InputDecoration(
@@ -122,8 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       validator: (value) =>
                           value?.isEmpty ?? true ? 'Enter password' : null,
                     ),
-                    
-                    // Forgot Password
+
                     if (_isLogin)
                       Align(
                         alignment: Alignment.centerRight,
@@ -134,12 +148,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
 
                     const SizedBox(height: 24),
-                    
-                    // Submit Button
+
                     BlocBuilder<AuthBloc, AuthState>(
                       builder: (context, state) {
                         if (state is AuthLoading) {
-                          return const Center(child: CircularProgressIndicator());
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
                         }
                         return ElevatedButton(
                           onPressed: _submitForm,
@@ -164,6 +179,50 @@ class _LoginScreenState extends State<LoginScreen> {
                             : 'Already have an account? Login',
                       ),
                     ),
+
+                    // ===============================================
+                    // GOOGLE SIGN IN SECTION
+                    // ===============================================
+                    const SizedBox(height: 20),
+                    Row(
+                      children: const [
+                        Expanded(child: Divider()),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Text("OR"),
+                        ),
+                        Expanded(child: Divider()),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        context.read<AuthBloc>().add(
+                          AuthGoogleLoginRequested(),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: Colors.grey),
+                      ),
+                      // If you don't have a Google asset, use an icon
+                      icon: SizedBox(
+                        width: 24,
+                        height: 24,
+                        // Ensure you have this asset or replace with Icon(Icons.login)
+                        child: Image.network(
+                          'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.login),
+                        ),
+                      ),
+                      label: const Text(
+                        "Sign in with Google",
+                        style: TextStyle(fontSize: 16, color: Colors.white),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -178,26 +237,28 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_formKey.currentState!.validate()) {
       if (_isLogin) {
         context.read<AuthBloc>().add(
-              AuthLoginRequested(
-                _emailController.text.trim(),
-                _passwordController.text,
-              ),
-            );
+          AuthLoginRequested(
+            _emailController.text.trim(),
+            _passwordController.text,
+          ),
+        );
       } else {
         context.read<AuthBloc>().add(
-              AuthRegisterRequested(
-                _emailController.text.trim(),
-                _passwordController.text,
-                _nameController.text.trim(),
-              ),
-            );
+          AuthRegisterRequested(
+            _emailController.text.trim(),
+            _passwordController.text,
+            _nameController.text.trim(),
+          ),
+        );
       }
     }
   }
 
   void _showForgotPasswordDialog() {
-    final resetEmailController = TextEditingController(text: _emailController.text);
-    
+    final resetEmailController = TextEditingController(
+      text: _emailController.text,
+    );
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -205,7 +266,9 @@ class _LoginScreenState extends State<LoginScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Enter your email address to receive a password reset link."),
+            const Text(
+              "Enter your email address to receive a password reset link.",
+            ),
             const SizedBox(height: 15),
             TextField(
               controller: resetEmailController,
@@ -225,7 +288,7 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: () {
               if (resetEmailController.text.isNotEmpty) {
                 context.read<AuthBloc>().add(
-                  AuthResetPasswordRequested(resetEmailController.text.trim())
+                  AuthResetPasswordRequested(resetEmailController.text.trim()),
                 );
                 Navigator.pop(ctx);
               }

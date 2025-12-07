@@ -17,6 +17,9 @@ class AuthLoginRequested extends AuthEvent {
   AuthLoginRequested(this.email, this.password);
 }
 
+// --- NEW: Google Login Event ---
+class AuthGoogleLoginRequested extends AuthEvent {}
+
 class AuthRegisterRequested extends AuthEvent {
   final String email;
   final String password;
@@ -42,7 +45,6 @@ class AuthTargetLanguageChanged extends AuthEvent {
   AuthTargetLanguageChanged(this.languageCode);
 }
 
-// --- NEW: Event to change the level (e.g., A1, B2) for the current language ---
 class AuthLanguageLevelChanged extends AuthEvent {
   final String level;
   AuthLanguageLevelChanged(this.level);
@@ -63,27 +65,21 @@ class AuthUpdateUser extends AuthEvent {
 class AuthDeleteAccount extends AuthEvent {}
 
 // ==========================================
-// STATES
+// STATES (Unchanged)
 // ==========================================
 abstract class AuthState {}
-
 class AuthInitial extends AuthState {}
-
 class AuthLoading extends AuthState {}
-
 class AuthAuthenticated extends AuthState {
   final UserModel user;
   AuthAuthenticated(this.user);
 }
-
 class AuthUnauthenticated extends AuthState {}
-
 class AuthError extends AuthState {
   final String message;
   final bool isVerificationError; 
   AuthError(this.message, {this.isVerificationError = false});
 }
-
 class AuthMessage extends AuthState {
   final String message;
   AuthMessage(this.message);
@@ -99,15 +95,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc(this.authService) : super(AuthInitial()) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<AuthLoginRequested>(_onAuthLoginRequested);
+    on<AuthGoogleLoginRequested>(_onAuthGoogleLoginRequested); // --- NEW HANDLER
     on<AuthRegisterRequested>(_onAuthRegisterRequested);
     on<AuthResetPasswordRequested>(_onAuthResetPasswordRequested);
     on<AuthResendVerificationEmail>(_onAuthResendVerificationEmail);
     on<AuthLogoutRequested>(_onAuthLogoutRequested);
     on<AuthTargetLanguageChanged>(_onAuthTargetLanguageChanged);
-    on<AuthLanguageLevelChanged>(_onAuthLanguageLevelChanged); // Register new handler
+    on<AuthLanguageLevelChanged>(_onAuthLanguageLevelChanged);
     on<AuthUpdateUser>(_onAuthUpdateUser);
     on<AuthDeleteAccount>(_onAuthDeleteAccount);
   }
+
+  // ... existing methods (_onAuthCheckRequested, etc) ...
 
   Future<void> _onAuthCheckRequested(
     AuthCheckRequested event,
@@ -116,6 +115,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     if (firebaseUser != null) {
       await firebaseUser.reload(); 
+      // Note: Google Sign In automatically verifies email, so we might need 
+      // to loosen the check or ensure Google users are treated as verified.
       if (firebaseUser.emailVerified) {
          final user = await authService.getCurrentUser();
          if (user != null) {
@@ -152,6 +153,31 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
+  // --- NEW: Google Login Logic ---
+  Future<void> _onAuthGoogleLoginRequested(
+    AuthGoogleLoginRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    try {
+      // Assuming you implement `signInWithGoogle` in your AuthService
+      // This method should handle the popup, Firebase sign-in, AND creating the
+      // Firestore document if it doesn't exist yet.
+      final UserModel? user = await authService.signInWithGoogle();
+      
+      if (user != null) {
+        emit(AuthAuthenticated(user));
+      } else {
+        // User cancelled the login or something failed silently
+        emit(AuthUnauthenticated());
+      }
+    } catch (e) {
+      emit(AuthError("Google Sign In Failed: ${e.toString()}"));
+    }
+  }
+
+  // ... rest of existing methods (_onAuthRegisterRequested, etc) ...
+  
   Future<void> _onAuthRegisterRequested(
     AuthRegisterRequested event,
     Emitter<AuthState> emit,
@@ -176,6 +202,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthResendVerificationEmail event,
     Emitter<AuthState> emit,
   ) async {
+    // ... existing code ...
     if (_lastEmailSentTime != null) {
       final difference = DateTime.now().difference(_lastEmailSentTime!);
       if (difference.inSeconds < 60) {
@@ -183,14 +210,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       }
     }
-
     emit(AuthLoading());
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: event.email, 
         password: event.password
       );
-      
       final user = FirebaseAuth.instance.currentUser;
       if (user != null && !user.emailVerified) {
         await user.sendEmailVerification();
@@ -249,27 +274,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  // --- NEW: Logic to Update and Persist Level ---
   Future<void> _onAuthLanguageLevelChanged(
     AuthLanguageLevelChanged event,
     Emitter<AuthState> emit,
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
-      
-      // 1. Create a copy of the levels map
       final updatedLevels = Map<String, String>.from(currentUser.languageLevels);
-      
-      // 2. Update the level for the CURRENT language
       updatedLevels[currentUser.currentLanguage] = event.level;
-
-      // 3. Create updated User object
       final updatedUser = currentUser.copyWith(languageLevels: updatedLevels);
-
-      // 4. Update UI immediately
       emit(AuthAuthenticated(updatedUser));
-
-      // 5. Persist to Firestore
       try {
         await FirebaseFirestore.instance
             .collection('users')
@@ -277,7 +291,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             .update({'languageLevels': updatedLevels});
       } catch (e) {
         print("Error updating language level: $e");
-        // Optionally emit an error or revert state
       }
     }
   }
@@ -288,15 +301,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
-      
       final updatedUser = currentUser.copyWith(
         nativeLanguage: event.nativeLanguage ?? currentUser.nativeLanguage,
         targetLanguages: event.targetLanguages ?? currentUser.targetLanguages,
         displayName: event.displayName ?? currentUser.displayName,
       );
-      
       emit(AuthAuthenticated(updatedUser));
-
       try {
         final updates = <String, dynamic>{};
         if (event.nativeLanguage != null) updates['nativeLanguage'] = event.nativeLanguage;

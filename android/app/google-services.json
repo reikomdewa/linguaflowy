@@ -12,7 +12,20 @@
           "package_name": "com.reikom.linguaflow"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1085234269350-h6hloraer8n4jnp9j05orf85nsjmqfal.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.reikom.linguaflow",
+            "certificate_hash": "19f0e08008d5c554696cb7973d78f90b6e75cd64"
+          }
+        },
+        {
+          "client_id": "1085234269350-ansduim33nq9bu2o66gqj05fbucvdn4b.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBHjU8kTjJRSSrpK1FPm9x3lSMPk4Ji_OY"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1085234269350-ansduim33nq9bu2o66gqj05fbucvdn4b.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1085234269350-vg9g40tmnb8bchmq95ud7atj2raksnj2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.reikom.linguaflow"
+              }
+            }
+          ]
         }
       }
     }
