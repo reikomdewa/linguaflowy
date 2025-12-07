@@ -43,6 +43,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
   bool _isFullScreen = false;
   bool _isTransitioningFullscreen = false;
 
+  // NEW: State to track if we are playing just one sentence (Sentence Mode)
+  bool _isPlayingSingleSentence = false;
+
   // --- TTS STATE ---
   final FlutterTts _flutterTts = FlutterTts();
   bool _isTtsPlaying = false;
@@ -114,7 +117,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _prepareBookPages();
     }
 
-    // --- FIX: DETECT AUDIOBOOKS & VIDEOS ---
+    // --- DETECT AUDIOBOOKS & VIDEOS ---
     if (widget.lesson.videoUrl != null && widget.lesson.videoUrl!.isNotEmpty) {
       _initializeVideoPlayer();
     } else {
@@ -357,46 +360,53 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (_videoController == null || !mounted) return;
     if (_isTransitioningFullscreen) return;
 
-    if (_videoController!.value.isPlaying != _isPlaying) {
-      setState(() => _isPlaying = _videoController!.value.isPlaying);
+    final isPlayerPlaying = _videoController!.value.isPlaying;
+
+    if (isPlayerPlaying != _isPlaying) {
+      setState(() => _isPlaying = isPlayerPlaying);
     }
 
     if (widget.lesson.transcript.isEmpty) return;
 
-    final currentSeconds =
-        _videoController!.value.position.inMilliseconds / 1000;
+    final currentSeconds = _videoController!.value.position.inMilliseconds / 1000;
 
-    int realTimeIndex = -1;
-    for (int i = 0; i < widget.lesson.transcript.length; i++) {
-      final line = widget.lesson.transcript[i];
-      if (currentSeconds >= line.start && currentSeconds < line.end) {
-        realTimeIndex = i;
-        break;
-      }
+    // --- LOGIC FOR SINGLE SENTENCE MODE ---
+    // If playing a specific sentence, stop when we reach the end of that sentence
+    if (_isSentenceMode && _isPlayingSingleSentence && _isPlaying) {
+       if (_activeSentenceIndex >= 0 && _activeSentenceIndex < widget.lesson.transcript.length) {
+         final activeLine = widget.lesson.transcript[_activeSentenceIndex];
+         if (currentSeconds >= activeLine.end) {
+           _videoController!.pause();
+           setState(() {
+             _isPlayingSingleSentence = false;
+             _isPlaying = false;
+           });
+           return;
+         }
+       }
     }
 
-    if (_isSentenceMode) {
+    // --- LOGIC FOR NORMAL SYNC ---
+    // Only update active index if we are NOT playing a specific sentence (avoids fighting)
+    // and if the video is actually playing
+    if (_isPlaying && !_isPlayingSingleSentence) {
+      int realTimeIndex = -1;
+      for (int i = 0; i < widget.lesson.transcript.length; i++) {
+        final line = widget.lesson.transcript[i];
+        if (currentSeconds >= line.start && currentSeconds < line.end) {
+          realTimeIndex = i;
+          break;
+        }
+      }
+
       if (realTimeIndex != -1 && realTimeIndex != _activeSentenceIndex) {
         setState(() {
           _activeSentenceIndex = realTimeIndex;
           _currentSentenceTranslation = null;
         });
-      }
-      if (_activeSentenceIndex >= 0 &&
-          _activeSentenceIndex < widget.lesson.transcript.length) {
-        final activeLine = widget.lesson.transcript[_activeSentenceIndex];
-        if (_isPlaying &&
-            currentSeconds >= activeLine.end &&
-            currentSeconds < activeLine.end + 0.5) {
-          if (realTimeIndex == _activeSentenceIndex) {
-            _videoController!.pause();
-          }
+        if (!_isSentenceMode) {
+          _scrollToActiveLine(realTimeIndex);
         }
-      }
-    } else if (!_isSelectionMode) {
-      if (realTimeIndex != -1 && realTimeIndex != _activeSentenceIndex) {
-        setState(() => _activeSentenceIndex = realTimeIndex);
-        _scrollToActiveLine(realTimeIndex);
       }
     }
   }
@@ -463,9 +473,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _seekToTime(double seconds) {
     if (_videoController != null) {
-      _videoController!
-          .seekTo(Duration(milliseconds: (seconds * 1000).toInt()));
-      _videoController!.play();
+      _videoController!.seekTo(Duration(milliseconds: (seconds * 1000).toInt()));
+      // We do NOT play here automatically, just seek.
     }
   }
 
@@ -528,8 +537,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _toggleSentenceMode() {
-    if (_isVideo) _videoController?.pause();
+    if (_isVideo) {
+      _videoController?.pause();
+      setState(() {
+        _isPlayingSingleSentence = false;
+        _isPlaying = false;
+      });
+    }
     if (_isTtsPlaying) _stopTts();
+    
     setState(() {
       _isSentenceMode = !_isSentenceMode;
       if (_activeSentenceIndex == -1 ||
@@ -538,11 +554,23 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
       _currentSentenceTranslation = null;
     });
+
+    // If entering sentence mode, sync video to current sentence start
+    if (_isSentenceMode && _isVideo && _activeSentenceIndex < widget.lesson.transcript.length) {
+      _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
+    }
   }
 
   void _togglePlaybackInMode() {
     if (_isVideo && _videoController != null) {
-      _isPlaying ? _videoController!.pause() : _videoController!.play();
+      if (_isPlaying) {
+        // If playing, pause and reset "single sentence" flag
+        _videoController!.pause();
+        setState(() => _isPlayingSingleSentence = false);
+      } else {
+        // If paused, play just this sentence
+        _playCurrentSentenceInMode();
+      }
     } else {
       _isTtsPlaying ? _stopTts() : _playCurrentSentenceInMode();
     }
@@ -550,9 +578,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _playCurrentSentenceInMode() {
     if (_activeSentenceIndex == -1) return;
+    
     if (_isVideo && widget.lesson.transcript.isNotEmpty) {
       if (_activeSentenceIndex < widget.lesson.transcript.length) {
-        _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
+        // Set flag so listener knows to stop at end
+        setState(() => _isPlayingSingleSentence = true);
+        
+        final start = widget.lesson.transcript[_activeSentenceIndex].start;
+        _seekToTime(start);
+        _videoController!.play();
       }
     } else {
       if (_activeSentenceIndex < _smartChunks.length) {
@@ -585,7 +619,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
       setState(() {
         _activeSentenceIndex++;
         _currentSentenceTranslation = null;
+        // User manually swiped, so reset single sentence playback logic
+        _isPlayingSingleSentence = false;
       });
+
+      // SYNC: Move video to the start of the new sentence
+      if (_isVideo && widget.lesson.transcript.isNotEmpty) {
+        if (_activeSentenceIndex < widget.lesson.transcript.length) {
+           _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
+        }
+      }
     }
   }
 
@@ -594,7 +637,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
       setState(() {
         _activeSentenceIndex--;
         _currentSentenceTranslation = null;
+        // User manually swiped, so reset single sentence playback logic
+        _isPlayingSingleSentence = false;
       });
+
+      // SYNC: Move video to the start of the new sentence
+      if (_isVideo && widget.lesson.transcript.isNotEmpty) {
+        if (_activeSentenceIndex < widget.lesson.transcript.length) {
+           _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
+        }
+      }
     }
   }
 
