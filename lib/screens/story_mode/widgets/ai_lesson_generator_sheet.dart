@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/screens/story_mode/widgets/loading_view.dart';
+// IMPORT STORY MODE SCREEN
+import 'package:linguaflow/screens/story_mode/story_mode_screen.dart';
 
 class AILessonGeneratorSheet extends StatefulWidget {
   final String userId;
@@ -69,7 +71,8 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
     // 2. Close the Bottom Sheet
     Navigator.pop(context);
 
-    // 3. Push the new Smart Wrapper instead of the dumb LoadingView
+    // 3. Push the new Smart Wrapper (Loading Screen)
+    // The wrapper will handle the transition to StoryMode via pushReplacement
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -84,7 +87,8 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
         ),
       ),
     ).then((_) {
-      // 4. Reload list when returning (Success or User cancelled)
+      // 4. Reload list when returning (from Story Mode)
+      // This happens when the StoryModeScreen pops, returning to Home
       lessonBloc.add(LessonLoadRequested(widget.userId, widget.targetLanguage));
     });
   }
@@ -322,7 +326,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
 }
 
 /// --------------------------------------------------------------------------
-/// NEW WRAPPER SCREEN: Handles Loading, 429 Errors, Retries, and Success
+/// WRAPPER SCREEN: Handles Loading & Swaps to StoryMode on Success
 /// --------------------------------------------------------------------------
 class _LessonGenerationScreen extends StatefulWidget {
   final String userId;
@@ -342,13 +346,11 @@ class _LessonGenerationScreen extends StatefulWidget {
       _LessonGenerationScreenState();
 }
 
-
-
 class _LessonGenerationScreenState extends State<_LessonGenerationScreen> {
-  // Cooldown variables
   Timer? _cooldownTimer;
   int _secondsRemaining = 0;
   int _retryCount = 0;
+  bool _hasNavigated = false; // Prevent double navigation
 
   @override
   void dispose() {
@@ -357,30 +359,22 @@ class _LessonGenerationScreenState extends State<_LessonGenerationScreen> {
   }
 
   void _startCooldown() {
-    setState(() {
-      _secondsRemaining = 60; // Standard Gemini/API free tier reset time
-    });
-
+    setState(() => _secondsRemaining = 60);
     _cooldownTimer?.cancel();
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
-          if (_secondsRemaining > 0) {
+          if (_secondsRemaining > 0)
             _secondsRemaining--;
-          } else {
+          else
             _cooldownTimer?.cancel();
-          }
         });
       }
     });
   }
 
   void _retryGeneration() {
-    setState(() {
-      _retryCount++;
-    });
-
-    // Fire the same event again
+    setState(() => _retryCount++);
     context.read<LessonBloc>().add(
           LessonGenerateRequested(
             userId: widget.userId,
@@ -391,130 +385,92 @@ class _LessonGenerationScreenState extends State<_LessonGenerationScreen> {
         );
   }
 
-  String _getFriendlyErrorMessage(String error) {
-    if (_retryCount >= 1) {
-      return "The AI is too busy right now. Please try again later.";
-    }
-    if (error.contains("429") || error.contains("Too Many Requests")) {
-      return "Server is busy. Please wait a moment.";
-    }
-    if (error.contains("SocketException") || error.contains("Network")) {
-      return "Check your internet connection.";
-    }
-    return "Failed to create story.";
-  }
-
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<LessonBloc, LessonState>(
+    return BlocListener<LessonBloc, LessonState>(
       listener: (context, state) {
-        // 1. Success -> Close this screen
-        // CHANGED: Check type 'is LessonGenerationSuccess'
-        if (state is LessonGenerationSuccess) {
-          Navigator.pop(context); 
+        // --- 1. SUCCESS: SWAP TO STORY MODE ---
+        if (state is LessonGenerationSuccess && !_hasNavigated) {
+          _hasNavigated = true;
+          // Use pushReplacement to REMOVE the loading screen from history
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => StoryModeScreen(lesson: state.lesson),
+            ),
+          );
         }
 
-        // 2. Error -> Start Timer and Show SnackBar
-        // CHANGED: Check type 'is LessonError'
-        if (state is LessonError) {
+        // --- 2. ERROR ---
+        if (state is LessonError && !_hasNavigated) {
           _startCooldown();
-          final message = _getFriendlyErrorMessage(state.message);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(message),
-              backgroundColor: Colors.redAccent,
+              content: Text(state.message),
+              backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 4),
             ),
           );
         }
       },
-      builder: (context, state) {
-        final bgColor = Theme.of(context).scaffoldBackgroundColor;
+      child: Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: BlocBuilder<LessonBloc, LessonState>(
+          builder: (context, state) {
+            // --- ERROR STATE ---
+            if (state is LessonError) {
+              return _buildErrorView(state.message);
+            }
 
-        // --- LOADING STATE ---
-        // CHANGED: Check type 'is LessonLoading'
-        if (state is LessonLoading) {
-          return const LoadingView(
-            tip: "Creating your unique story...",
-            title: "Writing Story",
-            subtitle: "This may take a few seconds",
-          );
-        }
+            // --- LOADING STATE (Default) ---
+            return const LoadingView(
+              tip: "We are crafting your unique story...",
+              title: "Writing Story",
+              subtitle: "This usually takes about 10-20 seconds",
+            );
+          },
+        ),
+      ),
+    );
+  }
 
-        // --- ERROR STATE ---
-        // CHANGED: Check type 'is LessonError'
-        if (state is LessonError) {
-          final bool isFinalFailure = _retryCount >= 2;
-          // CHANGED: Access 'state.message' directly
-          final errorMessage = _getFriendlyErrorMessage(state.message);
-
-          return Scaffold(
-            backgroundColor: bgColor,
-            appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-            body: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      isFinalFailure ? Icons.block : Icons.access_time_filled,
-                      size: 64,
-                      color: isFinalFailure ? Colors.red : Colors.orange,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      isFinalFailure ? "Limit Reached" : "Server Busy",
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      isFinalFailure
-                          ? "We cannot generate the story right now. Please try again tomorrow."
-                          : errorMessage,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.grey, fontSize: 16),
-                    ),
-                    const SizedBox(height: 30),
-
-                    // RETRY BUTTON
-                    if (!isFinalFailure)
-                      ElevatedButton(
-                        onPressed: _secondsRemaining > 0
-                            ? null
-                            : _retryGeneration,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 32, vertical: 14),
-                          backgroundColor: Colors.blueAccent,
-                        ),
-                        child: Text(
-                          _secondsRemaining > 0
-                              ? "Wait ${_secondsRemaining}s"
-                              : "Retry Now",
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-
-                    // BACK BUTTON
-                    if (isFinalFailure)
-                      ElevatedButton.icon(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.arrow_back),
-                        label: const Text("Go Back"),
-                      ),
-                  ],
+  Widget _buildErrorView(String message) {
+    bool isFinal = _retryCount >= 2;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
+            const SizedBox(height: 16),
+            Text(
+              "Generation Failed",
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 30),
+            if (!isFinal)
+              ElevatedButton(
+                onPressed: _secondsRemaining > 0 ? null : _retryGeneration,
+                child: Text(
+                  _secondsRemaining > 0
+                      ? "Wait ${_secondsRemaining}s"
+                      : "Retry",
                 ),
               ),
-            ),
-          );
-        }
-
-        // Fallback for any other state
-        return const SizedBox();
-      },
+            if (isFinal)
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text("Go Back"),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

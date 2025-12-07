@@ -1,10 +1,6 @@
-
-
-
 import 'package:bloc/bloc.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
-import 'package:linguaflow/services/gemini_service.dart'; // Import Service
-
+import 'package:linguaflow/services/gemini_service.dart'; 
 import 'lesson_event.dart';
 import 'lesson_state.dart';
 
@@ -13,9 +9,8 @@ export 'lesson_state.dart';
 
 class LessonBloc extends Bloc<LessonEvent, LessonState> {
   final LessonRepository _lessonRepository;
-  final GeminiService _geminiService; // 1. Add Service Variable
+  final GeminiService _geminiService;
 
-  // 2. Update Constructor to require GeminiService
   LessonBloc({
     required LessonRepository lessonRepository,
     required GeminiService geminiService, 
@@ -27,8 +22,6 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
     on<LessonCreateRequested>(_onLessonCreateRequested);
     on<LessonDeleteRequested>(_onLessonDeleteRequested);
     on<LessonUpdateRequested>(_onLessonUpdateRequested);
-    
-    // 3. Register New Handler
     on<LessonGenerateRequested>(_onLessonGenerateRequested);
   }
 
@@ -44,7 +37,7 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
       );
       emit(LessonLoaded(allLessons));
     } catch (e) {
-      print("BLOC LOAD ERROR: $e");
+      // print("BLOC LOAD ERROR: $e");
       emit(LessonError(e.toString()));
     }
   }
@@ -86,6 +79,7 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
   ) async {
     final currentState = state;
     if (currentState is LessonLoaded) {
+      // Optimistic Update
       final updatedLessons = currentState.lessons.map((l) {
         return l.id == event.lesson.id ? event.lesson : l;
       }).toList();
@@ -94,12 +88,13 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
       try {
         await _lessonRepository.saveOrUpdateLesson(event.lesson);
       } catch (e) {
-        print("Update failed: $e");
+        // Revert or show error if needed
         emit(currentState); 
       }
     }
   }
-Future<void> _onLessonGenerateRequested(
+
+  Future<void> _onLessonGenerateRequested(
     LessonGenerateRequested event,
     Emitter<LessonState> emit,
   ) async {
@@ -117,20 +112,13 @@ Future<void> _onLessonGenerateRequested(
       // 2. Save to Database
       await _lessonRepository.saveOrUpdateLesson(newLesson);
 
-      // 3. EMIT SUCCESS
-      // This tells the UI to show the Story Mode.
+      // 3. Emit SUCCESS and STOP.
+      // We do NOT add LessonLoadRequested here. 
+      // The UI will handle the navigation and reload when the user is ready.
       emit(LessonGenerationSuccess(newLesson));
-
-      // --- DELETE OR COMMENT OUT THIS LINE ---
-      // add(LessonLoadRequested(event.userId, event.targetLanguage)); 
-      // ---------------------------------------
-      // Why? Because this triggers "LessonLoading" again immediately, 
-      // causing the "Making your story..." screen to spin forever.
-      // The list will refresh naturally next time the user visits the library.
 
     } catch (e) {
       emit(LessonError("Failed to generate AI lesson: $e"));
     }
   }
-
 }
