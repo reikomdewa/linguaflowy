@@ -1,8 +1,9 @@
+import 'dart:async'; // Required for TimeoutException
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-// 1. Alias the package to avoid "Part" vs "Parts" conflicts
-import 'package:flutter_gemini/flutter_gemini.dart' as gem; 
+import 'package:flutter_gemini/flutter_gemini.dart' as gem;
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md; // Import for ExtensionSet
 import 'package:linguaflow/models/lesson_model.dart';
 
 class AiConversationScreen extends StatefulWidget {
@@ -17,9 +18,8 @@ class AiConversationScreen extends StatefulWidget {
 class _AiConversationScreenState extends State<AiConversationScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
-  // 2. Use the alias 'gem' to force the correct Content type
-  final List<gem.Content> _chats = []; 
+
+  final List<gem.Content> _chats = [];
   bool _isLoading = false;
 
   @override
@@ -30,25 +30,27 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
 
   void _initializeGemini() {
     final apiKey = dotenv.env['GEMINI_API_KEY'];
-    
+
     if (apiKey != null && apiKey.isNotEmpty) {
       gem.Gemini.init(apiKey: apiKey);
     }
 
+    // UPDATED PROMPT: Explicitly forbid HTML to prevent </blockquote > issues
     final systemPrompt = '''
-You are a language tutor. 
+You are a language tutor.
 Context: User just learned "${widget.lesson.title}" (${widget.lesson.type}).
-Goal: Roleplay a scenario related to this topic. 
-Correct grammar mistakes gently in bold. Keep replies under 40 words.
-Start by welcoming the user to the topic.
+Goal: Roleplay a scenario related to this topic.
+INSTRUCTIONS:
+1. Correct grammar mistakes gently in **bold**.
+2. Keep replies under 40 words.
+3. Start by welcoming the user to the topic.
+4. IMPORTANT: Use standard Markdown only (stars for bold/italics). Do NOT use HTML tags like <b>, <i>, or <blockquote>.
 ''';
 
-    // 3. CORRECT SYNTAX: Use 'gem.Parts' (Plural) with named 'text' parameter
-    // We add this to history so the AI knows the context, but we will filter it out of the UI
     setState(() {
       _chats.add(gem.Content(
-        role: 'user', 
-        parts: [gem.Parts(text: systemPrompt)] 
+        role: 'user',
+        parts: [gem.Part.text(systemPrompt)],
       ));
     });
 
@@ -58,21 +60,23 @@ Start by welcoming the user to the topic.
   Future<void> _sendInitialTrigger() async {
     setState(() => _isLoading = true);
     try {
-      // 4. Use 'chat' instead of 'prompt'. 'chat' sends the whole history so the AI remembers context.
-      final response = await gem.Gemini.instance.chat(_chats);
-      
+      // Added 20-second timeout
+      final response = await gem.Gemini.instance.chat(_chats)
+          .timeout(const Duration(seconds: 20));
+
       if (mounted && response?.output != null) {
         setState(() {
           _chats.add(gem.Content(
-            role: 'model', 
-            parts: [gem.Parts(text: response!.output)]
+            role: 'model',
+            parts: [gem.Part.text(response!.output!)],
           ));
           _isLoading = false;
         });
       }
+    } on TimeoutException {
+      _handleError("AI is taking too long. It might be busy or failed.");
     } catch (e) {
-      debugPrint("Gemini Init Error: $e");
-      if (mounted) setState(() => _isLoading = false);
+      _handleError("Connection error: $e");
     }
   }
 
@@ -80,11 +84,10 @@ Start by welcoming the user to the topic.
     final message = _textController.text.trim();
     if (message.isEmpty) return;
 
-    // Add User Message
     setState(() {
       _chats.add(gem.Content(
-        role: 'user', 
-        parts: [gem.Parts(text: message)]
+        role: 'user',
+        parts: [gem.Part.text(message)],
       ));
       _isLoading = true;
       _textController.clear();
@@ -92,28 +95,48 @@ Start by welcoming the user to the topic.
     _scrollToBottom();
 
     try {
-      // Send History to AI
-      final response = await gem.Gemini.instance.chat(_chats);
+      // Added 20-second timeout
+      final response = await gem.Gemini.instance.chat(_chats)
+          .timeout(const Duration(seconds: 20));
 
       if (mounted && response?.output != null) {
         setState(() {
           _chats.add(gem.Content(
-            role: 'model', 
-            parts: [gem.Parts(text: response!.output)]
+            role: 'model',
+            parts: [gem.Part.text(response!.output!)],
           ));
           _isLoading = false;
         });
         _scrollToBottom();
       }
+    } on TimeoutException {
+      _handleError("AI is maybe too busy or failed.");
     } catch (e) {
+      _handleError("An error occurred. Please try again.");
       debugPrint("Gemini Error: $e");
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e")),
-        );
-      }
     }
+  }
+
+  void _handleError(String msg) {
+    if (!mounted) return;
+    
+    setState(() => _isLoading = false);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Retry',
+          textColor: Colors.white,
+          onPressed: () {
+            // Remove the last user message if it failed so they can try again?
+            // Or just leave it. Leaving it is usually safer.
+          },
+        ),
+      ),
+    );
   }
 
   void _scrollToBottom() {
@@ -134,7 +157,6 @@ Start by welcoming the user to the topic.
     final bgColor = isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5);
     final cardColor = isDark ? const Color(0xFF1E272E) : Colors.white;
 
-    // Filter out the system prompt (index 0) so the user doesn't see the instructions
     final visibleChats = _chats.length > 1 ? _chats.sublist(1) : <gem.Content>[];
 
     return Scaffold(
@@ -163,7 +185,6 @@ Start by welcoming the user to the topic.
               },
             ),
           ),
-          
           if (_isLoading)
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0, left: 16),
@@ -179,7 +200,6 @@ Start by welcoming the user to the topic.
                 ),
               ),
             ),
-          
           SafeArea(
             child: Container(
               padding: const EdgeInsets.all(16),
@@ -230,15 +250,14 @@ Start by welcoming the user to the topic.
   }
 
   Widget _buildMessageBubble(gem.Content content, bool isUser, bool isDark) {
-    // 5. SAFE TEXT EXTRACTION
-    // 'content.parts' is a list of 'gem.Parts' objects. 
-    // We map them to their 'text' property (handling nulls) and join them.
+    // 1. Extract text safely
     final text = content.parts
-            ?.map((part) => part.text ?? "")
+            ?.whereType<gem.TextPart>()
+            .map((part) => part.text)
             .join(" ") ?? "";
-    
-    final textColor = isUser 
-        ? Colors.white 
+
+    final textColor = isUser
+        ? Colors.white
         : (isDark ? Colors.white : Colors.black87);
 
     return Align(
@@ -248,8 +267,8 @@ Start by welcoming the user to the topic.
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         decoration: BoxDecoration(
-          color: isUser 
-              ? const Color(0xFF42A5F5) 
+          color: isUser
+              ? const Color(0xFF42A5F5)
               : (isDark ? const Color(0xFF263238) : Colors.white),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
@@ -266,13 +285,25 @@ Start by welcoming the user to the topic.
                ),
           ],
         ),
+        // 2. Updated Markdown Body configuration
         child: MarkdownBody(
           data: text,
+          selectable: true, // Allows user to copy text
+          // GitHub Flavored Markdown handles things like strikethrough and tables better
+          extensionSet: md.ExtensionSet.gitHubFlavored, 
           styleSheet: MarkdownStyleSheet(
             p: TextStyle(color: textColor, fontSize: 16, height: 1.4),
             strong: TextStyle(color: textColor, fontWeight: FontWeight.bold),
             em: TextStyle(color: textColor, fontStyle: FontStyle.italic),
             listBullet: TextStyle(color: textColor),
+            blockquote: TextStyle(
+              color: textColor.withOpacity(0.8),
+              fontStyle: FontStyle.italic,
+            ),
+            blockquoteDecoration: BoxDecoration(
+              color: isUser ? Colors.white.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
           ),
         ),
       ),
