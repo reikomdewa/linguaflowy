@@ -13,7 +13,7 @@ import 'package:linguaflow/screens/home/widgets/home_sections.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
 import 'package:linguaflow/screens/home/utils/home_utils.dart';
 import 'package:linguaflow/screens/placement_test/placement_test_screen.dart';
-import 'package:linguaflow/widgets/premium_lock_dialog.dart'; // Ensure this path is correct
+import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -50,17 +50,60 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
+
+    // --- FIX: Check for First Time User (Missing Language) ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authState = context.read<AuthBloc>().state;
+      if (authState is AuthAuthenticated) {
+        final user = authState.user;
+        
+        // If currentLanguage is empty or null, force selection
+        if (user.currentLanguage == null || user.currentLanguage.isEmpty) {
+          _showMandatoryLanguageSelector(context, user);
+        } else {
+          // Normal flow: Load vocabulary if language is already set
+          context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
+        }
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     // 1. Access User Data & Theme
-    final user = (context.watch<AuthBloc>().state as AuthAuthenticated).user;
+    final authState = context.watch<AuthBloc>().state;
+    
+    // Safety check for auth state
+    if (authState is! AuthAuthenticated) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final user = authState.user;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
+
+    // --- FIX: Empty State Guard ---
+    // If the language hasn't been chosen yet, do not attempt to render the 
+    // complex Lesson lists (which would fire API calls with empty language codes).
+    if (user.currentLanguage == null || user.currentLanguage.isEmpty) {
+      return Scaffold(
+        backgroundColor: bgColor,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.translate, size: 64, color: Colors.grey.withOpacity(0.5)),
+              const SizedBox(height: 16),
+              Text(
+                "Please select a language...",
+                style: TextStyle(color: textColor, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -93,9 +136,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       builder: (context, lessonState) {
                         // Handle Loading States
                         if (lessonState is LessonInitial) {
-                          context.read<LessonBloc>().add(
-                            LessonLoadRequested(user.id, user.currentLanguage),
-                          );
+                          // Only trigger load if we have a valid language
+                          if (user.currentLanguage.isNotEmpty) {
+                            context.read<LessonBloc>().add(
+                              LessonLoadRequested(user.id, user.currentLanguage),
+                            );
+                          }
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
@@ -391,11 +437,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (unlocked == true) {
                       // 1. Refresh Auth
                       context.read<AuthBloc>().add(AuthCheckRequested());
-
-                      // 2. Revive Quiz logic (if relevant here)
-                      // context.read<QuizBloc>().add(QuizReviveRequested());
-
-                      // 3. Just refresh UI or handle success
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text("Welcome to Premium!"),
@@ -514,6 +555,95 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- DIALOGS ---
 
+  // --- FIX: Mandatory Language Selector (No Cancel Option) ---
+  void _showMandatoryLanguageSelector(BuildContext context, dynamic user) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false, // Prevents clicking background to close
+      enableDrag: false,    // Prevents swiping down to close
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => PopScope(
+        canPop: false, // Prevents Android Back Button
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.8,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                Text(
+                  "Welcome! 👋",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Choose a language to start learning:",
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: isDark ? Colors.white70 : Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _languageNames.length,
+                    separatorBuilder: (ctx, i) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final entry = _languageNames.entries.elementAt(index);
+                      return ListTile(
+                        leading: Text(
+                          _getFlagEmoji(entry.key),
+                          style: const TextStyle(fontSize: 32),
+                        ),
+                        title: Text(
+                          entry.value,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? Colors.white : Colors.black,
+                          ),
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                        onTap: () {
+                          // 1. Update User Language preference
+                          context.read<AuthBloc>().add(
+                            AuthTargetLanguageChanged(entry.key),
+                          );
+                          // 2. Load data for the selected language
+                          context.read<LessonBloc>().add(
+                            LessonLoadRequested(user.id, entry.key),
+                          );
+                          context.read<VocabularyBloc>().add(
+                            VocabularyLoadRequested(user.id),
+                          );
+                          // 3. Close the modal
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Regular Selector (Can be dismissed)
   void _showLanguageSelector(BuildContext context, dynamic user) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
