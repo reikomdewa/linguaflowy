@@ -75,6 +75,7 @@ dependencies:
   logging: ^1.2.0
   flutter_tts: ^4.2.3
   flutter_gemini: ^3.0.0
+  flutter_markdown: ^0.7.3
   webview_flutter: ^4.13.0
   html_unescape: ^2.0.0
   xml: ^6.3.0
