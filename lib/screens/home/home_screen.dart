@@ -56,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final authState = context.read<AuthBloc>().state;
       if (authState is AuthAuthenticated) {
         final user = authState.user;
-        
+
         // If currentLanguage is empty or null, force selection
         if (user.currentLanguage == null || user.currentLanguage.isEmpty) {
           _showMandatoryLanguageSelector(context, user);
@@ -72,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     // 1. Access User Data & Theme
     final authState = context.watch<AuthBloc>().state;
-    
+
     // Safety check for auth state
     if (authState is! AuthAuthenticated) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -84,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
 
     // --- FIX: Empty State Guard ---
-    // If the language hasn't been chosen yet, do not attempt to render the 
+    // If the language hasn't been chosen yet, do not attempt to render the
     // complex Lesson lists (which would fire API calls with empty language codes).
     if (user.currentLanguage == null || user.currentLanguage.isEmpty) {
       return Scaffold(
@@ -93,7 +93,11 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.translate, size: 64, color: Colors.grey.withOpacity(0.5)),
+              Icon(
+                Icons.translate,
+                size: 64,
+                color: Colors.grey.withOpacity(0.5),
+              ),
               const SizedBox(height: 16),
               Text(
                 "Please select a language...",
@@ -139,7 +143,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           // Only trigger load if we have a valid language
                           if (user.currentLanguage.isNotEmpty) {
                             context.read<LessonBloc>().add(
-                              LessonLoadRequested(user.id, user.currentLanguage),
+                              LessonLoadRequested(
+                                user.id,
+                                user.currentLanguage,
+                              ),
                             );
                           }
                           return const Center(
@@ -562,7 +569,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showModalBottomSheet(
       context: context,
       isDismissible: false, // Prevents clicking background to close
-      enableDrag: false,    // Prevents swiping down to close
+      enableDrag: false, // Prevents swiping down to close
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => PopScope(
@@ -614,8 +621,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: isDark ? Colors.white : Colors.black,
                           ),
                         ),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                        trailing: const Icon(
+                          Icons.arrow_forward_ios,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 8,
+                        ),
                         onTap: () {
                           // 1. Update User Language preference
                           context.read<AuthBloc>().add(
@@ -809,9 +823,21 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        title: Text(
-          "Change Level?",
-          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              "Change Level?",
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+            ),
+           
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+              },
+              child: Icon(Icons.close),
+            ),
+          ],
         ),
         content: Text(
           "You selected $targetLevel. We recommend taking a quick placement test to ensure this is the right fit, or you can switch immediately.",
