@@ -37,7 +37,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   // --- VIDEO / AUDIOBOOK STATE ---
   YoutubePlayerController? _videoController;
-  bool _isVideo = false; 
+  bool _isVideo = false;
   bool _isAudioMode = false;
   bool _isPlaying = false;
   bool _isFullScreen = false;
@@ -52,7 +52,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // We use ScrollController for the ListView to handle lazy loading
   final ScrollController _listScrollController = ScrollController();
   int _activeSentenceIndex = -1;
-  
+
   // Keys to find items for auto-scrolling (only works if item is rendered)
   final List<GlobalKey> _itemKeys = [];
 
@@ -85,9 +85,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
-    
+
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    
+
     final envKey = dotenv.env['GEMINI_API_KEY'];
     if (envKey != null && envKey.isNotEmpty) {
       try {
@@ -115,7 +115,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
 
     // --- FIX: DETECT AUDIOBOOKS & VIDEOS ---
-    // This checks if we have a URL, even if the type says 'audio'
     if (widget.lesson.videoUrl != null && widget.lesson.videoUrl!.isNotEmpty) {
       _initializeVideoPlayer();
     } else {
@@ -233,10 +232,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     } catch (_) {}
     _videoController?.dispose();
     _pageController.dispose();
-    _listScrollController.dispose(); // Dispose new controller
+    _listScrollController.dispose();
     _flutterTts.stop();
     _stableWordKeys.clear();
-    
+
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.landscapeLeft,
@@ -329,10 +328,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // --- VIDEO PLAYER INIT ---
   void _initializeVideoPlayer() {
     String? videoId;
-    
-    // --- FIX: Handle Synced Audiobook IDs ---
+
     if (widget.lesson.id.startsWith('yt_audio_')) {
       videoId = widget.lesson.id.replaceAll('yt_audio_', '');
+      _isAudioMode = true;
     } else if (widget.lesson.id.startsWith('yt_')) {
       videoId = widget.lesson.id.replaceAll('yt_', '');
     } else if (widget.lesson.videoUrl != null) {
@@ -354,7 +353,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- SYNC ENGINE ---
   void _videoListener() {
     if (_videoController == null || !mounted) return;
     if (_isTransitioningFullscreen) return;
@@ -362,12 +360,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (_videoController!.value.isPlaying != _isPlaying) {
       setState(() => _isPlaying = _videoController!.value.isPlaying);
     }
-    
+
     if (widget.lesson.transcript.isEmpty) return;
-    
+
     final currentSeconds =
         _videoController!.value.position.inMilliseconds / 1000;
-    
+
     int realTimeIndex = -1;
     for (int i = 0; i < widget.lesson.transcript.length; i++) {
       final line = widget.lesson.transcript[i];
@@ -376,7 +374,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         break;
       }
     }
-    
+
     if (_isSentenceMode) {
       if (realTimeIndex != -1 && realTimeIndex != _activeSentenceIndex) {
         setState(() {
@@ -447,23 +445,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
     });
   }
 
-  // --- SAFE AUTO SCROLL ---
   void _scrollToActiveLine(int index) {
     if (!_isSentenceMode && !_isFullScreen) {
-      // FIX: Only scroll if item is likely rendered or within list bounds
       if (index >= 0 && index < _itemKeys.length) {
         final key = _itemKeys[index];
-        // Ensure context exists (item is rendered in ListView) before scrolling
         if (key.currentContext != null) {
           Scrollable.ensureVisible(
             key.currentContext!,
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
-            alignment: 0.5, // Center it
+            alignment: 0.5,
           );
-        } else {
-          // Fallback: If not rendered (lazy loaded), we could animate the scroll controller
-          // roughly. For now, we skip to avoid crashes.
         }
       }
     }
@@ -564,7 +556,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
     } else {
       if (_activeSentenceIndex < _smartChunks.length) {
-        _speakSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex);
+        _speakSentence(
+            _smartChunks[_activeSentenceIndex], _activeSentenceIndex);
       }
     }
   }
@@ -639,9 +632,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
       if (context != null) {
         final renderBox = context.findRenderObject() as RenderBox?;
         if (renderBox != null) {
-          final rect =
-              (renderBox.localToGlobal(Offset.zero) & renderBox.size)
-                  .inflate(10.0);
+          final rect = (renderBox.localToGlobal(Offset.zero) & renderBox.size)
+              .inflate(10.0);
           if (rect.contains(globalPosition)) {
             if (_selectionEndIndex != i) {
               setState(() => _selectionEndIndex = i);
@@ -764,8 +756,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     double sliderValue = 0.0;
     double sliderMax = 1.0;
 
-    if (_isSentenceMode ||
-        (_isVideo && widget.lesson.transcript.isNotEmpty)) {
+    if (_isSentenceMode || (_isVideo && widget.lesson.transcript.isNotEmpty)) {
       final total = _smartChunks.length;
       sliderMax = (total > 0) ? (total - 1).toDouble() : 0.0;
       sliderValue =
@@ -844,7 +835,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 if (_isVideo) _buildVideoHeader(isDark),
                 if (_isCheckingLimit)
                   const LinearProgressIndicator(minHeight: 2),
-                
+
                 // --- MAIN CONTENT AREA ---
                 Expanded(
                   child: _isSentenceMode
@@ -870,35 +861,37 @@ class _ReaderScreenState extends State<ReaderScreen> {
       ),
     );
   }
-Widget _buildVideoHeader(bool isDark) {
-if (_videoController == null) return const SizedBox.shrink();
-return Column(
-children: [
-SizedBox(
-height: _isAudioMode ? 1 : 220,
-child: YoutubePlayer(
-controller: _videoController!,
-showVideoProgressIndicator: true,
-progressIndicatorColor: Colors.red,
-bottomActions: [
-const SizedBox(width: 14.0),
-CurrentPosition(),
-const SizedBox(width: 8.0),
-ProgressBar(isExpanded: true),
-RemainingDuration(),
-const PlaybackSpeedButton(),
-IconButton(
-icon: const Icon(Icons.fullscreen, color: Colors.white),
-onPressed: _toggleCustomFullScreen,
-),
-],
-),
-),
-if (_isAudioMode) _buildAudioPlayerUI(isDark),
-],
-);
-}
- Widget _buildAudioPlayerUI(bool isDark) {
+
+  Widget _buildVideoHeader(bool isDark) {
+    if (_videoController == null) return const SizedBox.shrink();
+    return Column(
+      children: [
+        SizedBox(
+          height: _isAudioMode ? 1 : 220,
+          child: YoutubePlayer(
+            controller: _videoController!,
+            showVideoProgressIndicator: true,
+            progressIndicatorColor: Colors.red,
+            bottomActions: [
+              const SizedBox(width: 14.0),
+              CurrentPosition(),
+              const SizedBox(width: 8.0),
+              ProgressBar(isExpanded: true),
+              RemainingDuration(),
+              const PlaybackSpeedButton(),
+              IconButton(
+                icon: const Icon(Icons.fullscreen, color: Colors.white),
+                onPressed: _toggleCustomFullScreen,
+              ),
+            ],
+          ),
+        ),
+        if (_isAudioMode) _buildAudioPlayerUI(isDark),
+      ],
+    );
+  }
+
+  Widget _buildAudioPlayerUI(bool isDark) {
     return Container(
       color: isDark ? const Color(0xFF1E1E1E) : Colors.grey[100],
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -923,34 +916,28 @@ if (_isAudioMode) _buildAudioPlayerUI(isDark),
     );
   }
 
-  // --- REPLACED COLUMN WITH LISTVIEW TO FIX LAG/CRASH ---
   Widget _buildParagraphModeView(bool isDark) {
     if (widget.lesson.transcript.isNotEmpty) {
-      // OPTIMIZATION: Use ListView.builder for Lazy Loading
       return ListView.separated(
-        controller: _listScrollController, // Attach controller for potential manual scrolling
+        controller: _listScrollController,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        itemCount: widget.lesson.transcript.length + 1, // +1 for bottom padding
+        itemCount: widget.lesson.transcript.length + 1,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           if (index == widget.lesson.transcript.length) {
-            return const SizedBox(height: 100); // Bottom padding
+            return const SizedBox(height: 100);
           }
           final entry = widget.lesson.transcript[index];
-          return _buildTranscriptRow(
-            index, 
-            entry.text, 
-            entry.start, 
-            index == _activeSentenceIndex, 
-            isDark
-          );
+          return _buildTranscriptRow(index, entry.text, entry.start,
+              index == _activeSentenceIndex, isDark);
         },
       );
     }
-    
-    // For pure text (no transcript), we still use PageView which is safe
-    if (_bookPages.isEmpty) return const Center(child: CircularProgressIndicator());
-    
+
+    if (_bookPages.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return PageView.builder(
       controller: _pageController,
       itemCount: _bookPages.length,
@@ -961,13 +948,11 @@ if (_isAudioMode) _buildAudioPlayerUI(isDark),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ..._bookPages[pageIndex]
-                  .map((index) => _buildTextRow(
-                      index,
-                      widget.lesson.sentences[index],
-                      index == _activeSentenceIndex,
-                      isDark))
-                  ,
+              ..._bookPages[pageIndex].map((index) => _buildTextRow(
+                  index,
+                  widget.lesson.sentences[index],
+                  index == _activeSentenceIndex,
+                  isDark)),
               const SizedBox(height: 100),
             ],
           ),
@@ -976,9 +961,6 @@ if (_isAudioMode) _buildAudioPlayerUI(isDark),
     );
   }
 
-  // ... [Keep other methods like _buildSentenceModeView, _buildTranscriptRow, etc. exactly as they were] ...
-  
-  // (Include the rest of the file helper methods here to ensure complete file)
   Widget _buildSentenceModeView(bool isDark, Color? textColor) {
     final count = _smartChunks.length;
     if (count == 0) return const Center(child: Text("No content"));
@@ -1216,8 +1198,8 @@ if (_isAudioMode) _buildAudioPlayerUI(isDark),
           key: wordKey,
           behavior: HitTestBehavior.translucent,
           onLongPressStart: (_) => _startSelection(sentenceIndex, wordIndex),
-          onLongPressMoveUpdate: (details) =>
-              _handleDragUpdate(sentenceIndex, words.length, details.globalPosition),
+          onLongPressMoveUpdate: (details) => _handleDragUpdate(
+              sentenceIndex, words.length, details.globalPosition),
           onLongPressEnd: (_) => _finishSelection(sentence),
           onTapUp: (details) {
             if (_isSelectionMode) {
@@ -1263,6 +1245,25 @@ if (_isAudioMode) _buildAudioPlayerUI(isDark),
     );
   }
 
+  // --- SMART TAP SYSTEM ---
+  int _calculateSmartStatus(VocabularyItem? item) {
+    if (item == null || item.status == 0) {
+      return 1; // New word -> Status 1
+    }
+    if (item.status >= 5) {
+      return 5; // Maxed out
+    }
+
+    final lastReview = item.lastReviewed;
+    final difference = DateTime.now().difference(lastReview);
+
+    // Only upgrade level if > 1 hour has passed since last review
+    if (difference.inHours >= 1) {
+      return item.status + 1;
+    }
+    return item.status;
+  }
+
   Future<void> _handleWordTap(String cleanWord, String originalWord,
       {Offset? tapPosition}) async {
     if (_isCheckingLimit) return;
@@ -1272,6 +1273,18 @@ if (_isAudioMode) _buildAudioPlayerUI(isDark),
 
     final safePosition =
         tapPosition ?? MediaQuery.of(context).size.center(Offset.zero);
+
+    // --- AUTO STATUS UPDATE START ---
+    final existingItem = _vocabulary[cleanWord];
+    final int newStatus = _calculateSmartStatus(existingItem);
+
+    // Update if status changes or it's a new word
+    if (existingItem == null || existingItem.status != newStatus) {
+      await _updateWordStatus(cleanWord, originalWord,
+          existingItem?.translation ?? "", newStatus,
+          showDialog: false);
+    }
+    // --- AUTO STATUS UPDATE END ---
 
     if (user.isPremium) {
       _showDefinitionDialog(cleanWord, originalWord,
@@ -1400,25 +1413,8 @@ if (_isAudioMode) _buildAudioPlayerUI(isDark),
     );
   }
 
-  void _saveWordToFirebase(String word) async {
-    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.id)
-          .collection('saved_words')
-          .add({
-        'word': word,
-        'added_at': FieldValue.serverTimestamp(),
-        'source_lesson': widget.lesson.id,
-      });
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Saved to your list!")));
-    } catch (e) {}
-  }
-
-  Future<void> _updateWordStatus(String cleanWord, String originalWord,
-      String translation, int status,
+  Future<void> _updateWordStatus(
+      String cleanWord, String originalWord, String translation, int status,
       {bool showDialog = true}) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     VocabularyItem? existingItem = _vocabulary[cleanWord];
