@@ -6,7 +6,7 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/services/quiz_service.dart';
 import 'package:linguaflow/services/translation_service.dart';
-// Ensure this import exists
+// Ensure this import exists in your project
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 class QuizScreen extends StatefulWidget {
@@ -21,10 +21,25 @@ class _QuizScreenState extends State<QuizScreen> {
   String _targetLangCode = 'en';
   String _targetLangName = 'Target Language';
 
+  // --- ERROR HANDLING VARIABLES ---
+  Timer? _cooldownTimer;
+  int _secondsRemaining = 0;
+  int _retryCount = 0;
+
   @override
   void initState() {
     super.initState();
+    _loadQuiz();
+  }
 
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
+  }
+
+  // Separated logic to allow retrying
+  void _loadQuiz() {
     final authState = context.read<AuthBloc>().state;
     String targetLang = 'es';
     String nativeLang = 'en';
@@ -35,23 +50,66 @@ class _QuizScreenState extends State<QuizScreen> {
       targetLang = authState.user.currentLanguage;
       nativeLang = authState.user.nativeLanguage;
       userId = authState.user.id;
-      isPremium = authState.user.isPremium; // Check premium status
+      isPremium = authState.user.isPremium;
 
-      _targetLangCode = targetLang;
-      _targetLangName = targetLang.toUpperCase();
+      setState(() {
+        _targetLangCode = targetLang;
+        _targetLangName = targetLang.toUpperCase();
+      });
     }
 
     _tts.setLanguage(_targetLangCode);
 
     context.read<QuizBloc>().add(
-      QuizLoadRequested(
-         promptType: QuizPromptType.dailyPractice,
-        userId: userId,
-        targetLanguage: targetLang,
-        nativeLanguage: nativeLang,
-        isPremium: isPremium, // Pass status to Bloc
-      ),
-    );
+          QuizLoadRequested(
+            promptType: QuizPromptType.dailyPractice,
+            userId: userId,
+            targetLanguage: targetLang,
+            nativeLanguage: nativeLang,
+            isPremium: isPremium,
+          ),
+        );
+  }
+
+  void _retryQuizLoad() {
+    setState(() {
+      _retryCount++;
+    });
+    _loadQuiz();
+  }
+
+  // --- ERROR HELPERS ---
+
+  void _startCooldown() {
+    setState(() {
+      _secondsRemaining = 60; // Standard wait for quota reset
+    });
+
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          if (_secondsRemaining > 0) {
+            _secondsRemaining--;
+          } else {
+            _cooldownTimer?.cancel();
+          }
+        });
+      }
+    });
+  }
+
+  String _getFriendlyErrorMessage(String error) {
+    if (_retryCount >= 1) {
+      return "The AI cannot make the test right now as it is busy. Please try again later.";
+    }
+    if (error.contains("429") || error.contains("Too Many Requests")) {
+      return "The AI server is currently busy. Please wait a moment and try again.";
+    }
+    if (error.contains("SocketException") || error.contains("Network")) {
+      return "Please check your internet connection.";
+    }
+    return "Unable to generate quiz. Please try again.";
   }
 
   void _speakIfTargetLanguage(String text, bool isTargetLanguage) async {
@@ -105,7 +163,8 @@ class _QuizScreenState extends State<QuizScreen> {
         ),
         title: BlocBuilder<QuizBloc, QuizState>(
           builder: (context, state) {
-            if (state.status == QuizStatus.loading) return const SizedBox();
+            if (state.status == QuizStatus.loading ||
+                state.status == QuizStatus.error) return const SizedBox();
 
             return ClipRRect(
               borderRadius: BorderRadius.circular(2),
@@ -121,9 +180,9 @@ class _QuizScreenState extends State<QuizScreen> {
         actions: [
           BlocBuilder<QuizBloc, QuizState>(
             builder: (context, state) {
-              if (state.status == QuizStatus.loading) return const SizedBox();
+              if (state.status == QuizStatus.loading ||
+                  state.status == QuizStatus.error) return const SizedBox();
 
-              // Use state.isPremium to decide what to show
               return Padding(
                 padding: const EdgeInsets.only(right: 20.0),
                 child: Row(
@@ -137,7 +196,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     Text(
                       state.isPremium
                           ? "∞"
-                          : "${state.hearts}", // Infinite for Premium
+                          : "${state.hearts}",
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -156,22 +215,100 @@ class _QuizScreenState extends State<QuizScreen> {
           if (state.status == QuizStatus.completed) {
             _showCompletionDialog(context, isDark);
           }
-          // Only show Game Over if hearts <= 0 AND user is NOT premium
-          // (Double check state.isPremium here to be safe)
           if (state.hearts <= 0 &&
               !state.isPremium &&
-              state.status != QuizStatus.loading) {
+              state.status != QuizStatus.loading &&
+              state.status != QuizStatus.error) {
             _showGameOverDialog(context, isDark);
+          }
+
+          // --- ERROR HANDLING LISTENER ---
+          if (state.status == QuizStatus.error) {
+            _startCooldown();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Server is busy. Please wait for the timer."),
+                backgroundColor: Colors.redAccent,
+                behavior: SnackBarBehavior.floating,
+                duration: Duration(seconds: 4),
+              ),
+            );
           }
         },
         builder: (context, state) {
+          // 1. LOADING
           if (state.status == QuizStatus.loading) {
             return _LoadingWithTips(languageName: _targetLangName);
           }
 
+          // 2. ERROR / RETRY VIEW
+          if (state.status == QuizStatus.error) {
+            final bool isFinalFailure = _retryCount >= 2;
+            final errorMessage =
+                _getFriendlyErrorMessage(state.errorMessage ?? "");
+
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isFinalFailure ? Icons.block : Icons.access_time_filled,
+                      size: 64,
+                      color: isFinalFailure ? Colors.red : Colors.orange,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isFinalFailure ? "Limit Reached" : "Server Busy",
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isFinalFailure
+                          ? "We cannot generate the quiz right now. Please try again tomorrow."
+                          : errorMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                    const SizedBox(height: 30),
+
+                    if (!isFinalFailure)
+                      ElevatedButton(
+                        onPressed: _secondsRemaining > 0
+                            ? null
+                            : _retryQuizLoad,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 32, vertical: 14),
+                          backgroundColor: Colors.blueAccent,
+                        ),
+                        child: Text(
+                          _secondsRemaining > 0
+                              ? "Wait ${_secondsRemaining}s"
+                              : "Retry Now",
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+
+                    if (isFinalFailure)
+                      ElevatedButton.icon(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.arrow_back),
+                        label: const Text("Go Back"),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }
+
           final question = state.currentQuestion;
+          // Fallback initial state
           if (question == null) return const SizedBox();
 
+          // 3. MAIN QUIZ UI
           final bool isQuestionTargetLang = question.type == 'target_to_native';
           final bool areOptionsTargetLang = question.type == 'native_to_target';
 
@@ -295,8 +432,8 @@ class _QuizScreenState extends State<QuizScreen> {
                               isSelectedArea: true,
                               shouldSpeak: false,
                               onTap: () => context.read<QuizBloc>().add(
-                                QuizOptionDeselected(word),
-                              ),
+                                    QuizOptionDeselected(word),
+                                  ),
                             );
                           }).toList(),
                         ),
@@ -318,8 +455,8 @@ class _QuizScreenState extends State<QuizScreen> {
                               shouldSpeak: areOptionsTargetLang,
                               onTap: () {
                                 context.read<QuizBloc>().add(
-                                  QuizOptionSelected(word),
-                                );
+                                      QuizOptionSelected(word),
+                                    );
                               },
                             );
                           }).toList(),
@@ -406,9 +543,8 @@ class _QuizScreenState extends State<QuizScreen> {
               : () => context.read<QuizBloc>().add(QuizCheckAnswer()),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.blueAccent,
-            disabledBackgroundColor: isDark
-                ? Colors.grey[800]
-                : Colors.grey[300],
+            disabledBackgroundColor:
+                isDark ? Colors.grey[800] : Colors.grey[300],
             disabledForegroundColor: Colors.grey[500],
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
@@ -556,7 +692,6 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 
-  // --- UPDATED GAME OVER DIALOG ---
   void _showGameOverDialog(BuildContext context, bool isDark) {
     showDialog(
       context: context,
@@ -594,24 +729,15 @@ class _QuizScreenState extends State<QuizScreen> {
               ),
             ),
           ),
-
-          // PREMIUM BUTTON
           ElevatedButton(
             onPressed: () {
-              // Open Premium Dialog
               showDialog(
                 context: context,
                 builder: (context) => const PremiumLockDialog(),
               ).then((unlocked) {
                 if (unlocked == true) {
-                  // User Bought Premium:
-                  // 1. Refresh Auth
                   context.read<AuthBloc>().add(AuthCheckRequested());
-
-                  // 2. Revive Quiz (Reset Hearts & Set Premium)
                   context.read<QuizBloc>().add(QuizReviveRequested());
-
-                  // 3. Close Game Over Dialog
                   Navigator.pop(context);
                 }
               });

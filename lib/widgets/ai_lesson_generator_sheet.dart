@@ -1,7 +1,7 @@
+import 'dart:async'; // Required for Timer
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
-// IMPORT THE NEW WRAPPER SCREEN HERE
 import 'package:linguaflow/screens/story_mode/widgets/loading_view.dart';
 
 class AILessonGeneratorSheet extends StatefulWidget {
@@ -50,38 +50,41 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
   void _generateLesson() {
     if (_promptController.text.trim().isEmpty) return;
 
-    // 1. Unfocus keyboard
     FocusScope.of(context).unfocus();
 
-    // 2. Capture the Bloc (Safety first)
     final lessonBloc = context.read<LessonBloc>();
+    final topic = _promptController.text;
+    final level = _selectedLevel;
 
-    // 3. Fire the Generation Event
+    // 1. Fire the initial Generation Event
     lessonBloc.add(
       LessonGenerateRequested(
         userId: widget.userId,
-        topic: _promptController.text,
-        level: _selectedLevel,
+        topic: topic,
+        level: level,
         targetLanguage: widget.targetLanguage,
       ),
     );
 
-    // 4. Close the Bottom Sheet
+    // 2. Close the Bottom Sheet
     Navigator.pop(context);
 
-    // 5. Navigate to Wrapper AND Wait for return
+    // 3. Push the new Smart Wrapper instead of the dumb LoadingView
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => BlocProvider.value(
-          value: lessonBloc, // Pass the existing bloc
-          child: LoadingView(tip: 'Making your story...'),
+          value: lessonBloc,
+          child: _LessonGenerationScreen(
+            userId: widget.userId,
+            targetLanguage: widget.targetLanguage,
+            topic: topic,
+            level: level,
+          ),
         ),
       ),
     ).then((_) {
-      // --- THE FIX IS HERE ---
-      // When the user presses "Back" and returns to the Home Screen,
-      // we must reload the list to get back to 'LessonLoaded' state.
+      // 4. Reload list when returning (Success or User cancelled)
       lessonBloc.add(LessonLoadRequested(widget.userId, widget.targetLanguage));
     });
   }
@@ -111,7 +114,6 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
     final borderColor = isDark ? Colors.grey[800] : Colors.grey[300];
     final textColor = isDark ? Colors.white : Colors.black87;
 
-    // NOTE: Removed BlocListener because we navigate immediately now.
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
@@ -121,7 +123,6 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(top: isKeyboardOpen ? topPadding : 0),
-
       child: Column(
         children: [
           const SizedBox(height: 12),
@@ -135,7 +136,6 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
               ),
             ),
           ),
-
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -149,7 +149,6 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
                   Text(
                     "Difficulty",
                     style: TextStyle(
@@ -192,20 +191,18 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                       }).toList(),
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
                   SizedBox(
                     height: 140,
                     child: GridView.builder(
                       scrollDirection: Axis.horizontal,
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            childAspectRatio: 0.3,
-                            mainAxisSpacing: 10,
-                            crossAxisSpacing: 10,
-                          ),
+                        crossAxisCount: 3,
+                        childAspectRatio: 0.3,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                      ),
                       itemCount: _prompts.length,
                       itemBuilder: (context, index) {
                         final text = _prompts[index];
@@ -236,9 +233,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                       },
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
                   Text(
                     "What kind of story do you want?",
                     style: TextStyle(
@@ -270,7 +265,6 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
               ),
             ),
           ),
-
           Container(
             padding: EdgeInsets.only(
               left: 20,
@@ -323,6 +317,204 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// --------------------------------------------------------------------------
+/// NEW WRAPPER SCREEN: Handles Loading, 429 Errors, Retries, and Success
+/// --------------------------------------------------------------------------
+class _LessonGenerationScreen extends StatefulWidget {
+  final String userId;
+  final String targetLanguage;
+  final String topic;
+  final String level;
+
+  const _LessonGenerationScreen({
+    required this.userId,
+    required this.targetLanguage,
+    required this.topic,
+    required this.level,
+  });
+
+  @override
+  State<_LessonGenerationScreen> createState() =>
+      _LessonGenerationScreenState();
+}
+
+
+
+class _LessonGenerationScreenState extends State<_LessonGenerationScreen> {
+  // Cooldown variables
+  Timer? _cooldownTimer;
+  int _secondsRemaining = 0;
+  int _retryCount = 0;
+
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startCooldown() {
+    setState(() {
+      _secondsRemaining = 60; // Standard Gemini/API free tier reset time
+    });
+
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          if (_secondsRemaining > 0) {
+            _secondsRemaining--;
+          } else {
+            _cooldownTimer?.cancel();
+          }
+        });
+      }
+    });
+  }
+
+  void _retryGeneration() {
+    setState(() {
+      _retryCount++;
+    });
+
+    // Fire the same event again
+    context.read<LessonBloc>().add(
+          LessonGenerateRequested(
+            userId: widget.userId,
+            topic: widget.topic,
+            level: widget.level,
+            targetLanguage: widget.targetLanguage,
+          ),
+        );
+  }
+
+  String _getFriendlyErrorMessage(String error) {
+    if (_retryCount >= 1) {
+      return "The AI is too busy right now. Please try again later.";
+    }
+    if (error.contains("429") || error.contains("Too Many Requests")) {
+      return "Server is busy. Please wait a moment.";
+    }
+    if (error.contains("SocketException") || error.contains("Network")) {
+      return "Check your internet connection.";
+    }
+    return "Failed to create story.";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocConsumer<LessonBloc, LessonState>(
+      listener: (context, state) {
+        // 1. Success -> Close this screen
+        // CHANGED: Check type 'is LessonGenerationSuccess'
+        if (state is LessonGenerationSuccess) {
+          Navigator.pop(context); 
+        }
+
+        // 2. Error -> Start Timer and Show SnackBar
+        // CHANGED: Check type 'is LessonError'
+        if (state is LessonError) {
+          _startCooldown();
+          final message = _getFriendlyErrorMessage(state.message);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      },
+      builder: (context, state) {
+        final bgColor = Theme.of(context).scaffoldBackgroundColor;
+
+        // --- LOADING STATE ---
+        // CHANGED: Check type 'is LessonLoading'
+        if (state is LessonLoading) {
+          return const LoadingView(
+            tip: "Creating your unique story...",
+            title: "Writing Story",
+            subtitle: "This may take a few seconds",
+          );
+        }
+
+        // --- ERROR STATE ---
+        // CHANGED: Check type 'is LessonError'
+        if (state is LessonError) {
+          final bool isFinalFailure = _retryCount >= 2;
+          // CHANGED: Access 'state.message' directly
+          final errorMessage = _getFriendlyErrorMessage(state.message);
+
+          return Scaffold(
+            backgroundColor: bgColor,
+            appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isFinalFailure ? Icons.block : Icons.access_time_filled,
+                      size: 64,
+                      color: isFinalFailure ? Colors.red : Colors.orange,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isFinalFailure ? "Limit Reached" : "Server Busy",
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isFinalFailure
+                          ? "We cannot generate the story right now. Please try again tomorrow."
+                          : errorMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                    const SizedBox(height: 30),
+
+                    // RETRY BUTTON
+                    if (!isFinalFailure)
+                      ElevatedButton(
+                        onPressed: _secondsRemaining > 0
+                            ? null
+                            : _retryGeneration,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 32, vertical: 14),
+                          backgroundColor: Colors.blueAccent,
+                        ),
+                        child: Text(
+                          _secondsRemaining > 0
+                              ? "Wait ${_secondsRemaining}s"
+                              : "Retry Now",
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+
+                    // BACK BUTTON
+                    if (isFinalFailure)
+                      ElevatedButton.icon(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.arrow_back),
+                        label: const Text("Go Back"),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        // Fallback for any other state
+        return const SizedBox();
+      },
     );
   }
 }
