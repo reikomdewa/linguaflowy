@@ -1,6 +1,3 @@
-
-
-
 import json
 import os
 import re
@@ -11,45 +8,98 @@ import time
 # --- CONFIGURATION ---
 OUTPUT_DIR = "assets/data"
 
-# Structure: 'lang_code': [('Search Query', 'Genre/Category')]
+# EXPANDED SEARCH CONFIGURATION
+# Format: 'lang_code': [('Search Query', 'Genre')]
+# Genres: story, news, vlog, history, culture, science, tech, education
 SEARCH_CONFIG = {
     'es': [
-        ('Spanish comprehensible input stories', 'story'),
-        ('Spanish fairy tales for beginners', 'fairy_tale'),
-        ('Slow Spanish news', 'news'),
-        ('Easy Spanish daily life', 'vlog'),
-        ('History of Spain in easy spanish', 'history')
+        # Stories & Comprehensible Input
+        ('Spanish comprehensible input stories beginner', 'story'),
+        ('Dreaming Spanish superbeginner', 'story'),
+        ('BookBox Spanish stories', 'story'),
+        ('Fabulas de Esopo español', 'fairy_tale'),
+        # Vlogs & Daily Life
+        ('Easy Spanish street interviews', 'vlog'),
+        ('Spanish After Hours vlog', 'vlog'),
+        ('Luisito Comunica viajes', 'vlog'), # Native/Advanced
+        # Education & Science
+        ('Curiosamente ciencia', 'science'), # Great clear audio
+        ('Magic Markers explicacion', 'education'),
+        # News & History
+        ('BBC Mundo noticias', 'news'),
+        ('Historia de España para niños', 'history'),
+        ('Tedx Talks en español', 'education')
     ],
     'fr': [
-        ('French stories avec sous-titres', 'story'),
-        ('French comprehensible input beginner', 'story'),
-        ('Easy French news with subtitles', 'news'),
-        ('French fairy tales', 'fairy_tale')
+        # Stories
+        ('French comprehensible input stories', 'story'),
+        ('BookBox French', 'story'),
+        ('Contes de fées français', 'fairy_tale'),
+        # Vlogs & Culture
+        ('Easy French street interviews', 'vlog'),
+        ('Piece of French vlog', 'vlog'),
+        ('InnerFrench podcast video', 'culture'),
+        # News & Science
+        ('HugoDécrypte actus du jour', 'news'), # Fast/Native
+        ('1 jour 1 question', 'education'), # Kids news/edu
+        ('C\'est pas sorcier science', 'science'), # Classic science show
+        ('L\'histoire de France racontée', 'history')
     ],
     'de': [
-        ('German comprehensible input', 'story'),
-        ('German stories for beginners', 'story'),
-        ('Easy German history', 'history'),
-        ('Slow German news', 'news')
+        # Stories
+        ('German comprehensible input beginner', 'story'),
+        ('Hallo Deutschschule stories', 'story'),
+        ('Märchen für kinder deutsch', 'fairy_tale'),
+        # Vlogs
+        ('Easy German street interviews', 'vlog'),
+        ('Dinge Erklärt – Kurzgesagt', 'science'), # High quality science
+        ('MrWissen2go Geschichte', 'history'),
+        # News
+        ('Langsam gesprochene Nachrichten DW', 'news'), # Specifically slow news
+        ('Logo! Nachrichten für Kinder', 'news'),
+        ('Galileo deutschland', 'education')
     ],
     'it': [
-        ('Italian comprehensible input stories', 'story'),
-        ('Easy Italian stories', 'story'),
-        ('Italian culture for beginners', 'culture')
+        # Stories
+        ('Italian comprehensible input', 'story'),
+        ('Learn Italian with Lucrezia vlog', 'vlog'),
+        ('Podcast Italiano video', 'culture'),
+        # Culture & News
+        ('Storia d\'Italia semplice', 'history'),
+        ('Geopop it', 'science'), # Italian science/geo
+        ('Easy Italian street interviews', 'vlog'),
+        ('Fiabe italiane', 'fairy_tale')
     ],
     'pt': [
+        # Brazil
         ('Portuguese comprehensible input', 'story'),
-        ('Brazilian Portuguese stories', 'story')
+        ('Speaking Brazilian vlog', 'vlog'),
+        ('Turma da Mônica', 'story'), # Cultural cartoon
+        ('Nostalgia castanhari', 'history'), # Pop culture history
+        ('Manual do Mundo', 'science'), # Huge science channel
+        # Portugal
+        ('Portuguese from Portugal stories', 'story'),
+        ('RTP noticias portugal', 'news')
     ],
     'ja': [
-        ('Japanese comprehensible input', 'story'),
-        ('Easy Japanese stories', 'story'),
-        ('Japanese folklore stories', 'fairy_tale')
+        # Beginners
+        ('Comprehensible Japanese', 'story'),
+        ('Japanese fairy tales with subtitles', 'fairy_tale'),
+        ('Miku Real Japanese', 'vlog'),
+        ('Onomappu Japanese', 'education'),
+        # Advanced/Native
+        ('Japanese history animation', 'history'),
+        ('Dogen japanese phonetics', 'education'),
+        ('ANN news japanese', 'news'),
+        ('Cooking with Dog japanese', 'culture')
     ],
     'en': [
-        ('English stories for learning', 'story'),
-        ('History of the world easy english', 'history'),
-        ('Daily conversation english', 'vlog')
+        ('TED-Ed', 'education'),
+        ('Vox video essays', 'news'),
+        ('Easy English street interviews', 'vlog'),
+        ('History of the entire world i guess', 'history'),
+        ('Kurzgesagt – In a Nutshell', 'science'),
+        ('Short stories for learning english', 'story')
     ]
 }
 
@@ -71,32 +121,29 @@ def time_to_seconds(time_str):
 
 def split_sentences(text):
     """Splits text for the Flutter model (keeping punctuation)."""
-    # Regex lookbehind to keep the punctuation attached to the sentence
+    if not text: return []
+    # Regex to split by . ! ? but keep the punctuation attached to the previous sentence
+    # clean_text = re.sub(r'\s+', ' ', text)
     return re.split(r'(?<=[.!?])\s+', text)
 
 def parse_vtt_to_transcript(vtt_content):
     """Parses WebVTT content into a list of objects for Flutter."""
     lines = vtt_content.splitlines()
     transcript = []
-    # Pattern to match: 00:00:00.000 --> 00:00:02.000
     time_pattern = re.compile(r'(\d{2}:\d{2}:\d{2}\.\d{3})\s-->\s(\d{2}:\d{2}:\d{2}\.\d{3})')
     
     current_entry = None
     
     for line in lines:
         line = line.strip()
-        # Skip metadata
         if not line or line == 'WEBVTT' or line.startswith('Kind:') or line.startswith('Language:'):
             continue
             
-        # Check for Timestamp
         match = time_pattern.search(line)
         if match:
-            # Save previous entry if it exists
             if current_entry and current_entry['text']:
                 transcript.append(current_entry)
             
-            # Start new entry
             current_entry = {
                 'start': time_to_seconds(match.group(1)),
                 'end': time_to_seconds(match.group(2)),
@@ -104,21 +151,15 @@ def parse_vtt_to_transcript(vtt_content):
             }
             continue
             
-        # If we are inside a time block, capture text
         if current_entry:
-            # Remove HTML tags like <c.color> or <b>
             clean_line = re.sub(r'<[^>]+>', '', line)
-            # Fix HTML entities
             clean_line = clean_line.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"')
-            
             if clean_line:
                 current_entry['text'] += clean_line + " "
 
-    # Append last entry
     if current_entry and current_entry['text']:
         transcript.append(current_entry)
         
-    # Final cleanup
     for t in transcript: 
         t['text'] = t['text'].strip()
         
@@ -133,20 +174,19 @@ def analyze_difficulty(transcript):
     
     avg_len = sum(len(w) for w in words) / len(words)
     
-    # Adjust these thresholds based on language if needed
+    # Specific adjustments per language could go here
     if avg_len < 4.2: return 'beginner'
-    if avg_len > 5.8: return 'advanced'
+    if avg_len > 6.0: return 'advanced' # Bumped up slightly
     return 'intermediate'
 
 def get_video_details(video_url, lang_code, genre):
     video_id = video_url.split('v=')[-1]
-    temp_filename = f"temp_{video_id}"
+    temp_filename = f"temp_gen_{video_id}" # Distinct temp name
     
-    # yt-dlp options
     ydl_opts = {
         'skip_download': True,
-        'writesubtitles': True,       # Try manual subs
-        'writeautomaticsub': True,    # Fallback to auto subs
+        'writesubtitles': True,
+        'writeautomaticsub': True,    
         'subtitleslangs': [lang_code], 
         'outtmpl': temp_filename,
         'quiet': True,
@@ -156,33 +196,30 @@ def get_video_details(video_url, lang_code, genre):
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # 1. Download metadata and subtitles
             info = ydl.extract_info(video_url, download=True)
             
-            # 2. Find the .vtt file
-            # yt-dlp might name it temp_id.en.vtt or temp_id.es.vtt
+            # Skip videos longer than 20 mins to save space/processing
+            if info.get('duration', 0) > 1200:
+                print(f"    ⚠️ Skipping (Too long): {info.get('title')}")
+                return None
+
             files = glob.glob(f"{temp_filename}*.vtt")
             
             if not files:
                 return None
             
-            # 3. Read content
             with open(files[0], 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # 4. Clean up temp files immediately
             for f in files: 
                 try: os.remove(f)
                 except: pass
             
-            # 5. Parse
             transcript_data = parse_vtt_to_transcript(content)
             if not transcript_data: return None
             
-            # 6. Reconstruct full text
             full_text = " ".join([t['text'] for t in transcript_data])
 
-            # 7. Build Object
             return {
                 "id": f"yt_{video_id}",
                 "userId": "system",
@@ -191,18 +228,17 @@ def get_video_details(video_url, lang_code, genre):
                 "content": full_text,
                 "sentences": split_sentences(full_text),
                 "transcript": transcript_data,
-                "createdAt": "2024-01-01T00:00:00.000Z", # You can use info.get('upload_date') to be dynamic
+                "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
                 "imageUrl": f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
                 "type": "video",
                 "difficulty": analyze_difficulty(transcript_data),
                 "videoUrl": f"https://youtube.com/watch?v={video_id}",
                 "isFavorite": False,
                 "progress": 0,
-                "genre": genre # New Field
+                "genre": genre
             }
     except Exception as e:
         print(f"    ⚠️ Error processing {video_id}: {str(e)[:50]}...")
-        # Cleanup if error occurred before deletion
         for f in glob.glob(f"{temp_filename}*"):
             try: os.remove(f)
             except: pass
@@ -212,7 +248,6 @@ def main():
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
-    # Loop through Languages
     for lang, categories in SEARCH_CONFIG.items():
         print(f"\n==========================================")
         print(f" PROCESSING LANGUAGE: {lang.upper()}")
@@ -223,35 +258,34 @@ def main():
         existing_lessons = []
         existing_ids = set()
         
-        # 1. Load Existing Data
+        # 1. LOAD EXISTING
         if os.path.exists(filepath):
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
                     existing_lessons = json.load(f)
                     existing_ids = {l['id'] for l in existing_lessons}
-                print(f"  📚 Loaded {len(existing_lessons)} existing videos from DB.")
+                print(f"  📚 Loaded {len(existing_lessons)} existing videos.")
             except:
-                print("  🆕 No existing file found. Creating new.")
+                print("  🆕 No valid existing file found. Starting fresh.")
+                existing_lessons = []
 
         total_new_for_lang = 0
 
-        # 2. Loop through Categories (Genres)
+        # 2. SEARCH NEW
         for query, genre in categories:
-            print(f"\n  🔎 Searching: '{query}' (Genre: {genre})")
+            print(f"\n  🔎 Searching: '{query}' ({genre})")
             
             ydl_opts = {
                 'quiet': True,
-                'extract_flat': True, # Don't download yet, just get list
+                'extract_flat': True,
                 'dump_single_json': True,
                 'extractor_args': {'youtube': {'player_client': ['android']}}
             }
             
-            new_added_this_query = 0
-            
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Search for 8 videos per category
+                # Search for 6 videos per query (Keep it balanced)
                 try:
-                    result = ydl.extract_info(f"ytsearch8:{query}", download=False)
+                    result = ydl.extract_info(f"ytsearch6:{query}", download=False)
                 except Exception as e:
                     print(f"    ❌ Search failed: {e}")
                     continue
@@ -264,7 +298,7 @@ def main():
                         title = entry.get('title')
                         lesson_id = f"yt_{vid}"
 
-                        # Check duplication
+                        # DUPLICATE CHECK
                         if lesson_id in existing_ids:
                             continue
 
@@ -273,24 +307,23 @@ def main():
                         lesson = get_video_details(f"https://www.youtube.com/watch?v={vid}", lang, genre)
                         
                         if lesson:
-                            # Add to beginning of list (fresh content first)
+                            # Prepend to list (Newest first)
                             existing_lessons.insert(0, lesson)
                             existing_ids.add(lesson_id)
-                            new_added_this_query += 1
                             total_new_for_lang += 1
                             print(f"       ✅ Added!")
                         else:
-                            print(f"       🚫 Skipped (No subs)")
+                            print(f"       🚫 Skipped (No subs/Error)")
                         
-                        # Rate limit slightly to be nice to YouTube
                         time.sleep(1)
 
-        # 3. Save after processing all categories for this language
-        with open(filepath, 'w', encoding='utf-8') as f:
-            # indent=None is optimal for app size, indent=2 is good for debugging
-            json.dump(existing_lessons, f, ensure_ascii=False, indent=None)
-        
-        print(f"\n  💾 SAVED {lang.upper()}: Total {len(existing_lessons)} lessons (+{total_new_for_lang} new).")
+        # 3. SAVE
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(existing_lessons, f, ensure_ascii=False, indent=None)
+            print(f"\n  💾 SAVED {lang.upper()}: +{total_new_for_lang} new. Total: {len(existing_lessons)}")
+        except Exception as e:
+            print(f"  ❌ Error saving file: {e}")
 
 if __name__ == "__main__":
     main()
