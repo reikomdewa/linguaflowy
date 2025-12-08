@@ -21,17 +21,18 @@ import 'blocs/auth/auth_bloc.dart';
 import 'blocs/lesson/lesson_bloc.dart';
 import 'blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 void main() async {
   // Enable verbose logging
   await dotenv.load(fileName: ".env");
   final apiKey = dotenv.env['GEMINI_API_KEY'];
-  
+
   if (apiKey != null) {
     Gemini.init(
       apiKey: apiKey,
       // --- ADD THIS ---
       // This prints the exact API URL and Response to the console.
-      // It helps confirm if the package is using 'v1beta' or 'v1', 
+      // It helps confirm if the package is using 'v1beta' or 'v1',
       // and shows the raw error details from Google.
     );
   } else {
@@ -57,21 +58,6 @@ class LanguageLearningApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // await dotenv.load();
-    // 1. Create Services
-    final firestoreService = LessonService();
-    final localLessonService = LocalLessonService();
-
-    // 2. Create Repository (Inject Services)
-    // final lessonRepository = LessonRepository(
-    //   firestoreService: firestoreService,
-    //   localService: localLessonService,
-    // );
-
-    // 1. Load Environment variables
-
-    // 2. Initialize Gemini GLOBALLY here
-
     final lessonRepository = LessonRepository(
       firestoreService: LessonService(),
       localService: LocalLessonService(),
