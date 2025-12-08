@@ -4,13 +4,12 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/transcript_line.dart';
 
 class LocalLessonService {
-  
   /// Fetches standard text/video lessons
   Future<List<LessonModel>> fetchStandardLessons(String languageCode) async {
     return _loadFromAsset(
-      'assets/data/lessons_$languageCode.json', 
-      languageCode, 
-      'system'
+      'assets/data/lessons_$languageCode.json',
+      languageCode,
+      'system',
     );
   }
 
@@ -36,14 +35,13 @@ class LocalLessonService {
         'system_librivox',
       );
       if (librivox.isNotEmpty) {
-        print("✅ Loaded ${librivox.length} LibriVox tracks for $languageCode");
         allAudio.addAll(librivox);
       }
     } catch (e) {
       // We catch here specifically to allow the next part (Audiobooks) to still try loading
       print("⚠️ LibriVox Load Skipped: $e");
     }
-    
+
     // 2. Fetch Synced Audiobooks (YouTube Audio)
     // These files are expected in: assets/youtube_audio_library/
     try {
@@ -53,7 +51,6 @@ class LocalLessonService {
         'system_audiobook',
       );
       if (audiobooks.isNotEmpty) {
-        print("✅ Loaded ${audiobooks.length} Synced Audiobooks for $languageCode");
         allAudio.addAll(audiobooks);
       }
     } catch (e) {
@@ -90,13 +87,14 @@ class LocalLessonService {
     try {
       // 1. Attempt to load string from assets
       final String jsonString = await rootBundle.loadString(path);
-      
+
       // 2. Decode JSON
       final List<dynamic> data = json.decode(jsonString);
 
       // 3. Map to LessonModel
       return data.map((jsonItem) {
-        final id = jsonItem['id']?.toString() ??
+        final id =
+            jsonItem['id']?.toString() ??
             'unknown_${DateTime.now().millisecondsSinceEpoch}';
 
         // --- URL MAPPING FIX ---
@@ -114,17 +112,19 @@ class LocalLessonService {
           language: jsonItem['language'] ?? languageCode,
           content: jsonItem['content'] ?? '',
           // Safely convert list of strings
-          sentences: (jsonItem['sentences'] as List<dynamic>?)
+          sentences:
+              (jsonItem['sentences'] as List<dynamic>?)
                   ?.map((e) => e.toString())
                   .toList() ??
               [],
           // Safely convert transcripts
-          transcript: (jsonItem['transcript'] as List<dynamic>?)
+          transcript:
+              (jsonItem['transcript'] as List<dynamic>?)
                   ?.map((e) => TranscriptLine.fromMap(e))
                   .toList() ??
               [],
-          createdAt: DateTime.tryParse(jsonItem['createdAt'] ?? '') ??
-              DateTime.now(),
+          createdAt:
+              DateTime.tryParse(jsonItem['createdAt'] ?? '') ?? DateTime.now(),
           imageUrl: jsonItem['imageUrl'],
           type: jsonItem['type'] ?? 'text',
           difficulty: jsonItem['difficulty'] ?? 'intermediate',
@@ -133,13 +133,12 @@ class LocalLessonService {
           progress: jsonItem['progress'] ?? 0,
         );
       }).toList();
-
     } catch (e) {
       // Print the specific error to the console so we know which file failed
       // e.g. "Unable to load asset" means file missing/pubspec issue
       // e.g. "FormatException" means bad JSON
       print("🔴 ASSET LOAD ERROR [$path]: $e");
-      
+
       // Return empty list so the app doesn't crash
       return [];
     }

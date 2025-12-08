@@ -3,8 +3,8 @@ import 'dart:io'; // Required for SocketException
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_gemini/flutter_gemini.dart' as gem;
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:markdown/markdown.dart' as md;
+// CHANGED: Imported flutter_markdown_plus instead of flutter_markdown
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 
 class AiConversationScreen extends StatefulWidget {
@@ -156,7 +156,6 @@ INSTRUCTIONS:
           textColor: Colors.white,
           onPressed: () {
             // Logic to retry the last request
-            // We remove the loading state before retry, so just calling submit works
             _submitToGemini(); 
           },
         ),
@@ -178,8 +177,6 @@ INSTRUCTIONS:
 
   @override
   Widget build(BuildContext context) {
-    // ... (Keep your existing build method UI exactly the same) ...
-    // Below is just the abbreviated return for context
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5);
     final cardColor = isDark ? const Color(0xFF1E272E) : Colors.white;
@@ -246,7 +243,7 @@ INSTRUCTIONS:
                     child: TextField(
                       controller: _textController,
                       textCapitalization: TextCapitalization.sentences,
-                      enabled: !_isLoading, // Disable input while loading to prevent spam
+                      enabled: !_isLoading, 
                       decoration: InputDecoration(
                         hintText: "Type in target language...",
                         filled: true,
@@ -275,7 +272,6 @@ INSTRUCTIONS:
   }
 
   Widget _buildMessageBubble(gem.Content content, bool isUser, bool isDark) {
-    // ... (Keep your existing bubble UI exactly the same) ...
     final text = content.parts
             ?.whereType<gem.TextPart>()
             .map((part) => part.text)
@@ -297,6 +293,7 @@ INSTRUCTIONS:
               : (isDark ? const Color(0xFF263238) : Colors.white),
           borderRadius: BorderRadius.circular(16),
         ),
+        // NOTE: This widget now comes from flutter_markdown_plus
         child: MarkdownBody(
           data: text,
           selectable: true, 

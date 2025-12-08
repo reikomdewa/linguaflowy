@@ -54,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final authState = context.read<AuthBloc>().state;
       if (authState is AuthAuthenticated) {
         final user = authState.user;
-        if (user.currentLanguage == null || user.currentLanguage.isEmpty) {
+        if (user.currentLanguage.isEmpty) {
           _showMandatoryLanguageSelector(context, user);
         } else {
           context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
@@ -76,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
 
-    if (user.currentLanguage == null || user.currentLanguage.isEmpty) {
+    if (user.currentLanguage.isEmpty) {
       return Scaffold(
         backgroundColor: bgColor,
         body: Center(

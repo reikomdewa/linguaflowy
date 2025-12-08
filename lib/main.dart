@@ -21,21 +21,22 @@ import 'blocs/auth/auth_bloc.dart';
 import 'blocs/lesson/lesson_bloc.dart';
 import 'blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 void main() async {
   // Enable verbose logging
   await dotenv.load(fileName: ".env");
   final apiKey = dotenv.env['GEMINI_API_KEY'];
+  
   if (apiKey != null) {
-    Gemini.init(apiKey: apiKey);
+    Gemini.init(
+      apiKey: apiKey,
+      // --- ADD THIS ---
+      // This prints the exact API URL and Response to the console.
+      // It helps confirm if the package is using 'v1beta' or 'v1', 
+      // and shows the raw error details from Google.
+    );
   } else {
     print("WARNING: GEMINI_API_KEY is missing in .env");
   }
-
-  // Logger.root.level = Level.ALL;
-  // Logger.root.onRecord.listen((record) {
-  //   print('[${record.level.name}] ${record.time}: ${record.message}');
-  // });
 
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -44,17 +45,11 @@ void main() async {
     androidNotificationChannelId: 'com.ryanheise.bg_demo.channel.audio',
     androidNotificationChannelName: 'Audio playback',
     androidNotificationOngoing: true,
-
-    // --- ADD THIS ---
-    // This color controls the Play/Pause buttons and notification icon.
-    // Using your primary Purple ensures it matches your app's brand.
     notificationColor: const Color(0xFF6A11CB),
-
-    // Optional: Point to a specific icon in your drawable folder
     androidNotificationIcon: 'mipmap/ic_launcher',
   );
 
-  runApp(LanguageLearningApp());
+  runApp(const LanguageLearningApp()); // Ensure const is used if applicable
 }
 
 class LanguageLearningApp extends StatelessWidget {

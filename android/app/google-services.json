@@ -1,20 +1,20 @@
 {
   "project_info": {
-    "project_number": "1085234269350",
-    "project_id": "linguaflowy",
-    "storage_bucket": "linguaflowy.firebasestorage.app"
+    "project_number": "171340794740",
+    "project_id": "lingua-flowy",
+    "storage_bucket": "lingua-flowy.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1085234269350:android:0b597fd1819bdbd2e13867",
+        "mobilesdk_app_id": "1:171340794740:android:ca6bfc1cefd95b31643a21",
         "android_client_info": {
           "package_name": "com.reikom.linguaflow"
         }
       },
       "oauth_client": [
         {
-          "client_id": "1085234269350-h6hloraer8n4jnp9j05orf85nsjmqfal.apps.googleusercontent.com",
+          "client_id": "171340794740-r68eappc1o7s0d89tl2s59ffcfucjpao.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.reikom.linguaflow",
@@ -22,28 +22,21 @@
           }
         },
         {
-          "client_id": "1085234269350-ansduim33nq9bu2o66gqj05fbucvdn4b.apps.googleusercontent.com",
+          "client_id": "171340794740-cf60kh5rrv16eukghhf4560eg2tkmf6e.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBHjU8kTjJRSSrpK1FPm9x3lSMPk4Ji_OY"
+          "current_key": "AIzaSyC-wRBs-0x3Nn1ws-iaxKHRiyK2NpPtnMI"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "1085234269350-ansduim33nq9bu2o66gqj05fbucvdn4b.apps.googleusercontent.com",
+              "client_id": "171340794740-cf60kh5rrv16eukghhf4560eg2tkmf6e.apps.googleusercontent.com",
               "client_type": 3
-            },
-            {
-              "client_id": "1085234269350-vg9g40tmnb8bchmq95ud7atj2raksnj2.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.reikom.linguaflow"
-              }
             }
           ]
         }

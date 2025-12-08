@@ -6,7 +6,6 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/services/quiz_service.dart';
 import 'package:linguaflow/services/translation_service.dart';
-// Ensure this import exists in your project
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 class QuizScreen extends StatefulWidget {
@@ -25,11 +24,18 @@ class _QuizScreenState extends State<QuizScreen> {
   Timer? _cooldownTimer;
   int _secondsRemaining = 0;
   int _retryCount = 0;
+  
+  // --- GUARD VARIABLE ---
+  bool _hasLoaded = false; // Ensures load happens only once
 
   @override
   void initState() {
     super.initState();
-    _loadQuiz();
+    // Only load if the bloc is in initial state or we explicitly want to start
+    final currentState = context.read<QuizBloc>().state;
+    if (currentState.status == QuizStatus.initial) {
+      _loadQuiz();
+    }
   }
 
   @override
@@ -38,8 +44,10 @@ class _QuizScreenState extends State<QuizScreen> {
     super.dispose();
   }
 
-  // Separated logic to allow retrying
   void _loadQuiz() {
+    if (_hasLoaded) return; // Prevent double execution
+    _hasLoaded = true;
+
     final authState = context.read<AuthBloc>().state;
     String targetLang = 'es';
     String nativeLang = 'en';
@@ -74,6 +82,7 @@ class _QuizScreenState extends State<QuizScreen> {
   void _retryQuizLoad() {
     setState(() {
       _retryCount++;
+      _hasLoaded = false; // Allow loading again
     });
     _loadQuiz();
   }
@@ -82,7 +91,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
   void _startCooldown() {
     setState(() {
-      _secondsRemaining = 60; // Standard wait for quota reset
+      _secondsRemaining = 60; 
     });
 
     _cooldownTimer?.cancel();
@@ -101,15 +110,16 @@ class _QuizScreenState extends State<QuizScreen> {
 
   String _getFriendlyErrorMessage(String error) {
     if (_retryCount >= 1) {
-      return "The AI cannot make the test right now as it is busy. Please try again later.";
+      return "The AI is busy. Please try again in 1 minute.";
     }
-    if (error.contains("429") || error.contains("Too Many Requests")) {
-      return "The AI server is currently busy. Please wait a moment and try again.";
+    // Handle the custom exception we threw in the Service
+    if (error.contains("429") || error.contains("Too many requests")) {
+      return "Server is busy. Please wait a moment.";
     }
     if (error.contains("SocketException") || error.contains("Network")) {
-      return "Please check your internet connection.";
+      return "Check your internet connection.";
     }
-    return "Unable to generate quiz. Please try again.";
+    return "Unable to generate quiz. Please retry.";
   }
 
   void _speakIfTargetLanguage(String text, bool isTargetLanguage) async {
@@ -119,7 +129,6 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
-  // --- GOOGLE TRANSLATE POPUP ---
   void _showWordHint(String cleanWord, String originalWord) {
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return;
@@ -164,7 +173,9 @@ class _QuizScreenState extends State<QuizScreen> {
         title: BlocBuilder<QuizBloc, QuizState>(
           builder: (context, state) {
             if (state.status == QuizStatus.loading ||
-                state.status == QuizStatus.error) return const SizedBox();
+                state.status == QuizStatus.error) {
+              return const SizedBox();
+            }
 
             return ClipRRect(
               borderRadius: BorderRadius.circular(2),
@@ -181,7 +192,9 @@ class _QuizScreenState extends State<QuizScreen> {
           BlocBuilder<QuizBloc, QuizState>(
             builder: (context, state) {
               if (state.status == QuizStatus.loading ||
-                  state.status == QuizStatus.error) return const SizedBox();
+                  state.status == QuizStatus.error) {
+                return const SizedBox();
+              }
 
               return Padding(
                 padding: const EdgeInsets.only(right: 20.0),
@@ -225,14 +238,18 @@ class _QuizScreenState extends State<QuizScreen> {
           // --- ERROR HANDLING LISTENER ---
           if (state.status == QuizStatus.error) {
             _startCooldown();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Server is busy. Please wait for the timer."),
-                backgroundColor: Colors.redAccent,
-                behavior: SnackBarBehavior.floating,
-                duration: Duration(seconds: 4),
-              ),
-            );
+            
+            // Only show snackbar if we aren't showing the full error screen
+            // (The builder below handles the full screen error view)
+            if (state.errorMessage != null && !state.errorMessage!.contains("429")) {
+               ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.errorMessage ?? "An error occurred"),
+                  backgroundColor: Colors.redAccent,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
           }
         },
         builder: (context, state) {

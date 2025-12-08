@@ -364,10 +364,11 @@ class _LessonGenerationScreenState extends State<_LessonGenerationScreen> {
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
-          if (_secondsRemaining > 0)
+          if (_secondsRemaining > 0) {
             _secondsRemaining--;
-          else
+          } else {
             _cooldownTimer?.cancel();
+          }
         });
       }
     });

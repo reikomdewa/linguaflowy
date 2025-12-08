@@ -210,8 +210,11 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
           setState(() => _currentPage = index);
         },
         itemBuilder: (context, index) {
-          if (index < _storyPages.length) return _buildStoryPage(_storyPages[index], isDark);
-          else return _buildKeyPhrasesPage(isDark);
+          if (index < _storyPages.length) {
+            return _buildStoryPage(_storyPages[index], isDark);
+          } else {
+            return _buildKeyPhrasesPage(isDark);
+          }
         },
       ),
       
@@ -343,8 +346,11 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
       final canAccess = await _checkAndIncrementFreeLimit(user.id);
       if (!mounted) return;
       setState(() => _isCheckingLimit = false);
-      if (canAccess) _showDefinitionDialog(cleanWord, originalWord, isPhrase, user, tapPosition);
-      else _showLimitDialog();
+      if (canAccess) {
+        _showDefinitionDialog(cleanWord, originalWord, isPhrase, user, tapPosition);
+      } else {
+        _showLimitDialog();
+      }
     } catch (e) {
       if (mounted) setState(() => _isCheckingLimit = false);
     }
@@ -386,9 +392,9 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
       context: context,
       barrierColor: Colors.transparent,
       builder: (context) => FloatingTranslationCard(
+        onGetAiExplanation: ()async{},
         originalText: originalText,
         translationFuture: translationFuture,
-        geminiFuture: geminiFuture,
         targetLanguage: widget.lesson.language,
         nativeLanguage: user.nativeLanguage,
         currentStatus: existingItem?.status ?? 0,

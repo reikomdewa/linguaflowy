@@ -49,7 +49,7 @@ class AuthService {
       await googleSignIn.initialize();
 
       // 2. Authenticate the user
-      final GoogleSignInAccount? googleUser = await googleSignIn.authenticate();
+      final GoogleSignInAccount googleUser = await googleSignIn.authenticate();
       
       if (googleUser == null) return null; // User cancelled
 

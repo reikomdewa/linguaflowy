@@ -3,18 +3,20 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:flutter_tts/flutter_tts.dart'; // REQUIRED: Add internal TTS
+import 'package:flutter_tts/flutter_tts.dart'; 
 import 'package:linguaflow/widgets/gemini_formatted_text.dart';
 
 class FloatingTranslationCard extends StatefulWidget {
   final String originalText;
-  final Future<String> translationFuture;
-  final Future<String?> geminiFuture;
+  final Future<String> translationFuture; // Google Translation from parent
+  
+  // Passed as a function for Lazy Loading (only calls API when clicked)
+  final Future<String?> Function() onGetAiExplanation; 
+  
   final String targetLanguage;
   final String nativeLanguage;
   final int currentStatus;
   final Offset anchorPosition;
-  // Removed 'onSpeak' callback from parent
   final Function(int, String) onUpdateStatus;
   final VoidCallback onClose;
 
@@ -22,7 +24,7 @@ class FloatingTranslationCard extends StatefulWidget {
     super.key,
     required this.originalText,
     required this.translationFuture,
-    required this.geminiFuture,
+    required this.onGetAiExplanation, 
     required this.targetLanguage,
     required this.nativeLanguage,
     required this.currentStatus,
@@ -38,19 +40,20 @@ class FloatingTranslationCard extends StatefulWidget {
 class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   String _translationText = "Loading...";
   
-  // Internal TTS for the card specifically
+  // AI State
+  String? _aiText;
+  bool _isAiLoading = false;
+
+  // Internal TTS
   final FlutterTts _cardTts = FlutterTts();
   
   // Dragging State
   Offset _dragOffset = Offset.zero;
 
-  // Tabs: 0=Editor, 1=MyMemory, 2=WordRef, 3=Glosbe, 4=Reverso
+  // Tabs: 0=AI, 1=Reserved(MyMemory Hidden), 2=WordRef, 3=Glosbe, 4=Reverso
   int _selectedTabIndex = 0; 
   bool _isExpanded = false;
   
-  // API Cache
-  final Map<int, Future<String>> _externalDictFutures = {};
-
   // WebView Controller
   WebViewController? _webViewController;
   bool _isLoadingWeb = false;
@@ -58,18 +61,48 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   @override
   void initState() {
     super.initState();
-    // Initialize Translation
-    widget.translationFuture.then((value) {
-      if (mounted) setState(() => _translationText = value);
-    });
     // Initialize Local TTS
     _initTts();
+    
+    // Load both MyMemory (Internal) and Google (Parent) for the top display
+    _loadCombinedTranslations();
+  }
+
+  // --- COMBINED LOADING LOGIC ---
+  Future<void> _loadCombinedTranslations() async {
+    String combined = "";
+
+    // 1. Fetch MyMemory (Internally) - Used for Top Display
+    try {
+      final myMemoryResult = await _fetchMyMemoryInternal(); 
+      if (!myMemoryResult.startsWith("Error") && !myMemoryResult.startsWith("No results")) {
+        combined += myMemoryResult;
+      }
+    } catch (_) {}
+
+    // 2. Fetch Google (From Parent)
+    try {
+      final googleResult = await widget.translationFuture;
+      if (googleResult.isNotEmpty) {
+        // Prevent duplicate text
+        if (combined.isEmpty) {
+          combined = googleResult;
+        } else if (combined.trim().toLowerCase() != googleResult.trim().toLowerCase()) {
+          combined += "\n\n[Google]\n$googleResult";
+        }
+      }
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _translationText = combined.isNotEmpty ? combined : "Translation not found.";
+      });
+    }
   }
 
   void _initTts() async {
     await _cardTts.setLanguage(widget.targetLanguage);
-    await _cardTts.setSpeechRate(0.5); // Slower for individual words
-    // iOS requires setting this to allow mixing or pausing others
+    await _cardTts.setSpeechRate(0.5); 
     await _cardTts.setIosAudioCategory(IosTextToSpeechAudioCategory.playback,
         [
           IosTextToSpeechAudioCategoryOptions.allowBluetooth,
@@ -90,31 +123,34 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     super.dispose();
   }
 
-  // --- API LOGIC ---
-  Future<String> _fetchTextDefinition(int tabIndex) async {
-    if (tabIndex == 1) { // MyMemory
-      try {
-        final src = widget.targetLanguage.isEmpty ? 'es' : widget.targetLanguage;
-        final tgt = widget.nativeLanguage.isEmpty ? 'en' : widget.nativeLanguage;
-        final text = Uri.encodeComponent(widget.originalText);
-        final url = Uri.parse('https://api.mymemory.translated.net/get?q=$text&langpair=$src|$tgt');
-        final response = await http.get(url).timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          if (data['responseData'] != null) {
-            String result = data['responseData']['translatedText'] ?? "";
-             if (result.trim().toLowerCase() == widget.originalText.trim().toLowerCase()) {
-              return "No direct translation match found.";
-            }
-            return result;
+  // --- API LOGIC (MyMemory Internal Helper) ---
+  Future<String> _fetchMyMemoryInternal() async {
+    try {
+      final src = widget.targetLanguage.isEmpty ? 'es' : widget.targetLanguage;
+      final tgt = widget.nativeLanguage.isEmpty ? 'en' : widget.nativeLanguage;
+      
+      final cleanText = widget.originalText.replaceAll('\n', ' ').trim();
+      final text = Uri.encodeComponent(cleanText);
+      
+      final url = Uri.parse('https://api.mymemory.translated.net/get?q=$text&langpair=$src|$tgt');
+      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['responseData'] != null) {
+          String result = data['responseData']['translatedText'] ?? "";
+          
+          if (result.contains("MYMEMORY WARNING") || 
+              result.trim().toLowerCase() == cleanText.toLowerCase()) {
+            return "No results found.";
           }
+          return result;
         }
-        return "No results found.";
-      } catch (e) {
-        return "Error: $e";
       }
+      return "No results found.";
+    } catch (e) {
+      return "Error: $e";
     }
-    return "Unknown Source";
   }
 
   // --- WEBVIEW LOGIC ---
@@ -156,6 +192,12 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
       } else {
         _selectedTabIndex = index;
         _isExpanded = true;
+        
+        // Lazy Load AI if Tab 0 is selected
+        if (index == 0 && _aiText == null && !_isAiLoading) {
+          _fetchAiExplanation();
+        }
+        
         if (index > 1) {
           _initializeWebView(index);
         } else {
@@ -163,6 +205,19 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
         }
       }
     });
+  }
+
+  // --- LAZY AI FETCHER ---
+  Future<void> _fetchAiExplanation() async {
+    setState(() => _isAiLoading = true);
+    try {
+      final result = await widget.onGetAiExplanation();
+      if (mounted) setState(() => _aiText = result ?? "No explanation available.");
+    } catch (e) {
+      if (mounted) setState(() => _aiText = "AI Error: $e");
+    } finally {
+      if (mounted) setState(() => _isAiLoading = false);
+    }
   }
 
   @override
@@ -175,13 +230,11 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     double width;
 
     if (_isExpanded) {
-      // FULL SCREEN MODE
       topPos = padding.top + 10;
       bottomPos = 0; 
       leftPos = 0; 
       width = screenSize.width; 
     } else {
-      // COMPACT MODE
       width = screenSize.width * 0.9;
       leftPos = ((screenSize.width - width) / 2) + _dragOffset.dx;
 
@@ -197,11 +250,9 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
       }
     }
 
-    // Flag logic
     String flagAsset = "🇬🇧"; 
-    if (widget.nativeLanguage == 'es') {
-      flagAsset = "🇪🇸";
-    } else if (widget.nativeLanguage == 'fr') flagAsset = "🇫🇷";
+    if (widget.nativeLanguage == 'es') flagAsset = "🇪🇸";
+    else if (widget.nativeLanguage == 'fr') flagAsset = "🇫🇷";
 
     return Stack(
       children: [
@@ -230,7 +281,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
                   mainAxisSize: _isExpanded ? MainAxisSize.max : MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    
                     // --- 1. STICKY HEADER ---
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -242,12 +292,11 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
                               margin: const EdgeInsets.only(bottom: 12),
                               decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
                             ),
-                          
                           Row(
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.volume_up, color: Colors.blue),
-                                onPressed: _speakWord, // Use internal method
+                                onPressed: _speakWord,
                                 padding: EdgeInsets.zero, constraints: const BoxConstraints(),
                               ),
                               const SizedBox(width: 12),
@@ -267,7 +316,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
                         ],
                       ),
                     ),
-
                     const Divider(color: Colors.white10, height: 1),
 
                     // --- 2. BODY CONTENT ---
@@ -295,7 +343,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
             children: [
               Expanded(
                 child: Text(
-                  _translationText,
+                  _translationText, // Combined (MyMemory + Google)
                   style: const TextStyle(fontSize: 18, color: Colors.white70, height: 1.4),
                 ),
               ),
@@ -322,9 +370,8 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildTabChip("Editor", 0),
-                const SizedBox(width: 8),
-                _buildTabChip("MyMemory", 1),
+                _buildTabChip("AI", 0), // RENAMED FROM EDITOR
+                // Removed MyMemory Chip (Index 1)
                 const SizedBox(width: 8),
                 _buildTabChip("WordRef", 2),
                 const SizedBox(width: 8),
@@ -373,32 +420,17 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
 
   Widget _buildExpandedContent() {
     if (_selectedTabIndex == 0) {
-      return FutureBuilder<String?>(
-        future: widget.geminiFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-             return Center(child: Padding(padding: const EdgeInsets.all(20), child: LinearProgressIndicator(color: Colors.blue.withOpacity(0.3), backgroundColor: Colors.transparent)));
-          }
-          if (snapshot.hasData && snapshot.data != null) {
-            return Padding(padding: const EdgeInsets.all(16), child: GeminiFormattedText(text: snapshot.data!));
-          }
-          return const Padding(padding: EdgeInsets.all(16), child: Text("AI explanation unavailable.", style: TextStyle(color: Colors.grey)));
-        },
-      );
+      // Lazy Loaded AI Content
+      if (_isAiLoading) {
+        return Center(child: Padding(padding: const EdgeInsets.all(20), child: LinearProgressIndicator(color: Colors.blue.withOpacity(0.3), backgroundColor: Colors.transparent)));
+      }
+      if (_aiText != null) {
+        return Padding(padding: const EdgeInsets.all(16), child: GeminiFormattedText(text: _aiText!));
+      }
+      return const Padding(padding: EdgeInsets.all(16), child: Text("Tap AI tab to load explanation.", style: TextStyle(color: Colors.grey)));
     }
     
-    if (_selectedTabIndex == 1) {
-      if (!_externalDictFutures.containsKey(1)) {
-        _externalDictFutures[1] = _fetchTextDefinition(1);
-      }
-      return FutureBuilder<String>(
-        future: _externalDictFutures[1],
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
-          return Padding(padding: const EdgeInsets.all(16), child: Text(snapshot.data ?? "No result", style: const TextStyle(color: Colors.white70)));
-        },
-      );
-    }
+    // Index 1 (MyMemory) logic removed from here as the tab is hidden
 
     if (_webViewController != null) {
       return Stack(

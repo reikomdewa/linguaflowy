@@ -107,7 +107,7 @@ void playLesson(LessonModel lesson) async {
 
 // --- UI OVERLAY ---
 class AudioPlayerOverlay extends StatelessWidget {
-  const AudioPlayerOverlay({Key? key}) : super(key: key);
+  const AudioPlayerOverlay({super.key});
 
   @override
   Widget build(BuildContext context) {

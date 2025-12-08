@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'package:flutter_gemini/flutter_gemini.dart';
+import 'dart:async';
+import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/models/quiz_model.dart';
@@ -10,9 +11,14 @@ class QuizService {
   
   static final QuizService _instance = QuizService._internal();
   factory QuizService() => _instance;
+  
   QuizService._internal();
 
-  /// Main method to generate quiz questions
+  // --- MODEL CONFIGURATION ---
+  // Based on your logs, 1.5 is deprecated. We use 2.5.
+  static const String _primaryModel = 'gemini-2.5-flash';
+  static const String _fallbackModel = 'gemini-2.5-pro';
+
   Future<List<QuizQuestion>> generateQuiz({
     required String userId,
     required String targetLanguage,
@@ -21,37 +27,37 @@ class QuizService {
     String? topic,
   }) async {
     
-    final apiKey = dotenv.env['GEMINI_API_KEY'];
-    if (apiKey == null || apiKey.isEmpty) throw Exception("GEMINI_API_KEY missing");
-    
-    Gemini.init(apiKey: apiKey);
+    // 1. Throttle
+    await Future.delayed(const Duration(milliseconds: 500));
 
-    // 1. FETCH CONTEXT DATA (Parallel fetch for speed)
+    // 2. Context Data
     final results = await Future.wait([
-      _fetchUserVocabulary(userId, targetLanguage), // Words to INCLUDE
-      _fetchQuizHistory(userId, targetLanguage),    // Sentences to AVOID
+      _fetchUserVocabulary(userId, targetLanguage),
+      _fetchQuizHistory(userId, targetLanguage),
     ]);
 
     final List<String> userVocabulary = results[0];
     final List<String> quizHistory = results[1];
 
-    // 2. Generate Prompt
     final String prompt = _getPromptTemplate(
       type, 
       targetLanguage, 
       nativeLanguage, 
       topic,
       userVocabulary,
-      quizHistory // Pass history here
+      quizHistory
     );
 
     try {
-      final value = await Gemini.instance.prompt(parts: [Part.text(prompt)]);
-      String? responseText = value?.output;
+      // 3. Generate with Retry
+      String? responseText = await _generateWithRetry(prompt);
 
-      if (responseText == null) throw Exception("Empty response from Gemini");
+      if (responseText == null) throw Exception("Empty response from AI");
 
-      responseText = responseText.replaceAll('```json', '').replaceAll('```', '').trim();
+      responseText = responseText
+          .replaceAll('```json', '')
+          .replaceAll('```', '')
+          .trim();
       
       final List<dynamic> data = jsonDecode(responseText);
 
@@ -65,20 +71,77 @@ class QuizService {
         );
       }).toList();
 
-      // 3. SAVE NEW HISTORY (Fire and forget - don't wait for it to finish)
       _saveQuizHistory(userId, targetLanguage, questions);
 
       return questions;
 
     } catch (e) {
       print("Quiz Service Error: $e");
+      if (e.toString().contains("429") || e.toString().contains("quota") || e.toString().contains("exhausted")) {
+        throw Exception("Server is busy (Rate Limit). Please wait a moment.");
+      }
+      // Pass through specific model errors if they occur
       throw Exception("Failed to generate quiz: $e");
     }
   }
 
-  // --- FIRESTORE HELPERS ---
+  // --- RETRY HELPER ---
+  Future<String?> _generateWithRetry(String promptText) async {
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception("GEMINI_API_KEY is missing");
+    }
 
-  /// 1. Fetch Vocabulary (Words to Include)
+    int attempts = 0;
+    
+    // We will try the primary model first, then fallback if needed
+    String currentModelName = _primaryModel;
+
+    while (attempts < 3) {
+      try {
+        final model = GenerativeModel(
+          model: currentModelName, 
+          apiKey: apiKey,
+        );
+
+        final content = [Content.text(promptText)];
+        final response = await model.generateContent(content);
+        return response.text;
+
+      } catch (e) {
+        final err = e.toString();
+        print("⚠️ Attempt ${attempts + 1} failed with $currentModelName: $err");
+
+        // 1. Handle Rate Limits (429)
+        if (err.contains("429") || err.contains("quota") || err.contains("exhausted")) {
+          attempts++;
+          int waitTime = attempts * 2;
+          print("⏳ Rate limit. Waiting $waitTime seconds...");
+          await Future.delayed(Duration(seconds: waitTime));
+        }
+        // 2. Handle "Not Found" / Deprecated Model
+        else if (err.contains("not found") || err.contains("404") || err.contains("deprecated")) {
+           if (currentModelName == _primaryModel) {
+             print("🔄 Model $_primaryModel not found. Switching to $_fallbackModel...");
+             currentModelName = _fallbackModel;
+             // Don't increment attempts, just switch model immediately and try again
+             continue; 
+           } else {
+             // If fallback also fails, we are stuck.
+             print("❌ All models failed.");
+             rethrow;
+           }
+        }
+        // 3. Other errors
+        else {
+          rethrow;
+        }
+      }
+    }
+    throw Exception("Failed after 3 attempts.");
+  }
+
+  // --- FIRESTORE HELPERS ---
   Future<List<String>> _fetchUserVocabulary(String userId, String targetLang) async {
     try {
       final snapshot = await FirebaseFirestore.instance
@@ -90,43 +153,28 @@ class QuizService {
           .orderBy('lastReviewed', descending: true)
           .limit(30) 
           .get();
-
       return snapshot.docs.map((doc) => doc['word'] as String).toList();
-    } catch (e) {
-      return [];
-    }
+    } catch (e) { return []; }
   }
 
-  /// 2. Fetch Quiz History (Sentences to Avoid)
   Future<List<String>> _fetchQuizHistory(String userId, String targetLang) async {
     try {
-      // We assume you have a collection 'quiz_history'
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .collection('quiz_history')
           .where('language', isEqualTo: targetLang)
-          .orderBy('createdAt', descending: true) // Get most recent
-          .limit(50) // Limit to last 50 sentences to keep prompt small
+          .orderBy('createdAt', descending: true) 
+          .limit(50) 
           .get();
-
       return snapshot.docs.map((doc) => doc['targetSentence'] as String).toList();
-    } catch (e) {
-      print("Error fetching history: $e");
-      return [];
-    }
+    } catch (e) { return []; }
   }
 
-  /// 3. Save New Questions to History
   Future<void> _saveQuizHistory(String userId, String targetLang, List<QuizQuestion> questions) async {
     final batch = FirebaseFirestore.instance.batch();
-    final collectionRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('quiz_history');
-
+    final collectionRef = FirebaseFirestore.instance.collection('users').doc(userId).collection('quiz_history');
     for (var q in questions) {
-      // Create a doc ID based on time + hash to avoid collisions
       final docRef = collectionRef.doc(); 
       batch.set(docRef, {
         'targetSentence': q.targetSentence,
@@ -134,18 +182,10 @@ class QuizService {
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
-
-    try {
-      await batch.commit();
-      print("Quiz history saved.");
-    } catch (e) {
-      print("Error saving quiz history: $e");
-    }
+    try { await batch.commit(); } catch (e) { /* ignore */ }
   }
 
-  // --- PROMPT TEMPLATE ---
-
-String _getPromptTemplate(
+  String _getPromptTemplate(
     QuizPromptType type, 
     String targetLang, 
     String nativeLang, 
@@ -153,31 +193,23 @@ String _getPromptTemplate(
     List<String> vocabulary,
     List<String> history,
   ) {
-    
-    // 1. Build Vocab Context
-    String vocabContext = "";
-    if (vocabulary.isNotEmpty) {
-      vocabContext = """
+    String vocabContext = vocabulary.isNotEmpty ? 
+      """
       INCLUSION INSTRUCTIONS:
       The user is learning these words. PRIORITIZE using them in your sentences:
       ${vocabulary.join(", ")}
-      """;
-    }
+      """ : "";
 
-    // 2. Build History Context
-    String historyContext = "";
-    if (history.isNotEmpty) {
-      historyContext = """
+    String historyContext = history.isNotEmpty ? 
+      """
       EXCLUSION INSTRUCTIONS:
       The user has recently seen the sentences below. 
       Please RARELY generate these exact sentences. You may reuse the vocabulary, 
       but try to change the grammar, context, or structure to keep it fresh.
       RECENT SENTENCES:
       ${history.join(" | ")}
-      """;
-    }
+      """ : "";
 
-    // 3. Specific Instructions
     String specificInstruction = "";
     switch (type) {
       case QuizPromptType.placementTest:
@@ -191,7 +223,6 @@ String _getPromptTemplate(
         break;
     }
 
-    // 4. THE RETURNED PROMPT (With Restored Rules)
     return """
       Task: Generate a language quiz.
       Language A (Target): $targetLang
