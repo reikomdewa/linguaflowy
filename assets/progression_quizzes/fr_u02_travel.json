@@ -1,0 +1,164 @@
+[
+  {
+    "id": "travel_a1_q1",
+    "type": "target_to_native",
+    "targetSentence": "Je voyage en train",
+    "correctAnswer": "I travel by train",
+    "options": [
+      "I",
+      "travel",
+      "by",
+      "train",
+      "car",
+      "plane",
+      "bus",
+      "with"
+    ]
+  },
+  {
+    "id": "travel_a1_q2",
+    "type": "native_to_target",
+    "targetSentence": "Where is the airport?",
+    "correctAnswer": "Où est l'aéroport",
+    "options": [
+      "Où",
+      "est",
+      "l'aéroport",
+      "la",
+      "gare",
+      "sont",
+      "le",
+      "train"
+    ]
+  },
+  {
+    "id": "travel_a1_q3",
+    "type": "target_to_native",
+    "targetSentence": "J'ai une valise",
+    "correctAnswer": "I have a suitcase",
+    "options": [
+      "I",
+      "have",
+      "a",
+      "suitcase",
+      "ticket",
+      "passport",
+      "bag",
+      "two"
+    ]
+  },
+  {
+    "id": "travel_a1_q4",
+    "type": "native_to_target",
+    "targetSentence": "I need a ticket",
+    "correctAnswer": "J'ai besoin d'un billet",
+    "options": [
+      "J'ai",
+      "besoin",
+      "d'un",
+      "billet",
+      "passeport",
+      "valise",
+      "nous",
+      "avons"
+    ]
+  },
+  {
+    "id": "travel_a1_q5",
+    "type": "target_to_native",
+    "targetSentence": "La gare est à droite",
+    "correctAnswer": "The station is on the right",
+    "options": [
+      "The",
+      "station",
+      "is",
+      "on",
+      "the",
+      "right",
+      "left",
+      "here",
+      "airport"
+    ]
+  },
+  {
+    "id": "travel_a1_q6",
+    "type": "native_to_target",
+    "targetSentence": "I am going to Paris",
+    "correctAnswer": "Je vais à Paris",
+    "options": [
+      "Je",
+      "vais",
+      "à",
+      "Paris",
+      "tu",
+      "Londres",
+      "aller",
+      "suis"
+    ]
+  },
+  {
+    "id": "travel_a1_q7",
+    "type": "target_to_native",
+    "targetSentence": "Où est mon passeport",
+    "correctAnswer": "Where is my passport",
+    "options": [
+      "Where",
+      "is",
+      "my",
+      "passport",
+      "ticket",
+      "your",
+      "his",
+      "are"
+    ]
+  },
+  {
+    "id": "travel_a1_q8",
+    "type": "native_to_target",
+    "targetSentence": "The hotel is near",
+    "correctAnswer": "L'hôtel est près",
+    "options": [
+      "L'hôtel",
+      "est",
+      "près",
+      "loin",
+      "la",
+      "gare",
+      "ici",
+      "sont"
+    ]
+  },
+  {
+    "id": "travel_a1_q9",
+    "type": "target_to_native",
+    "targetSentence": "Je cherche un taxi",
+    "correctAnswer": "I am looking for a taxi",
+    "options": [
+      "I",
+      "am",
+      "looking",
+      "for",
+      "a",
+      "taxi",
+      "bus",
+      "need",
+      "want"
+    ]
+  },
+  {
+    "id": "travel_a1_q10",
+    "type": "native_to_target",
+    "targetSentence": "How much is the ticket?",
+    "correctAnswer": "Combien coûte le billet",
+    "options": [
+      "Combien",
+      "coûte",
+      "le",
+      "billet",
+      "passeport",
+      "train",
+      "est",
+      "la"
+    ]
+  }
+]

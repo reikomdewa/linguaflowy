@@ -1,0 +1,91 @@
+[
+  {
+    "id": "greet_u1_q1",
+    "type": "target_to_native",
+    "targetSentence": "Bonjour",
+    "correctAnswer": "Good morning",
+    "options": [
+      "Good",
+      "morning",
+      "evening",
+      "night",
+      "afternoon",
+      "Hello"
+    ]
+  },
+  {
+    "id": "greet_u1_q2",
+    "type": "native_to_target",
+    "targetSentence": "How are you?",
+    "correctAnswer": "Comment allez-vous",
+    "options": [
+      "Comment",
+      "allez-vous",
+      "je",
+      "tu",
+      "êtes",
+      "suis",
+      "bien"
+    ]
+  },
+  {
+    "id": "greet_u1_q3",
+    "type": "target_to_native",
+    "targetSentence": "Comment ça va",
+    "correctAnswer": "How is it going",
+    "options": [
+      "How",
+      "is",
+      "it",
+      "going",
+      "are",
+      "you",
+      "doing",
+      "well"
+    ]
+  },
+  {
+    "id": "greet_u1_q4",
+    "type": "native_to_target",
+    "targetSentence": "Good morning",
+    "correctAnswer": "Bonjour",
+    "options": [
+      "Bonjour",
+      "Bonsoir",
+      "Salut",
+      "Bonne",
+      "nuit"
+    ]
+  },
+  {
+    "id": "greet_u1_q5",
+    "type": "target_to_native",
+    "targetSentence": "Comment allez-vous monsieur",
+    "correctAnswer": "How are you sir",
+    "options": [
+      "How",
+      "are",
+      "you",
+      "sir",
+      "madam",
+      "doing",
+      "is",
+      "he"
+    ]
+  },
+  {
+    "id": "greet_u1_q6",
+    "type": "native_to_target",
+    "targetSentence": "How do you do?",
+    "correctAnswer": "Enchanté",
+    "options": [
+      "Enchanté",
+      "Comment",
+      "allez",
+      "vous",
+      "bien",
+      "merci",
+      "ça"
+    ]
+  }
+]

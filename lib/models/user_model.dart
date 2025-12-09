@@ -1,15 +1,20 @@
+import 'package:cloud_firestore/cloud_firestore.dart'; // Needed for Timestamp check if used
+
 class UserModel {
   final String id;
   final String email;
   final String displayName;
   final String nativeLanguage;
   
-  // FIX 1: This tracks the ACTIVE language. Defaults to empty for new users.
+  // Tracks the ACTIVE language. Defaults to empty for new users.
   final String currentLanguage; 
   
-  // FIX 2: This tracks the HISTORY of all languages the user has started.
+  // Tracks the HISTORY of all languages the user has started.
   final List<String> targetLanguages; 
   
+  // FIX: Added this field to track completed unit IDs (e.g., ['es_u01_basics', ...])
+  final List<String> completedLevels; 
+
   final DateTime createdAt;
   final bool isPremium;
   final int xp;
@@ -20,11 +25,9 @@ class UserModel {
     required this.email,
     required this.displayName,
     this.nativeLanguage = 'en',
-    
-    // --- CHANGED: Default is now empty string (triggers Selector on Home) ---
     this.currentLanguage = '', 
-    
     this.targetLanguages = const [],
+    this.completedLevels = const [], // Default to empty
     required this.createdAt,
     this.isPremium = false,
     this.xp = 0,
@@ -32,7 +35,6 @@ class UserModel {
   });
 
   String get currentLevel {
-    // Return 'A1 - Newcomer' if the map doesn't have an entry for the current language
     return languageLevels[currentLanguage] ?? 'A1 - Newcomer';
   }
 
@@ -42,13 +44,18 @@ class UserModel {
       email: map['email']?.toString() ?? '',
       displayName: map['displayName']?.toString() ?? '',
       nativeLanguage: map['nativeLanguage']?.toString() ?? 'en',
-      
-      // --- CHANGED: If null in DB, default to '' ---
       currentLanguage: map['currentLanguage']?.toString() ?? '',
       
-      // Load the history list safely
+      // Load target languages history
       targetLanguages:
           (map['targetLanguages'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+
+      // FIX: Map the completed levels from Firestore
+      completedLevels:
+          (map['completedLevels'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
@@ -56,7 +63,7 @@ class UserModel {
       createdAt: map['createdAt'] != null
           ? (map['createdAt'] is String 
               ? DateTime.parse(map['createdAt']) 
-              : (map['createdAt'] as dynamic).toDate()) // Handle Firestore Timestamp
+              : (map['createdAt'] as Timestamp).toDate()) 
           : DateTime.now(),
       
       isPremium: map['isPremium'] == true,
@@ -75,7 +82,8 @@ class UserModel {
       'displayName': displayName,
       'nativeLanguage': nativeLanguage,
       'currentLanguage': currentLanguage,
-      'targetLanguages': targetLanguages, // Saves the history list
+      'targetLanguages': targetLanguages,
+      'completedLevels': completedLevels, // Save to Firestore
       'createdAt': createdAt.toIso8601String(),
       'isPremium': isPremium,
       'xp': xp,
@@ -90,6 +98,7 @@ class UserModel {
     String? nativeLanguage,
     String? currentLanguage,
     List<String>? targetLanguages,
+    List<String>? completedLevels, // Add to copyWith
     DateTime? createdAt,
     bool? isPremium,
     int? xp,
@@ -102,6 +111,7 @@ class UserModel {
       nativeLanguage: nativeLanguage ?? this.nativeLanguage,
       currentLanguage: currentLanguage ?? this.currentLanguage,
       targetLanguages: targetLanguages ?? this.targetLanguages,
+      completedLevels: completedLevels ?? this.completedLevels, // Update logic
       createdAt: createdAt ?? this.createdAt,
       isPremium: isPremium ?? this.isPremium,
       xp: xp ?? this.xp,

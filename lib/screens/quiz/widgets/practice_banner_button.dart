@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
-import 'package:linguaflow/widgets/quiz/units_bottom_sheet.dart';
+import 'package:linguaflow/screens/quiz/widgets/units_bottom_sheet.dart';
 
 class PracticeBannerButton extends StatelessWidget {
   const PracticeBannerButton({super.key});
@@ -41,7 +41,11 @@ class PracticeBannerButton extends StatelessWidget {
                     color: Colors.white.withOpacity(0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.map_outlined, color: Colors.white, size: 20),
+                  child: const Icon(
+                    Icons.map_outlined,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 const Column(
@@ -57,11 +61,8 @@ class PracticeBannerButton extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      "Follow the learning path",
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
+                      "Learning path",
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),

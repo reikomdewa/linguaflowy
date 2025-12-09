@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+// --- ADDED: Needed for saving progress ---
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -17,8 +19,15 @@ import 'widgets/quiz_dialogs.dart';
 
 class QuizScreen extends StatefulWidget {
   final List<dynamic>? initialQuestions;
+  
+  // --- ADDED: The ID of the level being played (e.g., 'es_u01_basics') ---
+  final String? levelId; 
 
-  const QuizScreen({super.key, this.initialQuestions});
+  const QuizScreen({
+    super.key, 
+    this.initialQuestions, 
+    this.levelId, // <--- ADDED
+  });
 
   @override
   State<QuizScreen> createState() => _QuizScreenState();
@@ -109,6 +118,27 @@ class _QuizScreenState extends State<QuizScreen> {
           targetLanguage: targetLang,
           nativeLanguage: nativeLang,
           isPremium: isPremium));
+    }
+  }
+
+  // --- ADDED: Method to Save Progress to Firestore ---
+  Future<void> _saveProgress() async {
+    // Only save if this was a specific Level (not daily practice)
+    if (widget.levelId == null) return;
+
+    try {
+      final authState = context.read<AuthBloc>().state;
+      if (authState is AuthAuthenticated) {
+        final userId = authState.user.id;
+        
+        // Add level ID to completedLevels array
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({
+          'completedLevels': FieldValue.arrayUnion([widget.levelId])
+        });
+        print("✅ Progress Saved: ${widget.levelId} unlocked!");
+      }
+    } catch (e) {
+      print("❌ Error saving progress: $e");
     }
   }
 
@@ -210,6 +240,8 @@ class _QuizScreenState extends State<QuizScreen> {
       body: BlocConsumer<QuizBloc, QuizState>(
         listener: (context, state) {
           if (state.status == QuizStatus.completed) {
+            // --- ADDED: Save progress BEFORE showing dialog ---
+            _saveProgress(); 
             QuizDialogs.showCompletion(context, isDark);
           }
           if (state.hearts <= 0 && !state.isPremium && state.status != QuizStatus.loading && state.status != QuizStatus.error) {

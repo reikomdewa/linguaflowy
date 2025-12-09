@@ -1,5 +1,6 @@
 import json
 import os
+import re  # <--- Added for text cleaning
 
 OUTPUT_DIR = "assets/progression_quizzes"
 
@@ -43,7 +44,17 @@ def main():
         data = json.loads(raw_json)
         
         unit_str = f"{int(unit):02d}"
-        topic_slug = topic.lower().replace(" ", "_")
+        
+        # --- FIX START ---
+        # 1. Lowercase
+        # 2. Regex: Remove anything that is NOT a letter, number, whitespace, or hyphen
+        #    This effectively removes '?', ':', '*', etc.
+        safe_topic = re.sub(r'[^\w\s-]', '', topic.lower())
+        
+        # 3. Replace spaces with underscores
+        topic_slug = safe_topic.strip().replace(" ", "_")
+        # --- FIX END ---
+        
         filename = f"{lang}_u{unit_str}_{topic_slug}.json"
         
         if not os.path.exists(OUTPUT_DIR):
