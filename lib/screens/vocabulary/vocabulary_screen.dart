@@ -14,16 +14,19 @@ import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/utils/language_helper.dart'; 
 
 // ==========================================
-// 🧠 SRS ALGORITHM & MAIN SCREEN (Unchanged)
+// 🧠 SRS ALGORITHM (The Brain)
 // ==========================================
 class SRSAlgorithm {
+  // Returns true if the word should be reviewed today
   static bool isDue(VocabularyItem item) {
-    if (item.status == 0) return true;
+    if (item.status == 0) return true; // New words always due
     final now = DateTime.now();
     final difference = now.difference(item.lastReviewed).inDays;
+
+    // Mapping Status (0-5) to Days required before next review
     int requiredGap;
     switch (item.status) {
-      case 1: requiredGap = 0; break;
+      case 1: requiredGap = 0; break; 
       case 2: requiredGap = 2; break;
       case 3: requiredGap = 6; break;
       case 4: requiredGap = 13; break;
@@ -33,14 +36,17 @@ class SRSAlgorithm {
     return difference >= requiredGap;
   }
 
+  // Calculate Next Status based on Button Press
   static int nextStatus(int current, int rating) {
-    if (rating == 1) return 1;
-    if (rating == 2) return current > 1 ? current : 1;
-    if (rating == 3) return math.min(current + 1, 5);
-    if (rating == 4) return math.min(current + 2, 5);
+    // Rating: 1=Again, 2=Hard, 3=Good, 4=Easy
+    if (rating == 1) return 1; // Forgot? Reset to 1.
+    if (rating == 2) return current > 1 ? current : 1; // Hard? Don't advance.
+    if (rating == 3) return math.min(current + 1, 5); // Good? Advance.
+    if (rating == 4) return math.min(current + 2, 5); // Easy? Jump.
     return current;
   }
 
+  // Helper text to show user when they will see the card again
   static String getNextIntervalText(int currentStatus, int rating) {
     int next = nextStatus(currentStatus, rating);
     if (next == 1) return "1d";
@@ -52,6 +58,9 @@ class SRSAlgorithm {
   }
 }
 
+// ==========================================
+// 📱 MAIN SCREEN
+// ==========================================
 class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({super.key});
   @override
@@ -66,6 +75,7 @@ class _VocabularyScreenState extends State<VocabularyScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    
     // Safety check to ensure Auth is authenticated before accessing user
     final authState = context.read<AuthBloc>().state;
     if (authState is AuthAuthenticated) {
@@ -104,8 +114,10 @@ class _VocabularyScreenState extends State<VocabularyScreen>
           }
 
           if (state is VocabularyLoaded) {
+            // Filter due items
             final dueItems =
                 state.items.where((i) => SRSAlgorithm.isDue(i)).toList();
+            // Sort due items: Newest/Lowest Status first
             dueItems.sort((a, b) => a.status.compareTo(b.status));
 
             return TabBarView(
@@ -161,7 +173,7 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
 
   void _startSession(List<VocabularyItem> items, {bool cram = false}) {
     setState(() {
-      _sessionQueue = List.from(items.take(20));
+      _sessionQueue = List.from(items.take(20)); // Limit to 20 for session
       _isSessionActive = true;
       _isCramMode = cram;
     });
@@ -189,7 +201,7 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
     if (_sessionQueue.isEmpty) return;
     final currentItem = _sessionQueue[0];
 
-    // ✅ FIXED: Pass both required parameters (id and userId)
+    // ✅ Pass both ID and UserID to the Bloc Event
     context.read<VocabularyBloc>().add(
       VocabularyDeleteRequested(
         id: currentItem.id, 
@@ -223,7 +235,6 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
         children: [
           _buildProgressBar(isDark),
           Expanded(
-            // We pass the Delete callback here
             child: Flashcard(
               key: ValueKey(item.id), // Key is crucial for Dismissible to work
               item: item,
@@ -235,6 +246,7 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
       );
     }
 
+    // --- EMPTY STATE UI ---
     final dueCount = widget.dueItems.length;
     return Center(
       child: Padding(
@@ -258,6 +270,8 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 40),
+            
+            // Start Due Button
             if (dueCount > 0)
               _buildLargeButton(
                 icon: Icons.play_arrow_rounded,
@@ -265,6 +279,8 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
                 color: Colors.blue,
                 onTap: () => _startSession(widget.dueItems),
               ),
+              
+            // Cram Options
             const SizedBox(height: 16),
             if (dueCount == 0) ...[
               const Text("Want to study anyway?",
@@ -346,12 +362,12 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
 }
 
 // ==========================================
-// 💳 FLASHCARD WIDGET
+// 💳 FLASHCARD WIDGET (Swipe, Delete, Buttons & Translation)
 // ==========================================
 class Flashcard extends StatefulWidget {
   final VocabularyItem item;
   final Function(int) onRated;
-  final VoidCallback onDelete; // Added delete callback
+  final VoidCallback onDelete;
 
   const Flashcard({
     super.key, 
@@ -394,13 +410,14 @@ class _FlashcardState extends State<Flashcard>
 
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return;
-
     final user = authState.user;
+    
     setState(() => _isLoadingExtra = true);
 
     String? mmResult;
     String? googleResult;
 
+    // Fetch MyMemory
     try {
       mmResult = await MyMemoryService.translate(
         text: widget.item.word,
@@ -409,6 +426,7 @@ class _FlashcardState extends State<Flashcard>
       );
     } catch (_) {}
 
+    // Fetch Google
     try {
       final service = context.read<TranslationService>();
       googleResult = await service.translate(
@@ -439,10 +457,10 @@ class _FlashcardState extends State<Flashcard>
     final cardBg = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final txtColor = isDark ? Colors.white : Colors.black87;
 
-    // --- DISMISSIBLE WRAPPER FOR SWIPE ---
+    // --- SWIPE LOGIC WRAPPER ---
     return Dismissible(
       key: ValueKey(widget.item.id),
-      direction: DismissDirection.horizontal, // Allow Left and Right
+      direction: DismissDirection.horizontal, // Allow Left and Right Swipe
       
       // Swipe Right -> Mark as Good (Green)
       background: Container(
@@ -544,7 +562,7 @@ class _FlashcardState extends State<Flashcard>
 
                         const SizedBox(height: 20),
 
-                        // BACK (Translations)
+                        // BACK (Translations + Extra)
                         FadeTransition(
                           opacity: _animation,
                           child: Column(
@@ -599,7 +617,7 @@ class _FlashcardState extends State<Flashcard>
                         ),
                         const Spacer(),
                         if (!_isRevealed)
-                          Text("Tap to flip • Swipe Right for Good",
+                          Text("Tap to flip",
                               style: TextStyle(color: Colors.grey[400], fontSize: 12)),
                       ],
                     ),
@@ -635,10 +653,10 @@ class _FlashcardState extends State<Flashcard>
             ),
           ),
 
-          // --- BUTTONS AREA ---
+          // --- ANKI BUTTONS AREA (Restored!) ---
           const SizedBox(height: 20),
           SizedBox(
-            height: 100,
+            height: 100, // Fixed height for buttons
             child: _isRevealed
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -652,7 +670,7 @@ class _FlashcardState extends State<Flashcard>
                       ],
                     ),
                   )
-                : const SizedBox(),
+                : const SizedBox(), // Hidden until flipped
           ),
           const SizedBox(height: 20),
         ],
@@ -674,7 +692,7 @@ class _FlashcardState extends State<Flashcard>
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              widget.onDelete(); 
+              widget.onDelete(); // Trigger delete callback
             },
             child: const Text("Delete", style: TextStyle(color: Colors.red)),
           ),
@@ -753,7 +771,7 @@ class _FlashcardState extends State<Flashcard>
 }
 
 // ==========================================
-// 📚 LIBRARY VIEW (Unchanged)
+// 📚 LIBRARY VIEW
 // ==========================================
 class LibraryView extends StatelessWidget {
   final List<VocabularyItem> items;
