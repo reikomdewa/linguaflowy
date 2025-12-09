@@ -1,0 +1,197 @@
+[
+  {
+    "id": "A1_COFFEE_01",
+    "type": "target_to_native",
+    "targetSentence": "Comment je peux vous aider ?",
+    "correctAnswer": "How can I help you?",
+    "options": [
+      "can",
+      "you",
+      "them",
+      "do",
+      "help",
+      "I",
+      "for",
+      "we",
+      "How"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=xNEtXZZr5FA",
+    "videoStart": 48.0,
+    "videoEnd": 50.0
+  },
+  {
+    "id": "A1_COFFEE_02",
+    "type": "target_to_native",
+    "targetSentence": "Je voudrais un jus d'orange.",
+    "correctAnswer": "I would like an orange juice.",
+    "options": [
+      "I",
+      "would",
+      "they",
+      "have",
+      "like",
+      "an",
+      "a",
+      "juice",
+      "orange"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=xNEtXZZr5FA",
+    "videoStart": 64.0,
+    "videoEnd": 67.0
+  },
+  {
+    "id": "A1_COFFEE_03",
+    "type": "target_to_native",
+    "targetSentence": "Est-ce que vous avez un café ?",
+    "correctAnswer": "Do you have a coffee?",
+    "options": [
+      "is",
+      "you",
+      "a",
+      "have",
+      "want",
+      "he",
+      "Do",
+      "coffee"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=xNEtXZZr5FA",
+    "videoStart": 93.0,
+    "videoEnd": 95.0
+  },
+  {
+    "id": "A1_COFFEE_04",
+    "type": "target_to_native",
+    "targetSentence": "Quel type de café voulez-vous ?",
+    "correctAnswer": "What type of coffee do you want?",
+    "options": [
+      "type",
+      "the",
+      "like",
+      "What",
+      "do",
+      "you",
+      "want",
+      "of",
+      "coffee",
+      "drink"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=xNEtXZZr5FA",
+    "videoStart": 100.0,
+    "videoEnd": 103.0
+  },
+  {
+    "id": "A1_COFFEE_05",
+    "type": "target_to_native",
+    "targetSentence": "Café noir avec une cuillérée de sucre.",
+    "correctAnswer": "Black coffee with a spoon of sugar.",
+    "options": [
+      "spoon",
+      "of",
+      "white",
+      "coffee",
+      "with",
+      "tea",
+      "a",
+      "Black",
+      "sugar",
+      "and"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=xNEtXZZr5FA",
+    "videoStart": 109.0,
+    "videoEnd": 113.0
+  },
+  {
+    "id": "A1_COFFEE_06",
+    "type": "native_to_target",
+    "targetSentence": "Vous allez au café.",
+    "correctAnswer": "Je vais au restaurant.",
+    "options": [
+      "la",
+      "vais",
+      "au",
+      "café",
+      "restaurant",
+      "pour",
+      "Je",
+      "mange"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=xNEtXZZr5FA",
+    "videoStart": 18.0,
+    "videoEnd": 20.0
+  },
+  {
+    "id": "A1_COFFEE_07",
+    "type": "native_to_target",
+    "targetSentence": "Quel type de café voulez-vous ?",
+    "correctAnswer": "Je voudrais une tasse de thé.",
+    "options": [
+      "une",
+      "café",
+      "de",
+      "thé",
+      "tasse",
+      "Je",
+      "aussi",
+      "voudrais",
+      "beaucoup"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=xNEtXZZr5FA",
+    "videoStart": 104.0,
+    "videoEnd": 107.0
+  },
+  {
+    "id": "A1_COFFEE_08",
+    "type": "native_to_target",
+    "targetSentence": "Rien d'autre ?",
+    "correctAnswer": "Rien d'autre ?",
+    "options": [
+      "Rien",
+      "de",
+      "que",
+      "pas",
+      "d'",
+      "autre"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=xNEtXZZr5FA",
+    "videoStart": 121.0,
+    "videoEnd": 122.5
+  },
+  {
+    "id": "A1_COFFEE_09",
+    "type": "native_to_target",
+    "targetSentence": "Je voudrais aussi une bouteille d'eau.",
+    "correctAnswer": "Je voudrais aussi une bouteille d'eau.",
+    "options": [
+      "Je",
+      "de",
+      "jus",
+      "une",
+      "eau",
+      "bouteille",
+      "aussi",
+      "mais",
+      "voudrais",
+      "d'"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=xNEtXZZr5FA",
+    "videoStart": 127.0,
+    "videoEnd": 131.0
+  },
+  {
+    "id": "A1_COFFEE_10",
+    "type": "native_to_target",
+    "targetSentence": "Combien ça coûte ?",
+    "correctAnswer": "Combien ça coûte ?",
+    "options": [
+      "est",
+      "très",
+      "ça",
+      "Combien",
+      "coûte",
+      "où"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=xNEtXZZr5FA",
+    "videoStart": 184.0,
+    "videoEnd": 186.0
+  }
+]

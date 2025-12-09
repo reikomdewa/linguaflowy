@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-// --- ADDED: Needed for saving progress ---
-import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/services/quiz_service.dart';
@@ -19,14 +20,12 @@ import 'widgets/quiz_dialogs.dart';
 
 class QuizScreen extends StatefulWidget {
   final List<dynamic>? initialQuestions;
-  
-  // --- ADDED: The ID of the level being played (e.g., 'es_u01_basics') ---
   final String? levelId; 
 
   const QuizScreen({
     super.key, 
     this.initialQuestions, 
-    this.levelId, // <--- ADDED
+    this.levelId, 
   });
 
   @override
@@ -36,10 +35,17 @@ class QuizScreen extends StatefulWidget {
 class _QuizScreenState extends State<QuizScreen> {
   final FlutterTts _tts = FlutterTts();
 
+  // --- VIDEO STATE ---
+  YoutubePlayerController? _videoController;
+  Timer? _videoSegmentTimer;
+  bool _isVideoReady = false;
+  String? _currentLoadedVideoId;
+  bool _isManuallyPlaying = false; 
+
+  // --- QUIZ STATE ---
   String _targetLangCode = 'en';
   String _targetLangName = 'English';
   String _targetFlag = '🇬🇧';
-
   Timer? _cooldownTimer;
   int _secondsRemaining = 0;
   int _retryCount = 0;
@@ -49,14 +55,80 @@ class _QuizScreenState extends State<QuizScreen> {
   void initState() {
     super.initState();
     _initializeAppSequence();
+    if (widget.levelId != null && widget.levelId!.startsWith('yt_')) {
+      _loadVideoById(widget.levelId!.replaceFirst('yt_', ''));
+    }
   }
 
+  // --- VIDEO LOGIC ---
+
+  void _loadVideoById(String videoId) {
+    if (_currentLoadedVideoId == videoId) return;
+
+    _videoController?.dispose();
+    _currentLoadedVideoId = videoId;
+    
+    _videoController = YoutubePlayerController(
+      initialVideoId: videoId,
+      flags: const YoutubePlayerFlags(
+        autoPlay: false,
+        mute: false,
+        disableDragSeek: false, 
+        enableCaption: false,
+        controlsVisibleAtStart: true,
+        hideControls: false, 
+        forceHD: false,
+      ),
+    )..addListener(() {
+      if (mounted && _videoController!.value.isReady && !_isVideoReady) {
+        setState(() => _isVideoReady = true);
+      }
+    });
+    setState(() {});
+  }
+
+  void _playVideoSegment(double startSeconds, double endSeconds) {
+    if (_videoController == null || !_isVideoReady) return;
+    
+    // If user is manually watching the 30s context, don't interrupt
+    if (_isManuallyPlaying) return;
+
+    _videoSegmentTimer?.cancel();
+
+    _videoController!.seekTo(Duration(milliseconds: (startSeconds * 1000).toInt()));
+    _videoController!.play();
+
+    final durationMs = ((endSeconds - startSeconds) * 1000).toInt();
+    if (durationMs <= 0) return;
+
+    _videoSegmentTimer = Timer(Duration(milliseconds: durationMs + 300), () {
+      if (mounted && !_isManuallyPlaying) _videoController!.pause();
+    });
+  }
+
+  // --- UPDATED: Play 30 Seconds Context ---
+  void _playContext() {
+    if (_videoController == null || !_isVideoReady) return;
+    
+    setState(() => _isManuallyPlaying = true);
+    _videoSegmentTimer?.cancel(); // Cancel auto-stopper
+    _videoController!.play();
+
+    // Stop after 30 seconds
+    _videoSegmentTimer = Timer(const Duration(seconds: 30), () {
+      if (mounted) {
+        _videoController!.pause();
+        setState(() => _isManuallyPlaying = false);
+      }
+    });
+  }
+
+  // --- APP & TTS SETUP ---
   Future<void> _initializeAppSequence() async {
     if (Platform.isAndroid) await Future.delayed(const Duration(seconds: 1));
     try {
       await _tts.awaitSpeakCompletion(true);
       await _tts.setVolume(1.0);
-      await _tts.setPitch(1.0);
     } catch (e) {
       print("TTS Config Warning: $e");
     }
@@ -69,6 +141,8 @@ class _QuizScreenState extends State<QuizScreen> {
   @override
   void dispose() {
     _cooldownTimer?.cancel();
+    _videoSegmentTimer?.cancel();
+    _videoController?.dispose(); 
     _tts.stop();
     super.dispose();
   }
@@ -88,7 +162,6 @@ class _QuizScreenState extends State<QuizScreen> {
       nativeLang = LanguageHelper.resolveCode(authState.user.nativeLanguage);
       userId = authState.user.id;
       isPremium = authState.user.isPremium;
-
       if (mounted) {
         setState(() {
           _targetLangCode = targetLang;
@@ -98,19 +171,13 @@ class _QuizScreenState extends State<QuizScreen> {
       }
     }
 
-    try {
-      await _tts.setLanguage(_targetLangCode);
-    } catch (e) {
-      print("TTS setLanguage failed: $e");
-    }
+    try { await _tts.setLanguage(_targetLangCode); } catch (_) {}
 
     if (!mounted) return;
 
     if (widget.initialQuestions != null && widget.initialQuestions!.isNotEmpty) {
       context.read<QuizBloc>().add(QuizStartWithQuestions(
-          questions: widget.initialQuestions!,
-          userId: userId,
-          isPremium: isPremium));
+          questions: widget.initialQuestions!, userId: userId, isPremium: isPremium));
     } else {
       context.read<QuizBloc>().add(QuizLoadRequested(
           promptType: QuizPromptType.dailyPractice,
@@ -121,41 +188,32 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
-  // --- ADDED: Method to Save Progress to Firestore ---
   Future<void> _saveProgress() async {
-    // Only save if this was a specific Level (not daily practice)
     if (widget.levelId == null) return;
-
     try {
       final authState = context.read<AuthBloc>().state;
       if (authState is AuthAuthenticated) {
         final userId = authState.user.id;
-        
-        // Add level ID to completedLevels array
         await FirebaseFirestore.instance.collection('users').doc(userId).update({
           'completedLevels': FieldValue.arrayUnion([widget.levelId])
         });
-        print("✅ Progress Saved: ${widget.levelId} unlocked!");
       }
     } catch (e) {
       print("❌ Error saving progress: $e");
     }
   }
 
-  void _speakIfTargetLanguage(String text, bool isTargetLanguage) async {
-    if (!isTargetLanguage || text.isEmpty) return;
+  void _speakOrPlayContext(String text, {double? start, double? end}) async {
+    if (_videoController != null && _isVideoReady && start != null && end != null) {
+      // If user clicks speaker, force play the short segment again (reset manual flag)
+      setState(() => _isManuallyPlaying = false);
+      _playVideoSegment(start, end);
+      return;
+    }
     try {
       await _tts.setLanguage(_targetLangCode);
       await _tts.speak(text);
-    } catch (e) {
-      if (e.toString().contains("not bound")) {
-        if (Platform.isAndroid) await Future.delayed(const Duration(milliseconds: 500));
-        try {
-          await _tts.setLanguage(_targetLangCode);
-          await _tts.speak(text);
-        } catch (_) {}
-      }
-    }
+    } catch (_) {}
   }
 
   void _showWordHint(String cleanWord, String originalWord) {
@@ -174,7 +232,7 @@ class _QuizScreenState extends State<QuizScreen> {
       builder: (context) => QuizHintDialog(
         originalWord: originalWord,
         translationFuture: translationFuture.then((value) => value ?? ''),
-        onSpeak: () => _speakIfTargetLanguage(originalWord, true),
+        onSpeak: () => _speakOrPlayContext(originalWord),
       ),
     );
   }
@@ -240,21 +298,30 @@ class _QuizScreenState extends State<QuizScreen> {
       body: BlocConsumer<QuizBloc, QuizState>(
         listener: (context, state) {
           if (state.status == QuizStatus.completed) {
-            // --- ADDED: Save progress BEFORE showing dialog ---
             _saveProgress(); 
             QuizDialogs.showCompletion(context, isDark);
           }
           if (state.hearts <= 0 && !state.isPremium && state.status != QuizStatus.loading && state.status != QuizStatus.error) {
             QuizDialogs.showGameOver(context, isDark);
           }
-          if (state.status == QuizStatus.error) {
-            setState(() => _secondsRemaining = 60);
-            _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-              if (mounted) setState(() => _secondsRemaining > 0 ? _secondsRemaining-- : t.cancel());
-            });
-            if (state.errorMessage != null && !state.errorMessage!.contains("429")) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.errorMessage!), backgroundColor: Colors.redAccent));
-            }
+          
+          if (state.status != QuizStatus.loading && state.currentQuestion != null) {
+             final q = state.currentQuestion!;
+             
+             if (q.videoUrl != null && q.videoUrl!.isNotEmpty) {
+               String? vidId = YoutubePlayer.convertUrlToId(q.videoUrl!);
+               if (vidId != null && vidId != _currentLoadedVideoId) {
+                 _loadVideoById(vidId);
+               }
+             }
+             // Reset manual playing when question changes
+             setState(() => _isManuallyPlaying = false);
+             
+             if (q.videoStart != null && q.videoEnd != null) {
+                Future.delayed(const Duration(milliseconds: 500), () {
+                   if (mounted) _playVideoSegment(q.videoStart!, q.videoEnd!);
+                });
+             }
           }
         },
         builder: (context, state) {
@@ -271,97 +338,170 @@ class _QuizScreenState extends State<QuizScreen> {
 
           final isTargetQ = question.type == 'target_to_native';
           final areOptionsTarget = question.type == 'native_to_target';
+          final hasVideoContext = _videoController != null && question.videoStart != null;
 
           return Column(
             children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 20),
-                      const Text("Translate this sentence", style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 24),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (isTargetQ)
-                            GestureDetector(
-                              onTap: () => _speakIfTargetLanguage(question.targetSentence, true),
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 16),
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.1), shape: BoxShape.circle),
-                                child: const Icon(Icons.volume_up, color: Colors.blueAccent, size: 24),
-                              ),
-                            ),
-                          Expanded(
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: question.targetSentence.split(' ').map((word) {
-                                final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
-                                if (isTargetQ) {
-                                  return GestureDetector(
-                                    onTap: () => _showWordHint(cleanWord, word),
-                                    child: Container(
-                                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.5), width: 1.5))),
-                                      child: Text(word, style: TextStyle(fontSize: 22, height: 1.4, color: textColor)),
-                                    ),
-                                  );
-                                } else {
-                                  return Text(word, style: TextStyle(fontSize: 22, height: 1.4, color: textColor));
-                                }
-                              }).toList(),
+              // 1. VIDEO SECTION
+              if (_videoController != null)
+                Column(
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      height: 200, 
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: YoutubePlayer(
+                          controller: _videoController!,
+                          showVideoProgressIndicator: true,
+                          progressIndicatorColor: Colors.blueAccent,
+                          bottomActions: [
+                             // Removed PlayPauseButton()
+                             CurrentPosition(),
+                             ProgressBar(isExpanded: true),
+                             RemainingDuration(),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // "Watch 30s" Button
+                    if (hasVideoContext)
+                      GestureDetector(
+                        onTap: _playContext,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: _isManuallyPlaying ? Colors.blueAccent : Colors.transparent,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.blueAccent)
+                          ),
+                          child: Text(
+                            _isManuallyPlaying ? "Playing 30s..." : "▶ Watch 30s context",
+                            style: TextStyle(
+                              fontSize: 12, 
+                              color: _isManuallyPlaying ? Colors.white : Colors.blueAccent,
+                              fontWeight: FontWeight.bold
                             ),
                           ),
-                        ],
-                      ),
-                      const Spacer(),
-                      
-                      // SELECTED AREA
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(minHeight: 80),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: isDark ? Colors.white24 : Colors.black12, width: 1))),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 12,
-                          children: state.selectedWords.map((word) {
-                            return QuizWordChip(
-                              word: word,
-                              isSelectedArea: true,
-                              onTap: () => context.read<QuizBloc>().add(QuizOptionDeselected(word)),
-                            );
-                          }).toList(),
                         ),
                       ),
-                      const Spacer(),
-                      
-                      // WORD BANK
-                      Center(
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 16,
-                          alignment: WrapAlignment.center,
-                          children: state.availableWords.map((word) {
-                            return QuizWordChip(
-                              word: word,
-                              isSelectedArea: false,
-                              shouldSpeak: areOptionsTarget,
-                              onSpeak: (w) => _speakIfTargetLanguage(w, true),
-                              onTap: () => context.read<QuizBloc>().add(QuizOptionSelected(word)),
-                            );
-                          }).toList(),
+                    const SizedBox(height: 10),
+                  ],
+                ),
+
+              // 2. SCROLLABLE CONTENT
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 10),
+                        Text(
+                          hasVideoContext ? "What was said in the video?" : "Translate this sentence", 
+                          style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w500)
                         ),
-                      ),
-                      const SizedBox(height: 40),
-                    ],
+                        const SizedBox(height: 20),
+                        
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (isTargetQ)
+                              GestureDetector(
+                                onTap: () => _speakOrPlayContext(
+                                  question.targetSentence, 
+                                  start: question.videoStart,
+                                  end: question.videoEnd
+                                ),
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 16),
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.1), shape: BoxShape.circle),
+                                  child: Icon(
+                                    hasVideoContext ? Icons.replay_circle_filled : Icons.volume_up, 
+                                    color: Colors.blueAccent, 
+                                    size: 24
+                                  ),
+                                ),
+                              ),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: question.targetSentence.split(' ').map((word) {
+                                  final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
+                                  if (isTargetQ) {
+                                    return GestureDetector(
+                                      onTap: () => _showWordHint(cleanWord, word),
+                                      child: Container(
+                                        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.5), width: 1.5))),
+                                        child: Text(word, style: TextStyle(fontSize: 22, height: 1.4, color: textColor)),
+                                      ),
+                                    );
+                                  } else {
+                                    return Text(word, style: TextStyle(fontSize: 22, height: 1.4, color: textColor));
+                                  }
+                                }).toList(),
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 30),
+                        
+                        // ANSWER AREA
+                        Container(
+                          width: double.infinity,
+                          constraints: const BoxConstraints(minHeight: 80),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: isDark ? Colors.white24 : Colors.black12, width: 1))),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 12,
+                            children: state.selectedWords.map((word) {
+                              return QuizWordChip(
+                                word: word,
+                                isSelectedArea: true,
+                                onTap: () => context.read<QuizBloc>().add(QuizOptionDeselected(word)),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 30),
+                        
+                        // WORD BANK
+                        Center(
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 16,
+                            alignment: WrapAlignment.center,
+                            children: state.availableWords.map((word) {
+                              return QuizWordChip(
+                                word: word,
+                                isSelectedArea: false,
+                                shouldSpeak: areOptionsTarget,
+                                onSpeak: (w) => _speakOrPlayContext(w),
+                                onTap: () => context.read<QuizBloc>().add(QuizOptionSelected(word)),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
                   ),
                 ),
               ),
+              
+              // 3. BOTTOM BAR
               QuizBottomBar(
                 state: state,
                 onCheck: () => context.read<QuizBloc>().add(QuizCheckAnswer()),
@@ -375,28 +515,6 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   Widget _buildErrorView(String msg) {
-    final bool isFinalFailure = _retryCount >= 2;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(isFinalFailure ? Icons.block : Icons.access_time_filled, size: 64, color: isFinalFailure ? Colors.red : Colors.orange),
-            const SizedBox(height: 16),
-            Text(isFinalFailure ? "Limit Reached" : "Server Busy", style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            Text(isFinalFailure ? "Please try again tomorrow." : "AI is busy. Please retry.", textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 16)),
-            const SizedBox(height: 30),
-            if (!isFinalFailure)
-              ElevatedButton(
-                  onPressed: _secondsRemaining > 0 ? null : _retryQuizLoad,
-                  child: Text(_secondsRemaining > 0 ? "Wait ${_secondsRemaining}s" : "Retry Now")),
-            if (isFinalFailure)
-              ElevatedButton.icon(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.arrow_back), label: const Text("Go Back")),
-          ],
-        ),
-      ),
-    );
+    return Center(child: Text(msg)); 
   }
 }

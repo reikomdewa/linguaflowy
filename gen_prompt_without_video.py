@@ -1,14 +1,14 @@
 import sys
 
 def create_prompt():
-    print("--- DATA GENERATOR PROMPT BUILDER ---\n")
+    print("--- STANDARD TEXT LESSON GENERATOR ---\n")
     
     # 1. Collect Inputs
     try:
         target_lang = input("1. Enter Target Language (Learning) [e.g., Spanish]: ").strip()
         native_lang = input("2. Enter Native Language (User Speaks) [e.g., English]: ").strip()
-        topic = input("3. Enter Topic/Unit [e.g., Travel]: ").strip()
-        level = input("4. Enter Proficiency Level [e.g., A1]: ").strip()
+        topic = input("3. Enter Topic/Unit [e.g., Past Tense Verbs]: ").strip()
+        level = input("4. Enter Proficiency Level [e.g., A2]: ").strip()
         count = input("5. Enter Question Count [e.g., 10]: ").strip()
         
         print("\n(Optional) Paste specific vocabulary words separated by commas.")
@@ -21,24 +21,21 @@ def create_prompt():
         sys.exit()
 
     # 2. Construct the Prompt
-    # Note: Double curly braces {{ }} are used for literal JSON braces in f-strings.
-    # Single curly braces { } are used for the python variables.
-    
     full_prompt = f"""**ROLE:**
-You are a strict Data Generator for a language learning app (Duolingo style).
-Your Output must be RAW JSON. Do not write explanations. Do not use markdown blocks (```json).
+You are a strict Data Generator for a language learning app.
+Your Output must be RAW JSON. Do not write explanations. Do not use markdown blocks.
 
 **PARAMETERS:**
-Target Language (Learning): {target_lang}
-Native Language (User Speaks): {native_lang}
-Topic {topic}
+Target Language: {target_lang}
+Native Language: {native_lang}
+Topic: {topic}
 Proficiency Level: {level}
 Question Count: {count}
 
 **INSTRUCTIONS:**
-1. Generate a quiz based on the Topic and Level.
+1. Generate {count} quiz questions based on the Topic.
 2. Mix the question types: 50% "target_to_native" and 50% "native_to_target".
-3. Use simple, natural sentences appropriate for the Level.
+3. Use natural sentences appropriate for the Level.
 
 **CRITICAL RULES FOR 'options' ARRAY:**
 1. The 'options' array is used for a drag-and-drop sentence builder.
@@ -61,14 +58,14 @@ Question Count: {count}
   }}
 ]
 
-**CONTEXT (Optional Vocabulary to include):**
+**CONTEXT (Vocabulary to include):**
 {vocab_list}
 
 **GENERATE NOW:**"""
 
     # 3. Output
     print("\n" + "="*60)
-    print("COPY THE TEXT BELOW:")
+    print("COPY THE TEXT BELOW INTO GEMINI:")
     print("="*60 + "\n")
     print(full_prompt)
     print("\n" + "="*60)

@@ -5,12 +5,20 @@ class QuizQuestion {
   final String correctAnswer;  // The answer the user must build
   final List<String> options;  // The word bank (correct words + distractors)
 
+  // --- VIDEO CONTEXT ---
+  final String? videoUrl;    // URL or ID of the YouTube video
+  final double? videoStart;  // Start time in seconds (e.g. 10.5)
+  final double? videoEnd;    // End time in seconds (e.g. 14.2)
+
   const QuizQuestion({
     required this.id,
     required this.type,
     required this.targetSentence,
     required this.correctAnswer,
     required this.options,
+    this.videoUrl,
+    this.videoStart,
+    this.videoEnd,
   });
 
   /// Factory constructor to create a QuizQuestion from JSON/Firestore data
@@ -25,6 +33,10 @@ class QuizQuestion {
               ?.map((e) => e.toString())
               .toList() ??
           [],
+      // Video fields
+      videoUrl: map['videoUrl']?.toString(),
+      videoStart: (map['videoStart'] as num?)?.toDouble(),
+      videoEnd: (map['videoEnd'] as num?)?.toDouble(),
     );
   }
 
@@ -36,6 +48,9 @@ class QuizQuestion {
       'targetSentence': targetSentence,
       'correctAnswer': correctAnswer,
       'options': options,
+      'videoUrl': videoUrl,
+      'videoStart': videoStart,
+      'videoEnd': videoEnd,
     };
   }
 
@@ -46,6 +61,9 @@ class QuizQuestion {
     String? targetSentence,
     String? correctAnswer,
     List<String>? options,
+    String? videoUrl,
+    double? videoStart,
+    double? videoEnd,
   }) {
     return QuizQuestion(
       id: id ?? this.id,
@@ -53,6 +71,9 @@ class QuizQuestion {
       targetSentence: targetSentence ?? this.targetSentence,
       correctAnswer: correctAnswer ?? this.correctAnswer,
       options: options ?? this.options,
+      videoUrl: videoUrl ?? this.videoUrl,
+      videoStart: videoStart ?? this.videoStart,
+      videoEnd: videoEnd ?? this.videoEnd,
     );
   }
 }

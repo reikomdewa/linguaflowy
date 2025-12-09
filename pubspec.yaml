@@ -88,6 +88,7 @@ dependencies:
   speech_to_text: ^7.3.0
   just_audio: ^0.10.5
   just_audio_background: ^0.0.1-beta.17
+  scrollable_positioned_list: ^0.3.8
   
 
   bloc: any
