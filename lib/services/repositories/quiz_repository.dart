@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:linguaflow/screens/quiz/quiz_level.dart';
+import 'package:linguaflow/screens/quiz/widgets/quiz_level.dart';
 
 class QuizPathRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;

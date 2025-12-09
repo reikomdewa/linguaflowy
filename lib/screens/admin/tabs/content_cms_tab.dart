@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:linguaflow/utils/language_helper.dart'; // Make sure this import path is correct
 
 class ContentCMSTab extends StatefulWidget {
   const ContentCMSTab({super.key});
@@ -46,36 +47,49 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // SEARCH LOGIC
-  // ---------------------------------------------------------------------------
+  // --- REPAIR TOOL ---
+  Future<void> _fixOldData() async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text("Updating database indexes...")));
+    
+    final collection = FirebaseFirestore.instance.collection('lessons');
+    final snapshot = await collection.get();
+    
+    int count = 0;
+    final batch = FirebaseFirestore.instance.batch();
+    
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      if (data['title'] != null) {
+        batch.update(doc.reference, {
+          'title_lower': data['title'].toString().toLowerCase().trim()
+        });
+        count++;
+      }
+      if (count % 400 == 0) await batch.commit();
+    }
+    await batch.commit();
+    messenger.showSnackBar(SnackBar(content: Text("Fixed $count lessons!")));
+  }
 
-  // 1. Dynamic Stream based on Search Text
+  // --- SEARCH LOGIC ---
   Stream<QuerySnapshot> _getStream() {
     CollectionReference lessonsRef = FirebaseFirestore.instance.collection('lessons');
 
     if (_searchText.isEmpty) {
-      // DEFAULT: Show latest 50 created
-      return lessonsRef
-          .orderBy('createdAt', descending: true)
-          .limit(50)
-          .snapshots();
+      return lessonsRef.orderBy('createdAt', descending: true).limit(50).snapshots();
     } else {
-      // SEARCH: Find titles starting with _searchText
-      // Note: Firestore is Case Sensitive! "Can" != "can"
+      final searchLower = _searchText.toLowerCase();
       return lessonsRef
-          .orderBy('title')
-          .startAt([_searchText])
-          .endAt(['$_searchText\uf8ff'])
+          .orderBy('title_lower')
+          .startAt([searchLower])
+          .endAt(['$searchLower\uf8ff'])
           .snapshots();
     }
   }
 
-  // 2. Exact ID Search (Because you can't query ID and Title in the same stream easily)
   Future<void> _searchById() async {
     if (_searchCtrl.text.isEmpty) return;
-    
-    // Clear the stream list so we don't show confusing data while fetching
     setState(() => _searchText = "___ID_SEARCH_MODE___"); 
 
     final docRef = FirebaseFirestore.instance.collection('lessons').doc(_searchCtrl.text.trim());
@@ -84,16 +98,13 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
     if (!mounted) return;
 
     if (snapshot.exists) {
-      // If found, immediately open the editor
       _openEditor(context, snapshot);
-      // Reset search so the list comes back
       _searchCtrl.clear();
       setState(() => _searchText = "");
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("No lesson found with that exact ID.")),
       );
-      // Go back to normal list
       _searchCtrl.clear();
       setState(() => _searchText = "");
     }
@@ -105,23 +116,33 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEditor(context),
-        backgroundColor: Colors.amber,
-        icon: const Icon(Icons.add, color: Colors.black),
-        label: const Text("Add Lesson", style: TextStyle(color: Colors.black)),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.small(
+            heroTag: "fix_btn",
+            onPressed: _fixOldData,
+            backgroundColor: Colors.grey,
+            child: const Icon(Icons.build, color: Colors.white),
+          ),
+          const SizedBox(height: 10),
+          FloatingActionButton.extended(
+            heroTag: "add_btn",
+            onPressed: () => _openEditor(context),
+            backgroundColor: Colors.amber,
+            icon: const Icon(Icons.add, color: Colors.black),
+            label: const Text("Add Lesson", style: TextStyle(color: Colors.black)),
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // -------------------------------------------------------------------
-          // SEARCH BAR
-          // -------------------------------------------------------------------
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
               controller: _searchCtrl,
               decoration: InputDecoration(
-                hintText: "Search Title (Case Sensitive)...",
+                hintText: "Search Title (e.g. 'candide')...",
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -134,7 +155,6 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
                           setState(() => _searchText = "");
                         },
                       ),
-                    // Specific ID Search Button
                     Tooltip(
                       message: "Find by Exact ID",
                       child: IconButton(
@@ -148,30 +168,17 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
                 filled: true,
                 fillColor: isDark ? Colors.white10 : Colors.grey[100],
               ),
-              onChanged: (val) {
-                setState(() {
-                  _searchText = val;
-                });
-              },
+              onChanged: (val) => setState(() => _searchText = val),
             ),
           ),
-
-          // -------------------------------------------------------------------
-          // RESULT LIST
-          // -------------------------------------------------------------------
           Expanded(
             child: _searchText == "___ID_SEARCH_MODE___" 
             ? const Center(child: CircularProgressIndicator()) 
             : StreamBuilder<QuerySnapshot>(
               stream: _getStream(),
               builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text("Error: ${snapshot.error}"));
-                }
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+                if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return Center(
@@ -180,21 +187,7 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
                       children: [
                         const Icon(Icons.search_off, size: 48, color: Colors.grey),
                         const SizedBox(height: 10),
-                        Text(
-                          _searchText.isEmpty 
-                              ? "No lessons found." 
-                              : "No matches for '$_searchText'",
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                        if (_searchText.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
-                            child: const Text(
-                              "Tip: Search is Case Sensitive.\nTry capitalizing the first letter.",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey, fontSize: 12),
-                            ),
-                          )
+                        Text(_searchText.isEmpty ? "No lessons found." : "No matches for '$_searchText'", style: const TextStyle(color: Colors.grey)),
                       ],
                     ),
                   );
@@ -208,24 +201,26 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
                     final data = doc.data() as Map<String, dynamic>;
 
                     final title = data['title'] ?? 'Untitled';
-                    final lang = data['language'] ?? '??';
+                    final langCode = data['language'] ?? 'en';
                     final diff = data['difficulty'] ?? 'unknown';
+
+                    // USE HELPER FOR FLAG
+                    final flag = LanguageHelper.getFlagEmoji(langCode);
 
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.grey[200],
-                          child: Text(lang.toString().toUpperCase(),
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black)),
+                        leading: Container(
+                          width: 40, height: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white10 : Colors.grey[200],
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(flag, style: const TextStyle(fontSize: 24)),
                         ),
-                        title: Text(title,
-                            style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: SelectableText("$diff • ${doc.id}", 
-                            maxLines: 1),
+                        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: SelectableText("$diff • ${doc.id}", maxLines: 1),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -234,8 +229,7 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
                               onPressed: () => _openEditor(context, doc),
                             ),
                             IconButton(
-                              icon:
-                                  const Icon(Icons.delete_outline, color: Colors.red),
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
                               onPressed: () => _deleteLesson(doc.id),
                             ),
                           ],
@@ -273,7 +267,7 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
   late TextEditingController _imageUrlCtrl;
   late TextEditingController _jsonTranscriptCtrl;
 
-  String _language = 'fr';
+  String _language = 'en'; // Default
   String _difficulty = 'intermediate';
 
   @override
@@ -285,17 +279,16 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
     _contentCtrl = TextEditingController(text: data?['content'] ?? '');
     _videoUrlCtrl = TextEditingController(text: data?['videoUrl'] ?? '');
     _imageUrlCtrl = TextEditingController(text: data?['imageUrl'] ?? '');
-    _language = data?['language'] ?? 'fr';
     _difficulty = data?['difficulty'] ?? 'intermediate';
+    
+    // USE HELPER TO RESOLVE LANGUAGE CODE (Safe handling)
+    String rawLang = data?['language'] ?? 'en';
+    _language = LanguageHelper.resolveCode(rawLang);
 
-    // Handle Transcript (Convert List<dynamic> to formatted JSON string for editing)
-    if (data != null &&
-        data['transcript'] != null &&
-        data['transcript'] is List) {
+    if (data != null && data['transcript'] != null && data['transcript'] is List) {
       try {
         const encoder = JsonEncoder.withIndent('  ');
-        _jsonTranscriptCtrl =
-            TextEditingController(text: encoder.convert(data['transcript']));
+        _jsonTranscriptCtrl = TextEditingController(text: encoder.convert(data['transcript']));
       } catch (e) {
         _jsonTranscriptCtrl = TextEditingController(text: "[]");
       }
@@ -304,22 +297,12 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // SUBTITLE PARSER LOGIC
-  // ---------------------------------------------------------------------------
   void _convertSubtitleFormat() {
     final text = _jsonTranscriptCtrl.text;
     if (text.isEmpty) return;
-
     try {
       final List<Map<String, dynamic>> parsed = [];
-
-      // Regex to find timestamps: 00:00:23,859 or 00:00:23.859
-      // Group 1: Start Time, Group 2: End Time
-      final RegExp timeReg = RegExp(
-          r'(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})');
-
-      // Split by double newlines (standard block separator in SRT/VTT)
+      final RegExp timeReg = RegExp(r'(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})');
       final blocks = text.split(RegExp(r'\n\s*\n'));
 
       for (var block in blocks) {
@@ -327,95 +310,66 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
         if (match != null) {
           final startStr = match.group(1)!;
           final endStr = match.group(2)!;
-
-          // Get text: Everything after the timestamp line
-          // We split the block by newlines, find the line with -->, take everything after
           final lines = block.split('\n');
           String content = "";
           bool foundTime = false;
-
           for (var line in lines) {
-            if (line.contains('-->')) {
-              foundTime = true;
-              continue;
-            }
+            if (line.contains('-->')) { foundTime = true; continue; }
             if (foundTime) {
-              // Remove HTML tags often found in VTT like <b> or <c>
-              String cleanLine =
-                  line.replaceAll(RegExp(r'<[^>]*>'), '').trim();
-              if (cleanLine.isNotEmpty &&
-                  !RegExp(r'^\d+$').hasMatch(cleanLine)) {
+              String cleanLine = line.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+              if (cleanLine.isNotEmpty && !RegExp(r'^\d+$').hasMatch(cleanLine)) {
                 content += "$cleanLine ";
               }
             }
           }
-
           if (content.isNotEmpty) {
-            parsed.add({
-              "start": _parseTime(startStr),
-              "end": _parseTime(endStr),
-              "text": content.trim(),
-            });
+            parsed.add({ "start": _parseTime(startStr), "end": _parseTime(endStr), "text": content.trim() });
           }
         }
       }
-
       if (parsed.isNotEmpty) {
         const encoder = JsonEncoder.withIndent('  ');
-        setState(() {
-          _jsonTranscriptCtrl.text = encoder.convert(parsed);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("Converted ${parsed.length} lines to JSON!")));
+        setState(() { _jsonTranscriptCtrl.text = encoder.convert(parsed); });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Converted ${parsed.length} lines!")));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Could not find SRT/VTT timestamps.")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not find timestamps.")));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Error parsing: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
-  // Helper: 00:00:23,859 -> 23.859 (double)
   double _parseTime(String timeStr) {
-    // Replace comma with dot for standardized parsing
     timeStr = timeStr.replaceAll(',', '.');
     final parts = timeStr.split(':');
-    final hours = double.parse(parts[0]);
-    final minutes = double.parse(parts[1]);
-    final seconds = double.parse(parts[2]);
-    return (hours * 3600) + (minutes * 60) + seconds;
+    return (double.parse(parts[0]) * 3600) + (double.parse(parts[1]) * 60) + double.parse(parts[2]);
   }
 
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // 1. Auto-generate sentences from Content
     List<String> sentences = _contentCtrl.text
-        .split(RegExp(r'(?<=[.!?])\s+')) // Split by punctuation
+        .split(RegExp(r'(?<=[.!?])\s+'))
         .where((s) => s.trim().isNotEmpty)
         .toList();
 
-    // 2. Parse Transcript JSON
     List<dynamic> transcriptList = [];
     try {
       transcriptList = jsonDecode(_jsonTranscriptCtrl.text);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Invalid JSON. Click 'Convert' if you pasted SRT.")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid JSON Transcript.")));
       return;
     }
 
-    // 3. Prepare Data
+    final title = _titleCtrl.text.trim();
+    
     final Map<String, dynamic> data = {
-      'title': _titleCtrl.text.trim(),
+      'title': title,
+      'title_lower': title.toLowerCase(),
       'content': _contentCtrl.text.trim(),
-      'videoUrl':
-          _videoUrlCtrl.text.trim().isEmpty ? null : _videoUrlCtrl.text.trim(),
-      'imageUrl':
-          _imageUrlCtrl.text.trim().isEmpty ? null : _imageUrlCtrl.text.trim(),
-      'language': _language,
+      'videoUrl': _videoUrlCtrl.text.trim().isEmpty ? null : _videoUrlCtrl.text.trim(),
+      'imageUrl': _imageUrlCtrl.text.trim().isEmpty ? null : _imageUrlCtrl.text.trim(),
+      'language': _language, // This comes from LanguageHelper data
       'difficulty': _difficulty,
       'sentences': sentences,
       'transcript': transcriptList,
@@ -425,44 +379,35 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
     };
 
     if (widget.doc == null) {
-      // New Doc
       data['createdAt'] = FieldValue.serverTimestamp();
       data['userId'] = 'admin';
-
-      // Try to determine Custom ID from YouTube URL
       String? customId;
-      if (_videoUrlCtrl.text.contains("youtube.com") ||
-          _videoUrlCtrl.text.contains("youtu.be")) {
-        try {
-          String? videoId;
-          if (_videoUrlCtrl.text.contains("v=")) {
-            videoId = _videoUrlCtrl.text.split('v=')[1].split('&')[0];
-          } else if (_videoUrlCtrl.text.contains("youtu.be/")) {
-            videoId = _videoUrlCtrl.text.split('youtu.be/')[1];
-          }
-          if (videoId != null) customId = "yt_$videoId";
-        } catch (_) {}
+      if (_videoUrlCtrl.text.contains("youtu")) {
+         try {
+           String? videoId;
+           if (_videoUrlCtrl.text.contains("v=")) videoId = _videoUrlCtrl.text.split('v=')[1].split('&')[0];
+           else if (_videoUrlCtrl.text.contains("youtu.be/")) videoId = _videoUrlCtrl.text.split('youtu.be/')[1];
+           if (videoId != null) customId = "yt_$videoId";
+         } catch (_) {}
       }
-
       if (customId != null) {
-        await FirebaseFirestore.instance
-            .collection('lessons')
-            .doc(customId)
-            .set(data);
+        await FirebaseFirestore.instance.collection('lessons').doc(customId).set(data);
       } else {
         await FirebaseFirestore.instance.collection('lessons').add(data);
       }
     } else {
-      // Update Existing
       await widget.doc!.reference.update(data);
     }
-
     if (mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Sort languages so they appear nicely in the dropdown
+    final sortedLanguages = LanguageHelper.availableLanguages.entries.toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
 
     return Dialog(
       backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -477,127 +422,69 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(widget.doc == null ? "Add Lesson" : "Edit Lesson",
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.bold)),
-                  IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close))
+                  Text(widget.doc == null ? "Add Lesson" : "Edit Lesson", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close))
                 ],
               ),
               const Divider(),
               Expanded(
                 child: ListView(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                            child: TextFormField(
-                                controller: _titleCtrl,
-                                decoration: const InputDecoration(
-                                    labelText: "Title",
-                                    border: OutlineInputBorder()),
-                                validator: (v) =>
-                                    v!.isEmpty ? 'Required' : null)),
-                        const SizedBox(width: 10),
-                        DropdownButton<String>(
-                          value: _language,
-                          items: ['fr', 'en', 'ja', 'es', 'de', 'it']
-                              .map((l) => DropdownMenuItem(
-                                  value: l, child: Text(l.toUpperCase())))
-                              .toList(),
-                          onChanged: (v) => setState(() => _language = v!),
-                        )
-                      ],
-                    ),
+                    TextFormField(controller: _titleCtrl, decoration: const InputDecoration(labelText: "Title"), validator: (v) => v!.isEmpty ? 'Required' : null),
                     const SizedBox(height: 15),
                     Row(
                       children: [
-                        Expanded(
-                            child: TextFormField(
-                                controller: _videoUrlCtrl,
-                                decoration: const InputDecoration(
-                                    labelText: "YouTube URL (Optional)",
-                                    border: OutlineInputBorder(),
-                                    hintText: "https://youtu.be/..."))),
+                        Expanded(child: TextFormField(controller: _videoUrlCtrl, decoration: const InputDecoration(labelText: "YouTube URL"))),
                         const SizedBox(width: 10),
-                        DropdownButton<String>(
-                          value: _difficulty,
-                          items: ['beginner', 'intermediate', 'advanced']
-                              .map((l) => DropdownMenuItem(
-                                  value: l, child: Text(l)))
-                              .toList(),
-                          onChanged: (v) => setState(() => _difficulty = v!),
-                        )
+                        
+                        // --- UPDATED LANGUAGE DROPDOWN USING HELPER ---
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _language,
+                            decoration: const InputDecoration(labelText: "Language"),
+                            isExpanded: true,
+                            items: sortedLanguages.map((entry) {
+                              final code = entry.key;
+                              final name = entry.value;
+                              final flag = LanguageHelper.getFlagEmoji(code);
+                              return DropdownMenuItem(
+                                value: code,
+                                child: Text("$flag $name", overflow: TextOverflow.ellipsis),
+                              );
+                            }).toList(),
+                            onChanged: (v) => setState(() => _language = v!),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 15),
-                    TextFormField(
-                        controller: _imageUrlCtrl,
-                        decoration: const InputDecoration(
-                            labelText: "Image URL (Optional)",
-                            border: OutlineInputBorder())),
-                    const SizedBox(height: 15),
-                    const Text("Full Content / Story",
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 5),
-                    TextFormField(
-                      controller: _contentCtrl,
-                      maxLines: 4,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText:
-                            "Paste full story text here (for 'sentences' array).",
-                      ),
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                    DropdownButtonFormField<String>(
+                        value: _difficulty,
+                        decoration: const InputDecoration(labelText: "Difficulty"),
+                        items: ['beginner', 'intermediate', 'advanced'].map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
+                        onChanged: (v) => setState(() => _difficulty = v!),
                     ),
+                    const SizedBox(height: 15),
+                    TextFormField(controller: _imageUrlCtrl, decoration: const InputDecoration(labelText: "Image URL")),
+                    const SizedBox(height: 15),
+                    TextFormField(controller: _contentCtrl, maxLines: 4, decoration: const InputDecoration(labelText: "Full Content", alignLabelWithHint: true), validator: (v) => v!.isEmpty ? 'Required' : null),
                     const SizedBox(height: 20),
-                    // ---------------------------------------------------------
-                    // TRANSCRIPT SECTION WITH CONVERT BUTTON
-                    // ---------------------------------------------------------
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("Transcript",
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                        TextButton.icon(
-                          onPressed: _convertSubtitleFormat,
-                          icon: const Icon(Icons.auto_fix_high, size: 16),
-                          label: const Text("Convert SRT/VTT to JSON"),
-                          style: TextButton.styleFrom(
-                              foregroundColor: Colors.blue),
-                        )
+                        const Text("Transcript (JSON)", style: TextStyle(fontWeight: FontWeight.bold)),
+                        TextButton(onPressed: _convertSubtitleFormat, child: const Text("Convert SRT"))
                       ],
                     ),
-                    const SizedBox(height: 5),
                     Container(
                       color: isDark ? Colors.black26 : Colors.grey[100],
-                      child: TextFormField(
-                        controller: _jsonTranscriptCtrl,
-                        maxLines: 8,
-                        style: const TextStyle(
-                            fontFamily: 'monospace', fontSize: 12),
-                        decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            hintText:
-                                "1\n00:00:01,000 --> 00:00:04,000\nPaste SRT here and click Convert..."),
-                      ),
+                      child: TextFormField(controller: _jsonTranscriptCtrl, maxLines: 6, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _save,
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber,
-                      foregroundColor: Colors.black),
-                  child: const Text("Save Lesson"),
-                ),
-              )
+              SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: _save, style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black), child: const Text("Save Lesson")))
             ],
           ),
         ),
