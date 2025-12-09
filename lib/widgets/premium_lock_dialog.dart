@@ -24,6 +24,7 @@ class _PremiumLockDialogState extends State<PremiumLockDialog> {
   // --- CONFIGURATION ---
   final String _gumroadLink = "https://reikom.gumroad.com/l/linguaflow"; 
   final String _adminEmail = "reikomuk@gmail.com";
+  final String _adminPhoneNumber = '212621630573'; 
 
   Future<void> _launchURL(String url) async {
     final Uri uri = Uri.parse(url);
@@ -34,18 +35,93 @@ class _PremiumLockDialogState extends State<PremiumLockDialog> {
     }
   }
 
-  Future<void> _contactAdmin() async {
-    final Uri emailLaunchUri = Uri(
-      scheme: 'mailto',
-      path: _adminEmail,
-      query: 'subject=Linguaflow Premium Request&body=Hello, I would like to purchase a premium code via bank transfer/other method.',
-    );
+ Future<void> _contactAdmin() async {
+  // Show a bottom sheet to let the user choose
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (BuildContext context) {
+      return SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.email),
+              title: const Text('Contact via Email'),
+              onTap: () {
+                Navigator.pop(context); // Close the sheet
+                _launchEmail();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.chat), // Or use a WhatsApp icon asset if you have one
+              title: const Text('Contact via WhatsApp'),
+              onTap: () {
+                Navigator.pop(context); // Close the sheet
+                _launchWhatsApp();
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+Future<void> _launchEmail() async {
+  final Uri emailLaunchUri = Uri(
+    scheme: 'mailto',
+    path: _adminEmail,
+    query: _encodeQueryParameters({
+      'subject': 'Linguaflow Premium Request',
+      'body': 'Hello, I would like to purchase a premium code via bank transfer/other method.'
+    }),
+  );
+
+  try {
     if (!await launchUrl(emailLaunchUri)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not open email client")));
-      }
+      throw 'Could not launch email';
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not open email client")),
+      );
     }
   }
+}
+
+Future<void> _launchWhatsApp() async {
+  final String message = "Hello, I would like to purchase a premium code via bank transfer/other method.";
+  
+  // Create the WhatsApp URL
+  // Using https://wa.me/ is the most reliable cross-platform method
+  final Uri whatsappUri = Uri.parse(
+    "https://wa.me/$_adminPhoneNumber?text=${Uri.encodeComponent(message)}",
+  );
+
+  try {
+    // mode: LaunchMode.externalApplication is crucial for WhatsApp to open the app 
+    // instead of an in-app web browser
+    if (!await launchUrl(whatsappUri, mode: LaunchMode.externalApplication)) {
+      throw 'Could not launch WhatsApp';
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not open WhatsApp")),
+      );
+    }
+  }
+}
+
+// Helper to handle spaces and special characters in email query
+String? _encodeQueryParameters(Map<String, String> params) {
+  return params.entries
+      .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+      .join('&');
+}
 
   void _handleRedeem() async {
     if (_controller.text.trim().isEmpty) return;

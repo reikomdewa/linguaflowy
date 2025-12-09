@@ -37,6 +37,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   // --- SETTINGS ---
   bool _autoMarkOnSwipe = false;
+    bool _hasSeenStatusHint = false;
 
   // --- VIDEO / AUDIOBOOK STATE ---
   YoutubePlayerController? _videoController;
@@ -139,9 +140,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
         if (doc.exists && mounted) {
           setState(() {
             _autoMarkOnSwipe = doc.data()?['autoMarkOnSwipe'] ?? false;
+            // --- ADD THIS LINE ---
+            _hasSeenStatusHint = doc.data()?['hasSeenStatusHint'] ?? false; 
           });
         }
-      } catch (e) {}
+      } catch (e) {
+        debugPrint("Error loading preferences: $e");
+      }
     }
   }
 
@@ -753,7 +758,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     });
   }
 
-  // --- SHOW POPUP DIALOG (WORD MODE) ---
+// --- SHOW POPUP DIALOG (WORD MODE) ---
   void _showDefinitionDialog(String cleanId, String originalText,
       {required bool isPhrase, required Offset tapPosition}) {
     if (_isVideo) _videoController!.pause();
@@ -795,14 +800,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
       builder: (context) {
         return FloatingTranslationCard(
           originalText: originalText,
-          translationFuture: fetchGoogle(), // The Card handles MyMemory internally!
-          onGetAiExplanation: fetchAiExplanation, // Callback for Lazy Loading
+          translationFuture: fetchGoogle(),
+          onGetAiExplanation: fetchAiExplanation,
           targetLanguage: widget.lesson.language,
           nativeLanguage: user.nativeLanguage,
           currentStatus: existingItem?.status ?? 0,
           anchorPosition: tapPosition,
-          onUpdateStatus: (status, translation) =>
-              _updateWordStatus(cleanId, originalText, translation, status),
+          // --- UPDATED SECTION START ---
+          onUpdateStatus: (status, translation) {
+            // 1. Update the status logic
+            _updateWordStatus(cleanId, originalText, translation, status);
+            
+            // 2. Close the dialog
+            Navigator.of(context).pop(); 
+
+            // 3. Clear selection highlights if needed
+            if (_isSelectionMode) {
+              _clearSelection();
+            }
+          },
+          // --- UPDATED SECTION END ---
           onClose: () {
             Navigator.of(context).pop();
             _clearSelection();
@@ -1567,12 +1584,35 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }, SetOptions(merge: true));
     } catch (e) {}
 
-    if (showDialog) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Word status updated"),
-          duration: Duration(seconds: 1),
-          behavior: SnackBarBehavior.floating));
+     if (showDialog) {
+      // Only show if they haven't seen the hint yet
+      if (!_hasSeenStatusHint) {
+        
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Word status updated. (Tap to change)"),
+            duration: Duration(seconds: 2), // Make it slightly longer for the first time
+            behavior: SnackBarBehavior.floating));
+
+        // 1. Update local state immediately so it doesn't show again this session
+        if (mounted) {
+          setState(() {
+            _hasSeenStatusHint = true;
+          });
+        }
+
+        // 2. Persist to Firestore so it doesn't show in future sessions
+        try {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.id)
+              .collection('preferences')
+              .doc('reader')
+              .set({'hasSeenStatusHint': true}, SetOptions(merge: true));
+        } catch (e) {
+          // Fail silently, it will try again next time
+        }
+      }
     }
   }
 }

@@ -384,7 +384,7 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
     if (!mounted) return;
     final translationService = context.read<TranslationService>();
     final VocabularyItem? existingItem = isPhrase ? null : _vocabulary[cleanId];
-    final translationFuture = existingItem != null ? Future.value(existingItem.translation) : translationService.translate(originalText, user.nativeLanguage, widget.lesson.language);
+    final translationFuture = (existingItem != null ? Future.value(existingItem.translation) : translationService.translate(originalText, user.nativeLanguage, widget.lesson.language)).then((value) => value ?? 'No translation available');
     final geminiPrompt = "Translate and explain: '$originalText' (Language: ${widget.lesson.language} -> ${user.nativeLanguage}).";
     final geminiFuture = Gemini.instance.prompt(parts: [Part.text(geminiPrompt)]).then((v) => v?.output);
 

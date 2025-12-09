@@ -9,59 +9,142 @@ import time
 
 OUTPUT_DIR = "assets/course_videos"
 
-# --- RELAXED DURATION RULES (In Seconds) ---
+# --- DURATION RULES (In Seconds) ---
 DURATION_RULES = {
-    # Stories: 1 min to 20 mins
-    'Stories':      (60, 1200),  
+    # Stories: 1 min to 25 mins (Extended slightly for deeper stories)
+    'Stories':      (60, 1500),  
     
     # News: 45 secs to 15 mins
     'News':         (45, 900),   
     
-    # Bites: 15 secs to 90 secs (Standard Shorts length)
-    'Bites':        (15, 90),    
+    # Bites: 10 secs to 90 secs (Strictly Shorts/Reels style)
+    'Bites':        (10, 90),    
     
-    # Grammar: 30 secs to 10 mins
-    'Grammar tips': (30, 600),   
+    # Grammar: 30 secs to 12 mins
+    'Grammar tips': (30, 720),   
 }
 
-# Search queries
+# --- EXPANDED SEARCH QUERIES ---
+# Format: 'lang_code': [('Query', 'Category')]
+# We mix specific topics to ensure the course has variety.
 SEARCH_CONFIG = {
     'es': [
-        ('Cuentos cortos español', 'Stories'),
-        ('Noticias telemundo', 'News'),
-        ('Spanish phrase shorts', 'Bites'),
-        ('Spanish grammar explained', 'Grammar tips'),
+        # --- STORIES ---
+        ('Spanish comprehensible input beginner', 'Stories'),
+        ('Cuentos de hadas españoles', 'Stories'),
+        ('Dreaming Spanish superbeginner', 'Stories'),
+        ('Hola Spanish stories', 'Stories'),
+        ('Spanish stories slow audio', 'Stories'),
+        # --- NEWS ---
+        ('BBC News Mundo', 'News'),
+        ('CNN en Español 5 cosas', 'News'),
+        ('Noticias Telemundo', 'News'),
+        ('Euronews español', 'News'),
+        # --- BITES (Shorts/Vocab) ---
+        ('Spanish slang shorts', 'Bites'),
+        ('Spanish word of the day', 'Bites'),
+        ('Mexican spanish phrases', 'Bites'),
+        ('Common spanish idioms', 'Bites'),
+        # --- GRAMMAR (Specific Topics) ---
+        ('Por vs Para explained', 'Grammar tips'),
+        ('Ser vs Estar spanish', 'Grammar tips'),
+        ('Spanish subjunctive mood explained', 'Grammar tips'),
+        ('Spanish past tense preterite imperfect', 'Grammar tips'),
+        ('Spanish reflexives explained', 'Grammar tips'),
+        ('Direct object pronouns spanish', 'Grammar tips')
     ],
     'fr': [
-        ('Contes français', 'Stories'),
+        # --- STORIES ---
+        ('French comprehensible input', 'Stories'),
+        ('Contes de fées français', 'Stories'),
+        ('Alice Ayel french stories', 'Stories'),
+        ('French stories with subtitles', 'Stories'),
+        # --- NEWS ---
         ('France 24 français', 'News'),
-        ('French phrase shorts', 'Bites'),
-        ('Grammaire française expliquée', 'Grammar tips'),
+        ('HugoDécrypte actus', 'News'),
+        ('Le Monde video', 'News'),
+        ('Brut officiel', 'News'),
+        # --- BITES ---
+        ('French slang shorts', 'Bites'),
+        ('French pronunciation tips', 'Bites'),
+        ('French idioms explained', 'Bites'),
+        # --- GRAMMAR ---
+        ('Passé Composé vs Imparfait', 'Grammar tips'),
+        ('French subjunctive explained', 'Grammar tips'),
+        ('French pronouns y and en', 'Grammar tips'),
+        ('French gender rules', 'Grammar tips')
     ],
-    # You can add your other languages back here
+    'de': [
+        # --- STORIES ---
+        ('German stories for beginners', 'Stories'),
+        ('Dino lernt Deutsch', 'Stories'),
+        ('Märchen für kinder deutsch', 'Stories'),
+        ('Natürlich German stories', 'Stories'),
+        # --- NEWS ---
+        ('Logo! Nachrichten', 'News'), # Kid's news (easier)
+        ('Tagesschau in 100 sekunden', 'News'),
+        ('DW Deutsch lernen nachrichten', 'News'),
+        # --- BITES ---
+        ('German compound words funny', 'Bites'),
+        ('German idioms shorts', 'Bites'),
+        ('German false friends', 'Bites'),
+        # --- GRAMMAR ---
+        ('German cases explained nominative accusative', 'Grammar tips'),
+        ('German sentence structure', 'Grammar tips'),
+        ('German two way prepositions', 'Grammar tips'),
+        ('Der Die Das rules', 'Grammar tips')
+    ],
+    'it': [
+        ('Storie italiane per stranieri', 'Stories'),
+        ('Learn Italian with Lucrezia', 'Stories'),
+        ('Easy Italian news', 'News'),
+        ('Fanpage.it stories', 'News'),
+        ('Italian hand gestures shorts', 'Bites'),
+        ('Italian slang shorts', 'Bites'),
+        ('Italian prepositions explained', 'Grammar tips'),
+        ('Passato prossimo vs imperfetto', 'Grammar tips')
+    ],
+    'pt': [
+        ('Histórias em português brasil', 'Stories'),
+        ('Turma da Mônica', 'Stories'),
+        ('Speaking Brazilian', 'Stories'),
+        ('CNN Brasil soft news', 'News'),
+        ('Brazilian slang shorts', 'Bites'),
+        ('Portuguese pronunciation tips', 'Bites'),
+        ('Por vs Para português', 'Grammar tips'),
+        ('Ser vs Estar português', 'Grammar tips')
+    ],
+    'ja': [
+        ('Japanese folklore stories subtitles', 'Stories'),
+        ('Comprehensible Japanese', 'Stories'),
+        ('ANN news japanese', 'News'),
+        ('Japanese candy review shorts', 'Bites'),
+        ('Japanese onomatopoeia', 'Bites'),
+        ('Japanese particles wa ga', 'Grammar tips'),
+        ('Japanese te-form conjugation', 'Grammar tips')
+    ],
     'en': [
-        ('Short stories English', 'Stories'),
-        ('BBC News Review', 'News'),
-        ('English idiom shorts', 'Bites'),
-        ('English grammar lesson', 'Grammar tips'),
+        ('English short stories for learning', 'Stories'),
+        ('VOA Learning English', 'News'),
+        ('BBC Learning English news review', 'News'),
+        ('English idioms shorts', 'Bites'),
+        ('American vs British english shorts', 'Bites'),
+        ('English phrasal verbs explained', 'Grammar tips'),
+        ('Present perfect tense english', 'Grammar tips')
     ]
 }
 
 # --- HELPERS ---
 
 def time_to_seconds(time_str):
-    """
-    Converts HH:MM:SS.mmm OR MM:SS.mmm to seconds (float).
-    """
+    """Converts HH:MM:SS.mmm or MM:SS.mmm to seconds."""
     try:
-        # Replace comma with dot just in case VTT uses commas
         time_str = time_str.replace(',', '.')
         parts = time_str.split(':')
-        
-        if len(parts) == 3: # HH:MM:SS.mmm
+        if len(parts) == 3:
             h, m, s = parts
             return int(h) * 3600 + int(m) * 60 + float(s)
-        elif len(parts) == 2: # MM:SS.mmm
+        elif len(parts) == 2:
             m, s = parts
             return int(m) * 60 + float(s)
     except:
@@ -72,33 +155,24 @@ def split_sentences(text):
     return re.split(r'(?<=[.!?])\s+', text)
 
 def parse_vtt_to_transcript(vtt_content):
-    """
-    Parses VTT. Updated to handle flexible timestamps for Short/Bite videos.
-    """
+    """Parses VTT, handling flexible timestamps for Shorts."""
     lines = vtt_content.splitlines()
     transcript = []
     
-    # --- FIX: Flexible Regex ---
-    # Matches both "00:00:00.000" AND "00:00.000" (missing hour)
-    # Also accepts . or , for milliseconds
+    # Matches 00:00:00.000 OR 00:00.000
     time_pattern = re.compile(r'((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})\s-->\s((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})')
     
     current_entry = None
     
     for line in lines:
         line = line.strip()
-        # Skip metadata
         if not line or line == 'WEBVTT' or line.startswith('Kind:') or line.startswith('Language:'):
             continue
             
-        # Check for Timestamp
         match = time_pattern.search(line)
         if match:
-            # Save previous entry if it exists
             if current_entry and current_entry['text']:
                 transcript.append(current_entry)
-            
-            # Start new entry
             current_entry = {
                 'start': time_to_seconds(match.group(1)),
                 'end': time_to_seconds(match.group(2)),
@@ -106,21 +180,15 @@ def parse_vtt_to_transcript(vtt_content):
             }
             continue
             
-        # Capture Text
         if current_entry:
-            # Remove HTML tags like <c.color> or <b>
             clean_line = re.sub(r'<[^>]+>', '', line)
-            # Fix HTML entities
             clean_line = clean_line.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"')
-            
             if clean_line:
                 current_entry['text'] += clean_line + " "
 
-    # Append last entry
     if current_entry and current_entry['text']:
         transcript.append(current_entry)
         
-    # Final cleanup
     for t in transcript: 
         t['text'] = t['text'].strip()
         
@@ -157,18 +225,16 @@ def get_video_details(video_url, lang_code, category):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
             
-            # --- DURATION FILTER ---
+            # Duration Check
             duration = info.get('duration', 0)
             min_dur, max_dur = DURATION_RULES.get(category, (30, 600))
             
             if not (min_dur <= duration <= max_dur):
-                print(f"    ⚠️ Skipping (Duration {duration}s not in {min_dur}-{max_dur}s)")
+                # print(f"    ⚠️ Skip: Length {duration}s not in range {min_dur}-{max_dur}")
                 return None
 
             files = glob.glob(f"{temp_filename}*.vtt")
-            
             if not files:
-                print(f"    ⚠️ No subtitles found.")
                 return None
             
             with open(files[0], 'r', encoding='utf-8') as f:
@@ -178,17 +244,12 @@ def get_video_details(video_url, lang_code, category):
                 try: os.remove(f)
                 except: pass
             
-            # Parse Transcript with fixed function
             transcript_data = parse_vtt_to_transcript(content)
-            
-            # If parsing failed, return None so we don't save empty content
-            if not transcript_data: 
-                print(f"    ⚠️ Parsing failed (transcript empty).")
-                return None
+            if not transcript_data: return None
             
             full_text = " ".join([t['text'] for t in transcript_data])
 
-            # Map category to your app's 'type' field
+            # Map to app types
             type_map = {
                 'Stories': 'story',
                 'News': 'news',
@@ -203,7 +264,7 @@ def get_video_details(video_url, lang_code, category):
                 "language": lang_code,
                 "content": full_text,
                 "sentences": split_sentences(full_text),
-                "transcript": transcript_data, # This now contains the correct time codes
+                "transcript": transcript_data,
                 "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
                 "imageUrl": f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
                 "type": type_map.get(category, 'video'), 
@@ -213,7 +274,7 @@ def get_video_details(video_url, lang_code, category):
                 "progress": 0,
             }
     except Exception as e:
-        print(f"    ⚠️ Error: {str(e)[:50]}...")
+        # print(f"    ⚠️ Error: {str(e)[:20]}")
         for f in glob.glob(f"{temp_filename}*"):
             try: os.remove(f)
             except: pass
@@ -225,7 +286,7 @@ def main():
 
     for lang, categories in SEARCH_CONFIG.items():
         print(f"\n==========================================")
-        print(f" GENERATING COURSE CONTENT: {lang.upper()}")
+        print(f" GENERATING COURSE: {lang.upper()}")
         print(f"==========================================")
         
         filepath = os.path.join(OUTPUT_DIR, f"{lang}.json")
@@ -233,7 +294,7 @@ def main():
         existing_lessons = []
         existing_ids = set()
         
-        # 1. Load Existing Data
+        # 1. Load Existing (Duplicate Handling)
         if os.path.exists(filepath):
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
@@ -241,12 +302,13 @@ def main():
                     existing_ids = {l['id'] for l in existing_lessons}
                 print(f"  📚 Loaded {len(existing_lessons)} existing lessons.")
             except:
-                print("  🆕 Creating new file.")
+                print("  🆕 Creating new course file.")
 
         total_new_for_lang = 0
 
+        # 2. Iterate through specific queries
         for query, category in categories:
-            print(f"\n  🔎 Category: {category} | Query: '{query}'")
+            print(f"\n  🔎 {category}: '{query}'")
             
             ydl_opts = {
                 'quiet': True,
@@ -256,47 +318,51 @@ def main():
             }
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Search for 20 candidates
+                # Search 10 candidates per query
                 try:
-                    result = ydl.extract_info(f"ytsearch20:{query}", download=False)
+                    result = ydl.extract_info(f"ytsearch10:{query}", download=False)
                 except Exception as e:
-                    print(f"    ❌ Search failed: {e}")
+                    print(f"    ❌ Search error: {e}")
                     continue
                 
-                count_added_this_category = 0
+                added_this_query = 0
                 
                 if 'entries' in result:
                     for entry in result['entries']:
                         if not entry: continue
                         
-                        # Stop if we found 3 NEW videos for this category
-                        if count_added_this_category >= 3: 
+                        # LIMIT: Only add 2 videos per specific query to ensure variety
+                        # (e.g. 2 Por vs Para, then move to Subjunctive)
+                        if added_this_query >= 2: 
                             break 
                         
                         vid = entry.get('id')
                         lesson_id = f"yt_{vid}"
 
+                        # DUPLICATE CHECK
                         if lesson_id in existing_ids:
                             continue
 
-                        print(f"    ⬇️ Checking: {entry.get('title', 'Unknown')[:40]}...")
+                        print(f"    ⬇️ Processing: {entry.get('title', '')[:40]}...")
                         
                         lesson = get_video_details(f"https://www.youtube.com/watch?v={vid}", lang, category)
                         
                         if lesson:
-                            existing_lessons.insert(0, lesson)
+                            existing_lessons.append(lesson) # Append to end for courses
                             existing_ids.add(lesson_id)
-                            count_added_this_category += 1
+                            added_this_query += 1
                             total_new_for_lang += 1
                             print(f"       ✅ Added!")
+                        else:
+                            print(f"       🚫 Skipped")
                         
                         time.sleep(1)
 
-        # Save Updated List
+        # 3. Save
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(existing_lessons, f, ensure_ascii=False, indent=None)
         
-        print(f"\n  💾 SAVED {lang.upper()}: Added {total_new_for_lang} new videos.")
+        print(f"\n  💾 SAVED {lang.upper()}: +{total_new_for_lang} new lessons. Total: {len(existing_lessons)}")
 
 if __name__ == "__main__":
     main()

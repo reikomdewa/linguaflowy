@@ -16,7 +16,7 @@ class VocabularyService {
           .collection('users')
           .doc(userId)
           .collection('vocabulary')
-          .get(); // Removed orderBy temporarily to prevent index errors during dev
+          .get(); 
 
       // 2. Map safely using the fixed Model
       return snapshot.docs.map((doc) {
@@ -52,5 +52,20 @@ class VocabularyService {
         .collection('vocabulary')
         .doc(actualId)
         .set(item.toMap(), SetOptions(merge: true));
+  }
+
+  // ✅ ADDED THIS METHOD TO FIX THE BLOC ERROR
+  Future<void> deleteVocabulary(String userId, String vocabularyId) async {
+    try {
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('vocabulary')
+          .doc(vocabularyId) // The ID from the model is already the Doc ID
+          .delete();
+    } catch (e) {
+      print("Error deleting vocabulary: $e");
+      throw Exception("Failed to delete vocabulary item");
+    }
   }
 }

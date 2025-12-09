@@ -1,4 +1,3 @@
-
 // ==========================================
 // VOCABULARY BLOC
 // ==========================================
@@ -23,6 +22,13 @@ class VocabularyAddRequested extends VocabularyEvent {
 class VocabularyUpdateRequested extends VocabularyEvent {
   final VocabularyItem item;
   VocabularyUpdateRequested(this.item);
+}
+
+// ✅ NEW: Added Delete Event
+class VocabularyDeleteRequested extends VocabularyEvent {
+  final String id;
+  final String userId;
+  VocabularyDeleteRequested({required this.id, required this.userId});
 }
 
 // States
@@ -50,6 +56,8 @@ class VocabularyBloc extends Bloc<VocabularyEvent, VocabularyState> {
     on<VocabularyLoadRequested>(_onVocabularyLoadRequested);
     on<VocabularyAddRequested>(_onVocabularyAddRequested);
     on<VocabularyUpdateRequested>(_onVocabularyUpdateRequested);
+    // ✅ NEW: Register Delete Handler
+    on<VocabularyDeleteRequested>(_onVocabularyDeleteRequested);
   }
 
   Future<void> _onVocabularyLoadRequested(
@@ -92,6 +100,27 @@ class VocabularyBloc extends Bloc<VocabularyEvent, VocabularyState> {
       }
     } catch (e) {
       emit(VocabularyError(e.toString()));
+    }
+  }
+
+  // ✅ NEW: Handle Delete
+  Future<void> _onVocabularyDeleteRequested(
+    VocabularyDeleteRequested event,
+    Emitter<VocabularyState> emit,
+  ) async {
+    try {
+      // 1. Call Service to delete from Firebase
+      await vocabularyService.deleteVocabulary(event.userId, event.id);
+
+      // 2. Update Local State immediately (Optimistic Update)
+      if (state is VocabularyLoaded) {
+        final currentItems = (state as VocabularyLoaded).items;
+        // Filter out the deleted item
+        final updatedItems = currentItems.where((item) => item.id != event.id).toList();
+        emit(VocabularyLoaded(updatedItems));
+      }
+    } catch (e) {
+      emit(VocabularyError("Failed to delete item: ${e.toString()}"));
     }
   }
 }

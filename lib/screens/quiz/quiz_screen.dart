@@ -148,7 +148,7 @@ class _QuizScreenState extends State<QuizScreen> {
       builder: (context) {
         return _HintDialog(
           originalWord: originalWord,
-          translationFuture: translationFuture,
+          translationFuture: translationFuture.then((value) => value ?? ''),
           onSpeak: () => _speakIfTargetLanguage(originalWord, true),
         );
       },

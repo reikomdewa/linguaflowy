@@ -1,47 +1,46 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'dart:math' as math;
+
+// Import your existing project files
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
-import 'dart:math' as math;
+import 'package:linguaflow/services/mymemory_service.dart';
+import 'package:linguaflow/services/translation_service.dart'; 
+import 'package:linguaflow/utils/language_helper.dart'; 
 
 // ==========================================
-// 🧠 SMART SRS ALGORITHM (The Brain)
+// 🧠 SRS ALGORITHM & MAIN SCREEN (Unchanged)
 // ==========================================
 class SRSAlgorithm {
-  // Returns true if the word should be reviewed today
   static bool isDue(VocabularyItem item) {
-    if (item.status == 0) return true; // New words always due
-
+    if (item.status == 0) return true;
     final now = DateTime.now();
     final difference = now.difference(item.lastReviewed).inDays;
-
-    // Mapping Status (0-5) to Days required before next review
-    // 1: 1 day, 2: 3 days, 3: 7 days, 4: 14 days, 5: 30+ days
     int requiredGap;
     switch (item.status) {
-      case 1: requiredGap = 0; break; // Let them review Status 1 same day if they want
+      case 1: requiredGap = 0; break;
       case 2: requiredGap = 2; break;
       case 3: requiredGap = 6; break;
       case 4: requiredGap = 13; break;
       case 5: requiredGap = 29; break;
       default: requiredGap = 0;
     }
-
     return difference >= requiredGap;
   }
 
-  // Calculate Next Status based on Button Press
   static int nextStatus(int current, int rating) {
-    // Rating: 1=Again, 2=Hard, 3=Good, 4=Easy
-    if (rating == 1) return 1; // Forgot? Reset to 1.
-    if (rating == 2) return current > 1 ? current : 1; // Hard? Don't advance.
-    if (rating == 3) return math.min(current + 1, 5); // Good? Advance.
-    if (rating == 4) return math.min(current + 2, 5); // Easy? Jump.
+    if (rating == 1) return 1;
+    if (rating == 2) return current > 1 ? current : 1;
+    if (rating == 3) return math.min(current + 1, 5);
+    if (rating == 4) return math.min(current + 2, 5);
     return current;
   }
 
-  // Helper text to show user when they will see the card again
   static String getNextIntervalText(int currentStatus, int rating) {
     int next = nextStatus(currentStatus, rating);
     if (next == 1) return "1d";
@@ -53,37 +52,38 @@ class SRSAlgorithm {
   }
 }
 
-// ==========================================
-// 📱 MAIN SCREEN
-// ==========================================
 class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({super.key});
-
   @override
   _VocabularyScreenState createState() => _VocabularyScreenState();
 }
 
-class _VocabularyScreenState extends State<VocabularyScreen> with SingleTickerProviderStateMixin {
+class _VocabularyScreenState extends State<VocabularyScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
+    // Safety check to ensure Auth is authenticated before accessing user
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      context.read<VocabularyBloc>().add(VocabularyLoadRequested(authState.user.id));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? Color(0xFF121212) : Colors.grey[100];
+    final bg = isDark ? const Color(0xFF121212) : Colors.grey[100];
 
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
-        title: Text('Smart Flashcards', style: TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: isDark ? Color(0xFF1E1E1E) : Colors.white,
+        title: const Text('Smart Flashcards',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         elevation: 0,
         foregroundColor: isDark ? Colors.white : Colors.black87,
         bottom: TabBar(
@@ -91,7 +91,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> with SingleTickerPr
           labelColor: Colors.blueAccent,
           unselectedLabelColor: Colors.grey,
           indicatorColor: Colors.blueAccent,
-          tabs: [
+          tabs: const [
             Tab(text: "Review Deck"),
             Tab(text: "All Words"),
           ],
@@ -99,27 +99,33 @@ class _VocabularyScreenState extends State<VocabularyScreen> with SingleTickerPr
       ),
       body: BlocBuilder<VocabularyBloc, VocabularyState>(
         builder: (context, state) {
-          if (state is VocabularyLoading) return Center(child: CircularProgressIndicator());
-          
+          if (state is VocabularyLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
           if (state is VocabularyLoaded) {
-            // 1. Separate items
-            final dueItems = state.items.where((i) => SRSAlgorithm.isDue(i)).toList();
-            // Sort due items: Newest first, then oldest reviewed
+            final dueItems =
+                state.items.where((i) => SRSAlgorithm.isDue(i)).toList();
             dueItems.sort((a, b) => a.status.compareTo(b.status));
 
             return TabBarView(
               controller: _tabController,
-              physics: NeverScrollableScrollPhysics(), // Important for swipe cards
+              physics: const NeverScrollableScrollPhysics(),
               children: [
                 ReviewSessionView(
-                  dueItems: dueItems, 
-                  allItems: state.items, // Pass all for Cram mode
+                  dueItems: dueItems,
+                  allItems: state.items,
                 ),
                 LibraryView(items: state.items),
               ],
             );
           }
-          return Center(child: Text("Error loading vocabulary"));
+          
+          if (state is VocabularyError) {
+             return Center(child: Text("Error: ${state.message}"));
+          }
+          
+          return const Center(child: Text("Initializing..."));
         },
       ),
     );
@@ -127,20 +133,20 @@ class _VocabularyScreenState extends State<VocabularyScreen> with SingleTickerPr
 }
 
 // ==========================================
-// 🃏 REVIEW SESSION VIEW (The Anki Logic)
+// 🃏 REVIEW SESSION VIEW
 // ==========================================
 class ReviewSessionView extends StatefulWidget {
   final List<VocabularyItem> dueItems;
   final List<VocabularyItem> allItems;
 
-  const ReviewSessionView({super.key, required this.dueItems, required this.allItems});
+  const ReviewSessionView(
+      {super.key, required this.dueItems, required this.allItems});
 
   @override
   _ReviewSessionViewState createState() => _ReviewSessionViewState();
 }
 
 class _ReviewSessionViewState extends State<ReviewSessionView> {
-  // We use a local queue so the UI doesn't jump when the Bloc updates the master list
   List<VocabularyItem> _sessionQueue = [];
   bool _isSessionActive = false;
   bool _isCramMode = false;
@@ -148,7 +154,6 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
   @override
   void initState() {
     super.initState();
-    // Auto-start if items are due
     if (widget.dueItems.isNotEmpty) {
       _startSession(widget.dueItems);
     }
@@ -156,7 +161,6 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
 
   void _startSession(List<VocabularyItem> items, {bool cram = false}) {
     setState(() {
-      // Take top 20 to prevent fatigue, or all if less
       _sessionQueue = List.from(items.take(20));
       _isSessionActive = true;
       _isCramMode = cram;
@@ -165,25 +169,46 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
 
   void _handleRating(int rating) {
     if (_sessionQueue.isEmpty) return;
-
     final currentItem = _sessionQueue[0];
     
-    // 1. Calculate New Data
+    // Calculate next status based on rating
     final newStatus = SRSAlgorithm.nextStatus(currentItem.status, rating);
+    
     final newItem = currentItem.copyWith(
       status: newStatus,
-      lastReviewed: DateTime.now(), // Updates "Today"
+      lastReviewed: DateTime.now(),
       timesEncountered: currentItem.timesEncountered + 1,
     );
-
-    // 2. Update Firebase via Bloc
+    
     context.read<VocabularyBloc>().add(VocabularyUpdateRequested(newItem));
+    
+    _advanceQueue();
+  }
 
-    // 3. Update Local Queue (Remove current card)
+  void _handleDelete() {
+    if (_sessionQueue.isEmpty) return;
+    final currentItem = _sessionQueue[0];
+
+    // ✅ FIXED: Pass both required parameters (id and userId)
+    context.read<VocabularyBloc>().add(
+      VocabularyDeleteRequested(
+        id: currentItem.id, 
+        userId: currentItem.userId
+      )
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Card deleted permanently")),
+    );
+
+    _advanceQueue();
+  }
+
+  void _advanceQueue() {
     setState(() {
       _sessionQueue.removeAt(0);
       if (_sessionQueue.isEmpty) {
-        _isSessionActive = false; // Session Complete
+        _isSessionActive = false;
       }
     });
   }
@@ -192,50 +217,47 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // --- STATE: SESSION ACTIVE ---
     if (_isSessionActive && _sessionQueue.isNotEmpty) {
       final item = _sessionQueue.first;
       return Column(
         children: [
           _buildProgressBar(isDark),
           Expanded(
+            // We pass the Delete callback here
             child: Flashcard(
-              key: ValueKey(item.id), // Key forces rebuild/animation on new item
+              key: ValueKey(item.id), // Key is crucial for Dismissible to work
               item: item,
               onRated: _handleRating,
+              onDelete: _handleDelete,
             ),
           ),
         ],
       );
     }
 
-    // --- STATE: NOTHING DUE (Empty State) ---
-    // If we are here, either queue is empty or nothing was due initially
-    final dueCount = widget.dueItems.length; // Live count from Bloc
-    
+    final dueCount = widget.dueItems.length;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle_rounded, size: 80, color: Colors.green[300]),
-            SizedBox(height: 24),
+            Icon(Icons.check_circle_rounded,
+                size: 80, color: Colors.green[300]),
+            const SizedBox(height: 24),
             Text(
               dueCount > 0 ? "Ready to Review?" : "All Caught Up!",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Text(
-              dueCount > 0 
-                ? "You have $dueCount words waiting for you."
-                : "No cards are strictly due right now.",
+              dueCount > 0
+                  ? "You have $dueCount words waiting for you."
+                  : "No cards are strictly due right now.",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 16),
+              style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
-            SizedBox(height: 40),
-            
-            // Start Due Session
+            const SizedBox(height: 40),
             if (dueCount > 0)
               _buildLargeButton(
                 icon: Icons.play_arrow_rounded,
@@ -243,31 +265,19 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
                 color: Colors.blue,
                 onTap: () => _startSession(widget.dueItems),
               ),
-
-            SizedBox(height: 16),
-
-            // Start Cram Session (Even if not due)
+            const SizedBox(height: 16),
             if (dueCount == 0) ...[
-              Text("Want to study anyway?", style: TextStyle(color: Colors.grey)),
-              SizedBox(height: 16),
+              const Text("Want to study anyway?",
+                  style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 16),
               _buildLargeButton(
                 icon: Icons.bolt_rounded,
                 label: "Cram Session (Random 20)",
                 color: Colors.orange,
                 onTap: () {
-                  // Shuffle and take 20
-                  final mixed = List<VocabularyItem>.from(widget.allItems)..shuffle();
+                  final mixed = List<VocabularyItem>.from(widget.allItems)
+                    ..shuffle();
                   _startSession(mixed, cram: true);
-                },
-              ),
-              SizedBox(height: 12),
-              _buildLargeButton(
-                icon: Icons.refresh_rounded,
-                label: "Revise Known Words",
-                color: Colors.green,
-                onTap: () {
-                  final known = widget.allItems.where((i) => i.status == 5).toList()..shuffle();
-                  _startSession(known, cram: true);
                 },
               ),
             ]
@@ -278,29 +288,31 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
   }
 
   Widget _buildProgressBar(bool isDark) {
-    final total = 20; // Assuming batch of 20
+    final total = 20;
     final current = total - _sessionQueue.length;
     final pct = current / total;
 
     return Container(
-      padding: EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_isCramMode ? "🔥 Cramming" : "📚 Daily Review", style: TextStyle(fontWeight: FontWeight.bold)),
-              Text("${_sessionQueue.length} left", style: TextStyle(color: Colors.grey)),
+              Text(_isCramMode ? "🔥 Cramming" : "📚 Daily Review",
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text("${_sessionQueue.length} left",
+                  style: const TextStyle(color: Colors.grey)),
             ],
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: pct > 1.0 ? 1.0 : pct,
               minHeight: 6,
               backgroundColor: isDark ? Colors.grey[800] : Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.blueAccent),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.blueAccent),
             ),
           ),
         ],
@@ -308,18 +320,24 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
     );
   }
 
-  Widget _buildLargeButton({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
+  Widget _buildLargeButton(
+      {required IconData icon,
+      required String label,
+      required Color color,
+      required VoidCallback onTap}) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
         icon: Icon(icon, color: Colors.white),
-        label: Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        label: Text(label,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         onPressed: onTap,
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.white,
-          padding: EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           elevation: 4,
         ),
       ),
@@ -333,28 +351,80 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
 class Flashcard extends StatefulWidget {
   final VocabularyItem item;
   final Function(int) onRated;
+  final VoidCallback onDelete; // Added delete callback
 
-  const Flashcard({super.key, required this.item, required this.onRated});
+  const Flashcard({
+    super.key, 
+    required this.item, 
+    required this.onRated,
+    required this.onDelete,
+  });
 
   @override
   _FlashcardState createState() => _FlashcardState();
 }
 
-class _FlashcardState extends State<Flashcard> with SingleTickerProviderStateMixin {
+class _FlashcardState extends State<Flashcard>
+    with SingleTickerProviderStateMixin {
   bool _isRevealed = false;
   late AnimationController _controller;
   late Animation<double> _animation;
 
+  // Translation State
+  String? _myMemoryTranslation;
+  String? _googleTranslation;
+  bool _isLoadingExtra = false;
+
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: Duration(milliseconds: 300));
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 300));
     _animation = Tween<double>(begin: 0, end: 1).animate(_controller);
   }
 
   void _flip() {
     setState(() => _isRevealed = true);
     _controller.forward();
+    _fetchAlternativeTranslations();
+  }
+
+  Future<void> _fetchAlternativeTranslations() async {
+    if (_isLoadingExtra) return;
+
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return;
+
+    final user = authState.user;
+    setState(() => _isLoadingExtra = true);
+
+    String? mmResult;
+    String? googleResult;
+
+    try {
+      mmResult = await MyMemoryService.translate(
+        text: widget.item.word,
+        sourceLang: widget.item.language,
+        targetLang: user.nativeLanguage,
+      );
+    } catch (_) {}
+
+    try {
+      final service = context.read<TranslationService>();
+      googleResult = await service.translate(
+        widget.item.word,
+        user.nativeLanguage,
+        widget.item.language,
+      );
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _myMemoryTranslation = mmResult;
+        _googleTranslation = googleResult;
+        _isLoadingExtra = false;
+      });
+    }
   }
 
   @override
@@ -366,122 +436,293 @@ class _FlashcardState extends State<Flashcard> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? Color(0xFF2C2C2C) : Colors.white;
+    final cardBg = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final txtColor = isDark ? Colors.white : Colors.black87;
 
-    return Column(
-      children: [
-        // --- CARD AREA ---
-        Expanded(
-          child: GestureDetector(
-            onTap: _isRevealed ? null : _flip,
-            child: Container(
-              width: double.infinity,
-              margin: EdgeInsets.symmetric(horizontal: 20),
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 15,
-                    offset: Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+    // --- DISMISSIBLE WRAPPER FOR SWIPE ---
+    return Dismissible(
+      key: ValueKey(widget.item.id),
+      direction: DismissDirection.horizontal, // Allow Left and Right
+      
+      // Swipe Right -> Mark as Good (Green)
+      background: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+        decoration: BoxDecoration(
+          color: Colors.green,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 30),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.thumb_up_alt_rounded, color: Colors.white, size: 40),
+            Text("Good", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+          ],
+        ),
+      ),
+      
+      // Swipe Left -> Mark as Again (Red)
+      secondaryBackground: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+        decoration: BoxDecoration(
+          color: Colors.orange,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 30),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.refresh_rounded, color: Colors.white, size: 40),
+            Text("Again", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+          ],
+        ),
+      ),
+      
+      onDismissed: (direction) {
+        if (direction == DismissDirection.startToEnd) {
+          // Swipe Right: Mark as GOOD (3)
+          widget.onRated(3);
+        } else {
+          // Swipe Left: Mark as AGAIN (1)
+          widget.onRated(1);
+        }
+      },
+      
+      child: Column(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: _isRevealed ? null : _flip,
+              child: Stack(
                 children: [
-                  // Status Badge
                   Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    width: double.infinity,
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: _getStatusColor(widget.item.status).withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _getStatusLabel(widget.item.status).toUpperCase(),
-                      style: TextStyle(color: _getStatusColor(widget.item.status), fontWeight: FontWeight.bold, fontSize: 10),
-                    ),
-                  ),
-                  Spacer(),
-                  
-                  // FRONT (Word)
-                  Text(
-                    widget.item.word,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: txtColor),
-                  ),
-                  
-                  SizedBox(height: 20),
-                  
-                  // BACK (Translation - Revealed with animation)
-                  FadeTransition(
-                    opacity: _animation,
-                    child: Column(
-                      children: [
-                        Divider(color: Colors.grey.withOpacity(0.3)),
-                        SizedBox(height: 10),
-                        Text(
-                          widget.item.translation,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 24, color: Colors.blueAccent, fontWeight: FontWeight.w500),
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 15,
+                          offset: const Offset(0, 8),
                         ),
-                        if (widget.item.notes != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10.0),
-                            child: Text(
-                              widget.item.notes!,
-                              style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-                            ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Status Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _getStatusColor(widget.item.status).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
                           ),
+                          child: Text(
+                            _getStatusLabel(widget.item.status).toUpperCase(),
+                            style: TextStyle(
+                                color: _getStatusColor(widget.item.status),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10),
+                          ),
+                        ),
+                        const Spacer(),
+
+                        // FRONT (Word)
+                        Text(
+                          widget.item.word,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                              color: txtColor),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // BACK (Translations)
+                        FadeTransition(
+                          opacity: _animation,
+                          child: Column(
+                            children: [
+                              Divider(color: Colors.grey.withOpacity(0.3)),
+                              const SizedBox(height: 10),
+                              
+                              Text(
+                                widget.item.translation,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    fontSize: 24,
+                                    color: Colors.blueAccent,
+                                    fontWeight: FontWeight.w500),
+                              ),
+
+                              if (widget.item.notes != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10.0),
+                                  child: Text(
+                                    widget.item.notes!,
+                                    style: const TextStyle(
+                                        color: Colors.grey, fontStyle: FontStyle.italic),
+                                  ),
+                                ),
+
+                              if (_isRevealed) ...[
+                                const SizedBox(height: 20),
+                                if (_isLoadingExtra)
+                                  const SizedBox(
+                                    height: 15, width: 15,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                else
+                                  Column(
+                                    children: [
+                                      if (_myMemoryTranslation != null && 
+                                          _myMemoryTranslation != widget.item.translation)
+                                        _buildAltTranslationRow(
+                                            "MyMemory", _myMemoryTranslation!, isDark),
+                                      
+                                      if (_googleTranslation != null && 
+                                          _googleTranslation != widget.item.translation &&
+                                          _googleTranslation != _myMemoryTranslation)
+                                        _buildAltTranslationRow(
+                                            "Google", _googleTranslation!, isDark),
+                                    ],
+                                  ),
+                              ]
+                            ],
+                          ),
+                        ),
+                        const Spacer(),
+                        if (!_isRevealed)
+                          Text("Tap to flip • Swipe Right for Good",
+                              style: TextStyle(color: Colors.grey[400], fontSize: 12)),
                       ],
                     ),
                   ),
-                  Spacer(),
-                  if (!_isRevealed)
-                    Text("Tap to flip", style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+
+                  // --- MENU BUTTON FOR DELETE ---
+                  Positioned(
+                    top: 10,
+                    right: 30,
+                    child: PopupMenuButton<String>(
+                      icon: Icon(Icons.more_horiz, color: Colors.grey[400]),
+                      onSelected: (value) {
+                        if (value == 'delete') {
+                          _showDeleteConfirm();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text("Delete Card", style: TextStyle(color: Colors.red)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-        ),
 
-        // --- BUTTONS AREA ---
-        SizedBox(height: 20),
-        SizedBox(
-          height: 100, // Fixed height for buttons
-          child: _isRevealed
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildRatingBtn("Again", Colors.red, 1),
-                      _buildRatingBtn("Hard", Colors.orange, 2),
-                      _buildRatingBtn("Good", Colors.blue, 3),
-                      _buildRatingBtn("Easy", Colors.green, 4),
-                    ],
-                  ),
-                )
-              : SizedBox(), // Empty when not revealed
-        ),
-        SizedBox(height: 20),
-      ],
+          // --- BUTTONS AREA ---
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 100,
+            child: _isRevealed
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildRatingBtn("Again", Colors.red, 1),
+                        _buildRatingBtn("Hard", Colors.orange, 2),
+                        _buildRatingBtn("Good", Colors.blue, 3),
+                        _buildRatingBtn("Easy", Colors.green, 4),
+                      ],
+                    ),
+                  )
+                : const SizedBox(),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirm() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Word?"),
+        content: const Text("You will not see this card again."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              widget.onDelete(); 
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAltTranslationRow(String source, String text, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white12 : Colors.grey[200],
+              borderRadius: BorderRadius.circular(4)
+            ),
+            child: Text(source, style: TextStyle(fontSize: 9, color: Colors.grey[600]))
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 14,
+                fontStyle: FontStyle.italic,
+                color: isDark ? Colors.white70 : Colors.black87
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildRatingBtn(String label, Color color, int rating) {
-    // Get time estimate string
     final timeStr = SRSAlgorithm.getNextIntervalText(widget.item.status, rating);
-
     return InkWell(
       onTap: () => widget.onRated(rating),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: 75,
-        padding: EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
@@ -490,8 +731,8 @@ class _FlashcardState extends State<Flashcard> with SingleTickerProviderStateMix
         child: Column(
           children: [
             Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: color)),
-            SizedBox(height: 4),
-            Text(timeStr, style: TextStyle(fontSize: 10, color: Colors.grey)),
+            const SizedBox(height: 4),
+            Text(timeStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
           ],
         ),
       ),
@@ -512,11 +753,10 @@ class _FlashcardState extends State<Flashcard> with SingleTickerProviderStateMix
 }
 
 // ==========================================
-// 📚 LIBRARY VIEW (List)
+// 📚 LIBRARY VIEW (Unchanged)
 // ==========================================
 class LibraryView extends StatelessWidget {
   final List<VocabularyItem> items;
-
   const LibraryView({super.key, required this.items});
 
   @override
@@ -524,11 +764,11 @@ class LibraryView extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (items.isEmpty) {
-      return Center(child: Text("No words in library yet."));
+      return const Center(child: Text("No words in library yet."));
     }
 
     return ListView.builder(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
@@ -539,21 +779,24 @@ class LibraryView extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(color: Colors.grey.withOpacity(0.2)),
           ),
-          margin: EdgeInsets.only(bottom: 8),
+          margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             leading: CircleAvatar(
               backgroundColor: _getStatusColor(item.status).withOpacity(0.2),
               child: Text(
                 '${item.status}',
-                style: TextStyle(color: _getStatusColor(item.status), fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: _getStatusColor(item.status),
+                    fontWeight: FontWeight.bold),
               ),
             ),
-            title: Text(item.word, style: TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(item.word,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text(item.translation),
             trailing: Text(
               _daysAgo(item.lastReviewed),
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ),
         );

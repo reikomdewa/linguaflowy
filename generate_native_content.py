@@ -7,60 +7,106 @@ import time
 
 # --- CONFIGURATION FOR NATIVE CONTENT ---
 
-# 1. Change Output Directory so it doesn't mix with lessons
+# 1. Output Directory for "Trending/Native" feed
 OUTPUT_DIR = "assets/course_videos"
 
-# 2. Search Config: Native topics (Science, Tech, Vlogs, Culture)
-# Note: Queries are in the target language to find native content.
+# 2. EXPANDED SEARCH CONFIGURATION
+# High-quality native content queries mixed with specific popular channels
 SEARCH_CONFIG = {
     'es': [
-        ('Documentales interesantes en español', 'Stories'),
-        ('Reseñas de tecnología celulares', 'News'),
-        ('Vlog de viajes méxico españa', 'Bites'),
-        ('Entrevistas a famosos españoles', 'Grammar tips'),
+        # Tech & Science
+        ('Curiosamente ciencia', 'science'), # Excellent animated science
+        ('Topes de Gama review', 'tech'),
+        ('Robot de Platón ciencia', 'science'),
+        # Vlogs & Travel
+        ('Luisito Comunica viaje', 'vlog'), # The biggest travel vlogger
+        ('Ramilla de Aventura', 'vlog'),
+        ('Vlog diario españa', 'vlog'),
+        # Culture & History
+        ('VisualPolitik español', 'news'),
+        ('Academia Play historia', 'history'),
+        ('Te lo resumo cuentos', 'culture'),
+        # Cooking
+        ('La capital cocina', 'cooking')
     ],
     'fr': [
-        ('Documentaire arte français', 'documentary'),
-        ('High tech test français', 'tech'),
+        # News & Essays
+        ('HugoDécrypte actus', 'news'), # Essential French news
+        ('Le Monde video', 'news'),
+        ('Arte documentaire français', 'documentary'),
+        # History & Science
+        ('Nota Bene histoire', 'history'),
+        ('C\'est pas sorcier', 'science'), # Classic clear French
+        ('Dr Nozman science', 'science'),
+        # Lifestyle
         ('Vlog voyage paris', 'vlog'),
-        ('HugoDécrypte actus', 'news'), # Popular French news YouTuber
-        ('Recette cuisine française simple', 'cooking')
+        ('Bruno Maltor voyage', 'vlog'),
+        ('750g recettes', 'cooking'),
+        ('Tech test français', 'tech')
     ],
     'de': [
-        ('Doku deutsch', 'documentary'),
-        ('Technik review deutsch', 'tech'),
-        ('Reisevlog deutschland', 'vlog'),
-        ('Wissen macht Ah', 'science'),
-        ('Interessante fakten deutsch', 'education')
+        # Science & Education (Germany is great for this)
+        ('Dinge Erklärt – Kurzgesagt', 'science'), # Best animation
+        ('MrWissen2go Geschichte', 'history'),
+        ('Galileo deutschland', 'education'),
+        ('Simplicissimus video essay', 'news'),
+        # Tech & Lifestyle
+        ('Technikfaultier review', 'tech'),
+        ('Felixba review', 'tech'),
+        ('Reisevlog Deutschland', 'vlog'),
+        ('Sallys Welt kochen', 'cooking'),
+        # Documentary
+        ('STRG_F reportage', 'documentary'),
+        ('WDR Doku', 'documentary')
     ],
     'it': [
-        ('Documentario italiano', 'documentary'),
-        ('Recensione tecnologia italiano', 'tech'),
-        ('Vlog viaggio italia', 'vlog'),
-        ('Intervista italiano', 'interview'),
-        ('Ricette cucina italiana', 'cooking')
+        # Science & History
+        ('Nova Lectio storia', 'history'),
+        ('Geopop scienze', 'science'),
+        ('Entropy for Life', 'science'),
+        # News & Culture
+        ('Breaking Italy news', 'news'),
+        ('Podcast Italiano', 'culture'),
+        # Lifestyle
+        ('Human Safari viaggi', 'vlog'),
+        ('Fatto in casa da Benedetta', 'cooking'),
+        ('Galeazzi tech', 'tech')
     ],
     'pt': [
-        ('Documentário brasileiro', 'documentary'),
-        ('Review tecnologia brasil', 'tech'),
-        ('Vlog de viagem portugal brasil', 'vlog'),
-        ('Podcast cortes brasil', 'interview')
+        # Brazil Dominates YouTube PT
+        ('Manual do Mundo', 'science'), # Huge science channel
+        ('Nostalgia Castanhari', 'history'),
+        ('Sérgio Sacani', 'science'),
+        # Tech & Vlogs
+        ('Loop Infinito tech', 'tech'),
+        ('Coisa de Nerd', 'tech'),
+        ('Vlog de viagem brasil', 'vlog'),
+        ('Receitas de Pai', 'cooking'),
+        ('Jovem Nerd', 'culture')
     ],
     'ja': [
-        ('日本のドキュメンタリー', 'documentary'), # Japanese Documentary
-        ('ガジェットレビュー', 'tech'),           # Gadget Review
-        ('日本旅行 Vlog', 'vlog'),              # Japan Travel Vlog
-        ('日本の料理レシピ', 'cooking')           # Japanese Cooking Recipes
+        # Vlogs & Culture
+        ('Rachel and Jun vlogs', 'vlog'),
+        ('Paolo fromTOKYO', 'documentary'),
+        ('Kimono Mom cooking', 'cooking'),
+        # Tech & News
+        ('瀬戸弘司 (Seto Koji)', 'tech'),
+        ('ANN news japanese', 'news'),
+        # Entertainment
+        ('Sushi Ramen Riku', 'science'), # Very visual, good for context
+        ('Japanese history animation', 'history')
     ],
     'en': [
-        ('TED talks', 'education'),
-        ('MKBHD tech reviews', 'tech'),
-        ('Travel documentary 4k', 'documentary'),
-        ('Celebrity interviews', 'interview')
+        ('Veritasium', 'science'),
+        ('Vox video essays', 'news'),
+        ('Marques Brownlee', 'tech'),
+        ('Architectural Digest open door', 'vlog'),
+        ('Gordon Ramsay cooking', 'cooking'),
+        ('TED talks', 'education')
     ]
 }
 
-# --- HELPERS (Identical to your Lesson script) ---
+# --- HELPERS ---
 
 def time_to_seconds(time_str):
     try:
@@ -113,7 +159,7 @@ def parse_vtt_to_transcript(vtt_content):
     return transcript
 
 def analyze_difficulty(transcript):
-    # Native content is usually Advanced or Intermediate
+    # Native content is usually Advanced, but we check word length
     if not transcript: return 'advanced'
     all_text = " ".join([t['text'] for t in transcript])
     words = all_text.split()
@@ -121,14 +167,13 @@ def analyze_difficulty(transcript):
     
     avg_len = sum(len(w) for w in words) / len(words)
     
-    # Adjusted thresholds for native content
     if avg_len < 4.0: return 'beginner'
     if avg_len < 5.0: return 'intermediate'
     return 'advanced'
 
 def get_video_details(video_url, lang_code, genre):
     video_id = video_url.split('v=')[-1]
-    temp_filename = f"temp_native_{video_id}" # Changed temp name to avoid conflicts
+    temp_filename = f"temp_native_{video_id}"
     
     ydl_opts = {
         'skip_download': True,
@@ -145,10 +190,10 @@ def get_video_details(video_url, lang_code, genre):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
             
-            # Filter out "Shorts" or very short videos (less than 2 mins)
+            # Filter shorts or very long videos
             duration = info.get('duration', 0)
-            if duration < 120: 
-                print(f"    ⚠️ Skipping (Too short/Shorts): {info.get('title')}")
+            if duration < 120 or duration > 1800: 
+                print(f"    ⚠️ Skipping (Length {duration}s): {info.get('title')[:30]}...")
                 return None
 
             files = glob.glob(f"{temp_filename}*.vtt")
@@ -170,7 +215,7 @@ def get_video_details(video_url, lang_code, genre):
 
             return {
                 "id": f"yt_{video_id}",
-                "userId": "system_native", # Mark as native system content
+                "userId": "system_native",
                 "title": info.get('title', 'Unknown Title'),
                 "language": lang_code,
                 "content": full_text,
@@ -178,7 +223,7 @@ def get_video_details(video_url, lang_code, genre):
                 "transcript": transcript_data,
                 "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
                 "imageUrl": f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
-                "type": "video_native", # New Type identifier
+                "type": "video_native",
                 "difficulty": analyze_difficulty(transcript_data),
                 "videoUrl": f"https://youtube.com/watch?v={video_id}",
                 "isFavorite": False,
@@ -186,7 +231,7 @@ def get_video_details(video_url, lang_code, genre):
                 "genre": genre
             }
     except Exception as e:
-        print(f"    ⚠️ Error processing {video_id}: {str(e)[:50]}...")
+        # print(f"    ⚠️ Error: {str(e)[:50]}")
         for f in glob.glob(f"{temp_filename}*"):
             try: os.remove(f)
             except: pass
@@ -201,12 +246,12 @@ def main():
         print(f" PROCESSING NATIVE CONTENT: {lang.upper()}")
         print(f"==========================================")
         
-        # CHANGED: Filename is now 'trending_{lang}.json'
         filepath = os.path.join(OUTPUT_DIR, f"trending_{lang}.json")
         
         existing_lessons = []
         existing_ids = set()
         
+        # 1. Load Existing Data
         if os.path.exists(filepath):
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
@@ -218,8 +263,9 @@ def main():
 
         total_new_for_lang = 0
 
+        # 2. Search
         for query, genre in categories:
-            print(f"\n  🔎 Searching: '{query}' (Genre: {genre})")
+            print(f"\n  🔎 Searching: '{query}' ({genre})")
             
             ydl_opts = {
                 'quiet': True,
@@ -229,9 +275,9 @@ def main():
             }
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Search for 5 videos per topic (fewer than lessons, keeps it fresh)
+                # Search 4 videos per topic to keep the feed diverse
                 try:
-                    result = ydl.extract_info(f"ytsearch5:{query}", download=False)
+                    result = ydl.extract_info(f"ytsearch4:{query}", download=False)
                 except Exception as e:
                     print(f"    ❌ Search failed: {e}")
                     continue
@@ -244,6 +290,7 @@ def main():
                         title = entry.get('title')
                         lesson_id = f"yt_{vid}"
 
+                        # DUPLICATE PROTECTION
                         if lesson_id in existing_ids:
                             continue
 
@@ -261,10 +308,11 @@ def main():
                         
                         time.sleep(1)
 
+        # 3. Save
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(existing_lessons, f, ensure_ascii=False, indent=None)
         
-        print(f"\n  💾 SAVED {lang.upper()}: Total {len(existing_lessons)} videos.")
+        print(f"\n  💾 SAVED {lang.upper()}: Total {len(existing_lessons)} (+{total_new_for_lang} new).")
 
 if __name__ == "__main__":
     main()
