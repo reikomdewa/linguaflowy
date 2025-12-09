@@ -88,22 +88,15 @@ Future<List<LessonModel>> _fetchHybrid({
     final localList = results[0];
     final remoteList = results[1];
 
-    // --- 🔍 DEBUG PRINT ---
-    print("--------------------------------------------------");
-    print("📥 LOADING: $userId ($languageCode)");
-    print("   🏠 Local Assets Found: ${localList.length}");
-    print("   🔥 Firestore Found:    ${remoteList.length}");
     
     // Optional: Print names of remote lessons to prove they are unique
     if (remoteList.isNotEmpty) {
-      print("   🔥 First Remote Lesson: ${remoteList.first.title}");
     }
     print("--------------------------------------------------");
     // ---------------------
 
     return _mergeAndDeduplicate(localList, remoteList);
   } catch (e) {
-    print("Hybrid Fetch Error: $e");
     return _loadFromAsset(localPath, languageCode, userId);
   }
 }
@@ -144,7 +137,6 @@ Future<List<LessonModel>> _fetchHybrid({
       // Use the shared mapper
       return data.map((item) => _mapJsonToLesson(item, languageCode, defaultUserId)).toList();
     } catch (e) {
-      print("⚠️ ASSET LOAD SKIPPED [$path] (Might not exist yet)");
       return [];
     }
   }

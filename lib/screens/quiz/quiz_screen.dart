@@ -9,7 +9,12 @@ import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 class QuizScreen extends StatefulWidget {
-  const QuizScreen({super.key});
+  final List<dynamic>? initialQuestions; // ADD THIS
+
+  const QuizScreen({
+    super.key, 
+    this.initialQuestions, // ADD THIS
+  });
 
   @override
   State<QuizScreen> createState() => _QuizScreenState();
@@ -44,8 +49,8 @@ class _QuizScreenState extends State<QuizScreen> {
     super.dispose();
   }
 
-  void _loadQuiz() {
-    if (_hasLoaded) return; // Prevent double execution
+ void _loadQuiz() {
+    if (_hasLoaded) return; 
     _hasLoaded = true;
 
     final authState = context.read<AuthBloc>().state;
@@ -68,15 +73,28 @@ class _QuizScreenState extends State<QuizScreen> {
 
     _tts.setLanguage(_targetLangCode);
 
-    context.read<QuizBloc>().add(
-          QuizLoadRequested(
-            promptType: QuizPromptType.dailyPractice,
-            userId: userId,
-            targetLanguage: targetLang,
-            nativeLanguage: nativeLang,
-            isPremium: isPremium,
-          ),
-        );
+    // --- CHECK: DO WE HAVE PRE-LOADED QUESTIONS? ---
+    if (widget.initialQuestions != null && widget.initialQuestions!.isNotEmpty) {
+      // Use the specific unit questions
+      context.read<QuizBloc>().add(
+        QuizStartWithQuestions(
+          questions: widget.initialQuestions!,
+          userId: userId,
+          isPremium: isPremium,
+        ),
+      );
+    } else {
+      // Fallback: Generate daily practice quiz
+      context.read<QuizBloc>().add(
+        QuizLoadRequested(
+          promptType: QuizPromptType.dailyPractice,
+          userId: userId,
+          targetLanguage: targetLang,
+          nativeLanguage: nativeLang,
+          isPremium: isPremium,
+        ),
+      );
+    }
   }
 
   void _retryQuizLoad() {

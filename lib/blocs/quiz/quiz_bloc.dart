@@ -15,13 +15,12 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
     on<QuizCheckAnswer>(_onCheckAnswer);
     on<QuizNextQuestion>(_onNextQuestion);
     on<QuizReviveRequested>(_onReviveRequested);
+    // This connects the event to the function
+    on<QuizStartWithQuestions>(_onQuizStartWithQuestions); 
   }
 
-  // 1. LOAD QUESTIONS
+  // 1. LOAD QUESTIONS (AI GENERATED)
   Future<void> _onLoadRequested(QuizLoadRequested event, Emitter<QuizState> emit) async {
-    // --- CRITICAL FIX: GUARD CLAUSE ---
-    // If we are already loading, ignore this event. 
-    // This prevents the 429 Loop if the UI rebuilds.
     if (state.status == QuizStatus.loading) {
       print("QuizBloc: Already loading. Ignoring duplicate request.");
       return; 
@@ -63,7 +62,49 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
     }
   }
 
-  // ... (Rest of your methods remain exactly the same)
+  // 2. LOAD PRE-DEFINED QUESTIONS (FROM UNIT SELECTION)
+  // --- THIS IS THE NEW PART ---
+  void _onQuizStartWithQuestions(QuizStartWithQuestions event, Emitter<QuizState> emit) {
+    try {
+      // Convert raw Map/JSON to Model objects
+      final List<QuizQuestion> parsedQuestions = event.questions
+          .map((q) => QuizQuestion.fromMap(q as Map<String, dynamic>))
+          .toList();
+
+      if (parsedQuestions.isEmpty) {
+        emit(state.copyWith(
+          status: QuizStatus.error, 
+          errorMessage: "This unit has no valid questions."
+        ));
+        return;
+      }
+
+      // Prepare the first question
+      final firstQ = parsedQuestions[0];
+      final initialOptions = List<String>.from(firstQ.options)..shuffle();
+
+      // Emit ready state immediately
+      emit(state.copyWith(
+        status: QuizStatus.answering,
+        questions: parsedQuestions,
+        currentIndex: 0,
+        selectedWords: [],
+        availableWords: initialOptions,
+        hearts: 5, 
+        isPremium: event.isPremium,
+        correctAnswersCount: 0,
+        errorMessage: null, // Clear any previous errors
+      ));
+    } catch (e) {
+      print("Error parsing unit questions: $e");
+      emit(state.copyWith(
+        status: QuizStatus.error, 
+        errorMessage: "Failed to load unit data."
+      ));
+    }
+  }
+
+  // 3. GAME LOGIC HANDLERS
   void _onOptionSelected(QuizOptionSelected event, Emitter<QuizState> emit) {
     if (state.status != QuizStatus.answering) return;
     final newSelected = List<String>.from(state.selectedWords)..add(event.word);
@@ -84,6 +125,7 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
 
     final userSentence = state.selectedWords.join(" ");
     
+    // Normalize strings to ignore punctuation/case differences
     final cleanUser = userSentence.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\u00C0-\u017F]'), '');
     final cleanCorrect = currentQ.correctAnswer.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s\u00C0-\u017F]'), '');
 

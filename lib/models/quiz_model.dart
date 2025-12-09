@@ -1,61 +1,58 @@
-// enum QuestionType { translate, listen, fillGap, matching }
-
-// class QuestionModel {
-//   final String id;
-//   final QuestionType type;
-//   final String question; // "The cat eats" or Audio URL
-//   final List<String> correctAnswers; // ["El gato come", "El gato está comiendo"]
-//   final List<String> options; // ["El", "perro", "gato", "come", "bebe"] (Word Bank)
-//   final String? explanation; // "Gato is masculine, so use El"
-
-//   QuestionModel({
-//     required this.id,
-//     required this.type,
-//     required this.question,
-//     required this.correctAnswers,
-//     required this.options,
-//     this.explanation,
-//   });
-
-//   // Add fromMap/toMap...
-// }
-
-// class QuizLessonModel {
-//   final String id;
-//   final String title; // "Basics 1"
-//   final List<QuestionModel> questions;
-  
-//   QuizLessonModel({required this.id, required this.title, required this.questions});
-// }
-
-// class QuizQuestion {
-//   final String id;
-//   final String type; // 'target_to_native' or 'native_to_target'
-//   final String targetSentence; // The sentence to be translated (The Question)
-//   final String correctAnswer;  // The correct translation (The Answer)
-//   final List<String> options;  // The word bank choices
-
-//   QuizQuestion({
-//     required this.id,
-//     required this.type,
-//     required this.targetSentence,
-//     required this.correctAnswer,
-//     required this.options,
-//   });
-// }
-
 class QuizQuestion {
   final String id;
   final String type; // 'target_to_native' or 'native_to_target'
-  final String targetSentence; 
-  final String correctAnswer;
-  final List<String> options;
+  final String targetSentence; // The sentence shown to the user
+  final String correctAnswer;  // The answer the user must build
+  final List<String> options;  // The word bank (correct words + distractors)
 
-  QuizQuestion({
+  const QuizQuestion({
     required this.id,
     required this.type,
     required this.targetSentence,
     required this.correctAnswer,
     required this.options,
   });
+
+  /// Factory constructor to create a QuizQuestion from JSON/Firestore data
+  factory QuizQuestion.fromMap(Map<String, dynamic> map) {
+    return QuizQuestion(
+      id: map['id']?.toString() ?? '',
+      type: map['type']?.toString() ?? 'target_to_native',
+      targetSentence: map['targetSentence']?.toString() ?? '',
+      correctAnswer: map['correctAnswer']?.toString() ?? '',
+      // Safely convert List<dynamic> to List<String>
+      options: (map['options'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+    );
+  }
+
+  /// Converts the QuizQuestion object back to a Map (useful for uploading)
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'type': type,
+      'targetSentence': targetSentence,
+      'correctAnswer': correctAnswer,
+      'options': options,
+    };
+  }
+
+  /// Creates a copy of the object with some fields replaced (Useful for Bloc)
+  QuizQuestion copyWith({
+    String? id,
+    String? type,
+    String? targetSentence,
+    String? correctAnswer,
+    List<String>? options,
+  }) {
+    return QuizQuestion(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      targetSentence: targetSentence ?? this.targetSentence,
+      correctAnswer: correctAnswer ?? this.correctAnswer,
+      options: options ?? this.options,
+    );
+  }
 }
