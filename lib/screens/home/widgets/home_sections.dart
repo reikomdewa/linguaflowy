@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
+import 'package:linguaflow/screens/home/utils/home_utils.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart'; // Needed for nav
-import 'package:linguaflow/widgets/practice_banner_button.dart';
+import 'package:linguaflow/widgets/quiz/practice_banner_button.dart';
 import 'home_dialogs.dart'; // Needed for options
 import 'lesson_cards.dart';
 
 // --- HELPER METHOD TO BUILD CARDS (DRY Principle) ---
-Widget _buildCard(BuildContext context, LessonModel lesson, Map<String, VocabularyItem> vocabMap, bool isDark) {
+Widget _buildCard(
+  BuildContext context,
+  LessonModel lesson,
+  Map<String, VocabularyItem> vocabMap,
+  bool isDark,
+) {
   return VideoLessonCard(
     lesson: lesson,
     vocabMap: vocabMap,
@@ -33,8 +39,14 @@ class GuidedCoursesSection extends StatefulWidget {
   final Map<String, VocabularyItem> vocabMap;
   final bool isDark;
 
-  const GuidedCoursesSection({super.key, required this.guidedLessons, required this.importedLessons, required this.vocabMap, required this.isDark});
-  
+  const GuidedCoursesSection({
+    super.key,
+    required this.guidedLessons,
+    required this.importedLessons,
+    required this.vocabMap,
+    required this.isDark,
+  });
+
   @override
   _GuidedCoursesSectionState createState() => _GuidedCoursesSectionState();
 }
@@ -42,26 +54,105 @@ class GuidedCoursesSection extends StatefulWidget {
 class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
   // ... (State logic same as before) ...
   String _guidedTab = 'All';
-  final List<String> _guidedTabsList = ['All', 'Beginner', 'Intermediate', 'Advanced', 'Imported'];
+  final List<String> _guidedTabsList = [
+    'All',
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+    'Imported',
+  ];
+
+  Widget _buildAIStoryButton(BuildContext context, bool isDark) {
+    final List<Color> gradientColors = isDark
+        ? [const Color(0xFFFFFFFF), const Color(0xFFE0E0E0)]
+        : [const Color(0xFF2C3E50), const Color(0xFF000000)];
+    final Color textColor = isDark ? Colors.black : Colors.white;
+    final Color shadowColor = isDark
+        ? Colors.white.withOpacity(0.15)
+        : Colors.black.withOpacity(0.3);
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 16.0, right: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: shadowColor,
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: () => HomeUtils.showAIStoryGenerator(context),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.auto_awesome, color: textColor, size: 20),
+              const SizedBox(width: 10),
+              Text(
+                "Story Lesson",
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     // ... (Filter logic) ...
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     List<LessonModel> displayLessons = [];
-    if (_guidedTab == 'Imported') { displayLessons = widget.importedLessons; } 
-    else if (_guidedTab == 'All') { displayLessons = widget.guidedLessons; } 
-    else { displayLessons = widget.guidedLessons.where((l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase()).toList(); }
+    if (_guidedTab == 'Imported') {
+      displayLessons = widget.importedLessons;
+    } else if (_guidedTab == 'All') {
+      displayLessons = widget.guidedLessons;
+    } else {
+      displayLessons = widget.guidedLessons
+          .where((l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase())
+          .toList();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ... (Header logic) ...
-         Padding(
+        Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 0, 8),
           child: Row(
             children: [
-              Text("Guided Courses", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: widget.isDark ? Colors.white70 : Colors.black45)),
-              const Expanded(child: PracticeBannerButton()),
+              Text(
+                "Guided Courses",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: widget.isDark ? Colors.white70 : Colors.black45,
+                ),
+              ),
+              Expanded(child: _buildAIStoryButton(context, isDark)),
             ],
           ),
         ),
@@ -69,12 +160,23 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(children: _guidedTabsList.map((tab) => _buildTab(tab)).toList()),
+          child: Row(
+            children: _guidedTabsList.map((tab) => _buildTab(tab)).toList(),
+          ),
         ),
 
         // LIST
         if (displayLessons.isEmpty)
-           Container(height: 260, alignment: Alignment.center, child: Text(_guidedTab == 'Imported' ? "No imported lessons yet." : "No guided courses found.", style: const TextStyle(color: Colors.grey)))
+          Container(
+            height: 260,
+            alignment: Alignment.center,
+            child: Text(
+              _guidedTab == 'Imported'
+                  ? "No imported lessons yet."
+                  : "No guided courses found.",
+              style: const TextStyle(color: Colors.grey),
+            ),
+          )
         else
           SizedBox(
             height: 240,
@@ -85,7 +187,12 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
               separatorBuilder: (ctx, i) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
                 // CALL HELPER HERE
-                return _buildCard(context, displayLessons[index], widget.vocabMap, widget.isDark);
+                return _buildCard(
+                  context,
+                  displayLessons[index],
+                  widget.vocabMap,
+                  widget.isDark,
+                );
               },
             ),
           ),
@@ -94,27 +201,49 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
   }
 
   Widget _buildTab(String tab) {
-     final isSelected = _guidedTab == tab;
-     return Padding(
-        padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-        child: InkWell(
-          onTap: () => setState(() => _guidedTab = tab),
-          child: Column(children: [
-            Text(tab, style: TextStyle(fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? (widget.isDark ? Colors.white : Colors.black) : Colors.grey[500])),
-            if (isSelected) Container(margin: const EdgeInsets.only(top: 4), height: 2, width: 20, color: Colors.blue),
-          ]),
+    final isSelected = _guidedTab == tab;
+    return Padding(
+      padding: const EdgeInsets.only(right: 24.0, bottom: 12),
+      child: InkWell(
+        onTap: () => setState(() => _guidedTab = tab),
+        child: Column(
+          children: [
+            Text(
+              tab,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected
+                    ? (widget.isDark ? Colors.white : Colors.black)
+                    : Colors.grey[500],
+              ),
+            ),
+            if (isSelected)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                height: 2,
+                width: 20,
+                color: Colors.blue,
+              ),
+          ],
         ),
-      );
+      ),
+    );
   }
 }
 
 // --- IMMERSION SECTION ---
 class ImmersionSection extends StatefulWidget {
-   // ... Same Constructor ...
+  // ... Same Constructor ...
   final List<LessonModel> lessons;
   final Map<String, VocabularyItem> vocabMap;
   final bool isDark;
-  const ImmersionSection({super.key, required this.lessons, required this.vocabMap, required this.isDark});
+  const ImmersionSection({
+    super.key,
+    required this.lessons,
+    required this.vocabMap,
+    required this.isDark,
+  });
 
   @override
   _ImmersionSectionState createState() => _ImmersionSectionState();
@@ -122,25 +251,57 @@ class ImmersionSection extends StatefulWidget {
 
 class _ImmersionSectionState extends State<ImmersionSection> {
   String _nativeDifficultyTab = 'All';
-  final List<String> _difficultyTabs = ['All', 'Beginner', 'Intermediate', 'Advanced'];
+  final List<String> _difficultyTabs = [
+    'All',
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+  ];
 
   @override
   Widget build(BuildContext context) {
     // ... Logic ...
-    final displayVideos = _nativeDifficultyTab == 'All' ? widget.lessons : widget.lessons.where((l) => l.difficulty.toLowerCase() == _nativeDifficultyTab.toLowerCase()).toList();
+    final displayVideos = _nativeDifficultyTab == 'All'
+        ? widget.lessons
+        : widget.lessons
+              .where(
+                (l) =>
+                    l.difficulty.toLowerCase() ==
+                    _nativeDifficultyTab.toLowerCase(),
+              )
+              .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text("Immersion", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: widget.isDark ? Colors.white70 : Colors.black45))),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            "Immersion",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: widget.isDark ? Colors.white70 : Colors.black45,
+            ),
+          ),
+        ),
         // ... Tabs ...
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(children: _difficultyTabs.map((tab) => _buildTab(tab)).toList()),
+          child: Row(
+            children: _difficultyTabs.map((tab) => _buildTab(tab)).toList(),
+          ),
         ),
         if (displayVideos.isEmpty)
-          Container(height: 150, alignment: Alignment.center, child: const Text("No videos found", style: TextStyle(color: Colors.grey)))
+          Container(
+            height: 150,
+            alignment: Alignment.center,
+            child: const Text(
+              "No videos found",
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
         else
           SizedBox(
             height: 260,
@@ -151,36 +312,63 @@ class _ImmersionSectionState extends State<ImmersionSection> {
               separatorBuilder: (ctx, i) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
                 // CALL HELPER HERE
-                return _buildCard(context, displayVideos[index], widget.vocabMap, widget.isDark);
+                return _buildCard(
+                  context,
+                  displayVideos[index],
+                  widget.vocabMap,
+                  widget.isDark,
+                );
               },
             ),
           ),
       ],
     );
   }
-  
+
   Widget _buildTab(String tab) {
-     final isSelected = _nativeDifficultyTab == tab;
-     return Padding(
-        padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-        child: InkWell(
-          onTap: () => setState(() => _nativeDifficultyTab = tab),
-          child: Column(children: [
-            Text(tab, style: TextStyle(fontSize: 15, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? (widget.isDark ? Colors.white : Colors.black) : Colors.grey[500])),
-            if (isSelected) Container(margin: const EdgeInsets.only(top: 4), height: 2, width: 20, color: Colors.red),
-          ]),
+    final isSelected = _nativeDifficultyTab == tab;
+    return Padding(
+      padding: const EdgeInsets.only(right: 24.0, bottom: 12),
+      child: InkWell(
+        onTap: () => setState(() => _nativeDifficultyTab = tab),
+        child: Column(
+          children: [
+            Text(
+              tab,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected
+                    ? (widget.isDark ? Colors.white : Colors.black)
+                    : Colors.grey[500],
+              ),
+            ),
+            if (isSelected)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                height: 2,
+                width: 20,
+                color: Colors.red,
+              ),
+          ],
         ),
-      );
+      ),
+    );
   }
 }
 
 // --- LIBRARY SECTION ---
 class LibrarySection extends StatefulWidget {
-   // ... Same Constructor ...
+  // ... Same Constructor ...
   final List<LessonModel> lessons;
   final Map<String, VocabularyItem> vocabMap;
   final bool isDark;
-  const LibrarySection({super.key, required this.lessons, required this.vocabMap, required this.isDark});
+  const LibrarySection({
+    super.key,
+    required this.lessons,
+    required this.vocabMap,
+    required this.isDark,
+  });
 
   @override
   _LibrarySectionState createState() => _LibrarySectionState();
@@ -188,7 +376,12 @@ class LibrarySection extends StatefulWidget {
 
 class _LibrarySectionState extends State<LibrarySection> {
   String _libraryDifficultyTab = 'All';
-  final List<String> _difficultyTabs = ['All', 'Beginner', 'Intermediate', 'Advanced'];
+  final List<String> _difficultyTabs = [
+    'All',
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -199,20 +392,47 @@ class _LibrarySectionState extends State<LibrarySection> {
       if (a.difficulty != 'beginner' && b.difficulty == 'beginner') return 1;
       return 0;
     });
-    final displayBooks = _libraryDifficultyTab == 'All' ? sortedLessons : sortedLessons.where((l) => l.difficulty.toLowerCase() == _libraryDifficultyTab.toLowerCase()).toList();
+    final displayBooks = _libraryDifficultyTab == 'All'
+        ? sortedLessons
+        : sortedLessons
+              .where(
+                (l) =>
+                    l.difficulty.toLowerCase() ==
+                    _libraryDifficultyTab.toLowerCase(),
+              )
+              .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(padding: const EdgeInsets.fromLTRB(16, 24, 16, 8), child: Text("Reading Library", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: widget.isDark ? Colors.white70 : Colors.black45))),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+          child: Text(
+            "Reading Library",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: widget.isDark ? Colors.white70 : Colors.black45,
+            ),
+          ),
+        ),
         // ... Tabs ...
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(children: _difficultyTabs.map((tab) => _buildTab(tab)).toList()),
+          child: Row(
+            children: _difficultyTabs.map((tab) => _buildTab(tab)).toList(),
+          ),
         ),
         if (displayBooks.isEmpty)
-          Container(height: 150, alignment: Alignment.center, child: const Text("No books found", style: TextStyle(color: Colors.grey)))
+          Container(
+            height: 150,
+            alignment: Alignment.center,
+            child: const Text(
+              "No books found",
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
         else
           SizedBox(
             height: 260,
@@ -223,24 +443,47 @@ class _LibrarySectionState extends State<LibrarySection> {
               separatorBuilder: (ctx, i) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
                 // CALL HELPER HERE
-                return _buildCard(context, displayBooks[index], widget.vocabMap, widget.isDark);
+                return _buildCard(
+                  context,
+                  displayBooks[index],
+                  widget.vocabMap,
+                  widget.isDark,
+                );
               },
             ),
           ),
       ],
     );
   }
-   Widget _buildTab(String tab) {
-     final isSelected = _libraryDifficultyTab == tab;
-     return Padding(
-        padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-        child: InkWell(
-          onTap: () => setState(() => _libraryDifficultyTab = tab),
-          child: Column(children: [
-            Text(tab, style: TextStyle(fontSize: 15, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? (widget.isDark ? Colors.white : Colors.black) : Colors.grey[500])),
-            if (isSelected) Container(margin: const EdgeInsets.only(top: 4), height: 2, width: 20, color: Colors.green),
-          ]),
+
+  Widget _buildTab(String tab) {
+    final isSelected = _libraryDifficultyTab == tab;
+    return Padding(
+      padding: const EdgeInsets.only(right: 24.0, bottom: 12),
+      child: InkWell(
+        onTap: () => setState(() => _libraryDifficultyTab = tab),
+        child: Column(
+          children: [
+            Text(
+              tab,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected
+                    ? (widget.isDark ? Colors.white : Colors.black)
+                    : Colors.grey[500],
+              ),
+            ),
+            if (isSelected)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                height: 2,
+                width: 20,
+                color: Colors.green,
+              ),
+          ],
         ),
-      );
+      ),
+    );
   }
 }

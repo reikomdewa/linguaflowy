@@ -15,6 +15,7 @@ import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
 import 'package:linguaflow/screens/home/utils/home_utils.dart';
 import 'package:linguaflow/utils/language_helper.dart'; 
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
+import 'package:linguaflow/widgets/quiz/units_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -54,7 +55,17 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
   }
-
+ void _handleTap(BuildContext context) {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => UnitsBottomSheet(user: authState.user),
+      );
+    }
+  }
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
@@ -174,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
             HomeUtils.buildFloatingButton(
               label: "Learn",
               icon: Icons.school_rounded,
-              onTap: () => HomeUtils.navigateToLearnScreen(context),
+              onTap: () => _handleTap(context),
             ),
             HomeUtils.buildFloatingButton(
               label: "Import",
