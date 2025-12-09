@@ -72,24 +72,41 @@ class HybridLessonService {
   // ===========================================================================
 
   /// Orchestrates the Local + Remote fetch and merge
-  Future<List<LessonModel>> _fetchHybrid({
-    required String localPath,
-    required String userId,
-    required String languageCode,
-  }) async {
-    try {
-      final results = await Future.wait([
-        _loadFromAsset(localPath, languageCode, userId),
-        _loadFromFirestore(languageCode, [userId]),
-      ]);
+ // Inside HybridLessonService
 
-      return _mergeAndDeduplicate(results[0], results[1]);
-    } catch (e) {
-      print("Hybrid Fetch Error ($userId): $e");
-      // If something explodes, try to at least return the local asset load individually
-      return _loadFromAsset(localPath, languageCode, userId);
+Future<List<LessonModel>> _fetchHybrid({
+  required String localPath,
+  required String userId,
+  required String languageCode,
+}) async {
+  try {
+    final results = await Future.wait([
+      _loadFromAsset(localPath, languageCode, userId),
+      _loadFromFirestore(languageCode, [userId]),
+    ]);
+
+    final localList = results[0];
+    final remoteList = results[1];
+
+    // --- 🔍 DEBUG PRINT ---
+    print("--------------------------------------------------");
+    print("📥 LOADING: $userId ($languageCode)");
+    print("   🏠 Local Assets Found: ${localList.length}");
+    print("   🔥 Firestore Found:    ${remoteList.length}");
+    
+    // Optional: Print names of remote lessons to prove they are unique
+    if (remoteList.isNotEmpty) {
+      print("   🔥 First Remote Lesson: ${remoteList.first.title}");
     }
+    print("--------------------------------------------------");
+    // ---------------------
+
+    return _mergeAndDeduplicate(localList, remoteList);
+  } catch (e) {
+    print("Hybrid Fetch Error: $e");
+    return _loadFromAsset(localPath, languageCode, userId);
   }
+}
 
   /// Merges two lists. 
   /// PREFERENCE: Local files keep precedence (for instant load/offline stability).

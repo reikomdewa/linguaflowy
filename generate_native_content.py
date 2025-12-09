@@ -223,7 +223,7 @@ def get_video_details(video_url, lang_code, genre):
                 "transcript": transcript_data,
                 "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
                 "imageUrl": f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
-                "type": "video_native",
+                "type": "video",
                 "difficulty": analyze_difficulty(transcript_data),
                 "videoUrl": f"https://youtube.com/watch?v={video_id}",
                 "isFavorite": False,

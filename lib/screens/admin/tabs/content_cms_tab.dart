@@ -10,6 +10,9 @@ class ContentCMSTab extends StatefulWidget {
 }
 
 class _ContentCMSTabState extends State<ContentCMSTab> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchText = "";
+  
   // Open the Editor Dialog
   void _openEditor(BuildContext context, [DocumentSnapshot? doc]) {
     showDialog(
@@ -43,8 +46,63 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // SEARCH LOGIC
+  // ---------------------------------------------------------------------------
+
+  // 1. Dynamic Stream based on Search Text
+  Stream<QuerySnapshot> _getStream() {
+    CollectionReference lessonsRef = FirebaseFirestore.instance.collection('lessons');
+
+    if (_searchText.isEmpty) {
+      // DEFAULT: Show latest 50 created
+      return lessonsRef
+          .orderBy('createdAt', descending: true)
+          .limit(50)
+          .snapshots();
+    } else {
+      // SEARCH: Find titles starting with _searchText
+      // Note: Firestore is Case Sensitive! "Can" != "can"
+      return lessonsRef
+          .orderBy('title')
+          .startAt([_searchText])
+          .endAt(['$_searchText\uf8ff'])
+          .snapshots();
+    }
+  }
+
+  // 2. Exact ID Search (Because you can't query ID and Title in the same stream easily)
+  Future<void> _searchById() async {
+    if (_searchCtrl.text.isEmpty) return;
+    
+    // Clear the stream list so we don't show confusing data while fetching
+    setState(() => _searchText = "___ID_SEARCH_MODE___"); 
+
+    final docRef = FirebaseFirestore.instance.collection('lessons').doc(_searchCtrl.text.trim());
+    final snapshot = await docRef.get();
+
+    if (!mounted) return;
+
+    if (snapshot.exists) {
+      // If found, immediately open the editor
+      _openEditor(context, snapshot);
+      // Reset search so the list comes back
+      _searchCtrl.clear();
+      setState(() => _searchText = "");
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No lesson found with that exact ID.")),
+      );
+      // Go back to normal list
+      _searchCtrl.clear();
+      setState(() => _searchText = "");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
@@ -53,66 +111,143 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
         icon: const Icon(Icons.add, color: Colors.black),
         label: const Text("Add Lesson", style: TextStyle(color: Colors.black)),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('lessons')
-            .orderBy('createdAt', descending: true)
-            .limit(50)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No lessons found."));
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.only(bottom: 80),
-            itemCount: snapshot.data!.docs.length,
-            itemBuilder: (context, index) {
-              final doc = snapshot.data!.docs[index];
-              final data = doc.data() as Map<String, dynamic>;
-
-              final title = data['title'] ?? 'Untitled';
-              final lang = data['language'] ?? '??';
-              final diff = data['difficulty'] ?? 'unknown';
-
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.grey[200],
-                    child: Text(lang.toString().toUpperCase(),
-                        style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black)),
-                  ),
-                  title: Text(title,
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text("$diff • ${doc.id}",
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+      body: Column(
+        children: [
+          // -------------------------------------------------------------------
+          // SEARCH BAR
+          // -------------------------------------------------------------------
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                hintText: "Search Title (Case Sensitive)...",
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_searchText.isNotEmpty && _searchText != "___ID_SEARCH_MODE___")
                       IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () => _openEditor(context, doc),
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _searchText = "");
+                        },
                       ),
-                      IconButton(
-                        icon:
-                            const Icon(Icons.delete_outline, color: Colors.red),
-                        onPressed: () => _deleteLesson(doc.id),
+                    // Specific ID Search Button
+                    Tooltip(
+                      message: "Find by Exact ID",
+                      child: IconButton(
+                        icon: const Icon(Icons.tag, color: Colors.blue),
+                        onPressed: _searchById,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              );
-            },
-          );
-        },
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                filled: true,
+                fillColor: isDark ? Colors.white10 : Colors.grey[100],
+              ),
+              onChanged: (val) {
+                setState(() {
+                  _searchText = val;
+                });
+              },
+            ),
+          ),
+
+          // -------------------------------------------------------------------
+          // RESULT LIST
+          // -------------------------------------------------------------------
+          Expanded(
+            child: _searchText == "___ID_SEARCH_MODE___" 
+            ? const Center(child: CircularProgressIndicator()) 
+            : StreamBuilder<QuerySnapshot>(
+              stream: _getStream(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text("Error: ${snapshot.error}"));
+                }
+
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.search_off, size: 48, color: Colors.grey),
+                        const SizedBox(height: 10),
+                        Text(
+                          _searchText.isEmpty 
+                              ? "No lessons found." 
+                              : "No matches for '$_searchText'",
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                        if (_searchText.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: const Text(
+                              "Tip: Search is Case Sensitive.\nTry capitalizing the first letter.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey, fontSize: 12),
+                            ),
+                          )
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 80),
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) {
+                    final doc = snapshot.data!.docs[index];
+                    final data = doc.data() as Map<String, dynamic>;
+
+                    final title = data['title'] ?? 'Untitled';
+                    final lang = data['language'] ?? '??';
+                    final diff = data['difficulty'] ?? 'unknown';
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.grey[200],
+                          child: Text(lang.toString().toUpperCase(),
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black)),
+                        ),
+                        title: Text(title,
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: SelectableText("$diff • ${doc.id}", 
+                            maxLines: 1),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => _openEditor(context, doc),
+                            ),
+                            IconButton(
+                              icon:
+                                  const Icon(Icons.delete_outline, color: Colors.red),
+                              onPressed: () => _deleteLesson(doc.id),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,4 +1,3 @@
-
 import 'package:linguaflow/models/transcript_line.dart';
 
 class LessonModel {
@@ -8,7 +7,7 @@ class LessonModel {
   final String language;
   final String content;
   final List<String> sentences;
-  final List<TranscriptLine> transcript; // New field
+  final List<TranscriptLine> transcript;
   final DateTime createdAt;
   final int progress;
   final String? imageUrl;
@@ -16,6 +15,10 @@ class LessonModel {
   final String type; // 'text', 'video', 'audio'
   final String difficulty;
   final String? videoUrl;
+  
+  // --- ADDED FIELD ---
+  // This tells the UI if the file is from Assets (true) or Firestore (false)
+  final bool isLocal; 
 
   LessonModel({
     required this.id,
@@ -32,8 +35,12 @@ class LessonModel {
     this.type = 'text',
     this.difficulty = 'intermediate',
     this.videoUrl,
+    // Default to false so Firestore lessons don't need this field explicitly
+    this.isLocal = false, 
   });
-String? get mediaUrl => videoUrl; 
+
+  String? get mediaUrl => videoUrl; 
+
   factory LessonModel.fromMap(Map<String, dynamic> map, String id) {
     return LessonModel(
       id: id,
@@ -41,12 +48,10 @@ String? get mediaUrl => videoUrl;
       title: map['title']?.toString() ?? '',
       language: map['language']?.toString() ?? 'en',
       content: map['content']?.toString() ?? '',
-      // Handle simple string sentences
       sentences: (map['sentences'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
-      // Handle structured transcript with timecodes
       transcript: (map['transcript'] as List<dynamic>?)
               ?.map((e) => TranscriptLine.fromMap(e))
               .toList() ??
@@ -60,6 +65,8 @@ String? get mediaUrl => videoUrl;
       type: map['type']?.toString() ?? 'text',
       difficulty: map['difficulty']?.toString() ?? 'intermediate',
       videoUrl: map['videoUrl']?.toString(),
+      // We don't read isLocal from Map usually, as it's a runtime flag.
+      // It defaults to false in the constructor.
     );
   }
 
@@ -78,10 +85,12 @@ String? get mediaUrl => videoUrl;
       'type': type,
       'difficulty': difficulty,
       'videoUrl': videoUrl,
+      // NOTE: We do NOT save 'isLocal' to the database. 
+      // It is only for the app to know where the file came from.
     };
   }
 
-  // --- ADDED THIS METHOD ---
+  // --- UPDATED COPYWITH ---
   LessonModel copyWith({
     String? id,
     String? userId,
@@ -97,6 +106,8 @@ String? get mediaUrl => videoUrl;
     String? type,
     String? difficulty,
     String? videoUrl,
+    // Add isLocal here so the Service can update it
+    bool? isLocal, 
   }) {
     return LessonModel(
       id: id ?? this.id,
@@ -113,6 +124,7 @@ String? get mediaUrl => videoUrl;
       type: type ?? this.type,
       difficulty: difficulty ?? this.difficulty,
       videoUrl: videoUrl ?? this.videoUrl,
+      isLocal: isLocal ?? this.isLocal, // Assign it
     );
   }
 }

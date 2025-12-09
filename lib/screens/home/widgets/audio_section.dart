@@ -3,7 +3,7 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
 // Add this import for the dialog
-import 'package:linguaflow/screens/home/widgets/home_dialogs.dart'; 
+import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
 
 class AudioLibrarySection extends StatefulWidget {
   final List<LessonModel> lessons;
@@ -199,6 +199,8 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // In LessonCard widget
+
                 // Image Area
                 Expanded(
                   flex: 5,
@@ -217,7 +219,9 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
                                     : Colors.purple.shade100,
                                 child: Icon(
                                   isSynced ? Icons.menu_book : Icons.headphones,
-                                  color: isSynced ? Colors.orange : Colors.purple,
+                                  color: isSynced
+                                      ? Colors.orange
+                                      : Colors.purple,
                                   size: 40,
                                 ),
                               ),
@@ -257,7 +261,9 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: widget.isDark ? Colors.white : Colors.black87,
+                              color: widget.isDark
+                                  ? Colors.white
+                                  : Colors.black87,
                               height: 1.2,
                             ),
                           ),
@@ -307,10 +313,15 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
                   // Subtle color for the icon
                   color: widget.isDark ? Colors.white60 : Colors.grey[500],
                   padding: const EdgeInsets.all(8),
-                  constraints: const BoxConstraints(), // Removes default padding
+                  constraints:
+                      const BoxConstraints(), // Removes default padding
                   onPressed: () {
                     // Open the options dialog
-                    HomeDialogs.showLessonOptions(context, lesson, widget.isDark);
+                    HomeDialogs.showLessonOptions(
+                      context,
+                      lesson,
+                      widget.isDark,
+                    );
                   },
                 ),
               ),

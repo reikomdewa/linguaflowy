@@ -4,6 +4,7 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/lesson_service.dart';
+import 'package:linguaflow/utils/constants.dart';
 
 class HomeDialogs {
   static void showStatsDialog(
@@ -160,72 +161,103 @@ class HomeDialogs {
     );
   }
 
-  static void showLessonOptions(
-      BuildContext context, LessonModel lesson, bool isDark) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (builderContext) => Container(
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: EdgeInsets.only(
-          top: 20,
-          left: 0,
-          right: 0,
-          bottom: MediaQuery.of(builderContext).viewPadding.bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Colors.grey[600],
-                  borderRadius: BorderRadius.circular(2),
-                ),
+static void showLessonOptions(
+    BuildContext context, LessonModel lesson, bool isDark) {
+  
+  // 1. DEFINE VARIABLES AT THE TOP LEVEL
+  // This ensures they are visible everywhere inside this function
+  final authState = context.read<AuthBloc>().state;
+  String currentUserId = ''; // <--- FIXED: Defined here so 'onTap' can see it
+  bool canDelete = false;
+
+  // 2. CHECK PERMISSIONS
+  if (authState is AuthAuthenticated) {
+    final user = authState.user;
+    currentUserId = user.id; // Update variable with real ID
+
+    // Check permissions
+    final bool isCreator = (user.id == lesson.userId);
+    final bool isAdmin = AppConstants.isAdmin(user.email); // Uses your utils file
+
+    canDelete = isAdmin || isCreator;
+  }
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (builderContext) => Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        top: 20,
+        left: 0,
+        right: 0,
+        bottom: MediaQuery.of(builderContext).viewPadding.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle Bar
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.grey[600],
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: lesson.isFavorite
-                      ? Colors.amber.withOpacity(0.1)
-                      : (isDark ? Colors.white10 : Colors.grey[100]),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  lesson.isFavorite ? Icons.star : Icons.star_border,
-                  color: lesson.isFavorite ? Colors.amber : Colors.grey,
-                ),
+          ),
+
+          // --- FAVORITE OPTION ---
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: lesson.isFavorite
+                    ? Colors.amber.withOpacity(0.1)
+                    : (isDark ? Colors.white10 : Colors.grey[100]),
+                shape: BoxShape.circle,
               ),
-              title: Text(
-                lesson.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black,
-                ),
+              child: Icon(
+                lesson.isFavorite ? Icons.star : Icons.star_border,
+                color: lesson.isFavorite ? Colors.amber : Colors.grey,
               ),
-              subtitle: Text(
-                lesson.isFavorite ? 'Removed from library.' : 'Saved to library.',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              onTap: () {
-                final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-                final updatedLesson = lesson.copyWith(
-                  isFavorite: !lesson.isFavorite,
-                  userId: user.id,
-                );
-                context.read<LessonBloc>().add(LessonUpdateRequested(updatedLesson));
-                Navigator.pop(builderContext);
-              },
             ),
+            title: Text(
+              lesson.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+            ),
+            subtitle: Text(
+              lesson.isFavorite ? 'Removed from library.' : 'Saved to library.',
+              style: const TextStyle(color: Colors.grey),
+            ),
+            onTap: () {
+              // 3. USE currentUserId HERE
+              // Logic: If the lesson doesn't have an owner (system lesson), 
+              // assign it to the current user when they favorite it.
+              // Otherwise, keep the original owner.
+              final newOwnerId = lesson.userId.isEmpty ? currentUserId : lesson.userId;
+
+              final updatedLesson = lesson.copyWith(
+                isFavorite: !lesson.isFavorite,
+                userId: newOwnerId,
+              );
+              
+              context.read<LessonBloc>().add(LessonUpdateRequested(updatedLesson));
+              Navigator.pop(builderContext);
+            },
+          ),
+
+          // --- DELETE OPTION (CONDITIONAL) ---
+          if (canDelete) ...[
             Divider(color: Colors.grey[800]),
             ListTile(
               leading: Container(
@@ -236,17 +268,41 @@ class HomeDialogs {
                 ),
                 child: const Icon(Icons.delete_outline, color: Colors.red),
               ),
-              title: const Text('Delete Lesson', style: TextStyle(color: Colors.red)),
+              title: const Text('Delete Lesson',
+                  style: TextStyle(color: Colors.red)),
               onTap: () {
-                context.read<LessonBloc>().add(LessonDeleteRequested(lesson.id));
-                Navigator.pop(builderContext);
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text("Delete Lesson?"),
+                    content: const Text("This cannot be undone. Are you sure?"),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text("Cancel"),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          context
+                              .read<LessonBloc>()
+                              .add(LessonDeleteRequested(lesson.id));
+                          Navigator.pop(builderContext);
+                        },
+                        child: const Text("Delete",
+                            style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
               },
             ),
           ],
-        ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   static void showCreateLessonDialog(
     BuildContext context,

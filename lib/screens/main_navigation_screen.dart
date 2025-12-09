@@ -8,6 +8,7 @@ import 'package:linguaflow/screens/library/library_screen.dart';
 import 'package:linguaflow/screens/profile/profile_screen.dart';
 import 'package:linguaflow/screens/vocabulary/vocabulary_screen.dart';
 import 'package:linguaflow/screens/admin/admin_dashboard_screen.dart';
+import 'package:linguaflow/utils/constants.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -21,10 +22,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   // Update with your real email(s)
   static const List<String> adminEmails = [
-    "mrollzmiki@gmail.com",
-    "reikomdewa@gmail.com",
+   
     "tester_email@gmail.com",
-    "reikomuk@gmail.com",
   ];
 
   @override
@@ -36,7 +35,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
 
     final user = authState.user;
-    final bool isAdmin = adminEmails.contains(user.email);
+final bool isAdmin = AppConstants.isAdmin(user.email);
 
     // 1. Build the list of Screens dynamically
     final List<Widget> screens = [
