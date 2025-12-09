@@ -4,15 +4,18 @@ import time
 import os
 
 # List of scripts to run in order.
-# These match the filenames in your screenshot.
 SCRIPTS = [
-    "generate_assets.py",           # General video lessons
-    "generate_audio_library.py",    # LibriVox audio
-    "generate_beginner_books.py",   # Simple Gutenberg texts
-    "generate_books.py",            # Classic/Advanced Gutenberg texts
-    "generate_course_content.py",   # Structured video courses
-    "generate_native_content.py",   # Trending/Native videos
-    "generate_yt_audiobooks.py"     # YouTube Synced Audiobooks
+    # 1. GENERATION PHASE (Creates local JSONs)
+    "generate_guided_courses.py",           
+    "generate_audio_library.py",    
+    "generate_beginner_books.py",   
+    "generate_books.py",            
+    "generate_course_content.py",   
+    "generate_native_content.py",   
+    "generate_yt_audiobooks.py",
+    
+    # 2. UPLOAD PHASE (Syncs to Firebase)
+    "sync_to_firebase.py" 
 ]
 
 def run_script(script_name):
@@ -30,7 +33,6 @@ def run_script(script_name):
 
     try:
         # sys.executable ensures we use the same Python environment 
-        # that is currently running this script
         subprocess.run([sys.executable, script_name], check=True)
         
         elapsed = time.time() - start_time
@@ -40,6 +42,8 @@ def run_script(script_name):
         
     except subprocess.CalledProcessError:
         print(f"\n❌ FAILED: {script_name} exited with an error.")
+        # Optional: Stop entire pipeline on failure?
+        # sys.exit(1) 
     except KeyboardInterrupt:
         print(f"\n🛑 STOPPED: Process interrupted by user.")
         sys.exit(1)
@@ -49,12 +53,11 @@ def run_script(script_name):
 def main():
     total_start = time.time()
     
-    print("--- 📦 STARTING CONTENT GENERATION PIPELINE ---")
+    print("--- 📦 STARTING GENERATION & SYNC PIPELINE ---")
     print(f"--- Queue: {len(SCRIPTS)} scripts ---\n")
 
     for script in SCRIPTS:
         run_script(script)
-        # Small pause between scripts to ensure file I/O operations close properly
         time.sleep(1) 
 
     total_elapsed = time.time() - total_start

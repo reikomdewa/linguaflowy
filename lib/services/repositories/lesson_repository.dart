@@ -1,14 +1,14 @@
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/lesson_service.dart';
-import 'package:linguaflow/services/local_lesson_service.dart';
+import 'package:linguaflow/services/hybrid_lesson_service.dart';
 
 class LessonRepository {
   final LessonService _firestoreService;
-  final LocalLessonService _localService;
+  final HybridLessonService _localService;
 
   LessonRepository({
     required LessonService firestoreService,
-    required LocalLessonService localService,
+    required HybridLessonService localService,
   })  : _firestoreService = firestoreService,
         _localService = localService;
 

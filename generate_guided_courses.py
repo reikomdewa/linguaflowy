@@ -6,7 +6,7 @@ import yt_dlp
 import time
 
 # --- CONFIGURATION ---
-OUTPUT_DIR = "assets/data"
+OUTPUT_DIR = "assets/guided_courses"
 
 # EXPANDED SEARCH CONFIGURATION
 # Format: 'lang_code': [('Search Query', 'Genre')]

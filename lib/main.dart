@@ -7,7 +7,7 @@ import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
 import 'package:linguaflow/services/gemini_service.dart';
-import 'package:linguaflow/services/local_lesson_service.dart';
+import 'package:linguaflow/services/hybrid_lesson_service.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 
 // Import all screens and services
@@ -60,7 +60,7 @@ class LanguageLearningApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final lessonRepository = LessonRepository(
       firestoreService: LessonService(),
-      localService: LocalLessonService(),
+      localService: HybridLessonService(),
     );
     // printFirestoreSchema();
     return MultiRepositoryProvider(
@@ -70,7 +70,7 @@ class LanguageLearningApp extends StatelessWidget {
         RepositoryProvider(create: (context) => LessonService()),
         RepositoryProvider(create: (context) => VocabularyService()),
         RepositoryProvider(create: (context) => TranslationService()),
-        RepositoryProvider(create: (context) => LocalLessonService()),
+        RepositoryProvider(create: (context) => HybridLessonService()),
       ],
       child: MultiBlocProvider(
         providers: [
