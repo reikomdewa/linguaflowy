@@ -5,7 +5,7 @@ import 'dart:async';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart'; 
 import 'package:linguaflow/widgets/gemini_formatted_text.dart';
-
+import 'package:linguaflow/utils/language_helper.dart';
 class FloatingTranslationCard extends StatefulWidget {
   final String originalText;
   final Future<String> translationFuture; // Google Translation from parent
@@ -250,9 +250,8 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
       }
     }
 
-    String flagAsset = "🇬🇧"; 
-    if (widget.nativeLanguage == 'es') flagAsset = "🇪🇸";
-    else if (widget.nativeLanguage == 'fr') flagAsset = "🇫🇷";
+String flagAsset = LanguageHelper.getFlagEmoji(widget.nativeLanguage);
+    
 
     return Stack(
       children: [

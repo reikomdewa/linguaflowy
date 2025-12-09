@@ -8,11 +8,12 @@ import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/home/widgets/audio_section.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
-import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
+import 'package:linguaflow/screens/home/widgets/home_dialogs.dart'; // For creating lessons
+import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart'; // NEW Dialog File
 import 'package:linguaflow/screens/home/widgets/home_sections.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
 import 'package:linguaflow/screens/home/utils/home_utils.dart';
-import 'package:linguaflow/screens/placement_test/placement_test_screen.dart';
+import 'package:linguaflow/utils/language_helper.dart'; 
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -23,26 +24,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // --- SHARED CONSTANTS ---
-  final Map<String, String> _languageNames = {
-    'es': 'Spanish',
-    'fr': 'French',
-    'de': 'German',
-    'en': 'English',
-    'it': 'Italian',
-    'pt': 'Portuguese',
-    'ja': 'Japanese',
-  };
-
-  final List<String> _proficiencyLevels = [
-    'A1 - Newcomer',
-    'A1 - Beginner',
-    'A2 - Elementary',
-    'B1 - Intermediate',
-    'B2 - Upper Intermediate',
-    'C1 - Advanced',
-  ];
-
   // --- FILTERS ---
   String _selectedGlobalFilter = 'All'; 
   final List<String> _globalFilters = ['All', 'Videos', 'Audio', 'Text'];
@@ -54,9 +35,20 @@ class _HomeScreenState extends State<HomeScreen> {
       final authState = context.read<AuthBloc>().state;
       if (authState is AuthAuthenticated) {
         final user = authState.user;
+        
+        // --- LOGIC FIX HERE ---
+        // If currentLanguage (Target) is empty, it's a new setup.
+        // We force the Native Selector first (isFirstSetup: true), 
+        // which will automatically open the Target Selector afterwards.
         if (user.currentLanguage.isEmpty) {
-          _showMandatoryLanguageSelector(context, user);
-        } else {
+          HomeLanguageDialogs.showNativeLanguageSelector(context, isFirstSetup: true);
+        } 
+        // Fallback: If for some reason they have a target but no native (edge case)
+        else if (user.nativeLanguage.isEmpty) {
+           HomeLanguageDialogs.showNativeLanguageSelector(context, isFirstSetup: false);
+        }
+        // Standard Load
+        else {
           context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
         }
       }
@@ -76,6 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
 
+    // Show onboarding placeholder if languages aren't selected yet
     if (user.currentLanguage.isEmpty) {
       return Scaffold(
         backgroundColor: bgColor,
@@ -85,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Icon(Icons.translate, size: 64, color: Colors.grey.withOpacity(0.5)),
               const SizedBox(height: 16),
-              Text("Please select a language...", style: TextStyle(color: textColor, fontSize: 16)),
+              const Text("Welcome! Setting up...", style: TextStyle(fontSize: 16)),
             ],
           ),
         ),
@@ -95,8 +88,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: bgColor,
       appBar: _buildAppBar(context, user, isDark, textColor),
-      
-      // FIX: Reverted to Stack (Removed BlocListener that caused the stuck screen)
       body: Stack(
         children: [
           BlocBuilder<VocabularyBloc, VocabularyState>(
@@ -119,14 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           return const Center(child: CircularProgressIndicator());
                         }
                         
-                        // Handle Loading or Success (wait for nav)
                         if (lessonState is LessonLoading || lessonState is LessonGenerationSuccess) {
-                          // Show list if available (optimistic) or loader
-                          if (lessonState is LessonGenerationSuccess) {
-                             // We might be returning from story mode, trigger reload if needed
-                             // But usually we just show loader until LessonLoaded fires
-                             return const Center(child: CircularProgressIndicator());
-                          }
                           return const Center(child: CircularProgressIndicator());
                         }
 
@@ -137,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             return _buildFilteredList(processedLessons, vocabMap, isDark);
                           }
 
+                          // Filter categories
                           final nativeLessons = processedLessons.where((l) => l.type == 'video_native').toList();
                           final guidedLessons = processedLessons.where((l) => l.type == 'video').toList();
                           final audioLessons = processedLessons.where((l) => l.type == 'audio').toList();
@@ -198,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 context,
                 user.id,
                 user.currentLanguage,
-                _languageNames,
+                LanguageHelper.availableLanguages, 
                 isFavoriteByDefault: false,
               ),
             ),
@@ -208,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- APP BAR & STATS ---
+  // --- APP BAR ---
   PreferredSizeWidget _buildAppBar(BuildContext context, dynamic user, bool isDark, Color? textColor) {
     final bool isPremium = user.isPremium;
     return AppBar(
@@ -227,8 +212,9 @@ class _HomeScreenState extends State<HomeScreen> {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Language Selector Flag
               GestureDetector(
-                onTap: () => _showLanguageSelector(context, user),
+                onTap: () => HomeLanguageDialogs.showTargetLanguageSelector(context),
                 child: Container(
                   width: 48,
                   height: 48,
@@ -238,13 +224,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: isDark ? Colors.black26 : Colors.white,
                   ),
                   alignment: Alignment.center,
-                  child: Text(_getFlagEmoji(user.currentLanguage), style: const TextStyle(fontSize: 28)),
+                  child: Text(LanguageHelper.getFlagEmoji(user.currentLanguage), style: const TextStyle(fontSize: 28)),
                 ),
               ),
               const SizedBox(width: 16),
+              // Level & Stats
               Expanded(
                 child: InkWell(
-                  onTap: () => _showLevelSelector(context, currentLevel, user.currentLanguage),
+                  onTap: () => HomeLanguageDialogs.showLevelSelector(context, currentLevel, user.currentLanguage),
                   borderRadius: BorderRadius.circular(8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -282,6 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       actions: [
+        // Premium Icon
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Center(
@@ -324,15 +312,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  String _mapLevelToDifficulty(String fullLevel) {
-    if (fullLevel.contains("Newcomer")) return "beginner";
-    if (fullLevel.contains("Beginner")) return "beginner";
-    if (fullLevel.contains("Elementary")) return "beginner";
-    if (fullLevel.contains("Intermediate")) return "intermediate";
-    if (fullLevel.contains("Advanced")) return "advanced";
-    return "beginner";
-  }
-
   int _getNextGoal(int count) {
     if (count < 500) return 500;
     if (count < 1000) return 1000;
@@ -340,195 +319,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (count < 4000) return 4000;
     if (count < 8000) return 8000;
     return 16000;
-  }
-
-  String _getFlagEmoji(String langCode) {
-    switch (langCode) {
-      case 'es': return '🇪🇸';
-      case 'fr': return '🇫🇷';
-      case 'de': return '🇩🇪';
-      case 'en': return '🇬🇧';
-      case 'it': return '🇮🇹';
-      case 'pt': return '🇵🇹';
-      case 'ja': return '🇯🇵';
-      default: return '🏳️';
-    }
-  }
-
-  // --- DIALOGS ---
-  void _showMandatoryLanguageSelector(BuildContext context, dynamic user) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    showModalBottomSheet(
-      context: context,
-      isDismissible: false,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => PopScope(
-        canPop: false,
-        child: Container(
-          height: MediaQuery.of(context).size.height * 0.8,
-          decoration: BoxDecoration(color: isDark ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
-          child: SafeArea(
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-                Text("Welcome! 👋", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: isDark ? Colors.white : Colors.black)),
-                const SizedBox(height: 8),
-                Text("Choose a language to start learning:", style: TextStyle(fontSize: 16, color: isDark ? Colors.white70 : Colors.grey[700])),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _languageNames.length,
-                    separatorBuilder: (ctx, i) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final entry = _languageNames.entries.elementAt(index);
-                      return ListTile(
-                        leading: Text(_getFlagEmoji(entry.key), style: const TextStyle(fontSize: 32)),
-                        title: Text(entry.value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: isDark ? Colors.white : Colors.black)),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                        onTap: () {
-                          context.read<AuthBloc>().add(AuthTargetLanguageChanged(entry.key));
-                          context.read<LessonBloc>().add(LessonLoadRequested(user.id, entry.key));
-                          context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
-                          Navigator.pop(ctx);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showLanguageSelector(BuildContext context, dynamic user) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(color: isDark ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text("Switch Language", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
-              ),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: _languageNames.entries.map((entry) {
-                      final isSelected = user.currentLanguage == entry.key;
-                      return ListTile(
-                        leading: Text(_getFlagEmoji(entry.key), style: const TextStyle(fontSize: 24)),
-                        title: Text(entry.value, style: TextStyle(color: isDark ? Colors.white : Colors.black)),
-                        trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.blue) : null,
-                        onTap: () {
-                          context.read<AuthBloc>().add(AuthTargetLanguageChanged(entry.key));
-                          context.read<LessonBloc>().add(LessonLoadRequested(user.id, entry.key));
-                          context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
-                          Navigator.pop(ctx);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showLevelSelector(BuildContext context, String currentLevel, String langCode) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(color: isDark ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
-        padding: const EdgeInsets.only(top: 16),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
-                child: Text("Select Your Level", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
-              ),
-              Divider(color: Colors.grey.withOpacity(0.2)),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: _proficiencyLevels.map((level) {
-                      final isSelected = currentLevel == level;
-                      return ListTile(
-                        leading: Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? Colors.blue : Colors.grey),
-                        title: Text(level, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          if (level == currentLevel) return;
-                          if (level == 'A1 - Newcomer') {
-                            context.read<AuthBloc>().add(AuthLanguageLevelChanged(level));
-                          } else {
-                            _showPlacementTestDialog(context, level, langCode);
-                          }
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showPlacementTestDialog(BuildContext context, String targetLevel, String langCode) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        title: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Change Level?", style: TextStyle(color: isDark ? Colors.white : Colors.black)), GestureDetector(onTap: () => Navigator.pop(context), child: Icon(Icons.close))]),
-        content: Text("You selected $targetLevel. We recommend taking a quick placement test to ensure this is the right fit, or you can switch immediately.", style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.read<AuthBloc>().add(AuthLanguageLevelChanged(targetLevel));
-            },
-            child: const Text("Just switch"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final resultLevel = await Navigator.push(context, MaterialPageRoute(builder: (_) => PlacementTestScreen(userId: user.id, nativeLanguage: user.nativeLanguage, targetLanguage: user.currentLanguage, targetLevelToCheck: targetLevel)));
-              if (resultLevel != null && resultLevel is String && mounted) {
-                context.read<AuthBloc>().add(AuthLanguageLevelChanged(resultLevel));
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Level set to: $resultLevel"), backgroundColor: Colors.green));
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-            child: const Text("Take Test"),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildGlobalFilterChips(bool isDark) {

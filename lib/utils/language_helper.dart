@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 class LanguageHelper {
-  // Single source of truth for supported languages
+  /// 1. Map of Supported Languages (Code -> Name)
   static const Map<String, String> availableLanguages = {
     'en': 'English',
     'es': 'Spanish',
@@ -18,13 +18,31 @@ class LanguageHelper {
     'tr': 'Turkish',
     'ar': 'Arabic',
     'hi': 'Hindi',
+    'sv': 'Swedish',
+    'no': 'Norwegian',
+    'da': 'Danish',
+    'fi': 'Finnish',
+    'cs': 'Czech',
+    'el': 'Greek',
+    'ro': 'Romanian',
+    'hu': 'Hungarian',
+    'id': 'Indonesian',
+    'uk': 'Ukrainian',
+    'vi': 'Vietnamese',
+    'th': 'Thai',
   };
 
+  /// 2. Resolve Language Code
+  /// Handles inputs like "Spanish", " Spanish ", "es" -> returns "es"
   static String resolveCode(String input) {
+    if (input.isEmpty) return 'en';
+    
     final clean = input.toLowerCase().trim();
+    
+    // If it's already a short code (2-3 chars), assume it's valid or return as is
     if (clean.length <= 3) return clean;
 
-    // Inverse map for name -> code lookup if needed
+    // Inverse map for Name -> Code lookup
     final Map<String, String> nameToCode = {
       'english': 'en', 'spanish': 'es', 'french': 'fr', 'german': 'de',
       'italian': 'it', 'portuguese': 'pt', 'russian': 'ru', 'chinese': 'zh',
@@ -35,23 +53,49 @@ class LanguageHelper {
       'greek': 'el', 'czech': 'cs', 'romanian': 'ro', 'hungarian': 'hu',
     };
 
-    final code = nameToCode[clean] ?? 'en';
-    return code;
+    return nameToCode[clean] ?? 'en'; // Default to English if unknown
   }
   
+  /// 3. Get Flag Emoji from Code
   static String getFlagEmoji(String langCode) {
-    switch (langCode) {
+    // Ensure we are working with a clean code (e.g. handle "Spanish" -> "es" first if needed)
+    final code = resolveCode(langCode);
+
+    switch (code) {
+      case 'en': return '🇬🇧';
       case 'es': return '🇪🇸';
       case 'fr': return '🇫🇷';
       case 'de': return '🇩🇪';
-      case 'en': return '🇬🇧';
       case 'it': return '🇮🇹';
       case 'pt': return '🇵🇹';
-      case 'ja': return '🇯🇵';
-      case 'zh': return '🇨🇳';
       case 'ru': return '🇷🇺';
+      case 'zh': return '🇨🇳';
+      case 'ja': return '🇯🇵';
+      case 'ko': return '🇰🇷';
+      case 'nl': return '🇳🇱';
+      case 'pl': return '🇵🇱';
+      case 'tr': return '🇹🇷';
       case 'ar': return '🇸🇦';
-      default: return '🏳️';
+      case 'hi': return '🇮🇳';
+      case 'sv': return '🇸🇪';
+      case 'no': return '🇳🇴';
+      case 'da': return '🇩🇰';
+      case 'fi': return '🇫🇮';
+      case 'cs': return '🇨🇿';
+      case 'el': return '🇬🇷';
+      case 'ro': return '🇷🇴';
+      case 'hu': return '🇭🇺';
+      case 'id': return '🇮🇩';
+      case 'uk': return '🇺🇦';
+      case 'vi': return '🇻🇳';
+      case 'th': return '🇹🇭';
+      default: return '🇬🇧'; // Default fallback
     }
+  }
+
+  /// 4. Get Language Name from Code (e.g., "es" -> "Spanish")
+  static String getLanguageName(String code) {
+    final clean = resolveCode(code);
+    return availableLanguages[clean] ?? 'English';
   }
 }
