@@ -5,10 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 // --- ENUMS ---
 
 /// Specific themes for the Reader View
+/// ORDER MATTERS: 0=light, 1=dark, 2=sepia.
+/// Do not change order to preserve saved user preferences.
 enum ReaderTheme {
-  light, // White background, Black text
-  dark,  // Black/Grey background, White text
-  sepia, // Warm Beige background, Dark Brown text
+  light, // Index 0
+  dark,  // Index 1
+  sepia, // Index 2
 }
 
 // --- EVENTS ---
@@ -89,7 +91,8 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
       : super(SettingsState(
           themeMode: ThemeMode.system,
           fontSizeScale: 1.0,
-          readerTheme: ReaderTheme.light,
+          // 1. DEFAULT STATE: Set to Dark (index 1) for immediate load
+          readerTheme: ReaderTheme.dark, 
           fontFamily: 'Roboto',
           lineHeight: 1.5,
         )) {
@@ -107,14 +110,22 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
 
     // 1. Global Theme
     final themeIndex = prefs.getInt('themeMode') ?? 0;
-    final themeMode = ThemeMode.values[themeIndex];
+    // Safety check for enum range
+    final themeMode = (themeIndex >= 0 && themeIndex < ThemeMode.values.length)
+        ? ThemeMode.values[themeIndex]
+        : ThemeMode.system;
 
     // 2. Font Size
     final fontScale = prefs.getDouble('fontScale') ?? 1.0;
 
-    // 3. Reader Theme (Sepia, etc) - Default to Light (0)
-    final readerIndex = prefs.getInt('readerTheme') ?? 0;
-    final readerTheme = ReaderTheme.values[readerIndex];
+    // 3. Reader Theme (Sepia, etc)
+    // 0=Light, 1=Dark, 2=Sepia. 
+    // We default to 1 (Dark) if no setting exists.
+    final readerIndex = prefs.getInt('readerTheme') ?? 1; 
+    
+    final readerTheme = (readerIndex >= 0 && readerIndex < ReaderTheme.values.length)
+        ? ReaderTheme.values[readerIndex]
+        : ReaderTheme.dark; // Fallback to Dark
 
     // 4. Font Family - Default to Roboto (Sans-Serif)
     final fontFamily = prefs.getString('fontFamily') ?? 'Roboto';
