@@ -1,5 +1,8 @@
+import 'dart:async'; // Required for StreamSubscription
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart'; // NEW
+
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
@@ -8,13 +11,14 @@ import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/home/widgets/audio_section.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
-import 'package:linguaflow/screens/home/widgets/home_dialogs.dart'; // For creating lessons
-import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart'; // NEW Dialog File
+import 'package:linguaflow/screens/home/widgets/home_dialogs.dart'; 
+import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/home_sections.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
 import 'package:linguaflow/screens/home/utils/home_utils.dart';
 import 'package:linguaflow/utils/language_helper.dart'; 
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
+import 'package:linguaflow/services/web_scraper_service.dart'; // NEW: Ensure this file exists
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,32 +32,125 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedGlobalFilter = 'All'; 
   final List<String> _globalFilters = ['All', 'Videos', 'Audio', 'Text'];
 
+  // --- SHARE LISTENER SUBSCRIPTION ---
+  late StreamSubscription _intentDataStreamSubscription; // NEW
+
   @override
   void initState() {
     super.initState();
+    // Initialize Share Listener immediately
+    _initShareListener(); // NEW
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authState = context.read<AuthBloc>().state;
       if (authState is AuthAuthenticated) {
         final user = authState.user;
         
-        // --- LOGIC FIX HERE ---
-        // If currentLanguage (Target) is empty, it's a new setup.
-        // We force the Native Selector first (isFirstSetup: true), 
-        // which will automatically open the Target Selector afterwards.
         if (user.currentLanguage.isEmpty) {
           HomeLanguageDialogs.showNativeLanguageSelector(context, isFirstSetup: true);
-        } 
-        // Fallback: If for some reason they have a target but no native (edge case)
-        else if (user.nativeLanguage.isEmpty) {
+        } else if (user.nativeLanguage.isEmpty) {
            HomeLanguageDialogs.showNativeLanguageSelector(context, isFirstSetup: false);
-        }
-        // Standard Load
-        else {
+        } else {
           context.read<VocabularyBloc>().add(VocabularyLoadRequested(user.id));
         }
       }
     });
   }
+
+  @override
+  void dispose() {
+    _intentDataStreamSubscription.cancel(); // NEW: Cleanup listener
+    super.dispose();
+  }
+
+  // --- NEW: SHARE LISTENER LOGIC ---
+  void _initShareListener() {
+    // 1. Listen for sharing while app is running (in memory)
+    _intentDataStreamSubscription = ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> value) {
+      if (value.isNotEmpty && value.first.path.isNotEmpty) {
+        // Usually text comes as path for getTextStream, but check package version logic
+        // If using latest 1.8.x+, getTextStream is deprecated in favor of getMediaStream 
+        // or specifically tailored text streams depending on version.
+        // Assuming older version or standard text approach:
+        _handleSharedContent(value.first.path); 
+      }
+    }, onError: (err) {
+      debugPrint("getMediaStream error: $err");
+    });
+
+    // NOTE: If using receive_sharing_intent < 1.6.0 use getTextStream
+    // Since I don't know your exact version, I'll add the most common text listener:
+    // UNCOMMENT IF COMPILER COMPLAINS ABOUT getMediaStream FOR TEXT
+    /*
+    _intentDataStreamSubscription = ReceiveSharingIntent.getTextStream().listen((String value) {
+      _handleSharedContent(value);
+    }, onError: (err) => print("getLinkStream error: $err"));
+    
+    ReceiveSharingIntent.getInitialText().then((String? value) {
+      if (value != null) _handleSharedContent(value);
+    });
+    */
+    
+    // For modern versions supporting both:
+    // Try catching initial share if app was closed
+    ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> value) {
+        if (value.isNotEmpty && value.first.path.isNotEmpty) {
+             _handleSharedContent(value.first.path);
+        }
+    });
+  }
+
+  Future<void> _handleSharedContent(String sharedText) async {
+    if (!mounted) return;
+    
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return; // Ignore if not logged in
+    final user = authState.user;
+
+    // Check if URL
+    final uri = Uri.tryParse(sharedText);
+    bool isUrl = uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+
+    String initialTitle = "";
+    String initialContent = "";
+
+    if (isUrl) {
+      // Show loading spinner while scraping
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final data = await WebScraperService.scrapeUrl(sharedText);
+      
+      if (!mounted) return;
+      Navigator.pop(context); // Hide spinner
+
+      if (data != null) {
+        initialTitle = data['title']!;
+        initialContent = data['content']!;
+      } else {
+        initialContent = sharedText; // Fallback
+      }
+    } else {
+      initialContent = sharedText;
+    }
+
+    if (!mounted) return;
+
+    // Open your existing Create Dialog, pre-filled
+    HomeDialogs.showCreateLessonDialog(
+      context,
+      user.id,
+      user.currentLanguage,
+      LanguageHelper.availableLanguages, 
+      isFavoriteByDefault: false,
+      initialTitle: initialTitle,     // NEW param
+      initialContent: initialContent, // NEW param
+    );
+  }
+  // ---------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +165,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
 
-    // Show onboarding placeholder if languages aren't selected yet
     if (user.currentLanguage.isEmpty) {
       return Scaffold(
         backgroundColor: bgColor,
@@ -121,7 +217,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             return _buildFilteredList(processedLessons, vocabMap, isDark);
                           }
 
-                          // Filter categories
                           final nativeLessons = processedLessons.where((l) => l.type == 'video_native').toList();
                           final guidedLessons = processedLessons.where((l) => l.type == 'video').toList();
                           final audioLessons = processedLessons.where((l) => l.type == 'audio').toList();
@@ -212,7 +307,6 @@ class _HomeScreenState extends State<HomeScreen> {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Language Selector Flag
               GestureDetector(
                 onTap: () => HomeLanguageDialogs.showTargetLanguageSelector(context),
                 child: Container(
@@ -228,7 +322,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(width: 16),
-              // Level & Stats
               Expanded(
                 child: InkWell(
                   onTap: () => HomeLanguageDialogs.showLevelSelector(context, currentLevel, user.currentLanguage),
@@ -269,7 +362,6 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       actions: [
-        // Premium Icon
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Center(

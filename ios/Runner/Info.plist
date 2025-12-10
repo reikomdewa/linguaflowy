@@ -56,5 +56,13 @@
   <string>whatsapp</string>
 </array>
 </array>
+<dict>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>ShareMedia</string>
+        </array>
+    </dict>
 </dict>
 </plist>

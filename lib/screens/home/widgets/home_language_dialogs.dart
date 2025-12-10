@@ -302,61 +302,8 @@ static void showLevelSelector(BuildContext context, String currentLevel, String 
       ),
     );
   }
-  // /// 3. Level Selector (Unchanged logic, just keeping it handy)
-  // static void showLevelSelector(BuildContext context, String currentLevel, String langCode) {
-  //   // ... (Same as previous code) ...
-  //   // Keeping this concise for this answer, use the previous version of this method
-  //   final isDark = Theme.of(context).brightness == Brightness.dark;
-  //   final List<String> proficiencyLevels = [
-  //     'A1 - Newcomer', 'A1 - Beginner', 'A2 - Elementary',
-  //     'B1 - Intermediate', 'B2 - Upper Intermediate', 'C1 - Advanced',
-  //   ];
 
-  //   showModalBottomSheet(
-  //     context: context,
-  //     backgroundColor: Colors.transparent,
-  //     isScrollControlled: true,
-  //     builder: (ctx) => Container(
-  //       decoration: BoxDecoration(color: isDark ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
-  //       padding: const EdgeInsets.only(top: 16),
-  //       child: SafeArea(
-  //         child: Column(
-  //           mainAxisSize: MainAxisSize.min,
-  //           children: [
-  //             Padding(
-  //               padding: const EdgeInsets.all(16.0),
-  //               child: Text("Select Your Level", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
-  //             ),
-  //             Divider(color: Colors.grey.withOpacity(0.2)),
-  //             Flexible(
-  //               child: SingleChildScrollView(
-  //                 child: Column(
-  //                   children: proficiencyLevels.map((level) {
-  //                     final isSelected = currentLevel == level;
-  //                     return ListTile(
-  //                       leading: Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? Colors.blue : Colors.grey),
-  //                       title: Text(level, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-  //                       onTap: () {
-  //                         Navigator.pop(ctx);
-  //                         if (level != currentLevel) {
-  //                           if (level == 'A1 - Newcomer') {
-  //                             context.read<AuthBloc>().add(AuthLanguageLevelChanged(level));
-  //                           } else {
-  //                             _showPlacementTestConfirmDialog(context, level, langCode);
-  //                           }
-  //                         }
-  //                       },
-  //                     );
-  //                   }).toList(),
-  //                 ),
-  //               ),
-  //             ),
-  //           ],
-  //         ),
-  //       ),
-  //     ),
-  //   );
-  // }
+  
 
   static void _showPlacementTestConfirmDialog(BuildContext context, String targetLevel, String langCode) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
