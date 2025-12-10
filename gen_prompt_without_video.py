@@ -1,7 +1,8 @@
 import sys
+import datetime
 
 def create_prompt():
-    print("--- STANDARD TEXT LESSON GENERATOR ---\n")
+    print("--- STANDARD TEXT LESSON GENERATOR (WITH TIMESTAMP) ---\n")
     
     # 1. Collect Inputs
     try:
@@ -20,6 +21,9 @@ def create_prompt():
         print("\n\nExited by user.")
         sys.exit()
 
+    # Get current time for the prompt example, though Gemini will generate its own
+    current_iso = datetime.datetime.utcnow().isoformat() + "Z"
+
     # 2. Construct the Prompt
     full_prompt = f"""**ROLE:**
 You are a strict Data Generator for a language learning app.
@@ -36,6 +40,7 @@ Question Count: {count}
 1. Generate {count} quiz questions based on the Topic.
 2. Mix the question types: 50% "target_to_native" and 50% "native_to_target".
 3. Use natural sentences appropriate for the Level.
+4. **TIMESTAMP**: Include a "createdAt" field in every object with the current UTC timestamp in ISO 8601 format (e.g., {current_iso}).
 
 **CRITICAL RULES FOR 'options' ARRAY:**
 1. The 'options' array is used for a drag-and-drop sentence builder.
@@ -51,6 +56,7 @@ Question Count: {count}
 [
   {{
     "id": "unique_id_1",
+    "createdAt": "{current_iso}",
     "type": "target_to_native", 
     "targetSentence": "Sentence in {target_lang}",
     "correctAnswer": "Sentence in {native_lang}",

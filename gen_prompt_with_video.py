@@ -1,7 +1,8 @@
 import sys
+import datetime
 
 def create_prompt():
-    print("--- VIDEO QUIZ GENERATOR PROMPT BUILDER ---\n")
+    print("--- VIDEO QUIZ GENERATOR (WITH TIMESTAMP) ---\n")
     
     # 1. Collect Inputs
     try:
@@ -20,8 +21,10 @@ def create_prompt():
         print("\n\nExited by user.")
         sys.exit()
 
-    # 2. Construct the Prompt
-    # We strictly enforce the JSON structure with video fields.
+    # Get current time for the prompt example
+    current_iso = datetime.datetime.utcnow().isoformat() + "Z"
+
+    # 2. Construct the Prompt with FIXED Timestamp Logic + CreatedAt
     
     full_prompt = f"""**ROLE:**
 You are an advanced Content Generator for a video-based language learning app.
@@ -36,8 +39,9 @@ Question Count: {count}
 
 **INSTRUCTIONS:**
 1. Generate {count} quiz questions based on the Topic.
-2. **VIDEO CONTEXT IS REQUIRED**: For each question, identify a real YouTube video (vlog, news, movie clip, or educational video) where this sentence (or a very similar phrase) is naturally spoken.
-3. **TIMESTAMPS**: You must estimate the `videoStart` and `videoEnd` where that specific sentence occurs in the video.
+2. **VIDEO CONTEXT**: Identify a real YouTube video (vlog, TedTalk, news, or movie clip) where this sentence is naturally spoken.
+3. **TIMESTAMPS**: You must estimate the `videoStart` and `videoEnd` accurately.
+4. **TIMESTAMP**: Include a "createdAt" field in every object with the current UTC timestamp: {current_iso}
 
 **CRITICAL RULES FOR 'options' ARRAY:**
 1. The 'options' array is for a drag-and-drop sentence builder.
@@ -47,23 +51,26 @@ Question Count: {count}
 5. If type is "native_to_target", 'options' are in {target_lang}.
 6. If type is "target_to_native", 'options' are in {native_lang}.
 
-**TIMESTAMP RULES (CRITICAL):**
-- Timestamps must be in **SECONDS (Float)**. 
-- Example: 1 minute 30 seconds = 90.0
-- `videoStart`: When the sentence begins.
-- `videoEnd`: When the sentence ends.
+**TIMESTAMP ACCURACY RULES (VERY IMPORTANT):**
+1. **Format**: Use Floating Point Seconds (e.g., 90.5).
+2. **Start Time**: When the first word is spoken.
+3. **End Time Calculation**: 
+   - Estimate when the sentence finishes.
+   - **ADD 1.5 SECONDS BUFFER**: You MUST add +1.5 seconds to your calculated end time. It is better to have a slightly longer clip than to cut off the audio.
+4. **Verification**: Ensure (`videoEnd` - `videoStart`) is NOT less than 3.0 seconds.
 
 **OUTPUT JSON STRUCTURE:**
 [
   {{
     "id": "unique_id_1",
+    "createdAt": "{current_iso}",
     "type": "target_to_native", 
     "targetSentence": "Sentence in {target_lang} as heard in the video",
     "correctAnswer": "Translation in {native_lang}",
     "options": ["word", "word", "distractor", "distractor"],
     "videoUrl": "https://www.youtube.com/watch?v=VIDEO_ID",
-    "videoStart": 12.5,
-    "videoEnd": 15.8
+    "videoStart": 12.0,
+    "videoEnd": 16.5
   }}
 ]
 

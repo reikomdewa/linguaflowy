@@ -1,0 +1,198 @@
+[
+  {
+    "id": "at_the_store_a1_1",
+    "type": "target_to_native",
+    "targetSentence": "Je cherche une robe.",
+    "correctAnswer": "I am looking for a dress.",
+    "options": [
+      "I",
+      "am",
+      "buy",
+      "for",
+      "the",
+      "looking",
+      "clothes",
+      "a",
+      "shirt",
+      "dress"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=7Vb8NmSJCSg",
+    "videoStart": 21.0,
+    "videoEnd": 24.0
+  },
+  {
+    "id": "at_the_store_a1_2",
+    "type": "native_to_target",
+    "targetSentence": "Je voudrais une robe noire.",
+    "correctAnswer": "I would like a black dress.",
+    "options": [
+      "cherche",
+      "une",
+      "magasin",
+      "T-shirt",
+      "robe",
+      "noire",
+      "grand",
+      "Je",
+      "voudrais"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=7Vb8NmSJCSg",
+    "videoStart": 49.0,
+    "videoEnd": 52.5
+  },
+  {
+    "id": "at_the_store_a1_3",
+    "type": "target_to_native",
+    "targetSentence": "Je peux l'essayer?",
+    "correctAnswer": "Can I try it on?",
+    "options": [
+      "I",
+      "try",
+      "jacket",
+      "buy",
+      "it",
+      "Can",
+      "here",
+      "on",
+      "you"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=7Vb8NmSJCSg",
+    "videoStart": 91.5,
+    "videoEnd": 94.5
+  },
+  {
+    "id": "at_the_store_a1_4",
+    "type": "native_to_target",
+    "targetSentence": "Où sont les cabines?",
+    "correctAnswer": "Where are the changing rooms?",
+    "options": [
+      "Où",
+      "le",
+      "chemises",
+      "cabines",
+      "sont",
+      "magasin",
+      "les",
+      "jupes"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=7Vb8NmSJCSg",
+    "videoStart": 93.0,
+    "videoEnd": 96.5
+  },
+  {
+    "id": "at_the_store_a1_5",
+    "type": "target_to_native",
+    "targetSentence": "Ça vous convient?",
+    "correctAnswer": "Does that suit you?",
+    "options": [
+      "that",
+      "suit",
+      "Does",
+      "fit",
+      "good",
+      "very",
+      "is",
+      "you"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=7Vb8NmSJCSg",
+    "videoStart": 115.0,
+    "videoEnd": 118.0
+  },
+  {
+    "id": "at_the_store_a1_6",
+    "type": "native_to_target",
+    "targetSentence": "Non, c'est trop petit.",
+    "correctAnswer": "No, it is too small.",
+    "options": [
+      "petit",
+      "Non",
+      "c'est",
+      "grand",
+      "cher",
+      "pantalon",
+      "trop",
+      "bleu"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=7Vb8NmSJCSg",
+    "videoStart": 118.5,
+    "videoEnd": 122.5
+  },
+  {
+    "id": "at_the_store_a1_7",
+    "type": "target_to_native",
+    "targetSentence": "Combien ça coûte?",
+    "correctAnswer": "How much does it cost?",
+    "options": [
+      "money",
+      "much",
+      "How",
+      "does",
+      "pay",
+      "it",
+      "cost",
+      "are",
+      "is"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=7Vb8NmSJCSg",
+    "videoStart": 129.0,
+    "videoEnd": 132.5
+  },
+  {
+    "id": "at_the_store_a1_8",
+    "type": "native_to_target",
+    "targetSentence": "Elle coûte 50 euros.",
+    "correctAnswer": "It costs 50 euros.",
+    "options": [
+      "robe",
+      "50",
+      "Elle",
+      "coûte",
+      "cent",
+      "chaussettes",
+      "cher",
+      "euros"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=7Vb8NmSJCSg",
+    "videoStart": 137.0,
+    "videoEnd": 140.0
+  },
+  {
+    "id": "at_the_store_a1_9",
+    "type": "target_to_native",
+    "targetSentence": "Je cherche des chaussures.",
+    "correctAnswer": "I am looking for shoes.",
+    "options": [
+      "I",
+      "am",
+      "buy",
+      "for",
+      "the",
+      "looking",
+      "clothes",
+      "shirt",
+      "shoes"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=7Vb8NmSJCSg",
+    "videoStart": 174.0,
+    "videoEnd": 177.0
+  },
+  {
+    "id": "at_the_store_a1_10",
+    "type": "native_to_target",
+    "targetSentence": "Je préfère le rouge.",
+    "correctAnswer": "I prefer the red one.",
+    "options": [
+      "Je",
+      "préfère",
+      "elle",
+      "bleu",
+      "vert",
+      "j'achète",
+      "le",
+      "rouge"
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=7Vb8NmSJCSg",
+    "videoStart": 203.0,
+    "videoEnd": 206.0
+  }
+]

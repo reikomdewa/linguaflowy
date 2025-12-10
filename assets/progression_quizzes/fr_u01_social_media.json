@@ -1,0 +1,119 @@
+[
+  {
+    "id": "q1_a1_sm_fr",
+    "createdAt": "2025-12-10T00:50:28Z",
+    "type": "target_to_native",
+    "targetSentence": "Je regarde une vidéo sur mon téléphone.",
+    "correctAnswer": "I watch a video on my phone.",
+    "options": [
+      "a",
+      "watch",
+      "my",
+      "I",
+      "phone",
+      "video",
+      "on",
+      "read",
+      "car"
+    ]
+  },
+  {
+    "id": "q2_a1_sm_fr",
+    "createdAt": "2025-12-10T00:50:28Z",
+    "type": "native_to_target",
+    "targetSentence": "Tu télécharges cette application.",
+    "correctAnswer": "You download this application.",
+    "options": [
+      "cette",
+      "la",
+      "boissons",
+      "télécharges",
+      "Tu",
+      "application",
+      "téléphone"
+    ]
+  },
+  {
+    "id": "q3_a1_sm_fr",
+    "createdAt": "2025-12-10T00:50:28Z",
+    "type": "target_to_native",
+    "targetSentence": "Elle crée un nouveau compte.",
+    "correctAnswer": "She creates a new account.",
+    "options": [
+      "new",
+      "creates",
+      "He",
+      "book",
+      "account",
+      "She",
+      "a",
+      "reads"
+    ]
+  },
+  {
+    "id": "q4_a1_sm_fr",
+    "createdAt": "2025-12-10T00:50:28Z",
+    "type": "native_to_target",
+    "targetSentence": "Nous envoyons un texte à des amis.",
+    "correctAnswer": "We send a text to some friends.",
+    "options": [
+      "texte",
+      "des",
+      "amis",
+      "parle",
+      "un",
+      "Nous",
+      "envoyons",
+      "voiture",
+      "à"
+    ]
+  },
+  {
+    "id": "q5_a1_sm_fr",
+    "createdAt": "2025-12-10T00:50:28Z",
+    "type": "target_to_native",
+    "targetSentence": "Vous chattez avec ma sœur.",
+    "correctAnswer": "You chat with my sister.",
+    "options": [
+      "my",
+      "brother",
+      "chat",
+      "You",
+      "with",
+      "sister",
+      "house"
+    ]
+  },
+  {
+    "id": "q6_a1_sm_fr",
+    "createdAt": "2025-12-10T00:50:28Z",
+    "type": "native_to_target",
+    "targetSentence": "Ils appellent leur mère.",
+    "correctAnswer": "They call their mother.",
+    "options": [
+      "leur",
+      "père",
+      "mère",
+      "Ils",
+      "disent",
+      "appellent",
+      "dormir"
+    ]
+  },
+  {
+    "id": "q7_a1_sm_fr",
+    "createdAt": "2025-12-10T00:50:28Z",
+    "type": "native_to_target",
+    "targetSentence": "Je crée une vidéo courte.",
+    "correctAnswer": "I create a short video.",
+    "options": [
+      "courte",
+      "une",
+      "ordinateur",
+      "vidéo",
+      "Je",
+      "crée",
+      "grande"
+    ]
+  }
+]

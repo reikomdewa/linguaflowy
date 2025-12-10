@@ -39,18 +39,8 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
           child: Column(
             children: [
               const SizedBox(height: 12),
-              // Handle Bar
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[400],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 10),
-
-              // --- TABS HEADER ---
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
@@ -63,10 +53,7 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
                         indicatorColor: const Color(0xFF6C63FF),
                         indicatorSize: TabBarIndicatorSize.label,
                         labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                        tabs: const [
-                          Tab(text: "Practice Path"),
-                          Tab(text: "Content Library"),
-                        ],
+                        tabs: const [Tab(text: "Practice Path"), Tab(text: "Content Library")],
                       ),
                     ),
                     if (_isLoading)
@@ -78,15 +65,10 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
                 ),
               ),
               const Divider(height: 1),
-
-              // --- TAB VIEW ---
               Expanded(
                 child: TabBarView(
                   children: [
-                    // Tab 1: The Timeline
                     _buildPracticePath(scrollController),
-                    
-                    // Tab 2: The Learn Screen (Content)
                     const ClipRRect(
                       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                       child: LearnScreen(),
@@ -101,7 +83,6 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
     );
   }
 
-  // --- LOGIC FOR THE BUSUU-STYLE PATH ---
   Widget _buildPracticePath(ScrollController controller) {
     final String targetLang = widget.user.currentLanguage;
     final List<dynamic> completedIds = widget.user.completedLevels ?? [];
@@ -110,43 +91,33 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
       stream: FirebaseFirestore.instance
           .collection('quiz_levels')
           .where('language', isEqualTo: targetLang)
-          .orderBy('unitIndex')
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) return const Center(child: Text("Unable to load path."));
+        if (snapshot.hasError) {
+          print("SNAPSHOT ERROR: ${snapshot.error}");
+          return const Center(child: Text("Load error. Check Console."));
+        }
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
-        final docs = snapshot.data?.docs ?? [];
+        List<QueryDocumentSnapshot> docs = snapshot.data?.docs ?? [];
         if (docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.map_outlined, size: 60, color: Colors.grey[400]),
-                const SizedBox(height: 16),
-                const Text("No practice units available yet."),
-              ],
-            ),
-          );
+          return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.map_outlined, size: 60, color: Colors.grey[400]), SizedBox(height: 16), Text("No practice units available yet.")]));
         }
 
-        // --- 1. DETERMINE PROGRESS STATE ---
-        int firstIncompleteIndex = -1;
+        // --- SORT WITH DEBUGGING ---
+        docs = _sortByCreatedAt(docs);
 
+        // --- PROGRESS LOGIC ---
+        int firstIncompleteIndex = -1;
         for (int i = 0; i < docs.length; i++) {
-          final docId = docs[i].id;
-          if (!completedIds.contains(docId)) {
+          if (!completedIds.contains(docs[i].id)) {
             firstIncompleteIndex = i;
             break;
           }
         }
-        
-        if (firstIncompleteIndex == -1 && completedIds.isNotEmpty) {
-          firstIncompleteIndex = docs.length;
-        }
+        if (firstIncompleteIndex == -1 && completedIds.isNotEmpty) firstIncompleteIndex = docs.length;
         if (completedIds.isEmpty) firstIncompleteIndex = 0;
 
-        // --- 2. BUILD THE LIST ---
         return ListView.builder(
           controller: controller,
           padding: const EdgeInsets.only(bottom: 30),
@@ -154,41 +125,32 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
           itemBuilder: (context, index) {
             final doc = docs[index];
             final data = doc.data() as Map<String, dynamic>;
-            
             final String title = data['topic'] ?? 'Lesson';
             final int qCount = data['questionCount'] ?? 0;
-            final int unitIndex = data['unitIndex'] ?? 1;
+            // Parse Unit Index for Display (Visual only, not for sorting)
+            final int unitIndex = int.tryParse(data['unitIndex']?.toString() ?? '1') ?? 1;
             final List<dynamic> questions = data['questions'] ?? [];
 
-            // A. Determine Status
             LessonStatus status;
-            if (index < firstIncompleteIndex) {
-              status = LessonStatus.completed;
-            } else if (index == firstIncompleteIndex) {
-              status = LessonStatus.current;
-            } else {
-              status = LessonStatus.locked;
-            }
+            if (index < firstIncompleteIndex) status = LessonStatus.completed;
+            else if (index == firstIncompleteIndex) status = LessonStatus.current;
+            else status = LessonStatus.locked;
 
-            // B. Determine Grouping
+            // UI Grouping
             bool isFirstInUnit = false;
-            if (index == 0) {
-              isFirstInUnit = true;
-            } else {
+            if (index == 0) isFirstInUnit = true;
+            else {
               final prevData = docs[index - 1].data() as Map<String, dynamic>;
-              if (unitIndex != (prevData['unitIndex'] ?? 0)) {
-                isFirstInUnit = true;
-              }
+              final int prevUnit = int.tryParse(prevData['unitIndex']?.toString() ?? '0') ?? 0;
+              if (unitIndex != prevUnit) isFirstInUnit = true;
             }
 
             bool isLastInUnit = false;
-            if (index == docs.length - 1) {
-              isLastInUnit = true;
-            } else {
+            if (index == docs.length - 1) isLastInUnit = true;
+            else {
               final nextData = docs[index + 1].data() as Map<String, dynamic>;
-              if (unitIndex != (nextData['unitIndex'] ?? 0)) {
-                isLastInUnit = true;
-              }
+              final int nextUnit = int.tryParse(nextData['unitIndex']?.toString() ?? '0') ?? 0;
+              if (unitIndex != nextUnit) isLastInUnit = true;
             }
 
             return UnitPathCard(
@@ -211,96 +173,112 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
     );
   }
 
-  // --- SELECTION & LIMIT LOGIC ---
+ List<QueryDocumentSnapshot> _sortByCreatedAt(List<QueryDocumentSnapshot> unsortedDocs) {
+  
+  List<QueryDocumentSnapshot> sorted = List.from(unsortedDocs);
+  
+  sorted.sort((a, b) {
+    final dataA = a.data() as Map<String, dynamic>;
+    final dataB = b.data() as Map<String, dynamic>;
+
+    // 1. PRIMARY SORT: Unit Index
+    int unitA = int.tryParse(dataA['unitIndex']?.toString() ?? '999') ?? 999;
+    int unitB = int.tryParse(dataB['unitIndex']?.toString() ?? '999') ?? 999;
+    
+    int unitCompare = unitA.compareTo(unitB);
+    if (unitCompare != 0) return unitCompare;
+
+    // 2. SECONDARY SORT: Created At DESCENDING (newest first)
+    final rawDateA = dataA['createdAt'] ?? dataA['updatedAt'];
+    final rawDateB = dataB['createdAt'] ?? dataB['updatedAt'];
+
+    DateTime dateA = _parseAnyDate(rawDateA) ?? DateTime(1970);
+    DateTime dateB = _parseAnyDate(rawDateB) ?? DateTime(1970);
+
+  
+
+    return dateB.compareTo(dateA); // DESCENDING - newest to oldest
+  });
+  
+  print("--- END SORTING ---");
+  return sorted;
+}
+
+  DateTime? _parseAnyDate(dynamic val) {
+    if (val == null) return null;
+    if (val is Timestamp) return val.toDate();
+    if (val is String) {
+      // Try ISO format (2025-12-10T...)
+      try { return DateTime.parse(val); } catch (_) {}
+      // Try Verbose format
+      return _parseVerboseString(val);
+    }
+    return null;
+  }
+
+  DateTime? _parseVerboseString(String input) {
+    try {
+      final parts = input.split(' '); 
+      if (parts.length < 3) return null;
+      String monthStr = parts[0]; 
+      String dayStr = parts[1].replaceAll(',', ''); 
+      String yearStr = parts[2]; 
+      return DateTime(int.parse(yearStr), _getMonthIndex(monthStr), int.parse(dayStr));
+    } catch (_) { return null; }
+  }
+
+  int _getMonthIndex(String m) {
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    int index = months.indexOf(m);
+    return index != -1 ? index + 1 : 1;
+  }
 
   Future<void> _handleUnitSelection(List<dynamic> questions, String levelId) async {
     if (questions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("This unit is empty.")));
       return;
     }
-
     if (_isLoading) return;
-
     if (widget.user.isPremium) {
       _navigateToQuiz(questions, levelId);
       return;
     }
-
     setState(() => _isLoading = true);
-
     try {
       final canAccess = await _limitService.checkAndIncrementQuizLimit(widget.user.id);
-      
       if (!mounted) return;
       setState(() => _isLoading = false);
-
-      if (canAccess) {
-        _navigateToQuiz(questions, levelId);
-      } else {
-        _showLimitDialog();
-      }
+      if (canAccess) _navigateToQuiz(questions, levelId);
+      else _showLimitDialog();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Connection error.")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Connection error.")));
     }
   }
 
-  // --- FIX START: Capture Context safely ---
   void _navigateToQuiz(List<dynamic> questions, String levelId) {
-    // 1. Capture the AuthBloc and Navigator BEFORE the widget is disposed/popped
     final authBloc = context.read<AuthBloc>();
     final navigator = Navigator.of(context);
-
-    // 2. Close the Bottom Sheet
     navigator.pop(); 
-    
-    // 3. Navigate to Quiz
-    navigator.push(
-      MaterialPageRoute(
-        builder: (_) => QuizScreen(
-          initialQuestions: questions,
-          levelId: levelId, 
-        ),
-      ),
-    ).then((_) {
-      // 4. Use the captured Bloc instance. 
-      // DO NOT USE 'context' here because the Bottom Sheet is gone.
-      authBloc.add(AuthCheckRequested());
-    });
+    navigator.push(MaterialPageRoute(builder: (_) => QuizScreen(initialQuestions: questions, levelId: levelId)))
+             .then((_) => authBloc.add(AuthCheckRequested()));
   }
-  // --- FIX END ---
 
   void _showLimitDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Daily Limit Reached"),
-        content: Text(
-          "Free accounts can take ${_limitService.limit} guided practices every ${_limitService.resetMinutes} minutes.\n\n"
-          "Upgrade to Premium for unlimited access.",
-        ),
+        content: Text("Free accounts can take ${_limitService.limit} guided practices every ${_limitService.resetMinutes} minutes.\n\nUpgrade to Premium."),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Wait"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Wait")),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6C63FF),
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C63FF), foregroundColor: Colors.white),
             onPressed: () {
               Navigator.pop(context); 
-              showDialog(
-                context: context,
-                builder: (context) => const PremiumLockDialog(),
-              ).then((unlocked) {
-                if (unlocked == true) {
-                  context.read<AuthBloc>().add(AuthCheckRequested());
-                }
+              showDialog(context: context, builder: (context) => const PremiumLockDialog()).then((unlocked) {
+                if (unlocked == true) context.read<AuthBloc>().add(AuthCheckRequested());
               });
             },
             child: const Text("Upgrade"),

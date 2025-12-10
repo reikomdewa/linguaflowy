@@ -4,16 +4,13 @@ import json
 import os
 import sys
 import re
+from datetime import datetime
 
 # --- CONFIGURATION ---
 SERVICE_ACCOUNT_FILE = "serviceAccountKey.json"
-# This must match where your save script put the file
 INPUT_DIR = "assets/progression_quizzes" 
 
 # REGEX: Matches "es_u01_basics.json"
-# Group 1: Language (es)
-# Group 2: Unit Number (01)
-# Group 3: Topic (basics)
 FILENAME_PATTERN = re.compile(r"^([a-z]{2})_u(\d+)_(.+)\.json$")
 
 def initialize_firebase():
@@ -30,7 +27,7 @@ def initialize_firebase():
         sys.exit(1)
 
 def process_file(db, filepath, filename):
-    # 1. Parse Filename for Metadata
+    # 1. Parse Filename
     match = FILENAME_PATTERN.match(filename)
     if not match:
         print(f"   ⚠️ SKIPPING: '{filename}'")
@@ -41,10 +38,9 @@ def process_file(db, filepath, filename):
     unit_index = int(match.group(2))
     topic_slug = match.group(3)
     
-    # Clean up topic string (e.g. "food_and_drink" -> "Food And Drink")
     display_title = topic_slug.replace("_", " ").title()
 
-    # 2. Read JSON Content
+    # 2. Read JSON
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             questions = json.load(f)
@@ -56,25 +52,42 @@ def process_file(db, filepath, filename):
         print(f"   ❌ Error: Root of JSON must be a list []")
         return False
 
-    # 3. Create a ID (e.g., es_u01_basics)
+    # 3. Create ID
     doc_id = f"{lang_code}_u{unit_index:02d}_{topic_slug}"
 
     print(f"   🚀 Syncing: {lang_code.upper()} Unit {unit_index}: {display_title} ({len(questions)} Qs)")
 
-    # 4. Prepare Firestore Data
-    # We store metadata for the Path UI, and the questions array for the Quiz UI
+    # 4. Extract 'createdAt' from JSON (From the Generator Script)
+    # We look at the first question to find the timestamp for the whole lesson.
+    created_at_val = firestore.SERVER_TIMESTAMP # Default to NOW if missing in JSON
+    
+    if len(questions) > 0 and isinstance(questions[0], dict):
+        raw_date = questions[0].get('createdAt')
+        if raw_date:
+            try:
+                # Convert ISO string (e.g., "2025-12-10T...") to Python datetime
+                # This ensures Firestore stores it as a Timestamp, allowing perfect sorting.
+                if raw_date.endswith('Z'):
+                    raw_date = raw_date[:-1] + '+00:00'
+                created_at_val = datetime.fromisoformat(raw_date)
+            except Exception:
+                # If parsing fails, store string (Flutter app handles this too)
+                created_at_val = raw_date
+
+    # 5. Prepare Firestore Data
     data = {
         "id": doc_id,
         "language": lang_code,
-        "unitIndex": unit_index,     # Crucial for sorting in the app
-        "topic": display_title,      # "Basics"
-        "questions": questions,      # The content
+        "unitIndex": unit_index,
+        "topic": display_title,
+        "questions": questions,
         "questionCount": len(questions),
         "type": "progression_quiz", 
+        "createdAt": created_at_val,         # <--- STABLE SORT KEY
         "updatedAt": firestore.SERVER_TIMESTAMP
     }
 
-    # 5. Upload (Merge=True updates existing levels without deleting extra fields)
+    # 6. Upload
     try:
         db.collection('quiz_levels').document(doc_id).set(data, merge=True)
         return True
