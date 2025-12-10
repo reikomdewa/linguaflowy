@@ -173,41 +173,114 @@ class HomeLanguageDialogs {
       ),
     );
   }
-
-  /// 3. Level Selector (Unchanged logic, just keeping it handy)
-  static void showLevelSelector(BuildContext context, String currentLevel, String langCode) {
-    // ... (Same as previous code) ...
-    // Keeping this concise for this answer, use the previous version of this method
+static void showLevelSelector(BuildContext context, String currentLevel, String langCode) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // 1. Define levels
     final List<String> proficiencyLevels = [
-      'A1 - Newcomer', 'A1 - Beginner', 'A2 - Elementary',
-      'B1 - Intermediate', 'B2 - Upper Intermediate', 'C1 - Advanced',
+      'A1 - Newcomer', 
+      'A1 - Beginner', 
+      'A2 - Elementary',
+      'B1 - Intermediate', 
+      'B2 - Upper Intermediate', 
+      'C1 - Advanced',
     ];
+
+    // 2. Calculate progress based on current level index
+    int currentIndex = proficiencyLevels.indexOf(currentLevel);
+    // If level isn't found (e.g. data error), default to 0
+    if (currentIndex == -1) currentIndex = 0;
+    
+    // Calculate percentage (e.g., 1/6, 2/6...)
+    // We use (currentIndex + 1) so even the first level shows some progress
+    double progressValue = (currentIndex + 1) / proficiencyLevels.length;
 
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => Container(
-        decoration: BoxDecoration(color: isDark ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E1E) : Colors.white, 
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20))
+        ),
         padding: const EdgeInsets.only(top: 16),
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // --- Title ---
               Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text("Select Your Level", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Text(
+                  "Select Your Level", 
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold, 
+                    fontSize: 18, 
+                    color: isDark ? Colors.white : Colors.black
+                  )
+                ),
               ),
+
+              // --- NEW: Journey Progress Bar ---
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Current Progress", 
+                          style: TextStyle(color: Colors.grey, fontSize: 12)
+                        ),
+                        Text(
+                          "${currentIndex + 1} / ${proficiencyLevels.length}", 
+                          style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: LinearProgressIndicator(
+                        value: progressValue,
+                        minHeight: 8,
+                        backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      currentIndex < proficiencyLevels.length - 1 
+                        ? "Next: ${proficiencyLevels[currentIndex + 1].split(' - ')[0]}" // Shows "Next: A2"
+                        : "Max Level Reached!",
+                      style: TextStyle(color: Colors.blue.withOpacity(0.8), fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              // ---------------------------------
+
               Divider(color: Colors.grey.withOpacity(0.2)),
+              
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(
                     children: proficiencyLevels.map((level) {
                       final isSelected = currentLevel == level;
                       return ListTile(
-                        leading: Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? Colors.blue : Colors.grey),
-                        title: Text(level, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                        leading: Icon(
+                          isSelected ? Icons.check_circle : Icons.circle_outlined, 
+                          color: isSelected ? Colors.blue : Colors.grey
+                        ),
+                        title: Text(
+                          level, 
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black, 
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
+                          )
+                        ),
                         onTap: () {
                           Navigator.pop(ctx);
                           if (level != currentLevel) {
@@ -229,6 +302,61 @@ class HomeLanguageDialogs {
       ),
     );
   }
+  // /// 3. Level Selector (Unchanged logic, just keeping it handy)
+  // static void showLevelSelector(BuildContext context, String currentLevel, String langCode) {
+  //   // ... (Same as previous code) ...
+  //   // Keeping this concise for this answer, use the previous version of this method
+  //   final isDark = Theme.of(context).brightness == Brightness.dark;
+  //   final List<String> proficiencyLevels = [
+  //     'A1 - Newcomer', 'A1 - Beginner', 'A2 - Elementary',
+  //     'B1 - Intermediate', 'B2 - Upper Intermediate', 'C1 - Advanced',
+  //   ];
+
+  //   showModalBottomSheet(
+  //     context: context,
+  //     backgroundColor: Colors.transparent,
+  //     isScrollControlled: true,
+  //     builder: (ctx) => Container(
+  //       decoration: BoxDecoration(color: isDark ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+  //       padding: const EdgeInsets.only(top: 16),
+  //       child: SafeArea(
+  //         child: Column(
+  //           mainAxisSize: MainAxisSize.min,
+  //           children: [
+  //             Padding(
+  //               padding: const EdgeInsets.all(16.0),
+  //               child: Text("Select Your Level", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
+  //             ),
+  //             Divider(color: Colors.grey.withOpacity(0.2)),
+  //             Flexible(
+  //               child: SingleChildScrollView(
+  //                 child: Column(
+  //                   children: proficiencyLevels.map((level) {
+  //                     final isSelected = currentLevel == level;
+  //                     return ListTile(
+  //                       leading: Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? Colors.blue : Colors.grey),
+  //                       title: Text(level, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+  //                       onTap: () {
+  //                         Navigator.pop(ctx);
+  //                         if (level != currentLevel) {
+  //                           if (level == 'A1 - Newcomer') {
+  //                             context.read<AuthBloc>().add(AuthLanguageLevelChanged(level));
+  //                           } else {
+  //                             _showPlacementTestConfirmDialog(context, level, langCode);
+  //                           }
+  //                         }
+  //                       },
+  //                     );
+  //                   }).toList(),
+  //                 ),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
 
   static void _showPlacementTestConfirmDialog(BuildContext context, String targetLevel, String langCode) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

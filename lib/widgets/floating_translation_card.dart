@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart'; 
 import 'package:linguaflow/widgets/gemini_formatted_text.dart';
 import 'package:linguaflow/utils/language_helper.dart';
+
 class FloatingTranslationCard extends StatefulWidget {
   final String originalText;
   final Future<String> translationFuture; // Google Translation from parent
@@ -50,7 +51,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   // Dragging State
   Offset _dragOffset = Offset.zero;
 
-  // Tabs: 0=AI, 1=Reserved(MyMemory Hidden), 2=WordRef, 3=Glosbe, 4=Reverso
+  // Tabs: 0=AI, 1=Reserved, 2=WordRef, 3=Glosbe, 4=Reverso
   int _selectedTabIndex = 0; 
   bool _isExpanded = false;
   
@@ -61,37 +62,62 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   @override
   void initState() {
     super.initState();
-    // Initialize Local TTS
     _initTts();
-    
-    // Load both MyMemory (Internal) and Google (Parent) for the top display
     _loadCombinedTranslations();
   }
 
   // --- COMBINED LOADING LOGIC ---
   Future<void> _loadCombinedTranslations() async {
-    String combined = "";
+    // 1. Start fetching Google (Parent Future) immediately
+    final googleFuture = widget.translationFuture;
+    
+    // 2. Start fetching MyMemory (Internal)
+    final myMemoryFuture = _fetchMyMemoryInternal();
 
-    // 1. Fetch MyMemory (Internally) - Used for Top Display
+    // 3. Wait for Google first (Since you mentioned it works fine)
+    String googleResult = "";
     try {
-      final myMemoryResult = await _fetchMyMemoryInternal(); 
-      if (!myMemoryResult.startsWith("Error") && !myMemoryResult.startsWith("No results")) {
-        combined += myMemoryResult;
-      }
+      googleResult = await googleFuture;
     } catch (_) {}
 
-    // 2. Fetch Google (From Parent)
+    String myMemoryResult = "";
     try {
-      final googleResult = await widget.translationFuture;
+      myMemoryResult = await myMemoryFuture;
+    } catch (_) {}
+
+    // 4. Combine Logic
+    String combined = "";
+    bool myMemoryValid = myMemoryResult.isNotEmpty && 
+                         !myMemoryResult.startsWith("Error") && 
+                         !myMemoryResult.startsWith("No results");
+
+    // Strategy: For Sentences (spaces detected), prioritize Google. 
+    // For single words, MyMemory often has better definitions, so show it first.
+    bool isPhrase = widget.originalText.trim().contains(' ');
+
+    if (isPhrase) {
+      // --- PHRASE MODE: Google First ---
       if (googleResult.isNotEmpty) {
-        // Prevent duplicate text
+        combined = googleResult;
+        if (myMemoryValid && myMemoryResult.trim().toLowerCase() != googleResult.trim().toLowerCase()) {
+           combined += "\n\n[Alternative]\n$myMemoryResult";
+        }
+      } else if (myMemoryValid) {
+        combined = myMemoryResult;
+      }
+    } else {
+      // --- WORD MODE: MyMemory First ---
+      if (myMemoryValid) {
+        combined = myMemoryResult;
+      }
+      if (googleResult.isNotEmpty) {
         if (combined.isEmpty) {
           combined = googleResult;
         } else if (combined.trim().toLowerCase() != googleResult.trim().toLowerCase()) {
-          combined += "\n\n[Google]\n$googleResult";
+           combined += "\n\n[Google]\n$googleResult";
         }
       }
-    } catch (_) {}
+    }
 
     if (mounted) {
       setState(() {
@@ -124,22 +150,46 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   }
 
   // --- API LOGIC (MyMemory Internal Helper) ---
+  String _sanitizeLangCode(String code) {
+    if (code.isEmpty) return 'en';
+    // MyMemory expects "en", "es", not "en-US"
+    if (code.contains('_')) return code.split('_')[0];
+    if (code.contains('-')) return code.split('-')[0];
+    return code;
+  }
+
   Future<String> _fetchMyMemoryInternal() async {
     try {
-      final src = widget.targetLanguage.isEmpty ? 'es' : widget.targetLanguage;
-      final tgt = widget.nativeLanguage.isEmpty ? 'en' : widget.nativeLanguage;
+      final src = _sanitizeLangCode(widget.targetLanguage);
+      final tgt = _sanitizeLangCode(widget.nativeLanguage);
       
       final cleanText = widget.originalText.replaceAll('\n', ' ').trim();
-      final text = Uri.encodeComponent(cleanText);
       
-      final url = Uri.parse('https://api.mymemory.translated.net/get?q=$text&langpair=$src|$tgt');
-      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      if (cleanText.isEmpty) return "";
+      // MyMemory GET limit is around 500 chars. Longer phrases fail.
+      if (cleanText.length > 500) return "No results (Text too long)";
+
+      // Use Uri.https for safer encoding of phrases with special chars
+      final queryParameters = {
+        'q': cleanText,
+        'langpair': '$src|$tgt',
+        'mt': '1' // Force Machine Translation if no memory match
+      };
+
+      final uri = Uri.https('api.mymemory.translated.net', '/get', queryParameters);
+      
+      final response = await http.get(uri).timeout(const Duration(seconds: 5));
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        
+        // Check internal status (sometimes HTTP is 200 but status is 4xx)
+        if (data['responseStatus'] != 200) return "No results found.";
+
         if (data['responseData'] != null) {
           String result = data['responseData']['translatedText'] ?? "";
           
+          // Check for MyMemory errors or echoes (common with MT failures)
           if (result.contains("MYMEMORY WARNING") || 
               result.trim().toLowerCase() == cleanText.toLowerCase()) {
             return "No results found.";
@@ -155,9 +205,10 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
 
   // --- WEBVIEW LOGIC ---
   String _getWebUrl(int index) {
-    final src = widget.targetLanguage;
-    final tgt = widget.nativeLanguage;
-    final word = widget.originalText;
+    final src = _sanitizeLangCode(widget.targetLanguage);
+    final tgt = _sanitizeLangCode(widget.nativeLanguage);
+    // Use proper encoding for URLs
+    final word = Uri.encodeComponent(widget.originalText);
 
     switch(index) {
       case 2: return "https://www.wordreference.com/${src}en/$word";
@@ -179,6 +230,9 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
           onPageFinished: (String url) {
             if (mounted) setState(() => _isLoadingWeb = false);
           },
+          onWebResourceError: (error) {
+             if (mounted) setState(() => _isLoadingWeb = false);
+          },
         ),
       )
       ..loadRequest(Uri.parse(url));
@@ -193,7 +247,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
         _selectedTabIndex = index;
         _isExpanded = true;
         
-        // Lazy Load AI if Tab 0 is selected
         if (index == 0 && _aiText == null && !_isAiLoading) {
           _fetchAiExplanation();
         }
@@ -225,10 +278,10 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     final screenSize = MediaQuery.of(context).size;
     final padding = MediaQuery.of(context).padding;
     
-    // --- POSITIONING LOGIC ---
     double? topPos, bottomPos, leftPos;
     double width;
 
+    // --- POSITIONING LOGIC ---
     if (_isExpanded) {
       topPos = padding.top + 10;
       bottomPos = 0; 
@@ -250,8 +303,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
       }
     }
 
-String flagAsset = LanguageHelper.getFlagEmoji(widget.nativeLanguage);
-    
+    String flagAsset = LanguageHelper.getFlagEmoji(widget.nativeLanguage);
 
     return Stack(
       children: [
@@ -342,7 +394,7 @@ String flagAsset = LanguageHelper.getFlagEmoji(widget.nativeLanguage);
             children: [
               Expanded(
                 child: Text(
-                  _translationText, // Combined (MyMemory + Google)
+                  _translationText, 
                   style: const TextStyle(fontSize: 18, color: Colors.white70, height: 1.4),
                 ),
               ),
@@ -369,8 +421,7 @@ String flagAsset = LanguageHelper.getFlagEmoji(widget.nativeLanguage);
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildTabChip("AI", 0), // RENAMED FROM EDITOR
-                // Removed MyMemory Chip (Index 1)
+                _buildTabChip("AI", 0), 
                 const SizedBox(width: 8),
                 _buildTabChip("WordRef", 2),
                 const SizedBox(width: 8),
@@ -419,7 +470,6 @@ String flagAsset = LanguageHelper.getFlagEmoji(widget.nativeLanguage);
 
   Widget _buildExpandedContent() {
     if (_selectedTabIndex == 0) {
-      // Lazy Loaded AI Content
       if (_isAiLoading) {
         return Center(child: Padding(padding: const EdgeInsets.all(20), child: LinearProgressIndicator(color: Colors.blue.withOpacity(0.3), backgroundColor: Colors.transparent)));
       }
@@ -429,8 +479,6 @@ String flagAsset = LanguageHelper.getFlagEmoji(widget.nativeLanguage);
       return const Padding(padding: EdgeInsets.all(16), child: Text("Tap AI tab to load explanation.", style: TextStyle(color: Colors.grey)));
     }
     
-    // Index 1 (MyMemory) logic removed from here as the tab is hidden
-
     if (_webViewController != null) {
       return Stack(
         children: [
@@ -439,7 +487,7 @@ String flagAsset = LanguageHelper.getFlagEmoji(widget.nativeLanguage);
         ],
       );
     }
-    return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("Initializing Browser...", style: TextStyle(color: Colors.grey))));
+    return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("Loading...", style: TextStyle(color: Colors.grey))));
   }
 
   Widget _buildRankButton(String label, int status, Color color) {
