@@ -48,7 +48,7 @@ class VideoLessonCard extends StatelessWidget {
                     height: 160,
                     width: 280,
                     color: isDark ? Colors.white10 : Colors.grey[200],
-                    child: (lesson.imageUrl != null && (lesson.type == 'video' || lesson.type == 'video_native')) 
+                    child: (lesson.imageUrl != null && (lesson.type == 'video' || lesson.type == 'video_native' || lesson.type == 'audio')) 
                         ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
                         : (lesson.type == 'text'
                               ? Center(

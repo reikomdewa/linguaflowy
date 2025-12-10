@@ -159,6 +159,7 @@ class _StatCard extends StatelessWidget {
   const _StatCard(
       {required this.title, required this.value, required this.color});
 
+
   @override
   Widget build(BuildContext context) {
     return Container(

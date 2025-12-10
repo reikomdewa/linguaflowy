@@ -23,20 +23,11 @@ import 'blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
-  // Enable verbose logging
   await dotenv.load(fileName: ".env");
   final apiKey = dotenv.env['GEMINI_API_KEY'];
 
   if (apiKey != null) {
-    Gemini.init(
-      apiKey: apiKey,
-      // --- ADD THIS ---
-      // This prints the exact API URL and Response to the console.
-      // It helps confirm if the package is using 'v1beta' or 'v1',
-      // and shows the raw error details from Google.
-    );
-  } else {
-    print("WARNING: GEMINI_API_KEY is missing in .env");
+    Gemini.init(apiKey: apiKey);
   }
 
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,11 +41,11 @@ void main() async {
     androidNotificationIcon: 'mipmap/ic_launcher',
   );
 
-  runApp(const LanguageLearningApp()); // Ensure const is used if applicable
+  runApp(const LinguaflowApp()); // Ensure const is used if applicable
 }
 
-class LanguageLearningApp extends StatelessWidget {
-  const LanguageLearningApp({super.key});
+class LinguaflowApp extends StatelessWidget {
+  const LinguaflowApp({super.key});
 
   @override
   Widget build(BuildContext context) {
