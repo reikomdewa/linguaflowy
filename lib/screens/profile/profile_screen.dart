@@ -84,7 +84,7 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 32),
+          const SizedBox(height: 16),
 
           // --- 2. LEARNING SETTINGS ---
           ProfileSectionCard(
