@@ -1,0 +1,85 @@
+[
+  {
+    "id": "q1_a1_cnt_fr",
+    "createdAt": "2025-12-10T01:18:17Z",
+    "type": "native_to_target",
+    "targetSentence": "J'ai trois chats et deux chiens.",
+    "correctAnswer": "I have three cats and two dogs.",
+    "options": [
+      "huit",
+      "chats",
+      "et",
+      "J'ai",
+      "deux",
+      "trois",
+      "chiens"
+    ]
+  },
+  {
+    "id": "q2_a1_cnt_fr",
+    "createdAt": "2025-12-10T01:18:17Z",
+    "type": "target_to_native",
+    "targetSentence": "Il y a sept livres sur la table.",
+    "correctAnswer": "There are seven books on the table.",
+    "options": [
+      "are",
+      "seven",
+      "books",
+      "car",
+      "on",
+      "There",
+      "the",
+      "table",
+      "ten"
+    ]
+  },
+  {
+    "id": "q3_a1_cnt_fr",
+    "createdAt": "2025-12-10T01:18:17Z",
+    "type": "native_to_target",
+    "targetSentence": "Nous avons dix pommes rouges.",
+    "correctAnswer": "We have ten red apples.",
+    "options": [
+      "dix",
+      "Nous",
+      "rouges",
+      "avons",
+      "bleues",
+      "pommes"
+    ]
+  },
+  {
+    "id": "q4_a1_cnt_fr",
+    "createdAt": "2025-12-10T01:18:17Z",
+    "type": "target_to_native",
+    "targetSentence": "Elle a un frère et quatre sœurs.",
+    "correctAnswer": "She has one brother and four sisters.",
+    "options": [
+      "has",
+      "ten",
+      "brother",
+      "sisters",
+      "one",
+      "She",
+      "and",
+      "four"
+    ]
+  },
+  {
+    "id": "q5_a1_cnt_fr",
+    "createdAt": "2025-12-10T01:18:17Z",
+    "type": "native_to_target",
+    "targetSentence": "J'ai six stylos noirs et cinq blancs.",
+    "correctAnswer": "I have six black pens and five white ones.",
+    "options": [
+      "blancs",
+      "J'ai",
+      "stylos",
+      "cinq",
+      "six",
+      "noirs",
+      "et",
+      "rouges"
+    ]
+  }
+]

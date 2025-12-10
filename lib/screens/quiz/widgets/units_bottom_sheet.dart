@@ -105,7 +105,7 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
         }
 
         // --- SORT WITH DEBUGGING ---
-        docs = _sortByCreatedAt(docs);
+        docs = _sortLessons(docs);
 
         // --- PROGRESS LOGIC ---
         int firstIncompleteIndex = -1;
@@ -173,36 +173,58 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
     );
   }
 
- List<QueryDocumentSnapshot> _sortByCreatedAt(List<QueryDocumentSnapshot> unsortedDocs) {
-  
-  List<QueryDocumentSnapshot> sorted = List.from(unsortedDocs);
-  
-  sorted.sort((a, b) {
-    final dataA = a.data() as Map<String, dynamic>;
-    final dataB = b.data() as Map<String, dynamic>;
-
-    // 1. PRIMARY SORT: Unit Index
-    int unitA = int.tryParse(dataA['unitIndex']?.toString() ?? '999') ?? 999;
-    int unitB = int.tryParse(dataB['unitIndex']?.toString() ?? '999') ?? 999;
+  /// Sorts lessons by unitIndex (ascending), then by createdAt (ascending within each unit)
+  /// This ensures Unit 1 comes before Unit 2, and within each unit, oldest lessons appear first
+  List<QueryDocumentSnapshot> _sortLessons(List<QueryDocumentSnapshot> unsortedDocs) {
+    print("--- START SORTING (${unsortedDocs.length} items) ---");
     
-    int unitCompare = unitA.compareTo(unitB);
-    if (unitCompare != 0) return unitCompare;
+    List<QueryDocumentSnapshot> sorted = List.from(unsortedDocs);
+    
+    sorted.sort((a, b) {
+      final dataA = a.data() as Map<String, dynamic>;
+      final dataB = b.data() as Map<String, dynamic>;
 
-    // 2. SECONDARY SORT: Created At DESCENDING (newest first)
-    final rawDateA = dataA['createdAt'] ?? dataA['updatedAt'];
-    final rawDateB = dataB['createdAt'] ?? dataB['updatedAt'];
+      // 1. PRIMARY SORT: Unit Index (ascending)
+      int unitA = int.tryParse(dataA['unitIndex']?.toString() ?? '999') ?? 999;
+      int unitB = int.tryParse(dataB['unitIndex']?.toString() ?? '999') ?? 999;
+      
+      int unitCompare = unitA.compareTo(unitB);
+      
+      // If units are different, sort by unit
+      if (unitCompare != 0) {
+        print("Different units: ${dataA['topic']} (Unit $unitA) vs ${dataB['topic']} (Unit $unitB) -> $unitCompare");
+        return unitCompare;
+      }
 
-    DateTime dateA = _parseAnyDate(rawDateA) ?? DateTime(1970);
-    DateTime dateB = _parseAnyDate(rawDateB) ?? DateTime(1970);
+      // 2. SECONDARY SORT: Created At (ascending within same unit)
+      final rawDateA = dataA['createdAt'] ?? dataA['updatedAt'];
+      final rawDateB = dataB['createdAt'] ?? dataB['updatedAt'];
 
-  
+      DateTime dateA = _parseAnyDate(rawDateA) ?? DateTime(1970);
+      DateTime dateB = _parseAnyDate(rawDateB) ?? DateTime(1970);
 
-    return dateB.compareTo(dateA); // DESCENDING - newest to oldest
-  });
-  
-  print("--- END SORTING ---");
-  return sorted;
-}
+      int dateCompare = dateA.compareTo(dateB);
+
+      print("Same unit ($unitA): ${dataA['topic']} vs ${dataB['topic']}");
+      print("   DateA: $dateA | DateB: $dateB -> $dateCompare");
+
+      // If dates are the same, use document ID as final tiebreaker
+      if (dateCompare == 0) {
+        return a.id.compareTo(b.id);
+      }
+
+      return dateCompare;
+    });
+    
+    print("--- END SORTING ---");
+    print("Final order:");
+    for (int i = 0; i < sorted.length; i++) {
+      final data = sorted[i].data() as Map<String, dynamic>;
+      print("  $i: ${data['topic']} (Unit ${data['unitIndex']})");
+    }
+    
+    return sorted;
+  }
 
   DateTime? _parseAnyDate(dynamic val) {
     if (val == null) return null;

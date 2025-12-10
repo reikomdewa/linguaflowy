@@ -1,0 +1,93 @@
+[
+  {
+    "id": "q1_a1_agr_fr",
+    "createdAt": "2025-12-10T01:15:04Z",
+    "type": "native_to_target",
+    "targetSentence": "Oui, c'est une bonne idée.",
+    "correctAnswer": "Yes, it is a good idea.",
+    "options": [
+      "grande",
+      "une",
+      "Oui",
+      "idée",
+      "c'est",
+      "mauvaise",
+      "bonne"
+    ]
+  },
+  {
+    "id": "q2_a1_agr_fr",
+    "createdAt": "2025-12-10T01:15:04Z",
+    "type": "target_to_native",
+    "targetSentence": "Je suis d'accord avec toi.",
+    "correctAnswer": "I agree with you.",
+    "options": [
+      "speak",
+      "with",
+      "agree",
+      "I",
+      "you",
+      "house"
+    ]
+  },
+  {
+    "id": "q3_a1_agr_fr",
+    "createdAt": "2025-12-10T01:15:04Z",
+    "type": "native_to_target",
+    "targetSentence": "C'est affirmatif, nous partons.",
+    "correctAnswer": "It is affirmative, we are leaving.",
+    "options": [
+      "partons",
+      "Nous",
+      "C'est",
+      "non",
+      "affirmative",
+      "affirmatif",
+      "manger"
+    ]
+  },
+  {
+    "id": "q4_a1_agr_fr",
+    "createdAt": "2025-12-10T01:15:04Z",
+    "type": "target_to_native",
+    "targetSentence": "Super, je viens aussi.",
+    "correctAnswer": "Great, I am coming too.",
+    "options": [
+      "go",
+      "I",
+      "Great",
+      "coming",
+      "am",
+      "too"
+    ]
+  },
+  {
+    "id": "q5_a1_agr_fr",
+    "createdAt": "2025-12-10T01:15:04Z",
+    "type": "native_to_target",
+    "targetSentence": "Ouais, c'est ça.",
+    "correctAnswer": "Yeah, that's it.",
+    "options": [
+      "Ouais",
+      "non",
+      "est",
+      "ça",
+      "c'est"
+    ]
+  },
+  {
+    "id": "q6_a1_agr_fr",
+    "createdAt": "2025-12-10T01:15:04Z",
+    "type": "target_to_native",
+    "targetSentence": "Oui, je suis d'accord.",
+    "correctAnswer": "Yes, I agree.",
+    "options": [
+      "don't",
+      "agree",
+      "Yes",
+      "go",
+      "I",
+      "know"
+    ]
+  }
+]
