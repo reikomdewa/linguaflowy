@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/blocs/settings/settings_bloc.dart'; // NEW
 import 'package:linguaflow/models/vocabulary_item.dart';
 import '../reader_utils.dart';
 
@@ -29,7 +31,6 @@ class InteractiveTextDisplay extends StatefulWidget {
 class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
   final List<GlobalKey> _wordKeys = [];
   List<String> _words = [];
-
   bool _isDragging = false;
   int _startIndex = -1;
   int _endIndex = -1;
@@ -59,13 +60,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
   }
 
   void _cancelSelection() {
-    if (mounted) {
-      setState(() {
-        _isDragging = false;
-        _startIndex = -1;
-        _endIndex = -1;
-      });
-    }
+    if (mounted) setState(() { _isDragging = false; _startIndex = -1; _endIndex = -1; });
   }
 
   int _getWordIndexFromPosition(Offset globalPosition) {
@@ -77,10 +72,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
         if (renderBox != null) {
           final localPosition = renderBox.globalToLocal(globalPosition);
           final size = renderBox.size;
-          if (localPosition.dx >= -5 &&
-              localPosition.dx <= size.width + 5 &&
-              localPosition.dy >= -5 &&
-              localPosition.dy <= size.height + 5) {
+          if (localPosition.dx >= -5 && localPosition.dx <= size.width + 5 && localPosition.dy >= -5 && localPosition.dy <= size.height + 5) {
             return i;
           }
         }
@@ -92,22 +84,14 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
   void _onPanStart(DragStartDetails details) {
     int index = _getWordIndexFromPosition(details.globalPosition);
     if (index != -1) {
-      setState(() {
-        _isDragging = true;
-        _startIndex = index;
-        _endIndex = index;
-        _lastDragPos = details.globalPosition;
-      });
+      setState(() { _isDragging = true; _startIndex = index; _endIndex = index; _lastDragPos = details.globalPosition; });
     }
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
     int index = _getWordIndexFromPosition(details.globalPosition);
     if (index != -1) {
-      setState(() {
-        _endIndex = index;
-        _lastDragPos = details.globalPosition;
-      });
+      setState(() { _endIndex = index; _lastDragPos = details.globalPosition; });
     }
   }
 
@@ -115,15 +99,11 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     if (_startIndex != -1 && _endIndex != -1) {
       final start = _startIndex < _endIndex ? _startIndex : _endIndex;
       final end = _startIndex < _endIndex ? _endIndex : _startIndex;
-      
-      final rawSublist = _words.sublist(start, end + 1);
-      final wordsOnly = rawSublist.where((w) => w.trim().isNotEmpty).toList();
+      final wordsOnly = _words.sublist(start, end + 1).where((w) => w.trim().isNotEmpty).toList();
       String phrase = wordsOnly.join(" ");
-
       if (phrase.trim().isNotEmpty) {
-        // Pass clear callback so parent can clear it when dialog closes or new selection starts
         widget.onPhraseSelected(phrase.trim(), _lastDragPos, _cancelSelection);
-        return; 
+        return;
       }
     }
     _cancelSelection();
@@ -131,9 +111,18 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
 
   @override
   Widget build(BuildContext context) {
+    // 1. WATCH SETTINGS
+    final settings = context.watch<SettingsBloc>().state;
+    
+    // 2. CHECK IF DARK MODE (Passed down via ReaderScreen's Theme)
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    double fontSize = widget.isBigMode ? 22 : 18;
-    if (widget.isOverlay) fontSize = 20;
+    
+    // 3. CALCULATE FONT SIZE
+    double baseSize = widget.isBigMode ? 22 : 18;
+    if (widget.isOverlay) baseSize = 20;
+    
+    final finalFontSize = baseSize * settings.fontSizeScale;
+    final lineHeight = settings.lineHeight;
 
     return GestureDetector(
       onPanStart: _onPanStart,
@@ -142,9 +131,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
       child: Wrap(
         spacing: 0,
         runSpacing: widget.isBigMode ? 12 : 6,
-        alignment: (widget.isBigMode || widget.isOverlay) 
-            ? WrapAlignment.center 
-            : WrapAlignment.start,
+        alignment: (widget.isBigMode || widget.isOverlay) ? WrapAlignment.center : WrapAlignment.start,
         children: List.generate(_words.length, (index) {
           final word = _words[index];
           final cleanWord = ReaderUtils.generateCleanId(word);
@@ -168,7 +155,6 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
                textColor = Colors.black;
              }
           }
-
           if (isSelected) {
             bgColor = Colors.purple.withOpacity(0.4);
             textColor = Colors.white;
@@ -177,9 +163,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
           return GestureDetector(
             key: _wordKeys[index],
             onTapUp: (details) {
-              if (!_isDragging) {
-                widget.onWordTap(word, cleanWord, details.globalPosition);
-              }
+              if (!_isDragging) widget.onWordTap(word, cleanWord, details.globalPosition);
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 2),
@@ -191,13 +175,11 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
               child: Text(
                 word,
                 style: TextStyle(
-                  fontSize: fontSize,
-                  height: 1.5,
+                  fontSize: finalFontSize, // APPLIED
+                  height: lineHeight,      // APPLIED
                   color: textColor,
                   fontWeight: (vocabItem?.status ?? 0) > 0 ? FontWeight.w600 : FontWeight.normal,
-                  shadows: widget.isOverlay
-                      ? [const Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black)]
-                      : null,
+                  shadows: widget.isOverlay ? [const Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black)] : null,
                 ),
               ),
             ),

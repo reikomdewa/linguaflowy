@@ -1,7 +1,7 @@
-import 'dart:async'; // Required for StreamSubscription
+import 'dart:async'; 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:receive_sharing_intent/receive_sharing_intent.dart'; // NEW
+import 'package:receive_sharing_intent/receive_sharing_intent.dart'; 
 
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
@@ -18,7 +18,7 @@ import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
 import 'package:linguaflow/screens/home/utils/home_utils.dart';
 import 'package:linguaflow/utils/language_helper.dart'; 
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
-import 'package:linguaflow/services/web_scraper_service.dart'; // NEW: Ensure this file exists
+import 'package:linguaflow/services/web_scraper_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -33,13 +33,15 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<String> _globalFilters = ['All', 'Videos', 'Audio', 'Text'];
 
   // --- SHARE LISTENER SUBSCRIPTION ---
-  late StreamSubscription _intentDataStreamSubscription; // NEW
+  late StreamSubscription _intentDataStreamSubscription; 
+  bool _initialIntentHandled = false; // Prevents duplicate handling on re-builds
 
   @override
   void initState() {
     super.initState();
-    // Initialize Share Listener immediately
-    _initShareListener(); // NEW
+    
+    // Setup listeners immediately
+    _initShareListener(); 
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authState = context.read<AuthBloc>().state;
@@ -59,44 +61,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _intentDataStreamSubscription.cancel(); // NEW: Cleanup listener
+    _intentDataStreamSubscription.cancel(); 
     super.dispose();
   }
 
-  // --- NEW: SHARE LISTENER LOGIC ---
+  // --- SHARE LISTENER LOGIC ---
   void _initShareListener() {
-    // 1. Listen for sharing while app is running (in memory)
+    // 1. Listen for sharing while app is running (in memory / background)
+    // This stream stays active as long as the screen is alive.
     _intentDataStreamSubscription = ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> value) {
       if (value.isNotEmpty && value.first.path.isNotEmpty) {
-        // Usually text comes as path for getTextStream, but check package version logic
-        // If using latest 1.8.x+, getTextStream is deprecated in favor of getMediaStream 
-        // or specifically tailored text streams depending on version.
-        // Assuming older version or standard text approach:
+        // Shared while app was already open
         _handleSharedContent(value.first.path); 
       }
     }, onError: (err) {
       debugPrint("getMediaStream error: $err");
     });
 
-    // NOTE: If using receive_sharing_intent < 1.6.0 use getTextStream
-    // Since I don't know your exact version, I'll add the most common text listener:
-    // UNCOMMENT IF COMPILER COMPLAINS ABOUT getMediaStream FOR TEXT
-    /*
-    _intentDataStreamSubscription = ReceiveSharingIntent.getTextStream().listen((String value) {
-      _handleSharedContent(value);
-    }, onError: (err) => print("getLinkStream error: $err"));
-    
-    ReceiveSharingIntent.getInitialText().then((String? value) {
-      if (value != null) _handleSharedContent(value);
-    });
-    */
-    
-    // For modern versions supporting both:
-    // Try catching initial share if app was closed
-    ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> value) {
+    // 2. Handle initial share (Cold Start)
+    // We wrap this in addPostFrameCallback to ensure the widget tree is built 
+    // before we try to show a dialog.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_initialIntentHandled) return;
+
+      ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> value) {
         if (value.isNotEmpty && value.first.path.isNotEmpty) {
+             _initialIntentHandled = true; // Mark as handled
              _handleSharedContent(value.first.path);
+             
+             // Crucial: Clear the intent so it doesn't reappear on restart (if supported by OS/Plugin)
+             ReceiveSharingIntent.instance.reset(); 
         }
+      });
     });
   }
 
@@ -104,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     
     final authState = context.read<AuthBloc>().state;
-    if (authState is! AuthAuthenticated) return; // Ignore if not logged in
+    if (authState is! AuthAuthenticated) return; 
     final user = authState.user;
 
     // Check if URL
@@ -115,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
     String initialContent = "";
 
     if (isUrl) {
-      // Show loading spinner while scraping
+      // Show loading spinner
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -131,7 +127,9 @@ class _HomeScreenState extends State<HomeScreen> {
         initialTitle = data['title']!;
         initialContent = data['content']!;
       } else {
-        initialContent = sharedText; // Fallback
+        // Fallback: If scraper fails, maybe it's just a raw link user wants to save?
+        // Or we can pre-fill content with the URL.
+        initialContent = sharedText; 
       }
     } else {
       initialContent = sharedText;
@@ -139,15 +137,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
-    // Open your existing Create Dialog, pre-filled
+    // Open existing Create Dialog
     HomeDialogs.showCreateLessonDialog(
       context,
       user.id,
       user.currentLanguage,
       LanguageHelper.availableLanguages, 
       isFavoriteByDefault: false,
-      initialTitle: initialTitle,     // NEW param
-      initialContent: initialContent, // NEW param
+      initialTitle: initialTitle,     
+      initialContent: initialContent, 
     );
   }
   // ---------------------------------

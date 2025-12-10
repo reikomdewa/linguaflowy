@@ -3,36 +3,42 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:just_audio_background/just_audio_background.dart';
-import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
-import 'package:linguaflow/blocs/settings/settings_bloc.dart';
-import 'package:linguaflow/screens/main_navigation_screen.dart';
-import 'package:linguaflow/services/gemini_service.dart';
-import 'package:linguaflow/services/hybrid_lesson_service.dart';
-import 'package:linguaflow/services/repositories/lesson_repository.dart';
-
-// Import all screens and services
-import 'screens/auth/login_screen.dart';
-
-import 'services/auth_service.dart';
-import 'services/lesson_service.dart';
-import 'services/vocabulary_service.dart';
-import 'services/translation_service.dart';
-import 'blocs/auth/auth_bloc.dart';
-import 'blocs/lesson/lesson_bloc.dart';
-import 'blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+// --- BLOCS ---
+import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
+import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
+import 'package:linguaflow/blocs/settings/settings_bloc.dart'; // Crucial for Themes
+import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
+
+// --- SERVICES & REPOSITORIES ---
+import 'package:linguaflow/services/auth_service.dart';
+import 'package:linguaflow/services/gemini_service.dart';
+import 'package:linguaflow/services/lesson_service.dart'; // Firestore Service
+import 'package:linguaflow/services/hybrid_lesson_service.dart'; // Local Service
+import 'package:linguaflow/services/repositories/lesson_repository.dart';
+import 'package:linguaflow/services/translation_service.dart';
+import 'package:linguaflow/services/vocabulary_service.dart';
+
+// --- SCREENS ---
+import 'package:linguaflow/screens/auth/login_screen.dart';
+import 'package:linguaflow/screens/main_navigation_screen.dart';
+
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // 1. Load Env & Init Gemini
   await dotenv.load(fileName: ".env");
   final apiKey = dotenv.env['GEMINI_API_KEY'];
-
   if (apiKey != null) {
     Gemini.init(apiKey: apiKey);
   }
 
-  WidgetsFlutterBinding.ensureInitialized();
+  // 2. Init Firebase
   await Firebase.initializeApp();
 
+  // 3. Init Audio Background
   await JustAudioBackground.init(
     androidNotificationChannelId: 'com.ryanheise.bg_demo.channel.audio',
     androidNotificationChannelName: 'Audio playback',
@@ -41,7 +47,7 @@ void main() async {
     androidNotificationIcon: 'mipmap/ic_launcher',
   );
 
-  runApp(const LinguaflowApp()); // Ensure const is used if applicable
+  runApp(const LinguaflowApp());
 }
 
 class LinguaflowApp extends StatelessWidget {
@@ -49,11 +55,12 @@ class LinguaflowApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Initialize Repository with both Firestore and Local data sources
     final lessonRepository = LessonRepository(
       firestoreService: LessonService(),
       localService: HybridLessonService(),
     );
-    // printFirestoreSchema();
+
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider.value(value: lessonRepository),
@@ -65,74 +72,80 @@ class LinguaflowApp extends StatelessWidget {
       ],
       child: MultiBlocProvider(
         providers: [
-          // 1. SETTINGS BLOC (Loaded immediately)
+          // 1. SETTINGS BLOC (Must load first for Theme)
           BlocProvider(
             create: (context) => SettingsBloc()..add(LoadSettings()),
           ),
           // 2. AUTH BLOC
           BlocProvider(
-            create: (context) =>
-                AuthBloc(context.read<AuthService>())
-                  ..add(AuthCheckRequested()),
+            create: (context) => AuthBloc(context.read<AuthService>())
+              ..add(AuthCheckRequested()),
           ),
           // 3. LESSON BLOC
           BlocProvider<LessonBloc>(
             create: (context) => LessonBloc(
-              geminiService: GeminiService(), // Inject Gemini Service
-              lessonRepository: lessonRepository, // Inject Repo, NOT services
+              geminiService: GeminiService(),
+              lessonRepository: lessonRepository,
             ),
           ),
-          BlocProvider<QuizBloc>(create: (context) => QuizBloc()),
-          // 4. VOCABULARY BLOC
+          // 4. QUIZ BLOC
+          BlocProvider<QuizBloc>(
+            create: (context) => QuizBloc(),
+          ),
+          // 5. VOCABULARY BLOC
           BlocProvider(
-            create: (context) =>
-                VocabularyBloc(context.read<VocabularyService>()),
+            create: (context) => VocabularyBloc(context.read<VocabularyService>()),
           ),
         ],
-        // Wrap MaterialApp with Settings Builder to apply themes
+        // Listen to SettingsBloc to change ThemeMode dynamically
         child: BlocBuilder<SettingsBloc, SettingsState>(
           builder: (context, settings) {
             return MaterialApp(
               title: 'LinguaFlow',
               debugShowCheckedModeBanner: false,
-
-              // --- THEME CONFIGURATION ---
+              
+              // --- DYNAMIC THEME MODE ---
+              // This controls System vs Light vs Dark
               themeMode: settings.themeMode,
 
-              // Light Theme
+              // --- LIGHT THEME ---
               theme: ThemeData(
+                useMaterial3: true,
                 brightness: Brightness.light,
-                primarySwatch: Colors.blue,
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: Colors.blue,
+                  brightness: Brightness.light,
+                ),
                 scaffoldBackgroundColor: Colors.white,
-                appBarTheme: AppBarTheme(
+                appBarTheme: const AppBarTheme(
                   elevation: 0,
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.black,
+                  surfaceTintColor: Colors.transparent,
                 ),
-                // Optional: Adjust font scale globally
-                textTheme: TextTheme(
-                  bodyMedium: TextStyle(fontSize: 14 * settings.fontSizeScale),
-                  bodyLarge: TextStyle(fontSize: 16 * settings.fontSizeScale),
-                ),
+                fontFamily: 'Roboto', // Default app font
               ),
 
-              // Dark Theme
+              // --- DARK THEME ---
               darkTheme: ThemeData(
+                useMaterial3: true,
                 brightness: Brightness.dark,
-                primarySwatch: Colors.blue,
-                scaffoldBackgroundColor: Color(0xFF121212),
-                appBarTheme: AppBarTheme(
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: Colors.blue,
+                  brightness: Brightness.dark,
+                ),
+                scaffoldBackgroundColor: const Color(0xFF121212),
+                appBarTheme: const AppBarTheme(
                   elevation: 0,
                   backgroundColor: Color(0xFF121212),
                   foregroundColor: Colors.white,
+                  surfaceTintColor: Colors.transparent,
                 ),
-                textTheme: TextTheme(
-                  bodyMedium: TextStyle(fontSize: 14 * settings.fontSizeScale),
-                  bodyLarge: TextStyle(fontSize: 16 * settings.fontSizeScale),
-                ),
+                fontFamily: 'Roboto',
               ),
 
-              home: AuthGate(),
+              // --- ROUTING ---
+              home: const AuthGate(),
             );
           },
         ),
