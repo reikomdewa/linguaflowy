@@ -35,6 +35,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Map<String, VocabularyItem> _vocabulary = {};
   bool _autoMarkOnSwipe = false;
   bool _hasSeenStatusHint = false;
+  bool _isListeningMode = false; 
 
   // Video / Audio
   YoutubePlayerController? _videoController;
@@ -113,19 +114,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _pageController.dispose();
     _listScrollController.dispose();
     _flutterTts.stop();
-    
-    // Reset Orientation & System UI
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark, // Default reset
+      statusBarIconBrightness: Brightness.dark, 
     ));
-    
     super.dispose();
   }
 
-  // --- LOGIC METHODS ---
   void _generateSmartChunks() {
     _smartChunks = [];
     if (widget.lesson.transcript.isNotEmpty) {
@@ -164,8 +161,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users').doc(user.id).collection('vocabulary').get();
+      final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.id).collection('vocabulary').get();
       final Map<String, VocabularyItem> loadedVocab = {};
       for (var doc in snapshot.docs) {
         final data = doc.data();
@@ -189,9 +185,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Future<void> _loadUserPreferences() async {
     final authState = context.read<AuthBloc>().state;
     if (authState is AuthAuthenticated) {
-      final doc = await FirebaseFirestore.instance
-          .collection('users').doc(authState.user.id)
-          .collection('preferences').doc('reader').get();
+      final doc = await FirebaseFirestore.instance.collection('users').doc(authState.user.id).collection('preferences').doc('reader').get();
       if (doc.exists && mounted) {
         setState(() {
           _autoMarkOnSwipe = doc.data()?['autoMarkOnSwipe'] ?? false;
@@ -229,6 +223,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (widget.lesson.transcript.isEmpty) return;
     final currentSeconds = _videoController!.value.position.inMilliseconds / 1000;
 
+    // Single Sentence Stop Logic
     if (_isSentenceMode && _isPlayingSingleSentence && _isPlaying) {
       if (_activeSentenceIndex >= 0 && _activeSentenceIndex < widget.lesson.transcript.length) {
         if (currentSeconds >= widget.lesson.transcript[_activeSentenceIndex].end) {
@@ -238,6 +233,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
         }
       }
     }
+    
+    // Auto Scroll Logic (Only if video is playing continuously)
     if (_isPlaying && !_isPlayingSingleSentence) {
       int realTimeIndex = -1;
       for (int i = 0; i < widget.lesson.transcript.length; i++) {
@@ -247,16 +244,127 @@ class _ReaderScreenState extends State<ReaderScreen> {
         }
       }
       if (realTimeIndex != -1 && realTimeIndex != _activeSentenceIndex) {
-        setState(() => _activeSentenceIndex = realTimeIndex);
+        setState(() {
+          _activeSentenceIndex = realTimeIndex;
+          _resetTranslationState();
+        });
         if (!_isSentenceMode) _scrollToActiveLine(realTimeIndex);
       }
     }
   }
 
+  void _resetTranslationState() {
+    _googleTranslation = null;
+    _myMemoryTranslation = null;
+    _isLoadingTranslation = false;
+    _showError = false;
+  }
+
   void _scrollToActiveLine(int index) {
     if (_listScrollController.hasClients) {
-      // Auto-scroll implementation logic can go here
+      // Auto-scroll logic if desired
     }
+  }
+
+  void _seekToTime(double seconds) {
+    if (_videoController != null) {
+      _videoController!.seekTo(Duration(milliseconds: (seconds * 1000).toInt()));
+    }
+  }
+
+  // --- NAVIGATION (SWIPES) ---
+  // Updated to act as Video Navigator
+  void _goToNextSentence() {
+    if (_activeSentenceIndex < _smartChunks.length - 1) {
+      _handleSwipeMarking(_activeSentenceIndex);
+      setState(() {
+        _activeSentenceIndex++;
+        _resetTranslationState();
+      });
+      // Jump Video to start of new sentence
+      if (_isVideo && widget.lesson.transcript.isNotEmpty) {
+        if (_activeSentenceIndex < widget.lesson.transcript.length) {
+           _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
+        }
+      }
+    }
+  }
+
+  void _goToPrevSentence() {
+    if (_activeSentenceIndex > 0) {
+      setState(() {
+        _activeSentenceIndex--;
+        _resetTranslationState();
+      });
+      // Jump Video to start of previous sentence
+      if (_isVideo && widget.lesson.transcript.isNotEmpty) {
+        if (_activeSentenceIndex < widget.lesson.transcript.length) {
+           _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
+        }
+      }
+    }
+  }
+
+  // --- PLAYBACK CONTROLS ---
+
+  // LEFT BUTTON: Play CURRENT sentence from start, CONTINUOUSLY
+  void _playFromStartContinuous() {
+    if (_isVideo && _videoController != null) {
+      if (_activeSentenceIndex != -1 && widget.lesson.transcript.isNotEmpty && _activeSentenceIndex < widget.lesson.transcript.length) {
+        setState(() => _isPlayingSingleSentence = false); // DISABLE Auto-Pause
+        _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
+        _videoController!.play();
+      }
+    } else {
+      _speakSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex);
+    }
+  }
+
+  // RIGHT BUTTON: Jump to NEXT sentence start, Play CONTINUOUSLY
+  void _playNextContinuous() {
+    if (_isVideo && _videoController != null) {
+      if (_activeSentenceIndex < _smartChunks.length - 1) {
+        // 1. Move Index
+        _handleSwipeMarking(_activeSentenceIndex);
+        setState(() {
+          _activeSentenceIndex++;
+          _resetTranslationState();
+          _isPlayingSingleSentence = false; // Continuous
+        });
+        // 2. Seek & Play
+        if (_activeSentenceIndex < widget.lesson.transcript.length) {
+           _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
+           _videoController!.play();
+        }
+      } else {
+        // If at end, just play
+        setState(() => _isPlayingSingleSentence = false);
+        _videoController!.play();
+      }
+    } else {
+      // For TTS, move next and speak
+      _goToNextSentence();
+      _speakSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex);
+    }
+  }
+
+  // MIDDLE BUTTON: Toggle Play/Pause (Single Sentence Mode Logic)
+  void _togglePlayback() {
+     if (_isVideo && _videoController != null) {
+       if (_isPlaying) {
+         _videoController!.pause();
+         setState(() => _isPlayingSingleSentence = false);
+       } else {
+         // Standard Play: Plays 1 sentence then stops
+         if (_activeSentenceIndex != -1 && widget.lesson.transcript.isNotEmpty && _activeSentenceIndex < widget.lesson.transcript.length) {
+            setState(() => _isPlayingSingleSentence = true);
+            _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
+            _videoController!.play();
+         }
+       }
+     } else {
+       _isTtsPlaying ? _flutterTts.stop() : _speakSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex);
+     }
   }
 
   void _initializeTts() async {
@@ -274,17 +382,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _playNextTtsSentence() {
     if (_activeSentenceIndex < widget.lesson.sentences.length - 1) {
       int nextIndex = _activeSentenceIndex + 1;
-      if (_bookPages.isNotEmpty) {
-        for (int i = 0; i < _bookPages.length; i++) {
-          if (_bookPages[i].contains(nextIndex)) {
-            if (_currentPage != i) {
-              _pageController.jumpToPage(i);
-              setState(() => _currentPage = i);
-            }
-            break;
-          }
-        }
-      }
       _speakSentence(widget.lesson.sentences[nextIndex], nextIndex);
     } else {
       setState(() { _isTtsPlaying = false; _activeSentenceIndex = -1; });
@@ -372,14 +469,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  Future<bool> _checkAndIncrementFreeLimit(String userId) async {
-    // Basic implementation
-    return true; 
-  }
-
-  void _showLimitDialog() {
-    showDialog(context: context, builder: (c) => const PremiumLockDialog());
-  }
+  Future<bool> _checkAndIncrementFreeLimit(String userId) async { return true; }
+  void _showLimitDialog() { showDialog(context: context, builder: (c) => const PremiumLockDialog()); }
 
   Future<void> _updateWordStatus(String cleanWord, String originalWord, String translation, int status, {bool showDialog = true}) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
@@ -406,15 +497,36 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return item.status;
   }
 
-  Future<void> _translateCurrentSentence() async {
-    String text = (_activeSentenceIndex < _smartChunks.length) ? _smartChunks[_activeSentenceIndex] : "";
+  Future<void> _handleTranslationToggle() async {
+    if (_googleTranslation != null || _myMemoryTranslation != null) {
+      setState(() {
+        _googleTranslation = null;
+        _myMemoryTranslation = null;
+      });
+      return;
+    }
+
+    String text = "";
+    if (_activeSentenceIndex < _smartChunks.length) {
+      text = _smartChunks[_activeSentenceIndex];
+    }
+    
     if (text.isEmpty) return;
+
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    setState(() { _isLoadingTranslation = true; _showError = false; _googleTranslation = null; _myMemoryTranslation = null; });
+    setState(() { _isLoadingTranslation = true; _showError = false; });
+
     try {
       final gRes = await context.read<TranslationService>().translate(text, user.nativeLanguage, widget.lesson.language);
       final mRes = await MyMemoryService.translate(text: text, sourceLang: widget.lesson.language, targetLang: user.nativeLanguage);
-      if (mounted) setState(() { _googleTranslation = gRes; _myMemoryTranslation = mRes; _isLoadingTranslation = false; });
+      
+      if (mounted) {
+        setState(() { 
+          _googleTranslation = gRes; 
+          _myMemoryTranslation = mRes; 
+          _isLoadingTranslation = false; 
+        });
+      }
     } catch (_) {
       if (mounted) setState(() { _isLoadingTranslation = false; _showError = true; });
     }
@@ -442,18 +554,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- UI BUILDING ---
-
   @override
   Widget build(BuildContext context) {
     if (_isFullScreen && _isVideo && _videoController != null) {
       return _buildFullscreenVideo();
     }
 
-    // 1. WATCH SETTINGS
     final settings = context.watch<SettingsBloc>().state;
-
-    // 2. CALCULATE COLORS & BRIGHTNESS based on Reader Theme
     Color bgColor;
     Color textColor;
     Brightness readerBrightness;
@@ -461,8 +568,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     switch (settings.readerTheme) {
       case ReaderTheme.sepia:
         bgColor = const Color(0xFFF4ECD8);
-        textColor = const Color(0xFF5D4037); // Dark Brown
-        readerBrightness = Brightness.light; // FORCE Light status bar/icons
+        textColor = const Color(0xFF5D4037);
+        readerBrightness = Brightness.light;
         break;
       case ReaderTheme.dark:
         bgColor = const Color(0xFF1E1E1E);
@@ -477,17 +584,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
         break;
     }
 
-    // 3. SET STATUS BAR COLOR (To match theme)
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: readerBrightness == Brightness.light ? Brightness.dark : Brightness.light,
     ));
 
-    // 4. OVERRIDE THEME for child widgets
-    // This explicitly tells children "Hey, we are in Light/Dark mode"
-    // regardless of what the main app theme is.
     final readerThemeData = Theme.of(context).copyWith(
-      brightness: readerBrightness, // <--- THE FIX
+      brightness: readerBrightness,
       scaffoldBackgroundColor: bgColor,
       appBarTheme: AppBarTheme(
         backgroundColor: bgColor,
@@ -510,11 +613,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
         appBar: AppBar(
           title: Text(widget.lesson.title, style: TextStyle(color: textColor, fontSize: 18)),
           actions: [
+            if (_isSentenceMode)
+              IconButton(
+                icon: Icon(_isListeningMode ? Icons.hearing : Icons.hearing_disabled, 
+                           color: _isListeningMode ? Colors.blue : Colors.grey),
+                tooltip: "Listening Mode",
+                onPressed: () {
+                  setState(() => _isListeningMode = !_isListeningMode);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(_isListeningMode ? "Listening Mode: Text hidden" : "Normal Mode"),
+                    duration: const Duration(seconds: 1),
+                  ));
+                },
+              ),
+            
             if (!_isVideo && !_isSentenceMode)
               IconButton(
                 icon: Icon(_isPlaying || _isTtsPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: Colors.blue),
                 onPressed: _toggleTtsFullLesson,
               ),
+            
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert, color: textColor),
               onSelected: (value) {
@@ -548,39 +666,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             isVideo: _isVideo,
                             isPlaying: _isPlaying || _isPlayingSingleSentence,
                             isTtsPlaying: _isTtsPlaying,
-                            onTogglePlayback: () {
-                               if (_isVideo && _videoController != null) {
-                                 if (_isPlaying) {
-                                   _videoController!.pause();
-                                   setState(() => _isPlayingSingleSentence = false);
-                                 } else {
-                                   if (_activeSentenceIndex != -1 && widget.lesson.transcript.isNotEmpty && _activeSentenceIndex < widget.lesson.transcript.length) {
-                                      setState(() => _isPlayingSingleSentence = true);
-                                      _videoController!.seekTo(Duration(seconds: widget.lesson.transcript[_activeSentenceIndex].start.toInt()));
-                                      _videoController!.play();
-                                   }
-                                 }
-                               } else {
-                                 _isTtsPlaying ? _flutterTts.stop() : _speakSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex);
-                               }
-                            },
-                            onNext: () {
-                              if (_activeSentenceIndex < _smartChunks.length - 1) {
-                                _handleSwipeMarking(_activeSentenceIndex);
-                                setState(() => _activeSentenceIndex++);
-                              }
-                            },
-                            onPrev: () {
-                              if (_activeSentenceIndex > 0) setState(() => _activeSentenceIndex--);
-                            },
+                            
+                            // --- CONTROLS ---
+                            onTogglePlayback: _togglePlayback,
+                            onPlayFromStartContinuous: _playFromStartContinuous, // Left Btn
+                            onPlayContinuous: _playNextContinuous,               // Right Btn (Fwd)
+                            
+                            onNext: _goToNextSentence, // Refactored
+                            onPrev: _goToPrevSentence, // Refactored
+                            
                             onWordTap: _handleWordTap,
                             onPhraseSelected: _handlePhraseSelected,
                             isLoadingTranslation: _isLoadingTranslation,
                             googleTranslation: _googleTranslation,
                             myMemoryTranslation: _myMemoryTranslation,
                             showError: _showError,
-                            onRetryTranslation: _translateCurrentSentence,
-                            onTranslateRequest: _translateCurrentSentence,
+                            onTranslateRequest: _handleTranslationToggle,
+                            onRetryTranslation: _handleTranslationToggle,
+                            isListeningMode: _isListeningMode, 
                           )
                         : ParagraphModeView(
                             lesson: widget.lesson,
@@ -596,6 +699,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             onVideoSeek: (t) => _videoController?.seekTo(Duration(seconds: t.toInt())),
                             onWordTap: _handleWordTap,
                             onPhraseSelected: _handlePhraseSelected,
+                            isListeningMode: _isListeningMode,
                           ),
                   ),
                 ],

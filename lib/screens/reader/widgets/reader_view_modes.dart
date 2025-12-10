@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'interactive_text_display.dart';
@@ -10,18 +11,26 @@ class SentenceModeView extends StatelessWidget {
   final bool isVideo;
   final bool isPlaying;
   final bool isTtsPlaying;
-  final Function() onTogglePlayback;
+
+  // Callbacks
+  final Function() onTogglePlayback; // Middle Button
+  final Function() onPlayFromStartContinuous; // Left Button
+  final Function() onPlayContinuous; // Right Button
+
   final Function() onNext;
   final Function() onPrev;
   final Function(String, String, Offset) onWordTap;
-  final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
-  
+  final Function(String phrase, Offset pos, VoidCallback clearSelection)
+  onPhraseSelected;
+
   final bool isLoadingTranslation;
   final String? googleTranslation;
   final String? myMemoryTranslation;
   final bool showError;
   final Function() onRetryTranslation;
   final Function() onTranslateRequest;
+
+  final bool isListeningMode;
 
   const SentenceModeView({
     super.key,
@@ -32,6 +41,8 @@ class SentenceModeView extends StatelessWidget {
     required this.isPlaying,
     required this.isTtsPlaying,
     required this.onTogglePlayback,
+    required this.onPlayFromStartContinuous, // NEW
+    required this.onPlayContinuous, // NEW
     required this.onNext,
     required this.onPrev,
     required this.onWordTap,
@@ -42,6 +53,7 @@ class SentenceModeView extends StatelessWidget {
     required this.showError,
     required this.onRetryTranslation,
     required this.onTranslateRequest,
+    this.isListeningMode = false,
   });
 
   @override
@@ -50,33 +62,66 @@ class SentenceModeView extends StatelessWidget {
     final safeIndex = activeIndex.clamp(0, chunks.length - 1);
     final currentText = chunks[safeIndex];
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = isDark ? Colors.white : Colors.black87;
 
     return Column(
       children: [
-        const SizedBox(height: 40),
-        Center(
-          child: GestureDetector(
-            onTap: onTogglePlayback,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: (isDark ? Colors.white : Colors.black).withOpacity(0.5), width: 2),
-              ),
-              child: Icon(
-                isVideo
-                    ? (isPlaying ? Icons.pause : Icons.play_arrow)
-                    : (isTtsPlaying ? Icons.stop : Icons.play_arrow),
-                size: 40,
-                color: isDark ? Colors.white : Colors.black87,
+        const SizedBox(height: 20),
+
+        // --- UPDATED CONTROLS ROW ---
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // 1. BACKWARD BUTTON (Start of sentence, Continuous)
+            IconButton(
+              icon: const Icon(FontAwesomeIcons.arrowRotateLeft),
+              iconSize: 28,
+              color: iconColor.withOpacity(0.7),
+              tooltip: "Play from start (Continuous)",
+              onPressed: onPlayFromStartContinuous,
+            ),
+
+            const SizedBox(width: 24),
+
+            // 2. MIDDLE BUTTON (Play/Pause Single)
+            GestureDetector(
+              onTap: onTogglePlayback,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: (isDark ? Colors.white : Colors.black).withOpacity(
+                      0.5,
+                    ),
+                    width: 2,
+                  ),
+                ),
+                child: Icon(
+                  isVideo
+                      ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                      : (isTtsPlaying ? Icons.stop : Icons.play_arrow),
+                  size: 40,
+                  color: iconColor,
+                ),
               ),
             ),
-          ),
+
+            const SizedBox(width: 24),
+
+            // 3. FORWARD BUTTON (Continue Playing, Continuous)
+            IconButton(
+              icon: const Icon(FontAwesomeIcons.arrowRotateRight),
+              iconSize: 28,
+              color: iconColor.withOpacity(0.7),
+              tooltip: "Continue playing",
+              onPressed: onPlayContinuous,
+            ),
+          ],
         ),
-        const Spacer(),
+
+        // Text Content
         Expanded(
-          flex: 3,
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onHorizontalDragEnd: (details) {
@@ -98,72 +143,97 @@ class SentenceModeView extends StatelessWidget {
                       isBigMode: true,
                       onWordTap: onWordTap,
                       onPhraseSelected: onPhraseSelected,
+                      isListeningMode: isListeningMode,
                     ),
                     const SizedBox(height: 24),
-                    _buildTranslationSection(),
+                    _buildTranslationSection(context),
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),
             ),
           ),
         ),
-        const Spacer(),
-        const Padding(
-          padding: EdgeInsets.only(bottom: 20),
-          child: Text(
-            "Swipe LEFT for next • RIGHT for previous",
-            style: TextStyle(color: Colors.grey, fontSize: 12),
-          ),
-        ),
       ],
     );
   }
 
-  Widget _buildTranslationSection() {
+  Widget _buildTranslationSection(BuildContext context) {
+    final bool hasTranslation =
+        googleTranslation != null || myMemoryTranslation != null;
+
     if (isLoadingTranslation) {
       return const SizedBox(
-          height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2));
-    } else if (googleTranslation == null && myMemoryTranslation == null) {
-      return showError
-          ? Column(
-              children: [
-                Text("Translation unavailable",
-                    style: TextStyle(color: Colors.red[300], fontSize: 13, fontStyle: FontStyle.italic)),
-                TextButton(onPressed: onRetryTranslation, child: const Text("Retry"))
-              ],
-            )
-          : TextButton.icon(
-              icon: const Icon(Icons.translate, size: 16, color: Colors.grey),
-              label: const Text("Translate Sentence", style: TextStyle(color: Colors.grey)),
-              onPressed: onTranslateRequest,
-            );
+        height: 20,
+        width: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    } else if (!hasTranslation && showError) {
+      return Column(
+        children: [
+          Text(
+            "Translation unavailable",
+            style: TextStyle(
+              color: Colors.red[300],
+              fontSize: 13,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          TextButton(onPressed: onRetryTranslation, child: const Text("Retry")),
+        ],
+      );
     } else {
       return Column(
         children: [
-          if (myMemoryTranslation != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: Text(
-                myMemoryTranslation!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic, fontSize: 16),
+          if (hasTranslation) ...[
+            if (myMemoryTranslation != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text(
+                  myMemoryTranslation!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                    fontSize: 16,
+                  ),
+                ),
               ),
-            ),
-          if (googleTranslation != null)
-            Padding(
-              padding: const EdgeInsets.all(4.0),
-              child: Text(
-                "[Google] $googleTranslation",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[400], fontStyle: FontStyle.italic, fontSize: 14),
+            if (googleTranslation != null)
+              Padding(
+                padding: const EdgeInsets.all(4.0),
+                child: Text(
+                  "$googleTranslation",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontStyle: FontStyle.italic,
+                    fontSize: 14,
+                  ),
+                ),
               ),
+            const SizedBox(height: 12),
+          ],
+
+          TextButton.icon(
+            icon: Icon(
+              hasTranslation ? Icons.visibility_off : Icons.translate,
+              size: 16,
+              color: Colors.grey,
             ),
+            label: Text(
+              hasTranslation ? "Hide Translation" : "Translate Sentence",
+              style: const TextStyle(color: Colors.grey),
+            ),
+            onPressed: onTranslateRequest,
+          ),
         ],
       );
     }
   }
 }
 
+// ... (ParagraphModeView remains unchanged)
 class ParagraphModeView extends StatelessWidget {
   final LessonModel lesson;
   final List<List<int>> bookPages;
@@ -177,7 +247,9 @@ class ParagraphModeView extends StatelessWidget {
   final Function(int) onSentenceTap;
   final Function(double) onVideoSeek;
   final Function(String, String, Offset) onWordTap;
-  final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
+  final Function(String phrase, Offset pos, VoidCallback clearSelection)
+  onPhraseSelected;
+  final bool isListeningMode;
 
   const ParagraphModeView({
     super.key,
@@ -194,6 +266,7 @@ class ParagraphModeView extends StatelessWidget {
     required this.onVideoSeek,
     required this.onWordTap,
     required this.onPhraseSelected,
+    this.isListeningMode = false,
   });
 
   @override
@@ -205,15 +278,23 @@ class ParagraphModeView extends StatelessWidget {
         itemCount: lesson.transcript.length + 1,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          if (index == lesson.transcript.length) return const SizedBox(height: 100);
+          if (index == lesson.transcript.length)
+            return const SizedBox(height: 100);
           final entry = lesson.transcript[index];
-          return _buildTranscriptRow(context, index, entry.text, entry.start, index == activeSentenceIndex);
+          return _buildTranscriptRow(
+            context,
+            index,
+            entry.text,
+            entry.start,
+            index == activeSentenceIndex,
+          );
         },
       );
     }
-    
-    if (bookPages.isEmpty) return const Center(child: CircularProgressIndicator());
-    
+
+    if (bookPages.isEmpty)
+      return const Center(child: CircularProgressIndicator());
+
     return PageView.builder(
       controller: pageController,
       itemCount: bookPages.length,
@@ -224,8 +305,14 @@ class ParagraphModeView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ...bookPages[pageIndex].map((idx) => _buildBookRow(
-                  context, idx, lesson.sentences[idx], idx == activeSentenceIndex)),
+              ...bookPages[pageIndex].map(
+                (idx) => _buildBookRow(
+                  context,
+                  idx,
+                  lesson.sentences[idx],
+                  idx == activeSentenceIndex,
+                ),
+              ),
               const SizedBox(height: 100),
             ],
           ),
@@ -234,13 +321,21 @@ class ParagraphModeView extends StatelessWidget {
     );
   }
 
-  Widget _buildTranscriptRow(BuildContext context, int index, String text, double start, bool isActive) {
+  Widget _buildTranscriptRow(
+    BuildContext context,
+    int index,
+    String text,
+    double start,
+    bool isActive,
+  ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: isActive ? const EdgeInsets.all(12) : EdgeInsets.zero,
       decoration: BoxDecoration(
-        color: isActive ? (isDark ? Colors.white10 : Colors.grey[100]) : Colors.transparent,
+        color: isActive
+            ? (isDark ? Colors.white10 : Colors.grey[100])
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -265,6 +360,7 @@ class ParagraphModeView extends StatelessWidget {
               vocabulary: vocabulary,
               onWordTap: onWordTap,
               onPhraseSelected: onPhraseSelected,
+              isListeningMode: isListeningMode,
             ),
           ),
         ],
@@ -272,7 +368,12 @@ class ParagraphModeView extends StatelessWidget {
     );
   }
 
-  Widget _buildBookRow(BuildContext context, int index, String text, bool isActive) {
+  Widget _buildBookRow(
+    BuildContext context,
+    int index,
+    String text,
+    bool isActive,
+  ) {
     return GestureDetector(
       onDoubleTap: () => onSentenceTap(index),
       child: Container(
@@ -288,6 +389,7 @@ class ParagraphModeView extends StatelessWidget {
           vocabulary: vocabulary,
           onWordTap: onWordTap,
           onPhraseSelected: onPhraseSelected,
+          isListeningMode: isListeningMode,
         ),
       ),
     );
