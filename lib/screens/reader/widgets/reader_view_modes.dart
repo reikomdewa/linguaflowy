@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/models/lesson_model.dart';
+import 'package:linguaflow/models/vocabulary_item.dart';
 import 'interactive_text_display.dart';
 
 class SentenceModeView extends StatelessWidget {
@@ -14,9 +14,8 @@ class SentenceModeView extends StatelessWidget {
   final Function() onNext;
   final Function() onPrev;
   final Function(String, String, Offset) onWordTap;
-  final Function(String, Offset) onPhraseSelected; // New Callback
+  final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
   
-  // Translation State Variables
   final bool isLoadingTranslation;
   final String? googleTranslation;
   final String? myMemoryTranslation;
@@ -55,7 +54,6 @@ class SentenceModeView extends StatelessWidget {
     return Column(
       children: [
         const SizedBox(height: 40),
-        // Play Button
         Center(
           child: GestureDetector(
             onTap: onTogglePlayback,
@@ -77,8 +75,6 @@ class SentenceModeView extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        
-        // Swipeable Text Area
         Expanded(
           flex: 3,
           child: GestureDetector(
@@ -181,7 +177,7 @@ class ParagraphModeView extends StatelessWidget {
   final Function(int) onSentenceTap;
   final Function(double) onVideoSeek;
   final Function(String, String, Offset) onWordTap;
-  final Function(String, Offset) onPhraseSelected;
+  final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
 
   const ParagraphModeView({
     super.key,
@@ -202,7 +198,6 @@ class ParagraphModeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Transcript Mode (Video/Audio)
     if (lesson.transcript.isNotEmpty) {
       return ListView.separated(
         controller: listScrollController,
@@ -212,14 +207,11 @@ class ParagraphModeView extends StatelessWidget {
         itemBuilder: (context, index) {
           if (index == lesson.transcript.length) return const SizedBox(height: 100);
           final entry = lesson.transcript[index];
-          final isActive = index == activeSentenceIndex;
-          
-          return _buildTranscriptRow(context, index, entry.text, entry.start, isActive);
+          return _buildTranscriptRow(context, index, entry.text, entry.start, index == activeSentenceIndex);
         },
       );
     }
-
-    // 2. Book Mode (Pagination)
+    
     if (bookPages.isEmpty) return const Center(child: CircularProgressIndicator());
     
     return PageView.builder(
@@ -232,10 +224,8 @@ class ParagraphModeView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ...bookPages[pageIndex].map((idx) {
-                final isActive = idx == activeSentenceIndex;
-                return _buildBookRow(context, idx, lesson.sentences[idx], isActive);
-              }),
+              ...bookPages[pageIndex].map((idx) => _buildBookRow(
+                  context, idx, lesson.sentences[idx], idx == activeSentenceIndex)),
               const SizedBox(height: 100),
             ],
           ),

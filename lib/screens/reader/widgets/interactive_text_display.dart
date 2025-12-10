@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
-import 'package:linguaflow/screens/reader/reader_utils.dart';
+import '../reader_utils.dart';
 
-/// A widget that displays a sentence, handles word coloring,
-/// single word taps, and smooth DRAG SELECTION for phrases.
 class InteractiveTextDisplay extends StatefulWidget {
   final String text;
   final int sentenceIndex;
   final Map<String, VocabularyItem> vocabulary;
   final Function(String word, String cleanId, Offset pos) onWordTap;
-  final Function(String phrase, Offset pos) onPhraseSelected;
+  final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
   final bool isBigMode;
   final bool isOverlay;
 
@@ -29,11 +27,9 @@ class InteractiveTextDisplay extends StatefulWidget {
 }
 
 class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
-  // We keep keys for every word to perform hit-testing during drag
   final List<GlobalKey> _wordKeys = [];
   List<String> _words = [];
 
-  // Selection State
   bool _isDragging = false;
   int _startIndex = -1;
   int _endIndex = -1;
@@ -50,7 +46,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.text != widget.text) {
       _processText();
-      _clearSelection();
+      _cancelSelection();
     }
   }
 
@@ -62,7 +58,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     }
   }
 
-  void _clearSelection() {
+  void _cancelSelection() {
     if (mounted) {
       setState(() {
         _isDragging = false;
@@ -72,7 +68,6 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     }
   }
 
-  /// Calculates which word index is under the user's finger
   int _getWordIndexFromPosition(Offset globalPosition) {
     for (int i = 0; i < _wordKeys.length; i++) {
       final key = _wordKeys[i];
@@ -80,13 +75,12 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
       if (context != null) {
         final renderBox = context.findRenderObject() as RenderBox?;
         if (renderBox != null) {
-          // Check if the touch point is within this word's bounds
           final localPosition = renderBox.globalToLocal(globalPosition);
           final size = renderBox.size;
-          if (localPosition.dx >= 0 &&
-              localPosition.dx <= size.width &&
-              localPosition.dy >= 0 &&
-              localPosition.dy <= size.height) {
+          if (localPosition.dx >= -5 &&
+              localPosition.dx <= size.width + 5 &&
+              localPosition.dy >= -5 &&
+              localPosition.dy <= size.height + 5) {
             return i;
           }
         }
@@ -109,7 +103,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
 
   void _onPanUpdate(DragUpdateDetails details) {
     int index = _getWordIndexFromPosition(details.globalPosition);
-    if (index != -1 && index != _endIndex) {
+    if (index != -1) {
       setState(() {
         _endIndex = index;
         _lastDragPos = details.globalPosition;
@@ -122,16 +116,17 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
       final start = _startIndex < _endIndex ? _startIndex : _endIndex;
       final end = _startIndex < _endIndex ? _endIndex : _startIndex;
       
-      // Combine the words into a phrase
-      final phrase = _words.sublist(start, end + 1).join("");
-      
-      // If it's just one word (and it was a drag, not a tap), treat as phrase 
-      // or if it's multiple words.
+      final rawSublist = _words.sublist(start, end + 1);
+      final wordsOnly = rawSublist.where((w) => w.trim().isNotEmpty).toList();
+      String phrase = wordsOnly.join(" ");
+
       if (phrase.trim().isNotEmpty) {
-        widget.onPhraseSelected(phrase.trim(), _lastDragPos);
+        // Pass clear callback so parent can clear it when dialog closes or new selection starts
+        widget.onPhraseSelected(phrase.trim(), _lastDragPos, _cancelSelection);
+        return; 
       }
     }
-    _clearSelection();
+    _cancelSelection();
   }
 
   @override
@@ -139,9 +134,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     double fontSize = widget.isBigMode ? 22 : 18;
     if (widget.isOverlay) fontSize = 20;
-    
-    // We wrap the whole text block in a GestureDetector to handle dragging
-    // across multiple words smoothly.
+
     return GestureDetector(
       onPanStart: _onPanStart,
       onPanUpdate: _onPanUpdate,
@@ -155,20 +148,19 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
         children: List.generate(_words.length, (index) {
           final word = _words[index];
           final cleanWord = ReaderUtils.generateCleanId(word);
+          if (word.isEmpty) return const SizedBox.shrink();
 
-          // Determine Selection
           bool isSelected = false;
           if (_isDragging && _startIndex != -1 && _endIndex != -1) {
-             final start = _startIndex < _endIndex ? _startIndex : _endIndex;
-             final end = _startIndex < _endIndex ? _endIndex : _startIndex;
-             if (index >= start && index <= end) isSelected = true;
+            final start = _startIndex < _endIndex ? _startIndex : _endIndex;
+            final end = _startIndex < _endIndex ? _endIndex : _startIndex;
+            if (index >= start && index <= end) isSelected = true;
           }
 
-          // Determine Style
           final vocabItem = widget.vocabulary[cleanWord];
           Color bgColor = ReaderUtils.getWordColor(vocabItem, isDark);
           Color textColor = ReaderUtils.getTextColorForStatus(vocabItem, isSelected, isDark);
-          
+
           if (widget.isOverlay) {
              textColor = Colors.white;
              if (bgColor != Colors.transparent && bgColor != Colors.blue.withOpacity(0.15)) {
@@ -182,16 +174,15 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
             textColor = Colors.white;
           }
 
-          // Render Word
           return GestureDetector(
-            key: _wordKeys[index], // Important for hit testing
+            key: _wordKeys[index],
             onTapUp: (details) {
               if (!_isDragging) {
                 widget.onWordTap(word, cleanWord, details.globalPosition);
               }
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 2),
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(4),

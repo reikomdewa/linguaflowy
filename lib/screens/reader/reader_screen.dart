@@ -6,10 +6,8 @@ import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:linguaflow/screens/reader/widgets/reader_view_modes.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
-// App Imports
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
@@ -20,8 +18,8 @@ import 'package:linguaflow/services/mymemory_service.dart';
 import 'package:linguaflow/widgets/floating_translation_card.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
-// New Split Files
 import 'reader_utils.dart';
+import 'widgets/reader_view_modes.dart';
 
 class ReaderScreen extends StatefulWidget {
   final LessonModel lesson;
@@ -69,8 +67,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
   String? _myMemoryTranslation;
   bool _isLoadingTranslation = false;
   bool _showError = false;
-
   bool _isCheckingLimit = false;
+
+  // --- FLOATING CARD STATE ---
+  bool _showCard = false;
+  String _selectedText = "";
+  String _selectedCleanId = "";
+  bool _isSelectionPhrase = false;
+  Offset _cardAnchor = Offset.zero;
+  Future<String>? _cardTranslationFuture;
+  VoidCallback? _activeSelectionClearer;
 
   @override
   void initState() {
@@ -114,8 +120,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.dispose();
   }
 
-  // --- LOGIC METHODS ---
-
   void _generateSmartChunks() {
     _smartChunks = [];
     if (widget.lesson.transcript.isNotEmpty) {
@@ -124,7 +128,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
       return;
     }
-    // Fallback splitting logic for basic text
     List<String> rawSentences = widget.lesson.sentences;
     if (rawSentences.isEmpty) {
       rawSentences = widget.lesson.content.split(RegExp(r'(?<=[.!?])\s+'));
@@ -180,9 +183,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         );
       }
       if (mounted) setState(() => _vocabulary = loadedVocab);
-    } catch (e) {
-      // Fallback to service if needed
-    }
+    } catch (e) {}
   }
 
   Future<void> _loadUserPreferences() async {
@@ -240,7 +241,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final currentSeconds =
         _videoController!.value.position.inMilliseconds / 1000;
 
-    // Logic for stopping after one sentence in sentence mode
     if (_isSentenceMode && _isPlayingSingleSentence && _isPlaying) {
       if (_activeSentenceIndex >= 0 &&
           _activeSentenceIndex < widget.lesson.transcript.length) {
@@ -255,7 +255,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
         }
       }
     }
-    // Auto-scroll logic
     if (_isPlaying && !_isPlayingSingleSentence) {
       int realTimeIndex = -1;
       for (int i = 0; i < widget.lesson.transcript.length; i++) {
@@ -273,7 +272,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _scrollToActiveLine(int index) {
-    // Basic scroll implementation - can be refined
+     if (_listScrollController.hasClients) {
+       // Simple autoscroll logic if needed
+     }
   }
 
   void _initializeTts() async {
@@ -291,7 +292,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _playNextTtsSentence() {
     if (_activeSentenceIndex < widget.lesson.sentences.length - 1) {
       int nextIndex = _activeSentenceIndex + 1;
-      // Handle page turning logic here if needed
+      if (_bookPages.isNotEmpty) {
+        for (int i = 0; i < _bookPages.length; i++) {
+          if (_bookPages[i].contains(nextIndex)) {
+            if (_currentPage != i) {
+              _pageController.jumpToPage(i);
+              setState(() => _currentPage = i);
+            }
+            break;
+          }
+        }
+      }
       _speakSentence(widget.lesson.sentences[nextIndex], nextIndex);
     } else {
       setState(() {
@@ -308,10 +319,35 @@ class _ReaderScreenState extends State<ReaderScreen> {
     });
     await _flutterTts.speak(text);
   }
+  
+  void _toggleTtsFullLesson() async {
+    if (_isTtsPlaying) {
+      await _flutterTts.stop();
+      setState(() => _isTtsPlaying = false);
+    } else {
+      int startIndex = _activeSentenceIndex == -1 ? 0 : _activeSentenceIndex;
+      if (startIndex >= widget.lesson.sentences.length) startIndex = 0;
+      _speakSentence(widget.lesson.sentences[startIndex], startIndex);
+    }
+  }
 
-  // --- USER INTERACTION HANDLERS ---
+  // --- INTERACTION HANDLERS (UPDATED) ---
+
+  void _closeTranslationCard() {
+    if (_showCard) {
+      _activeSelectionClearer?.call();
+      setState(() {
+        _showCard = false;
+        _activeSelectionClearer = null;
+      });
+    }
+  }
 
   void _handleWordTap(String originalWord, String cleanId, Offset pos) async {
+    // 1. Clear any existing phrase selection
+    _activeSelectionClearer?.call();
+    _activeSelectionClearer = null;
+
     if (_isCheckingLimit) return;
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return;
@@ -319,7 +355,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final existingItem = _vocabulary[cleanId];
     final int newStatus = _calculateSmartStatus(existingItem);
 
-    // Update status logic
+    // Auto-update status on tap
     if (existingItem == null || existingItem.status != newStatus) {
       await _updateWordStatus(
         cleanId,
@@ -331,48 +367,77 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
 
     if (authState.user.isPremium) {
-      _showDefinitionDialog(
-        cleanId,
-        originalWord,
-        isPhrase: false,
-        tapPosition: pos,
-      );
+      _activateCard(originalWord, cleanId, pos, isPhrase: false);
     } else {
-      await _checkLimitAndShow(authState.user.id, cleanId, originalWord, pos);
+      _checkLimitAndActivate(authState.user.id, cleanId, originalWord, pos, false);
     }
   }
 
-  void _handlePhraseSelected(String phrase, Offset pos) {
+  void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clearSelection) {
     if (_isVideo) _videoController?.pause();
     if (_isTtsPlaying) _flutterTts.stop();
-    _showDefinitionDialog(
-      ReaderUtils.generateCleanId(phrase),
-      phrase,
-      isPhrase: true,
-      tapPosition: pos,
-    );
+
+    // 1. Clear PREVIOUS selection visual (if from a different drag)
+    _activeSelectionClearer?.call();
+    
+    // 2. Register NEW clearer
+    _activeSelectionClearer = clearSelection;
+
+    final cleanId = ReaderUtils.generateCleanId(phrase);
+    _activateCard(phrase, cleanId, pos, isPhrase: true);
   }
 
-  Future<void> _checkLimitAndShow(
-    String userId,
-    String cleanId,
-    String word,
-    Offset pos,
-  ) async {
+  void _activateCard(String text, String cleanId, Offset pos, {required bool isPhrase}) {
+    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+    final translationService = context.read<TranslationService>();
+    
+    setState(() {
+      _showCard = true;
+      _selectedText = text;
+      _selectedCleanId = cleanId;
+      _isSelectionPhrase = isPhrase;
+      _cardAnchor = pos;
+      // Initialize Future here to persist across rebuilds
+      _cardTranslationFuture = translationService
+          .translate(text, user.nativeLanguage, widget.lesson.language)
+          .then((v) => v ?? "");
+    });
+  }
+
+  Future<void> _checkLimitAndActivate(String userId, String cleanId, String word, Offset pos, bool isPhrase) async {
     setState(() => _isCheckingLimit = true);
     final canAccess = await _checkAndIncrementFreeLimit(userId);
     setState(() => _isCheckingLimit = false);
     if (canAccess) {
-      _showDefinitionDialog(cleanId, word, isPhrase: false, tapPosition: pos);
+      _activateCard(word, cleanId, pos, isPhrase: isPhrase);
     } else {
       _showLimitDialog();
     }
   }
 
+  // --- HELPERS ---
+
   Future<bool> _checkAndIncrementFreeLimit(String userId) async {
-    // Basic Firestore limit check logic (same as original)
-    // Simplified for brevity in this response, but keep your original logic here
-    return true; // Placeholder
+    final docRef = FirebaseFirestore.instance.collection('users').doc(userId).collection('limits').doc('dictionary');
+    final snapshot = await docRef.get();
+    final now = DateTime.now();
+    if (!snapshot.exists) {
+      await docRef.set({'count': 1, 'lastReset': FieldValue.serverTimestamp()});
+      return true;
+    }
+    final data = snapshot.data()!;
+    final DateTime lastReset = (data['lastReset'] as Timestamp?)?.toDate() ?? now;
+    final int count = data['count'] ?? 0;
+    if (now.difference(lastReset).inMinutes >= ReaderUtils.kResetMinutes) {
+      await docRef.set({'count': 1, 'lastReset': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+      return true;
+    } else {
+      if (count < ReaderUtils.kFreeLookupLimit) {
+        await docRef.update({'count': FieldValue.increment(1)});
+        return true;
+      }
+      return false;
+    }
   }
 
   void _showLimitDialog() {
@@ -382,17 +447,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
         title: const Text("Free Limit Reached"),
         content: const Text("Upgrade to Premium for unlimited translation."),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("OK"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              showDialog(
-                context: context,
-                builder: (c) => const PremiumLockDialog(),
-              );
+              showDialog(context: context, builder: (c) => const PremiumLockDialog());
             },
             child: const Text("Upgrade"),
           ),
@@ -401,98 +460,27 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  void _showDefinitionDialog(
-    String cleanId,
-    String originalText, {
-    required bool isPhrase,
-    required Offset tapPosition,
-  }) {
+  Future<void> _updateWordStatus(String cleanWord, String originalWord, String translation, int status, {bool showDialog = true}) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    final translationService = context.read<TranslationService>();
-    final VocabularyItem? existingItem = isPhrase ? null : _vocabulary[cleanId];
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.transparent,
-      builder: (context) {
-        return FloatingTranslationCard(
-          originalText: originalText,
-          translationFuture: translationService
-              .translate(
-                originalText,
-                user.nativeLanguage,
-                widget.lesson.language,
-              )
-              .then((v) => v ?? ""),
-          onGetAiExplanation: () => Gemini.instance
-              .prompt(
-                parts: [
-                  Part.text(
-                    "Explain '$originalText' in ${widget.lesson.language} for ${user.nativeLanguage} speaker",
-                  ),
-                ],
-              )
-              .then((v) => v?.output)
-              .catchError((_) => "AI Error"),
-          targetLanguage: widget.lesson.language,
-          nativeLanguage: user.nativeLanguage,
-          currentStatus: existingItem?.status ?? 0,
-          anchorPosition: tapPosition,
-          onUpdateStatus: (status, translation) {
-            _updateWordStatus(cleanId, originalText, translation, status);
-            Navigator.of(context).pop();
-          },
-          onClose: () => Navigator.of(context).pop(),
-        );
-      },
-    );
-  }
-
-  Future<void> _updateWordStatus(
-    String cleanWord,
-    String originalWord,
-    String translation,
-    int status, {
-    bool showDialog = true,
-  }) async {
-    // Update Local State, Bloc, and Firestore (Keep original logic)
-    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-
     final newItem = VocabularyItem(
-      id: cleanWord,
-      userId: user.id,
-      word: cleanWord,
-      baseForm: cleanWord,
-      language: widget.lesson.language,
-      translation: translation,
-      status: status,
-      timesEncountered: 1,
-      lastReviewed: DateTime.now(),
-      createdAt: DateTime.now(),
+      id: cleanWord, userId: user.id, word: cleanWord, baseForm: cleanWord,
+      language: widget.lesson.language, translation: translation,
+      status: status, timesEncountered: 1, lastReviewed: DateTime.now(), createdAt: DateTime.now(),
     );
 
     setState(() => _vocabulary[cleanWord] = newItem);
     context.read<VocabularyBloc>().add(VocabularyUpdateRequested(newItem));
 
-    // Firestore Update...
     await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.id)
-        .collection('vocabulary')
-        .doc(cleanWord)
+        .collection('users').doc(user.id).collection('vocabulary').doc(cleanWord)
         .set({
-          'status': status,
-          'translation': translation,
-          'lastReviewed': FieldValue.serverTimestamp(),
+          'status': status, 'translation': translation, 'lastReviewed': FieldValue.serverTimestamp()
         }, SetOptions(merge: true));
 
     if (showDialog && !_hasSeenStatusHint) {
       setState(() => _hasSeenStatusHint = true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Word status updated"),
-          duration: Duration(seconds: 1),
-        ),
+        const SnackBar(content: Text("Word status updated"), duration: Duration(seconds: 1)),
       );
     }
   }
@@ -500,49 +488,46 @@ class _ReaderScreenState extends State<ReaderScreen> {
   int _calculateSmartStatus(VocabularyItem? item) {
     if (item == null || item.status == 0) return 1;
     if (item.status >= 5) return 5;
-    if (DateTime.now().difference(item.lastReviewed).inHours >= 1)
-      return item.status + 1;
+    if (DateTime.now().difference(item.lastReviewed).inHours >= 1) return item.status + 1;
     return item.status;
   }
 
-  // --- SENTENCE TRANSLATION ---
   Future<void> _translateCurrentSentence() async {
-    String text = (_activeSentenceIndex < _smartChunks.length)
-        ? _smartChunks[_activeSentenceIndex]
-        : "";
+    String text = (_activeSentenceIndex < _smartChunks.length) ? _smartChunks[_activeSentenceIndex] : "";
     if (text.isEmpty) return;
 
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    setState(() {
-      _isLoadingTranslation = true;
-      _showError = false;
-      _googleTranslation = null;
-      _myMemoryTranslation = null;
-    });
+    setState(() { _isLoadingTranslation = true; _showError = false; _googleTranslation = null; _myMemoryTranslation = null; });
 
     try {
-      final gRes = await context.read<TranslationService>().translate(
-        text,
-        user.nativeLanguage,
-        widget.lesson.language,
-      );
-      final mRes = await MyMemoryService.translate(
-        text: text,
-        sourceLang: widget.lesson.language,
-        targetLang: user.nativeLanguage,
-      );
-      if (mounted)
-        setState(() {
-          _googleTranslation = gRes;
-          _myMemoryTranslation = mRes;
-          _isLoadingTranslation = false;
-        });
+      final gRes = await context.read<TranslationService>().translate(text, user.nativeLanguage, widget.lesson.language);
+      final mRes = await MyMemoryService.translate(text: text, sourceLang: widget.lesson.language, targetLang: user.nativeLanguage);
+      if (mounted) setState(() { _googleTranslation = gRes; _myMemoryTranslation = mRes; _isLoadingTranslation = false; });
     } catch (_) {
-      if (mounted)
-        setState(() {
-          _isLoadingTranslation = false;
-          _showError = true;
-        });
+      if (mounted) setState(() { _isLoadingTranslation = false; _showError = true; });
+    }
+  }
+
+  void _handleSwipeMarking(int leavingIndex) {
+    if (!_autoMarkOnSwipe) return;
+    if (leavingIndex < 0 || leavingIndex >= _smartChunks.length) return;
+    String sentenceText = _smartChunks[leavingIndex];
+    if (sentenceText.isEmpty) return;
+    final words = sentenceText.split(RegExp(r'(\s+)'));
+    bool markedAny = false;
+    for (var word in words) {
+      final clean = ReaderUtils.generateCleanId(word);
+      if (clean.isEmpty) continue;
+      final item = _vocabulary[clean];
+      if (item == null || item.status == 0) {
+        _updateWordStatus(clean, word.trim(), "", 5, showDialog: false);
+        markedAny = true;
+      }
+    }
+    if (markedAny && !_hasShownSwipeHint) {
+      _hasShownSwipeHint = true;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Marked previous words as known"), duration: Duration(seconds: 1), behavior: SnackBarBehavior.floating));
     }
   }
 
@@ -553,32 +538,33 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (_isFullScreen && _isVideo && _videoController != null) {
       return _buildFullscreenVideo();
     }
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          widget.lesson.title,
-          style: TextStyle(
-            color: isDark ? Colors.white : Colors.black,
-            fontSize: 18,
-          ),
-        ),
+        title: Text(widget.lesson.title, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18)),
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
         iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
         actions: [
           if (!_isVideo && !_isSentenceMode)
-            IconButton(
-              icon: Icon(
-                _isPlaying || _isTtsPlaying
-                    ? Icons.pause_circle
-                    : Icons.play_circle,
+            IconButton(icon: Icon(_isPlaying || _isTtsPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: Colors.blue), onPressed: _toggleTtsFullLesson),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'toggle_mark_swipe') setState(() => _autoMarkOnSwipe = !_autoMarkOnSwipe);
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                value: 'toggle_mark_swipe',
+                child: Row(children: [
+                    Icon(_autoMarkOnSwipe ? Icons.check_box : Icons.check_box_outline_blank, color: _autoMarkOnSwipe ? theme.primaryColor : Colors.grey),
+                    const SizedBox(width: 8), const Text('Mark known on swipe'),
+                ]),
               ),
-              onPressed: _initializeTts, // Simplified for brevity
-            ),
-          // Add your PopupMenu here for settings
+            ],
+          )
         ],
       ),
       body: SafeArea(
@@ -587,8 +573,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
             Column(
               children: [
                 if (_isVideo) _buildVideoHeader(),
-                if (_isCheckingLimit)
-                  const LinearProgressIndicator(minHeight: 2),
+                if (_isCheckingLimit) const LinearProgressIndicator(minHeight: 2),
                 Expanded(
                   child: _isSentenceMode
                       ? SentenceModeView(
@@ -599,19 +584,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
                           isPlaying: _isPlaying || _isPlayingSingleSentence,
                           isTtsPlaying: _isTtsPlaying,
                           onTogglePlayback: () {
-                            /* Logic */
+                             if (_isVideo && _videoController != null) {
+                               if (_isPlaying) {
+                                 _videoController!.pause();
+                                 setState(() => _isPlayingSingleSentence = false);
+                               } else {
+                                 if (_activeSentenceIndex != -1 && widget.lesson.transcript.isNotEmpty && _activeSentenceIndex < widget.lesson.transcript.length) {
+                                    setState(() => _isPlayingSingleSentence = true);
+                                    _videoController!.seekTo(Duration(seconds: widget.lesson.transcript[_activeSentenceIndex].start.toInt()));
+                                    _videoController!.play();
+                                 }
+                               }
+                             } else {
+                               _isTtsPlaying ? _flutterTts.stop() : _speakSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex);
+                             }
                           },
-                          onNext: () => setState(() {
-                            if (_activeSentenceIndex < _smartChunks.length - 1)
-                              _activeSentenceIndex++;
-                          }),
-                          onPrev: () => setState(() {
-                            if (_activeSentenceIndex > 0)
-                              _activeSentenceIndex--;
-                          }),
+                          onNext: () {
+                            if (_activeSentenceIndex < _smartChunks.length - 1) {
+                              _handleSwipeMarking(_activeSentenceIndex);
+                              setState(() => _activeSentenceIndex++);
+                            }
+                          },
+                          onPrev: () {
+                            if (_activeSentenceIndex > 0) {
+                              setState(() => _activeSentenceIndex--);
+                            }
+                          },
                           onWordTap: _handleWordTap,
-                          onPhraseSelected:
-                              _handlePhraseSelected, // Functionality added here
+                          onPhraseSelected: _handlePhraseSelected,
                           isLoadingTranslation: _isLoadingTranslation,
                           googleTranslation: _googleTranslation,
                           myMemoryTranslation: _myMemoryTranslation,
@@ -628,34 +628,55 @@ class _ReaderScreenState extends State<ReaderScreen> {
                           isVideo: _isVideo,
                           listScrollController: _listScrollController,
                           pageController: _pageController,
-                          onPageChanged: (i) =>
-                              setState(() => _currentPage = i),
-                          onSentenceTap: (i) =>
-                              _speakSentence(widget.lesson.sentences[i], i),
-                          onVideoSeek: (t) => _videoController?.seekTo(
-                            Duration(seconds: t.toInt()),
-                          ),
+                          onPageChanged: (i) => setState(() => _currentPage = i),
+                          onSentenceTap: (i) => _speakSentence(widget.lesson.sentences[i], i),
+                          onVideoSeek: (t) => _videoController?.seekTo(Duration(seconds: t.toInt())),
                           onWordTap: _handleWordTap,
-                          onPhraseSelected:
-                              _handlePhraseSelected, // Functionality added here
+                          onPhraseSelected: _handlePhraseSelected,
                         ),
                 ),
               ],
             ),
+            
+            // FAB
             Positioned(
-              bottom: 24,
-              right: 24,
+              bottom: 24, right: 24,
               child: FloatingActionButton(
-                onPressed: () =>
-                    setState(() => _isSentenceMode = !_isSentenceMode),
-                child: Icon(
-                  _isSentenceMode ? Icons.menu_book : Icons.short_text,
-                ),
+                backgroundColor: theme.primaryColor,
+                onPressed: () => setState(() => _isSentenceMode = !_isSentenceMode),
+                child: Icon(_isSentenceMode ? Icons.menu_book : Icons.short_text, color: Colors.white),
               ),
             ),
+
+            // TRANSLATION CARD OVERLAY (Stack Approach)
+            if (_showCard && _cardTranslationFuture != null)
+              _buildTranslationOverlay(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTranslationOverlay() {
+    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+    final VocabularyItem? existingItem = _isSelectionPhrase ? null : _vocabulary[_selectedCleanId];
+
+    return FloatingTranslationCard(
+      key: ValueKey(_selectedText), // Force rebuild on text change
+      originalText: _selectedText,
+      translationFuture: _cardTranslationFuture!,
+      onGetAiExplanation: () => Gemini.instance.prompt(
+        parts: [Part.text("Explain '$_selectedText' in ${widget.lesson.language} for ${user.nativeLanguage} speaker")]
+      ).then((v) => v?.output).catchError((_) => "AI Error"),
+      targetLanguage: widget.lesson.language,
+      nativeLanguage: user.nativeLanguage,
+      currentStatus: existingItem?.status ?? 0,
+      anchorPosition: _cardAnchor,
+      onUpdateStatus: (status, translation) {
+        _updateWordStatus(_selectedCleanId, _selectedText, translation, status);
+        _closeTranslationCard();
+      },
+      onClose: _closeTranslationCard,
     );
   }
 
@@ -669,46 +690,39 @@ class _ReaderScreenState extends State<ReaderScreen> {
             controller: _videoController!,
             showVideoProgressIndicator: true,
             bottomActions: [
-              CurrentPosition(),
-              ProgressBar(isExpanded: true),
-              RemainingDuration(),
-              IconButton(
-                icon: const Icon(Icons.fullscreen),
-                onPressed: _toggleCustomFullScreen,
-              ),
+              CurrentPosition(), ProgressBar(isExpanded: true), RemainingDuration(),
+              IconButton(icon: const Icon(Icons.fullscreen), onPressed: _toggleCustomFullScreen),
             ],
           ),
         ),
         if (_isAudioMode)
           Container(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
-                  onPressed: () {
-                    _isPlaying
-                        ? _videoController!.pause()
-                        : _videoController!.play();
-                  },
-                ),
-                const Text("Audio Mode"),
-              ],
-            ),
-          ),
+             padding: const EdgeInsets.all(12),
+             child: Row(children: [
+                IconButton(icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow), onPressed: () {
+                   _isPlaying ? _videoController!.pause() : _videoController!.play();
+                }),
+                const Text("Audio Mode")
+             ]),
+          )
       ],
     );
   }
 
   void _toggleCustomFullScreen() {
-    // Your existing fullscreen logic
     setState(() => _isFullScreen = !_isFullScreen);
   }
 
   Widget _buildFullscreenVideo() {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(child: YoutubePlayer(controller: _videoController!)),
+    return WillPopScope(
+      onWillPop: () async {
+        _toggleCustomFullScreen();
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: YoutubePlayer(controller: _videoController!)),
+      ),
     );
   }
 }
