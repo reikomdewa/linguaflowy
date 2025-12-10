@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
 import 'package:linguaflow/screens/profile/widgets/profile_data_exporter.dart';
-import 'package:linguaflow/utils/language_helper.dart'; 
+import 'package:linguaflow/utils/language_helper.dart';
 
 // Local Imports (Ensure these files exist in the same folder or adjust paths)
 import 'widgets/profile_section_card.dart';
@@ -35,32 +35,51 @@ class ProfileScreen extends StatelessWidget {
         children: [
           // --- 1. USER INFO ---
           Center(
-            child: Column(
+            child: Row(
               children: [
                 CircleAvatar(
                   radius: 50,
                   backgroundColor: Theme.of(context).primaryColor,
                   child: Text(
-                    user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
+                    user.displayName.isNotEmpty
+                        ? user.displayName[0].toUpperCase()
+                        : '?',
                     style: const TextStyle(fontSize: 40, color: Colors.white),
                   ),
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      user.displayName,
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textColor),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.edit, size: 20, color: subTextColor),
-                      onPressed: () => ProfileDialogs.showEditNameDialog(context, user.displayName),
-                      tooltip: "Edit Name",
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            user.displayName,
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.edit,
+                              size: 20,
+                              color: subTextColor,
+                            ),
+                            onPressed: () => ProfileDialogs.showEditNameDialog(
+                              context,
+                              user.displayName,
+                            ),
+                            tooltip: "Edit Name",
+                          ),
+                        ],
+                      ),
+                      Text(user.email, style: TextStyle(color: subTextColor)),
+                    ],
+                  ),
                 ),
-                Text(user.email, style: TextStyle(color: subTextColor)),
               ],
             ),
           ),
@@ -74,16 +93,27 @@ class ProfileScreen extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.language),
                 title: const Text('Native Language'),
-                subtitle: Text(LanguageHelper.getLanguageName(user.nativeLanguage)),
+                subtitle: Text(
+                  LanguageHelper.getLanguageName(user.nativeLanguage),
+                ),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => ProfileDialogs.showNativeLanguageDialog(context, user.nativeLanguage),
+                onTap: () => ProfileDialogs.showNativeLanguageDialog(
+                  context,
+                  user.nativeLanguage,
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.translate),
                 title: const Text('Current Target Language'),
-                subtitle: Text(LanguageHelper.getLanguageName(user.currentLanguage)),
+                subtitle: Text(
+                  LanguageHelper.getLanguageName(user.currentLanguage),
+                ),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => ProfileDialogs.showTargetLanguageDialog(context, user.currentLanguage, user.id),
+                onTap: () => ProfileDialogs.showTargetLanguageDialog(
+                  context,
+                  user.currentLanguage,
+                  user.id,
+                ),
               ),
             ],
           ),
@@ -99,7 +129,8 @@ class ProfileScreen extends StatelessWidget {
                 title: const Text('App Theme'),
                 subtitle: Text(_getAppThemeName(settings.themeMode)),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => ProfileDialogs.showThemeDialog(context, settings.themeMode),
+                onTap: () =>
+                    ProfileDialogs.showThemeDialog(context, settings.themeMode),
               ),
             ],
           ),
@@ -115,28 +146,40 @@ class ProfileScreen extends StatelessWidget {
                 title: const Text('Background Theme'),
                 subtitle: Text(_getReaderThemeName(settings.readerTheme)),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => ProfileDialogs.showReaderThemeDialog(context, settings.readerTheme),
+                onTap: () => ProfileDialogs.showReaderThemeDialog(
+                  context,
+                  settings.readerTheme,
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.text_fields),
                 title: const Text('Text Size'),
                 subtitle: Text(_getFontSizeName(settings.fontSizeScale)),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => ProfileDialogs.showFontSizeDialog(context, settings.fontSizeScale),
+                onTap: () => ProfileDialogs.showFontSizeDialog(
+                  context,
+                  settings.fontSizeScale,
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.font_download_outlined),
                 title: const Text('Font Family'),
                 subtitle: Text(settings.fontFamily),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => ProfileDialogs.showFontFamilyDialog(context, settings.fontFamily),
+                onTap: () => ProfileDialogs.showFontFamilyDialog(
+                  context,
+                  settings.fontFamily,
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.format_line_spacing),
                 title: const Text('Line Spacing'),
                 subtitle: Text(settings.lineHeight.toString()),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => ProfileDialogs.showLineHeightDialog(context, settings.lineHeight),
+                onTap: () => ProfileDialogs.showLineHeightDialog(
+                  context,
+                  settings.lineHeight,
+                ),
               ),
             ],
           ),
@@ -152,7 +195,11 @@ class ProfileScreen extends StatelessWidget {
                 title: const Text('Report a Bug'),
                 subtitle: const Text('Found an issue? Let us know.'),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => ProfileDialogs.showReportBugDialog(context, user.id, user.email),
+                onTap: () => ProfileDialogs.showReportBugDialog(
+                  context,
+                  user.id,
+                  user.email,
+                ),
               ),
             ],
           ),
@@ -167,12 +214,20 @@ class ProfileScreen extends StatelessWidget {
                 leading: const Icon(Icons.download),
                 title: const Text('Export Data'),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => ProfileDataExporter.exportUserData(context, user.id),
+                onTap: () =>
+                    ProfileDataExporter.exportUserData(context, user.id),
               ),
               ListTile(
                 leading: const Icon(Icons.delete_forever, color: Colors.red),
-                title: const Text('Delete Account', style: TextStyle(color: Colors.red)),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.red),
+                title: const Text(
+                  'Delete Account',
+                  style: TextStyle(color: Colors.red),
+                ),
+                trailing: const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Colors.red,
+                ),
                 onTap: () => ProfileDialogs.showDeleteConfirmation(context),
               ),
             ],
@@ -191,12 +246,17 @@ class ProfileScreen extends StatelessWidget {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
           const SizedBox(height: 16),
           const Center(
-            child: Text('Version 1.0.0', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            child: Text(
+              'Version 1.0.0',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
           ),
         ],
       ),
@@ -207,17 +267,23 @@ class ProfileScreen extends StatelessWidget {
 
   String _getAppThemeName(ThemeMode mode) {
     switch (mode) {
-      case ThemeMode.light: return 'Light';
-      case ThemeMode.dark: return 'Dark';
-      default: return 'System Default';
+      case ThemeMode.light:
+        return 'Light';
+      case ThemeMode.dark:
+        return 'Dark';
+      default:
+        return 'System Default';
     }
   }
 
   String _getReaderThemeName(ReaderTheme theme) {
     switch (theme) {
-      case ReaderTheme.light: return 'Light';
-      case ReaderTheme.dark: return 'Dark';
-      case ReaderTheme.sepia: return 'Sepia';
+      case ReaderTheme.light:
+        return 'Light';
+      case ReaderTheme.dark:
+        return 'Dark';
+      case ReaderTheme.sepia:
+        return 'Sepia';
     }
   }
 
