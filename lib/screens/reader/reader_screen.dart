@@ -58,6 +58,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
   List<List<int>> _bookPages = [];
   int _currentPage = 0;
   final int _wordsPerPage = 100;
+  
+  // --- RESTORED KEYS FOR AUTO-SCROLL ---
+  List<GlobalKey> _itemKeys = []; 
 
   // Content
   List<String> _smartChunks = [];
@@ -87,7 +90,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _initGemini();
     _loadVocabulary();
     _loadUserPreferences();
-    _generateSmartChunks();
+    _generateSmartChunks(); // Populates content
+
+    // --- INITIALIZE KEYS ---
+    _itemKeys = List.generate(_smartChunks.length, (_) => GlobalKey());
 
     if (widget.lesson.transcript.isEmpty) _prepareBookPages();
     if (widget.lesson.videoUrl != null && widget.lesson.videoUrl!.isNotEmpty) {
@@ -223,7 +229,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (widget.lesson.transcript.isEmpty) return;
     final currentSeconds = _videoController!.value.position.inMilliseconds / 1000;
 
-    // Single Sentence Stop Logic
     if (_isSentenceMode && _isPlayingSingleSentence && _isPlaying) {
       if (_activeSentenceIndex >= 0 && _activeSentenceIndex < widget.lesson.transcript.length) {
         if (currentSeconds >= widget.lesson.transcript[_activeSentenceIndex].end) {
@@ -233,8 +238,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
         }
       }
     }
-    
-    // Auto Scroll Logic (Only if video is playing continuously)
     if (_isPlaying && !_isPlayingSingleSentence) {
       int realTimeIndex = -1;
       for (int i = 0; i < widget.lesson.transcript.length; i++) {
@@ -260,9 +263,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _showError = false;
   }
 
+  // --- AUTO SCROLL LOGIC ---
   void _scrollToActiveLine(int index) {
-    if (_listScrollController.hasClients) {
-      // Auto-scroll logic if desired
+    if (index >= 0 && index < _itemKeys.length) {
+      final key = _itemKeys[index];
+      if (key.currentContext != null) {
+        Scrollable.ensureVisible(
+          key.currentContext!,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: 0.5, // Center the item
+        );
+      }
     }
   }
 
@@ -272,8 +284,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- NAVIGATION (SWIPES) ---
-  // Updated to act as Video Navigator
+  // --- NAVIGATION ---
   void _goToNextSentence() {
     if (_activeSentenceIndex < _smartChunks.length - 1) {
       _handleSwipeMarking(_activeSentenceIndex);
@@ -281,7 +292,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _activeSentenceIndex++;
         _resetTranslationState();
       });
-      // Jump Video to start of new sentence
       if (_isVideo && widget.lesson.transcript.isNotEmpty) {
         if (_activeSentenceIndex < widget.lesson.transcript.length) {
            _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
@@ -296,7 +306,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _activeSentenceIndex--;
         _resetTranslationState();
       });
-      // Jump Video to start of previous sentence
       if (_isVideo && widget.lesson.transcript.isNotEmpty) {
         if (_activeSentenceIndex < widget.lesson.transcript.length) {
            _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
@@ -306,12 +315,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   // --- PLAYBACK CONTROLS ---
-
-  // LEFT BUTTON: Play CURRENT sentence from start, CONTINUOUSLY
   void _playFromStartContinuous() {
     if (_isVideo && _videoController != null) {
       if (_activeSentenceIndex != -1 && widget.lesson.transcript.isNotEmpty && _activeSentenceIndex < widget.lesson.transcript.length) {
-        setState(() => _isPlayingSingleSentence = false); // DISABLE Auto-Pause
+        setState(() => _isPlayingSingleSentence = false);
         _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
         _videoController!.play();
       }
@@ -320,42 +327,35 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // RIGHT BUTTON: Jump to NEXT sentence start, Play CONTINUOUSLY
   void _playNextContinuous() {
     if (_isVideo && _videoController != null) {
       if (_activeSentenceIndex < _smartChunks.length - 1) {
-        // 1. Move Index
         _handleSwipeMarking(_activeSentenceIndex);
         setState(() {
           _activeSentenceIndex++;
           _resetTranslationState();
-          _isPlayingSingleSentence = false; // Continuous
+          _isPlayingSingleSentence = false;
         });
-        // 2. Seek & Play
         if (_activeSentenceIndex < widget.lesson.transcript.length) {
            _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
            _videoController!.play();
         }
       } else {
-        // If at end, just play
         setState(() => _isPlayingSingleSentence = false);
         _videoController!.play();
       }
     } else {
-      // For TTS, move next and speak
       _goToNextSentence();
       _speakSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex);
     }
   }
 
-  // MIDDLE BUTTON: Toggle Play/Pause (Single Sentence Mode Logic)
   void _togglePlayback() {
      if (_isVideo && _videoController != null) {
        if (_isPlaying) {
          _videoController!.pause();
          setState(() => _isPlayingSingleSentence = false);
        } else {
-         // Standard Play: Plays 1 sentence then stops
          if (_activeSentenceIndex != -1 && widget.lesson.transcript.isNotEmpty && _activeSentenceIndex < widget.lesson.transcript.length) {
             setState(() => _isPlayingSingleSentence = true);
             _seekToTime(widget.lesson.transcript[_activeSentenceIndex].start);
@@ -382,6 +382,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _playNextTtsSentence() {
     if (_activeSentenceIndex < widget.lesson.sentences.length - 1) {
       int nextIndex = _activeSentenceIndex + 1;
+      // Auto-turn page for book mode
+      if (_bookPages.isNotEmpty) {
+        for (int i = 0; i < _bookPages.length; i++) {
+          if (_bookPages[i].contains(nextIndex)) {
+            if (_currentPage != i) {
+              _pageController.jumpToPage(i);
+              setState(() => _currentPage = i);
+            }
+            break;
+          }
+        }
+      }
       _speakSentence(widget.lesson.sentences[nextIndex], nextIndex);
     } else {
       setState(() { _isTtsPlaying = false; _activeSentenceIndex = -1; });
@@ -390,6 +402,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   Future<void> _speakSentence(String text, int index) async {
     setState(() { _activeSentenceIndex = index; _isTtsPlaying = true; });
+    // Also scroll in normal mode
+    if (!_isSentenceMode) _scrollToActiveLine(index);
     await _flutterTts.speak(text);
   }
 
@@ -404,7 +418,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- ACTIONS ---
+  // --- ACTIONS (Tap, Select, Translate) ---
   void _closeTranslationCard() {
     if (_showCard) {
       _activeSelectionClearer?.call();
@@ -667,13 +681,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             isPlaying: _isPlaying || _isPlayingSingleSentence,
                             isTtsPlaying: _isTtsPlaying,
                             
-                            // --- CONTROLS ---
+                            // CONTROLS
                             onTogglePlayback: _togglePlayback,
-                            onPlayFromStartContinuous: _playFromStartContinuous, // Left Btn
-                            onPlayContinuous: _playNextContinuous,               // Right Btn (Fwd)
+                            onPlayFromStartContinuous: _playFromStartContinuous,
+                            onPlayContinuous: _playNextContinuous,
                             
-                            onNext: _goToNextSentence, // Refactored
-                            onPrev: _goToPrevSentence, // Refactored
+                            onNext: _goToNextSentence,
+                            onPrev: _goToPrevSentence,
                             
                             onWordTap: _handleWordTap,
                             onPhraseSelected: _handlePhraseSelected,
@@ -700,6 +714,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             onWordTap: _handleWordTap,
                             onPhraseSelected: _handlePhraseSelected,
                             isListeningMode: _isListeningMode,
+                            
+                            // PASS KEYS TO VIEW
+                            itemKeys: _itemKeys, 
                           ),
                   ),
                 ],

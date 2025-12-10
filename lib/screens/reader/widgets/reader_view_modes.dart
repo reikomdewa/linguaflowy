@@ -20,8 +20,7 @@ class SentenceModeView extends StatelessWidget {
   final Function() onNext;
   final Function() onPrev;
   final Function(String, String, Offset) onWordTap;
-  final Function(String phrase, Offset pos, VoidCallback clearSelection)
-  onPhraseSelected;
+  final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
 
   final bool isLoadingTranslation;
   final String? googleTranslation;
@@ -41,8 +40,8 @@ class SentenceModeView extends StatelessWidget {
     required this.isPlaying,
     required this.isTtsPlaying,
     required this.onTogglePlayback,
-    required this.onPlayFromStartContinuous, // NEW
-    required this.onPlayContinuous, // NEW
+    required this.onPlayFromStartContinuous,
+    required this.onPlayContinuous,
     required this.onNext,
     required this.onPrev,
     required this.onWordTap,
@@ -91,9 +90,7 @@ class SentenceModeView extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: (isDark ? Colors.white : Colors.black).withOpacity(
-                      0.5,
-                    ),
+                    color: (isDark ? Colors.white : Colors.black).withOpacity(0.5),
                     width: 2,
                   ),
                 ),
@@ -159,8 +156,7 @@ class SentenceModeView extends StatelessWidget {
   }
 
   Widget _buildTranslationSection(BuildContext context) {
-    final bool hasTranslation =
-        googleTranslation != null || myMemoryTranslation != null;
+    final bool hasTranslation = googleTranslation != null || myMemoryTranslation != null;
 
     if (isLoadingTranslation) {
       return const SizedBox(
@@ -233,7 +229,6 @@ class SentenceModeView extends StatelessWidget {
   }
 }
 
-// ... (ParagraphModeView remains unchanged)
 class ParagraphModeView extends StatelessWidget {
   final LessonModel lesson;
   final List<List<int>> bookPages;
@@ -247,9 +242,11 @@ class ParagraphModeView extends StatelessWidget {
   final Function(int) onSentenceTap;
   final Function(double) onVideoSeek;
   final Function(String, String, Offset) onWordTap;
-  final Function(String phrase, Offset pos, VoidCallback clearSelection)
-  onPhraseSelected;
+  final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
   final bool isListeningMode;
+  
+  // --- ADDED: KEYS FOR AUTO-SCROLL ---
+  final List<GlobalKey> itemKeys; 
 
   const ParagraphModeView({
     super.key,
@@ -266,6 +263,7 @@ class ParagraphModeView extends StatelessWidget {
     required this.onVideoSeek,
     required this.onWordTap,
     required this.onPhraseSelected,
+    required this.itemKeys, // Required
     this.isListeningMode = false,
   });
 
@@ -278,8 +276,7 @@ class ParagraphModeView extends StatelessWidget {
         itemCount: lesson.transcript.length + 1,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          if (index == lesson.transcript.length)
-            return const SizedBox(height: 100);
+          if (index == lesson.transcript.length) return const SizedBox(height: 100);
           final entry = lesson.transcript[index];
           return _buildTranscriptRow(
             context,
@@ -292,8 +289,7 @@ class ParagraphModeView extends StatelessWidget {
       );
     }
 
-    if (bookPages.isEmpty)
-      return const Center(child: CircularProgressIndicator());
+    if (bookPages.isEmpty) return const Center(child: CircularProgressIndicator());
 
     return PageView.builder(
       controller: pageController,
@@ -305,14 +301,8 @@ class ParagraphModeView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ...bookPages[pageIndex].map(
-                (idx) => _buildBookRow(
-                  context,
-                  idx,
-                  lesson.sentences[idx],
-                  idx == activeSentenceIndex,
-                ),
-              ),
+              ...bookPages[pageIndex].map((idx) => _buildBookRow(
+                  context, idx, lesson.sentences[idx], idx == activeSentenceIndex)),
               const SizedBox(height: 100),
             ],
           ),
@@ -321,21 +311,15 @@ class ParagraphModeView extends StatelessWidget {
     );
   }
 
-  Widget _buildTranscriptRow(
-    BuildContext context,
-    int index,
-    String text,
-    double start,
-    bool isActive,
-  ) {
+  Widget _buildTranscriptRow(BuildContext context, int index, String text, double start, bool isActive) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
+      // --- ASSIGN KEY HERE ---
+      key: index < itemKeys.length ? itemKeys[index] : null,
       margin: const EdgeInsets.only(bottom: 12),
       padding: isActive ? const EdgeInsets.all(12) : EdgeInsets.zero,
       decoration: BoxDecoration(
-        color: isActive
-            ? (isDark ? Colors.white10 : Colors.grey[100])
-            : Colors.transparent,
+        color: isActive ? (isDark ? Colors.white10 : Colors.grey[100]) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -368,15 +352,12 @@ class ParagraphModeView extends StatelessWidget {
     );
   }
 
-  Widget _buildBookRow(
-    BuildContext context,
-    int index,
-    String text,
-    bool isActive,
-  ) {
+  Widget _buildBookRow(BuildContext context, int index, String text, bool isActive) {
     return GestureDetector(
       onDoubleTap: () => onSentenceTap(index),
       child: Container(
+        // --- ASSIGN KEY HERE ---
+        key: index < itemKeys.length ? itemKeys[index] : null,
         margin: const EdgeInsets.only(bottom: 24),
         padding: isActive ? const EdgeInsets.all(12) : EdgeInsets.zero,
         decoration: BoxDecoration(
