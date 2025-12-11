@@ -64,12 +64,15 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _isPlaying = false;
   bool _isSeeking = false;
   bool _isPlayingSingleSentence = false;
+  
+  // Track if video was playing before opening card
+  bool _wasPlayingBeforeCard = false;
 
   // --- Fullscreen State ---
   bool _isFullScreen = false;
   bool _isTransitioningFullscreen = false;
   
-  // FIXED: This GlobalKey now wraps a Container, not the library widget directly.
+  // GLOBAL KEY FOR SHARED PLAYER
   final GlobalKey _videoPlayerKey = GlobalKey();
 
   // --- Controls State (YouTube Style) ---
@@ -112,7 +115,6 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void initState() {
     super.initState();
-    // Observer for detecting physical rotation
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     
@@ -136,11 +138,9 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void didChangeMetrics() {
     super.didChangeMetrics();
-    // Auto-rotate logic: Only runs if we aren't manually toggling
     if (!_isTransitioningFullscreen && (_isVideo || _isAudio)) {
       final view = View.of(context);
       final physicalSize = view.physicalSize;
-      // Simple check: is width > height?
       final bool isLandscape = physicalSize.width > physicalSize.height;
 
       if (isLandscape != _isFullScreen) {
@@ -148,7 +148,6 @@ class _ReaderScreenState extends State<ReaderScreen>
           _isFullScreen = isLandscape;
         });
         
-        // Sync System UI
         if (isLandscape) {
            SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
         } else {
@@ -177,9 +176,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     try {
       final file = File(widget.lesson.subtitleUrl!);
       if (await file.exists()) {
-        final lines = await SubtitleParser.parseFile(
-          widget.lesson.subtitleUrl!,
-        );
+        final lines = await SubtitleParser.parseFile(widget.lesson.subtitleUrl!);
         if (mounted && lines.isNotEmpty) {
           _activeTranscript = lines;
         }
@@ -194,7 +191,6 @@ class _ReaderScreenState extends State<ReaderScreen>
   void _finalizeContentInitialization() {
     setState(() {
       _generateSmartChunks();
-      // Ensure unique keys are generated once
       _itemKeys = List.generate(_smartChunks.length, (_) => GlobalKey());
       _prepareBookPages();
       _isParsingSubtitles = false;
@@ -682,6 +678,12 @@ class _ReaderScreenState extends State<ReaderScreen>
         _showCard = false;
         _activeSelectionClearer = null;
       });
+
+      // RESUME: Check if video was playing before card opened
+      if (_wasPlayingBeforeCard && (_isVideo || _isAudio)) {
+        _playMedia();
+      }
+      _wasPlayingBeforeCard = false;
     }
   }
 
@@ -708,8 +710,6 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
-    if (_isVideo || _isAudio) _pauseMedia();
-    if (_isTtsPlaying) _flutterTts.stop();
     _activeSelectionClearer?.call();
     _activeSelectionClearer = clear;
     _activateCard(
@@ -726,6 +726,24 @@ class _ReaderScreenState extends State<ReaderScreen>
     Offset pos, {
     required bool isPhrase,
   }) {
+    // 1. Pause Video if playing
+    if (_isVideo || _isAudio) {
+      _wasPlayingBeforeCard = _isPlaying;
+      if (_isPlaying) {
+        _pauseMedia();
+      }
+    }
+
+    // 2. Stop any existing Lesson TTS loop
+    if (_isTtsPlaying) {
+      _flutterTts.stop();
+      setState(() => _isTtsPlaying = false);
+    }
+    
+    // 3. Play word/phrase TTS immediately
+    _flutterTts.speak(text);
+
+    // 4. Show Card
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final svc = context.read<TranslationService>();
     setState(() {
@@ -949,11 +967,9 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  // --- FULLSCREEN LOGIC (CRITICAL FIX APPLIED) ---
+  // --- FULLSCREEN LOGIC ---
   
-  // SHARED PLAYER: Reuses the exact same widget instance via GlobalKey.
-  // FIXED: The GlobalKey is now applied to a Container wrapper. 
-  // This prevents conflicts between the library widget's internal keys and our reparenting key.
+  // SHARED PLAYER: Reuses the exact same widget instance via GlobalKey
   Widget _buildSharedPlayer() {
     Widget playerWidget;
     
@@ -972,14 +988,14 @@ class _ReaderScreenState extends State<ReaderScreen>
       return const SizedBox.shrink();
     }
 
+    // Keep it wrapped in a Container with the GlobalKey to prevent reparenting issues
     return Container(
-      key: _videoPlayerKey, // Persistent Key Anchor
+      key: _videoPlayerKey,
       color: Colors.black,
       child: playerWidget,
     );
   }
 
-  // 2. TOGGLE ACTION
   void _toggleCustomFullScreen() {
     setState(() => _isTransitioningFullscreen = true);
     
@@ -1158,6 +1174,17 @@ class _ReaderScreenState extends State<ReaderScreen>
                   child: Icon(_isSentenceMode ? Icons.menu_book : Icons.short_text, color: Colors.white),
                 ),
               ),
+
+              // --- TAP OUTSIDE BARRIER (Portrait) ---
+              if (_showCard && !_isFullScreen)
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _closeTranslationCard,
+                    child: Container(color: Colors.transparent),
+                  ),
+                ),
+
               if (_showCard && _cardTranslationFuture != null && !_isFullScreen)
                 _buildTranslationOverlay(),
             ],
@@ -1267,7 +1294,7 @@ class _ReaderScreenState extends State<ReaderScreen>
           onPhraseSelected: _handlePhraseSelected,
           isBigMode: true,
           isListeningMode: false,
-          isOverlay: true, // Triggers YouTube-style rendering
+          isOverlay: true,
         ),
       ),
     );
