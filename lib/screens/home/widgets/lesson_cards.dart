@@ -48,7 +48,11 @@ class VideoLessonCard extends StatelessWidget {
                     height: 160,
                     width: 280,
                     color: isDark ? Colors.white10 : Colors.grey[200],
-                    child: (lesson.imageUrl != null && (lesson.type == 'video' || lesson.type == 'video_native' || lesson.type == 'audio')) 
+                    child:
+                        (lesson.imageUrl != null &&
+                            (lesson.type == 'video' ||
+                                lesson.type == 'video_native' ||
+                                lesson.type == 'audio'))
                         ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
                         : (lesson.type == 'text'
                               ? Center(
@@ -90,6 +94,29 @@ class VideoLessonCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (lesson.isLocal)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Imported',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
                 Positioned(
                   bottom: 0,
                   left: 0,

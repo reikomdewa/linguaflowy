@@ -51,7 +51,6 @@ class GuidedCoursesSection extends StatefulWidget {
 }
 
 class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
-  // ... (State logic same as before) ...
   String _guidedTab = 'All';
   final List<String> _guidedTabsList = [
     'All',
@@ -63,22 +62,34 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
 
   @override
   Widget build(BuildContext context) {
-    // ... (Filter logic) ...
     List<LessonModel> displayLessons = [];
+
+    // --- UPDATED LOGIC START ---
     if (_guidedTab == 'Imported') {
+      // 1. If 'Imported' tab is selected, ONLY show imported lessons
       displayLessons = widget.importedLessons;
-    } else if (_guidedTab == 'All') {
-      displayLessons = widget.guidedLessons;
     } else {
-      displayLessons = widget.guidedLessons
-          .where((l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase())
-          .toList();
+      // 2. For 'All', 'Beginner', etc., start by excluding imported lessons
+      //    from the main list to ensure they ONLY appear in the Imported tab.
+      final nonImportedLessons = widget.guidedLessons.where(
+        (l) => !widget.importedLessons.contains(l),
+      );
+
+      if (_guidedTab == 'All') {
+        displayLessons = nonImportedLessons.toList();
+      } else {
+        displayLessons = nonImportedLessons
+            .where(
+              (l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase(),
+            )
+            .toList();
+      }
     }
+    // --- UPDATED LOGIC END ---
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ... (Header logic) ...
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 0, 8),
           child: Row(
@@ -95,7 +106,7 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
             ],
           ),
         ),
-        // ... (Tabs logic) ...
+
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -125,7 +136,6 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
               itemCount: displayLessons.length,
               separatorBuilder: (ctx, i) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
-                // CALL HELPER HERE
                 return _buildCard(
                   context,
                   displayLessons[index],
@@ -142,7 +152,7 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
   Widget _buildTab(String tab) {
     final isSelected = _guidedTab == tab;
     return Padding(
-      padding: const EdgeInsets.only(right: 24.0, bottom: 12),
+      padding: const EdgeInsets.only(right: 12.0, bottom: 12),
       child: InkWell(
         onTap: () => setState(() => _guidedTab = tab),
         child: Column(
