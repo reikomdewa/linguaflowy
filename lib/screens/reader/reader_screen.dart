@@ -714,12 +714,45 @@ class _ReaderScreenState extends State<ReaderScreen>
       _checkLimitAndActivate(auth.user.id, cleanId, word, pos, false);
   }
 
+  // --- PHRASE RECOVERY LOGIC ---
+  /// Attempts to find the [compressedPhrase] (which may lack spaces) inside the 
+  /// current active sentence and returns the substring with spaces restored.
+  String _restoreSpaces(String compressedPhrase) {
+    if (_activeSentenceIndex < 0 || _activeSentenceIndex >= _smartChunks.length) {
+      return compressedPhrase;
+    }
+    
+    final fullText = _smartChunks[_activeSentenceIndex];
+    // Create a regex pattern that allows any amount of whitespace between chars
+    // e.g. "hello" -> "h\s*e\s*l\s*l\s*o"
+    String pattern = compressedPhrase
+        .split('')
+        .map((c) => RegExp.escape(c))
+        .join(r'\s*');
+        
+    try {
+      final regex = RegExp(pattern, caseSensitive: false);
+      final match = regex.firstMatch(fullText);
+      if (match != null) {
+        return fullText.substring(match.start, match.end);
+      }
+    } catch (_) {
+      // If regex fails (e.g. invalid chars), fall back to original
+    }
+    
+    return compressedPhrase;
+  }
+
   void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
+    // 1. Attempt to restore spaces in the selected text
+    final restoredPhrase = _restoreSpaces(phrase);
+
     _activeSelectionClearer?.call();
     _activeSelectionClearer = clear;
+    
     _activateCard(
-      phrase,
-      ReaderUtils.generateCleanId(phrase),
+      restoredPhrase,
+      ReaderUtils.generateCleanId(restoredPhrase),
       pos,
       isPhrase: true,
     );
@@ -981,6 +1014,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (_isLocalMedia && _localVideoController != null) {
       playerWidget = Video(
         controller: _localVideoController!,
+        // We use our custom overlay exclusively now
         controls: NoVideoControls,
       );
     } else if (_youtubeController != null) {
@@ -1082,7 +1116,42 @@ class _ReaderScreenState extends State<ReaderScreen>
                 ),
                 onPressed: _toggleTtsFullLesson,
               ),
-            IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
+            // Updated Menu for Swipe Toggle
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'toggle_swipe') {
+                  setState(() => _autoMarkOnSwipe = !_autoMarkOnSwipe);
+                  final user =
+                      (context.read<AuthBloc>().state as AuthAuthenticated).user;
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user.id)
+                      .collection('preferences')
+                      .doc('reader')
+                      .set(
+                        {'autoMarkOnSwipe': _autoMarkOnSwipe},
+                        SetOptions(merge: true),
+                      );
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'toggle_swipe',
+                  child: Row(
+                    children: [
+                      Icon(
+                        _autoMarkOnSwipe
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
+                        color: Theme.of(context).iconTheme.color,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('Auto-mark on swipe'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         body: SafeArea(
@@ -1108,31 +1177,32 @@ class _ReaderScreenState extends State<ReaderScreen>
                           // VIDEO: Use Shared Player in Portrait
                           : AspectRatio(
                               aspectRatio: 16 / 9,
-                              child: Stack(
-                                children: [
-                                  _buildSharedPlayer(),
-                                  Positioned(
-                                    bottom: 8,
-                                    right: 8,
-                                    child: GestureDetector(
-                                      onTap: _toggleCustomFullScreen,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black54,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                        child: const Icon(
-                                          Icons.fullscreen,
-                                          color: Colors.white,
-                                          size: 24,
-                                        ),
-                                      ),
+                              child: GestureDetector(
+                                onTap: _toggleControls,
+                                child: Stack(
+                                  children: [
+                                    _buildSharedPlayer(),
+                                    // Custom Overlay in Portrait
+                                    VideoControlsOverlay(
+                                      isPlaying: _isPlaying,
+                                      position: _isLocalMedia && _localPlayer != null
+                                          ? _localPlayer!.state.position
+                                          : (_youtubeController?.value.position ?? Duration.zero),
+                                      duration: _isLocalMedia && _localPlayer != null
+                                          ? _localPlayer!.state.duration
+                                          : (_youtubeController?.metadata.duration ?? Duration.zero),
+                                      showControls: _showControls,
+                                      onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
+                                      onSeekRelative: _seekRelative,
+                                      onSeekTo: (d) {
+                                        _resetControlsTimer();
+                                        if (_isLocalMedia) _localPlayer?.seek(d);
+                                        else _youtubeController?.seekTo(d);
+                                      },
+                                      onToggleFullscreen: _toggleCustomFullScreen,
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                     ),
