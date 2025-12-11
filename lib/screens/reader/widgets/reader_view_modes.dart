@@ -54,24 +54,33 @@ class SentenceModeView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (chunks.isEmpty) return const Center(child: Text("No content"));
+    
+    // Ensure index is valid to prevent crashes
     final safeIndex = activeIndex.clamp(0, chunks.length - 1);
     final currentText = chunks[safeIndex];
+    
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final iconColor = isDark ? Colors.white : Colors.black87;
 
     return Column(
       children: [
         const SizedBox(height: 20),
+        
+        // --- CONTROLS ---
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Restart / Prev
             IconButton(
               icon: const Icon(FontAwesomeIcons.arrowRotateLeft),
               iconSize: 28,
               color: iconColor.withOpacity(0.7),
               onPressed: onPlayFromStartContinuous,
+              tooltip: "Restart Sentence",
             ),
             const SizedBox(width: 24),
+            
+            // Play / Pause
             GestureDetector(
               onTap: onTogglePlayback,
               child: Container(
@@ -81,27 +90,40 @@ class SentenceModeView extends StatelessWidget {
                   border: Border.all(color: iconColor.withOpacity(0.5), width: 2),
                 ),
                 child: Icon(
-                  isVideo ? (isPlaying ? Icons.pause : Icons.play_arrow) : (isTtsPlaying ? Icons.stop : Icons.play_arrow),
+                  isVideo 
+                    ? (isPlaying ? Icons.pause : Icons.play_arrow) 
+                    : (isTtsPlaying ? Icons.stop : Icons.play_arrow),
                   size: 40,
                   color: iconColor,
                 ),
               ),
             ),
             const SizedBox(width: 24),
+            
+            // Next
             IconButton(
               icon: const Icon(FontAwesomeIcons.arrowRotateRight),
               iconSize: 28,
               color: iconColor.withOpacity(0.7),
               onPressed: onPlayContinuous,
+              tooltip: "Next Sentence",
             ),
           ],
         ),
+
+        // --- FLASHCARD CONTENT ---
         Expanded(
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onHorizontalDragEnd: (details) {
-              if (details.primaryVelocity! < 0) onNext();
-              if (details.primaryVelocity! > 0) onPrev();
+              // Swipe LEFT to go NEXT
+              if (details.primaryVelocity! < 0) {
+                onNext();
+              } 
+              // Swipe RIGHT to go PREV
+              else if (details.primaryVelocity! > 0) {
+                onPrev();
+              }
             },
             child: Container(
               width: double.infinity,
@@ -133,23 +155,34 @@ class SentenceModeView extends StatelessWidget {
   }
 
   Widget _buildTranslationSection(BuildContext context) {
-    // ... (Your existing translation UI code here - kept brief for cleaner answer) ...
-    // Copy logic from your existing code if needed, functionality unchanged.
     final bool hasTranslation = googleTranslation != null || myMemoryTranslation != null;
-    if (isLoadingTranslation) return const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2));
-    if (!hasTranslation && showError) return TextButton(onPressed: onRetryTranslation, child: const Text("Retry Translation"));
-    
-    return Column(
-      children: [
-        if (myMemoryTranslation != null) Text(myMemoryTranslation!, style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic, fontSize: 16), textAlign: TextAlign.center),
-        if (googleTranslation != null) Text(googleTranslation!, style: TextStyle(color: Colors.grey[400], fontStyle: FontStyle.italic, fontSize: 14), textAlign: TextAlign.center),
-        TextButton.icon(
-          icon: Icon(hasTranslation ? Icons.visibility_off : Icons.translate, size: 16, color: Colors.grey),
-          label: Text(hasTranslation ? "Hide" : "Translate", style: const TextStyle(color: Colors.grey)),
-          onPressed: onTranslateRequest,
-        ),
-      ],
-    );
+
+    if (isLoadingTranslation) {
+      return const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2));
+    } else if (!hasTranslation && showError) {
+      return TextButton(onPressed: onRetryTranslation, child: const Text("Retry Translation"));
+    } else {
+      return Column(
+        children: [
+          if (myMemoryTranslation != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Text(myMemoryTranslation!, style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic, fontSize: 16), textAlign: TextAlign.center),
+            ),
+          if (googleTranslation != null)
+            Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: Text("$googleTranslation", style: TextStyle(color: Colors.grey[400], fontStyle: FontStyle.italic, fontSize: 14), textAlign: TextAlign.center),
+            ),
+          const SizedBox(height: 12),
+          TextButton.icon(
+            icon: Icon(hasTranslation ? Icons.visibility_off : Icons.translate, size: 16, color: Colors.grey),
+            label: Text(hasTranslation ? "Hide Translation" : "Translate Sentence", style: const TextStyle(color: Colors.grey)),
+            onPressed: onTranslateRequest,
+          ),
+        ],
+      );
+    }
   }
 }
 
@@ -192,28 +225,33 @@ class ParagraphModeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // CONDITION FIXED: If transcript exists OR if it's a video (even with sentences mapped), use List View
+    // 1. TRANSCRIPT VIEW (Scrolling List)
+    // Used if we have parsed transcript data (always true for fixed local import now)
     if (lesson.transcript.isNotEmpty) {
       return ListView.separated(
         controller: listScrollController,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        itemCount: lesson.transcript.length + 1,
+        itemCount: lesson.transcript.length + 1, // +1 for bottom padding
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           if (index == lesson.transcript.length) return const SizedBox(height: 100);
+          
           final entry = lesson.transcript[index];
+          final bool isActive = index == activeSentenceIndex;
+
           return _buildTranscriptRow(
             context,
             index,
             entry.text,
             entry.start,
-            index == activeSentenceIndex,
+            isActive,
           );
         },
       );
     }
 
-    // Fallback for Text-Only lessons (Book Mode)
+    // 2. BOOK VIEW (Pages)
+    // Fallback for text-only content
     if (bookPages.isEmpty) return const Center(child: CircularProgressIndicator());
 
     return PageView.builder(
@@ -239,30 +277,38 @@ class ParagraphModeView extends StatelessWidget {
   Widget _buildTranscriptRow(BuildContext context, int index, String text, double start, bool isActive) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
+    // Safety check for keys
+    final Key? rowKey = (index < itemKeys.length) ? itemKeys[index] : null;
+
     return Container(
-      // CRITICAL: Attach the key here so Scrollable.ensureVisible works
-      key: (itemKeys.isNotEmpty && index < itemKeys.length) ? itemKeys[index] : null,
-      
+      key: rowKey, // Essential for Auto-Scroll
       margin: const EdgeInsets.only(bottom: 12),
-      padding: isActive ? const EdgeInsets.all(12) : EdgeInsets.zero,
+      padding: isActive ? const EdgeInsets.all(12) : const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       decoration: BoxDecoration(
-        color: isActive ? (isDark ? Colors.white10 : Colors.grey.shade200) : Colors.transparent,
+        color: isActive 
+            ? (isDark ? Colors.blue.withOpacity(0.2) : Colors.blue.withOpacity(0.1)) 
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
+        border: isActive ? Border.all(color: Colors.blue.withOpacity(0.3)) : null,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GestureDetector(
-            onTap: () => onVideoSeek(start),
-            child: Padding(
-              padding: const EdgeInsets.only(top: 4, right: 12),
-              child: Icon(
-                isActive ? Icons.play_arrow : Icons.play_arrow_outlined,
-                color: isActive ? Colors.blue : Colors.grey[400],
-                size: 24,
+          // Play Button for this specific line
+          if (isVideo)
+            GestureDetector(
+              onTap: () => onVideoSeek(start),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2, right: 12, left: 4),
+                child: Icon(
+                  isActive ? Icons.play_arrow : Icons.play_arrow_outlined,
+                  color: isActive ? Colors.blue : Colors.grey[400],
+                  size: 26,
+                ),
               ),
             ),
-          ),
+          
           Expanded(
             child: InteractiveTextDisplay(
               text: text,
@@ -279,11 +325,13 @@ class ParagraphModeView extends StatelessWidget {
   }
 
   Widget _buildBookRow(BuildContext context, int index, String text, bool isActive) {
+    // Safety check for keys
+    final Key? rowKey = (index < itemKeys.length) ? itemKeys[index] : null;
+
     return GestureDetector(
       onDoubleTap: () => onSentenceTap(index),
       child: Container(
-        // Keys used here too, just in case
-        key: (itemKeys.isNotEmpty && index < itemKeys.length) ? itemKeys[index] : null,
+        key: rowKey,
         margin: const EdgeInsets.only(bottom: 24),
         padding: isActive ? const EdgeInsets.all(12) : EdgeInsets.zero,
         decoration: BoxDecoration(

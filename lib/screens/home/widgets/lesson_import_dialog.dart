@@ -1,18 +1,19 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:video_player/video_player.dart';
+
+// --- MEDIA KIT ---
+import 'package:media_kit/media_kit.dart'; 
 
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/models/transcript_line.dart'; // Required for the fix
+import 'package:linguaflow/models/transcript_line.dart';
 import 'package:linguaflow/services/lesson_service.dart';
 import 'package:linguaflow/services/web_scraper_service.dart';
-import 'package:linguaflow/utils/subtitle_parser.dart'; // Required for the fix
+import 'package:linguaflow/utils/subtitle_parser.dart'; 
 
 class LessonImportDialog {
   static void show(
@@ -89,7 +90,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
   File? _selectedMediaFile; 
   File? _selectedSubtitleFile;
   
-  // We use this string just for preview in the UI, but we re-parse for the model later
   String? _previewSubtitleText; 
   
   bool _isLoading = false;
@@ -99,6 +99,9 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
   @override
   void initState() {
     super.initState();
+    // Ensure MediaKit is initialized
+    try { MediaKit.ensureInitialized(); } catch(_) {} 
+    
     _tabController = TabController(length: 2, vsync: this);
     _titleController = TextEditingController(text: widget.initialTitle ?? '');
     _contentController = TextEditingController(text: widget.initialContent ?? '');
@@ -185,10 +188,9 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
     if (result != null && result.files.single.path != null) {
       final file = File(result.files.single.path!);
       
-      // Parse for preview/validation only
       try {
         final content = await file.readAsString();
-        final cleanText = _extractTextNaive(content); // Just for UI preview
+        final cleanText = _extractTextNaive(content);
         
         setState(() {
           _selectedSubtitleFile = file;
@@ -201,30 +203,28 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
     }
   }
 
-  // --- Validation ---
+  // --- Validation using MediaKit ---
   Future<void> _validateDuration() async {
     if (_selectedMediaFile == null || _selectedSubtitleFile == null) return;
     setState(() => _isLoading = true);
     
     try {
-      final VideoPlayerController vController = VideoPlayerController.file(_selectedMediaFile!);
-      try {
-        await vController.initialize();
-      } catch (e) {
-        await vController.dispose();
-        setState(() => _isLoading = false);
-        return;
+      final player = Player();
+      
+      // Open file (Audio or Video)
+      await player.open(Media(_selectedMediaFile!.path), play: false);
+      
+      // FIX: Wait for duration to populate (Audio files can be slow to read headers)
+      int retries = 0;
+      while (player.state.duration == Duration.zero && retries < 10) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        retries++;
       }
 
-      Duration mediaDuration = vController.value.duration;
-      // 00:00 Fix
-      if (mediaDuration == Duration.zero) {
-        await Future.delayed(const Duration(milliseconds: 200));
-        mediaDuration = vController.value.duration;
-      }
-      await vController.dispose();
+      Duration mediaDuration = player.state.duration;
+      await player.dispose();
 
-      // Simple Naive Parse for Timestamp check
+      // Parse Subtitle
       final subContent = await _selectedSubtitleFile!.readAsString();
       final lastTimestamp = _getLastSubtitleTimestamp(subContent);
 
@@ -234,6 +234,8 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
           setState(() {
             _mediaWarningMsg = "Warning: Subtitle length (${_formatDuration(lastTimestamp)}) differs from media (${_formatDuration(mediaDuration)}).";
           });
+        } else {
+          setState(() => _mediaWarningMsg = null);
         }
       }
     } catch (e) {
@@ -272,49 +274,62 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
 
       setState(() => _isLoading = true);
 
-      // 1. Prepare Storage
-      final appDir = await getApplicationDocumentsDirectory();
-      final String dirPath = '${appDir.path}/lessons/${DateTime.now().millisecondsSinceEpoch}';
-      await Directory(dirPath).create(recursive: true);
-
-      // 2. Handle Media File
-      if (_selectedMediaFile != null) {
-        final ext = path.extension(_selectedMediaFile!.path).toLowerCase();
-        type = ['.mp3', '.wav', '.m4a', '.aac', '.flac'].contains(ext) ? "audio" : "video";
-        
-        final String newMediaPath = '$dirPath/media$ext';
-        await _selectedMediaFile!.copy(newMediaPath);
-        localMediaPath = newMediaPath;
-      } else if (_mediaUrlController.text.isNotEmpty) {
-        type = "video"; // YouTube
-        localMediaPath = _mediaUrlController.text;
-      } else {
-        setState(() {
-          _isLoading = false;
-          _errorMsg = "Media file or URL is required.";
-        });
-        return;
-      }
-
-      // 3. Handle Subtitle File & Parsing
-      final String newSubPath = '$dirPath/subs${path.extension(_selectedSubtitleFile!.path)}';
-      await _selectedSubtitleFile!.copy(newSubPath);
-      localSubtitlePath = newSubPath;
-
       try {
-        // CRITICAL FIX: Parse subtitles NOW and save them into the model
-        finalTranscript = await SubtitleParser.parseFile(newSubPath);
-        
-        // Generate content from the clean parsed transcript
-        if (finalTranscript.isNotEmpty) {
-          finalContent = finalTranscript.map((t) => t.text).join(" ");
+        // 1. Prepare Storage
+        final appDir = await getApplicationDocumentsDirectory();
+        final String dirPath = '${appDir.path}/lessons/${DateTime.now().millisecondsSinceEpoch}';
+        await Directory(dirPath).create(recursive: true);
+
+        // 2. Handle Media File (Copy)
+        if (_selectedMediaFile != null) {
+          final ext = path.extension(_selectedMediaFile!.path).toLowerCase();
+          
+          // Audio vs Video detection
+          if (['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg'].contains(ext)) {
+            type = "audio";
+          } else {
+            type = "video";
+          }
+          
+          final String newMediaPath = '$dirPath/media$ext';
+          await _selectedMediaFile!.copy(newMediaPath);
+          localMediaPath = newMediaPath;
+        } else if (_mediaUrlController.text.isNotEmpty) {
+          type = "video"; // YouTube URL default
+          localMediaPath = _mediaUrlController.text;
         } else {
-          // Fallback if parsing returned empty (shouldn't happen with robust parser)
+          throw Exception("Media file or URL is required.");
+        }
+
+        // 3. Handle Subtitle File (Copy)
+        final String newSubPath = '$dirPath/subs${path.extension(_selectedSubtitleFile!.path)}';
+        await _selectedSubtitleFile!.copy(newSubPath);
+        localSubtitlePath = newSubPath;
+
+        // 4. Parse Subtitles for Lesson Content
+        try {
+          finalTranscript = await SubtitleParser.parseFile(newSubPath);
+          
+          if (finalTranscript.isNotEmpty) {
+            finalContent = finalTranscript.map((t) => t.text).join(" ");
+          } else {
+            finalContent = await _selectedSubtitleFile!.readAsString();
+          }
+        } catch (e) {
+          print("Error parsing transcript: $e");
+          // Fallback to raw text if parsing fails, don't block import
           finalContent = await _selectedSubtitleFile!.readAsString();
         }
+
       } catch (e) {
-        print("Error parsing transcript during import: $e");
-        finalContent = await _selectedSubtitleFile!.readAsString();
+        // CATCH FILE COPY ERRORS
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMsg = "Failed to import files: $e";
+          });
+        }
+        return;
       }
     }
 
@@ -327,14 +342,14 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
       language: widget.currentLanguage,
       content: finalContent,
       sentences: sentences,
-      transcript: finalTranscript, // <--- SAVING THE TRANSCRIPT MAP HERE
+      transcript: finalTranscript, 
       createdAt: DateTime.now(),
       progress: 0,
       isFavorite: widget.isFavoriteByDefault,
       type: type,
       videoUrl: localMediaPath,
       subtitleUrl: localSubtitlePath,
-      isLocal: true, // Only save to local JSON
+      isLocal: true,
     );
 
     widget.lessonBloc.add(LessonCreateRequested(lesson));
@@ -587,7 +602,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
   String _formatDuration(Duration d) => "${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
 
   String _extractTextNaive(String fileContent) {
-    // Basic preview extraction only
     final lines = fileContent.split('\n');
     final buffer = StringBuffer();
     final timePattern = RegExp(r'\d{2}:\d{2}:\d{2}'); 
@@ -600,10 +614,15 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
   }
 
   Duration _getLastSubtitleTimestamp(String fileContent) {
-    final regex = RegExp(r'(\d{2}):(\d{2}):(\d{2})[,.](\d{3})');
+    final regex = RegExp(r'(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[,.](\d{3})');
     final matches = regex.allMatches(fileContent);
     if (matches.isEmpty) return Duration.zero;
     final lastMatch = matches.last;
-    return Duration(hours: int.parse(lastMatch.group(1)!), minutes: int.parse(lastMatch.group(2)!), seconds: int.parse(lastMatch.group(3)!));
+    
+    int h = lastMatch.group(1) != null ? int.parse(lastMatch.group(1)!) : 0;
+    int m = int.parse(lastMatch.group(2)!);
+    int s = int.parse(lastMatch.group(3)!);
+    
+    return Duration(hours: h, minutes: m, seconds: s);
   }
 }

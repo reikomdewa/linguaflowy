@@ -20,6 +20,8 @@ import 'package:linguaflow/services/hybrid_lesson_service.dart'; // Local Servic
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:video_player_media_kit/video_player_media_kit.dart';
 
 // --- SCREENS ---
 import 'package:linguaflow/screens/auth/login_screen.dart';
@@ -27,6 +29,8 @@ import 'package:linguaflow/screens/main_navigation_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+   MediaKit.ensureInitialized();
+
   
   // 1. Load Env & Init Gemini
   await dotenv.load(fileName: ".env");
