@@ -145,7 +145,7 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
                       Expanded(
                         child: SizedBox(
                           height:
-                              14 *
+                              15 *
                               1.2 *
                               2, // fontSize * lineHeight * numberOfLines
                           child: Text(
@@ -177,7 +177,7 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  SizedBox(height: 14, child: _buildSourceIndicator()),
+                  SizedBox(height: 18, child: _buildSourceIndicator()),
                 ],
               ),
             ),
