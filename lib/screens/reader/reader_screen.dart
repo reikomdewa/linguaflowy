@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -9,12 +7,12 @@ import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:linguaflow/screens/reader/widgets/reader_media_widgets.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
+// --- Internal App Imports ---
+import 'package:linguaflow/screens/reader/widgets/reader_media_widgets.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
@@ -22,17 +20,18 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/models/transcript_line.dart';
 import 'package:linguaflow/services/translation_service.dart';
-import 'package:linguaflow/services/vocabulary_service.dart';
 import 'package:linguaflow/services/mymemory_service.dart';
 import 'package:linguaflow/widgets/floating_translation_card.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
-import 'package:linguaflow/widgets/gemini_formatted_text.dart';
 import 'package:linguaflow/utils/subtitle_parser.dart';
-import 'package:linguaflow/utils/language_helper.dart';
 
 import 'reader_utils.dart';
 import 'widgets/reader_view_modes.dart';
 import 'widgets/interactive_text_display.dart';
+
+// --- NEW IMPORTS (The files we just created) ---
+import 'widgets/video_controls_overlay.dart';
+import 'widgets/fullscreen_translation_card.dart';
 
 class ReaderScreen extends StatefulWidget {
   final LessonModel lesson;
@@ -220,7 +219,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.dispose();
   }
 
-  // ... [Vocabulary Loading & Prefs - Kept Same] ...
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     try {
@@ -494,7 +492,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     });
   }
 
-  // --- CONTROLS VISIBILITY LOGIC ---
   void _toggleControls() {
     setState(() => _showControls = !_showControls);
     if (_showControls) _resetControlsTimer();
@@ -508,8 +505,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
     });
   }
-
-  // ... [Other navigation/audio methods - kept same] ...
 
   void _goToNextSentence() {
     if (_activeSentenceIndex < _smartChunks.length - 1) {
@@ -941,150 +936,181 @@ class _ReaderScreenState extends State<ReaderScreen> {
       if (mounted) setState(() => _isTransitioningFullscreen = false);
     });
   }
-
-  @override
+@override
   Widget build(BuildContext context) {
-    if (_isFullScreen && (_isVideo || _isAudio)) return _buildFullscreenMedia();
-    final settings = context.watch<SettingsBloc>().state;
-    final themeData = Theme.of(context).copyWith(
-      scaffoldBackgroundColor: settings.readerTheme == ReaderTheme.dark
-          ? const Color(0xFF1E1E1E)
-          : Colors.white,
-      appBarTheme: AppBarTheme(
-        backgroundColor: settings.readerTheme == ReaderTheme.dark
-            ? const Color(0xFF1E1E1E)
-            : Colors.white,
-        iconTheme: IconThemeData(
-          color: settings.readerTheme == ReaderTheme.dark
-              ? Colors.white
-              : Colors.black,
-        ),
-      ),
-      textTheme: Theme.of(context).textTheme.apply(
-        bodyColor: settings.readerTheme == ReaderTheme.dark
-            ? Colors.white
-            : Colors.black,
-      ),
-    );
+    // 1. Wrap in OrientationBuilder to detect rotation changes automatically
+    return OrientationBuilder(
+      builder: (context, orientation) {
+        
+        // 2. Check if we should show the Fullscreen Layout
+        // We show it if:
+        // A) The manual flag _isFullScreen is true
+        // B) OR the device is physically in Landscape mode (and it's a video/audio lesson)
+        final bool shouldShowFullscreen = (_isFullScreen || orientation == Orientation.landscape) && 
+                                          (_isVideo || _isAudio);
 
-    final displayLesson = widget.lesson.copyWith(
-      sentences: _smartChunks,
-      transcript: _activeTranscript,
-    );
+        if (shouldShowFullscreen) {
+          // If we are in landscape but the flag is false, sync the flag
+          if (!_isFullScreen) {
+            // Schedule this to run after build to avoid errors
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _isFullScreen = true);
+            });
+          }
+          return _buildFullscreenMedia();
+        }
 
-    return Theme(
-      data: themeData,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.lesson.title),
-          actions: [
-            IconButton(
-              icon: Icon(
-                _isListeningMode ? Icons.hearing : Icons.hearing_disabled,
-              ),
-              onPressed: () =>
-                  setState(() => _isListeningMode = !_isListeningMode),
+        // --- STANDARD PORTRAIT LAYOUT BELOW ---
+        final settings = context.watch<SettingsBloc>().state;
+        final themeData = Theme.of(context).copyWith(
+          scaffoldBackgroundColor: settings.readerTheme == ReaderTheme.dark
+              ? const Color(0xFF1E1E1E)
+              : Colors.white,
+          appBarTheme: AppBarTheme(
+            backgroundColor: settings.readerTheme == ReaderTheme.dark
+                ? const Color(0xFF1E1E1E)
+                : Colors.white,
+            iconTheme: IconThemeData(
+              color: settings.readerTheme == ReaderTheme.dark
+                  ? Colors.white
+                  : Colors.black,
             ),
-            if (!(_isVideo || _isAudio) && !_isSentenceMode)
-              IconButton(
-                icon: Icon(
-                  _isPlaying || _isTtsPlaying ? Icons.pause : Icons.play_arrow,
-                ),
-                onPressed: _toggleTtsFullLesson,
-              ),
-            IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
-          ],
-        ),
-        body: SafeArea(
-          child: Stack(
-            children: [
-              Column(
-                children: [
-                  if (_isVideo || _isAudio)
-                    ReaderMediaHeader(
-                      isInitializing: _isInitializingMedia,
-                      isAudio: _isAudio,
-                      isLocalMedia: _isLocalMedia,
-                      localVideoController: _localVideoController,
-                      localPlayer: _localPlayer,
-                      youtubeController: _youtubeController,
-                      onToggleFullscreen: _toggleCustomFullScreen,
-                    ),
-                  if (_isCheckingLimit || _isParsingSubtitles)
-                    const LinearProgressIndicator(minHeight: 2),
-                  Expanded(
-                    child: _isParsingSubtitles
-                        ? const Center(child: Text("Loading content..."))
-                        : _isSentenceMode
-                        ? SentenceModeView(
-                            chunks: _smartChunks,
-                            activeIndex: _activeSentenceIndex,
-                            vocabulary: _vocabulary,
-                            isVideo: _isVideo || _isAudio,
-                            isPlaying: _isPlaying || _isPlayingSingleSentence,
-                            isTtsPlaying: _isTtsPlaying,
-                            onTogglePlayback: _togglePlayback,
-                            onPlayFromStartContinuous: _playFromStartContinuous,
-                            onPlayContinuous: _playNextContinuous,
-                            onNext: _goToNextSentence,
-                            onPrev: _goToPrevSentence,
-                            onWordTap: _handleWordTap,
-                            onPhraseSelected: _handlePhraseSelected,
-                            isLoadingTranslation: _isLoadingTranslation,
-                            googleTranslation: _googleTranslation,
-                            myMemoryTranslation: _myMemoryTranslation,
-                            showError: _showError,
-                            onRetryTranslation: _handleTranslationToggle,
-                            onTranslateRequest: _handleTranslationToggle,
-                            isListeningMode: _isListeningMode,
-                          )
-                        : ParagraphModeView(
-                            lesson: displayLesson,
-                            bookPages: _bookPages,
-                            activeSentenceIndex: _activeSentenceIndex,
-                            currentPage: _currentPage,
-                            vocabulary: _vocabulary,
-                            isVideo: _isVideo || _isAudio,
-                            listScrollController: _listScrollController,
-                            pageController: _pageController,
-                            onPageChanged: (i) =>
-                                setState(() => _currentPage = i),
-                            onSentenceTap: (i) {
-                              if ((_isVideo || _isAudio) &&
-                                  i < _activeTranscript.length) {
-                                _seekToTime(_activeTranscript[i].start);
-                                _playMedia();
-                              } else
-                                _speakSentence(_smartChunks[i], i);
-                            },
-                            onVideoSeek: (t) => _seekToTime(t),
-                            onWordTap: _handleWordTap,
-                            onPhraseSelected: _handlePhraseSelected,
-                            isListeningMode: _isListeningMode,
-                            itemKeys: _itemKeys,
-                          ),
+          ),
+          textTheme: Theme.of(context).textTheme.apply(
+            bodyColor: settings.readerTheme == ReaderTheme.dark
+                ? Colors.white
+                : Colors.black,
+          ),
+        );
+
+        final displayLesson = widget.lesson.copyWith(
+          sentences: _smartChunks,
+          transcript: _activeTranscript,
+        );
+
+        return Theme(
+          data: themeData,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(widget.lesson.title),
+              actions: [
+                IconButton(
+                  icon: Icon(
+                    _isListeningMode ? Icons.hearing : Icons.hearing_disabled,
                   ),
+                  onPressed: () =>
+                      setState(() => _isListeningMode = !_isListeningMode),
+                ),
+                if (!(_isVideo || _isAudio) && !_isSentenceMode)
+                  IconButton(
+                    icon: Icon(
+                      _isPlaying || _isTtsPlaying
+                          ? Icons.pause
+                          : Icons.play_arrow,
+                    ),
+                    onPressed: _toggleTtsFullLesson,
+                  ),
+                IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
+              ],
+            ),
+            body: SafeArea(
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                      if (_isVideo || _isAudio)
+                        ReaderMediaHeader(
+                          isInitializing: _isInitializingMedia,
+                          isAudio: _isAudio,
+                          isLocalMedia: _isLocalMedia,
+                          localVideoController: _localVideoController,
+                          localPlayer: _localPlayer,
+                          youtubeController: _youtubeController,
+                          onToggleFullscreen: _toggleCustomFullScreen,
+                        ),
+                      if (_isCheckingLimit || _isParsingSubtitles)
+                        const LinearProgressIndicator(minHeight: 2),
+                      Expanded(
+                        child: _isParsingSubtitles
+                            ? const Center(child: Text("Loading content..."))
+                            : _isSentenceMode
+                                ? SentenceModeView(
+                                    chunks: _smartChunks,
+                                    activeIndex: _activeSentenceIndex,
+                                    vocabulary: _vocabulary,
+                                    isVideo: _isVideo || _isAudio,
+                                    isPlaying:
+                                        _isPlaying || _isPlayingSingleSentence,
+                                    isTtsPlaying: _isTtsPlaying,
+                                    onTogglePlayback: _togglePlayback,
+                                    onPlayFromStartContinuous:
+                                        _playFromStartContinuous,
+                                    onPlayContinuous: _playNextContinuous,
+                                    onNext: _goToNextSentence,
+                                    onPrev: _goToPrevSentence,
+                                    onWordTap: _handleWordTap,
+                                    onPhraseSelected: _handlePhraseSelected,
+                                    isLoadingTranslation: _isLoadingTranslation,
+                                    googleTranslation: _googleTranslation,
+                                    myMemoryTranslation: _myMemoryTranslation,
+                                    showError: _showError,
+                                    onRetryTranslation:
+                                        _handleTranslationToggle,
+                                    onTranslateRequest:
+                                        _handleTranslationToggle,
+                                    isListeningMode: _isListeningMode,
+                                  )
+                                : ParagraphModeView(
+                                    lesson: displayLesson,
+                                    bookPages: _bookPages,
+                                    activeSentenceIndex: _activeSentenceIndex,
+                                    currentPage: _currentPage,
+                                    vocabulary: _vocabulary,
+                                    isVideo: _isVideo || _isAudio,
+                                    listScrollController: _listScrollController,
+                                    pageController: _pageController,
+                                    onPageChanged: (i) =>
+                                        setState(() => _currentPage = i),
+                                    onSentenceTap: (i) {
+                                      if ((_isVideo || _isAudio) &&
+                                          i < _activeTranscript.length) {
+                                        _seekToTime(_activeTranscript[i].start);
+                                        _playMedia();
+                                      } else
+                                        _speakSentence(_smartChunks[i], i);
+                                    },
+                                    onVideoSeek: (t) => _seekToTime(t),
+                                    onWordTap: _handleWordTap,
+                                    onPhraseSelected: _handlePhraseSelected,
+                                    isListeningMode: _isListeningMode,
+                                    itemKeys: _itemKeys,
+                                  ),
+                      ),
+                    ],
+                  ),
+                  Positioned(
+                    bottom: 24,
+                    right: 24,
+                    child: FloatingActionButton(
+                      backgroundColor: Theme.of(context).primaryColor,
+                      onPressed: () =>
+                          setState(() => _isSentenceMode = !_isSentenceMode),
+                      child: Icon(
+                        _isSentenceMode ? Icons.menu_book : Icons.short_text,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  if (_showCard &&
+                      _cardTranslationFuture != null &&
+                      !_isFullScreen)
+                    _buildTranslationOverlay(),
                 ],
               ),
-              Positioned(
-                bottom: 24,
-                right: 24,
-                child: FloatingActionButton(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  onPressed: () =>
-                      setState(() => _isSentenceMode = !_isSentenceMode),
-                  child: Icon(
-                    _isSentenceMode ? Icons.menu_book : Icons.short_text,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              if (_showCard && _cardTranslationFuture != null && !_isFullScreen)
-                _buildTranslationOverlay(),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1097,6 +1123,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
+     
         body: GestureDetector(
           onTap: _toggleControls,
           // DOUBLE TAP GESTURES for Seek
@@ -1114,24 +1141,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
             alignment: Alignment.center,
             fit: StackFit.expand,
             children: [
-              // 1. Video Layer
               Center(
                 child: _isLocalMedia && _localVideoController != null
                     ? Video(
                         controller: _localVideoController!,
                         fit: BoxFit.contain,
-                         controls: NoVideoControls,
+                        controls: NoVideoControls,
                       )
                     : (_youtubeController != null
-                          ? FittedBox(
-                              fit: BoxFit.contain,
-                              child: SizedBox(
-                                width: 1920,
-                                height: 1080,
-                                child: YoutubePlayer(
-                                  controller: _youtubeController!,
-                                  showVideoProgressIndicator: false,
-                                ),
+                          ? AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: YoutubePlayer(
+                                controller: _youtubeController!,
+                                showVideoProgressIndicator: false,
+                                width: double.infinity,
                               ),
                             )
                           : const SizedBox.shrink()),
@@ -1154,7 +1177,29 @@ class _ReaderScreenState extends State<ReaderScreen> {
               ),
 
               // 4. CUSTOM YOUTUBE-STYLE CONTROLS
-              if (!_showCard) _buildEnhancedVideoControls(),
+              if (!_showCard)
+                VideoControlsOverlay(
+                  isPlaying: _isPlaying,
+                  position: _isLocalMedia && _localPlayer != null
+                      ? _localPlayer!.state.position
+                      : (_youtubeController?.value.position ?? Duration.zero),
+                  duration: _isLocalMedia && _localPlayer != null
+                      ? _localPlayer!.state.duration
+                      : (_youtubeController?.metadata.duration ??
+                            Duration.zero),
+                  showControls: _showControls,
+                  onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
+                  onSeekRelative: _seekRelative,
+                  onSeekTo: (d) {
+                    _resetControlsTimer();
+                    if (_isLocalMedia) {
+                      _localPlayer?.seek(d);
+                    } else {
+                      _youtubeController?.seekTo(d);
+                    }
+                  },
+                  onToggleFullscreen: _toggleCustomFullScreen,
+                ),
 
               // 5. Back Button (Always visible if controls shown)
               if (!_showCard && _showControls)
@@ -1178,154 +1223,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
               // 6. Translation Card
               if (_showCard && _cardTranslationFuture != null)
                 _buildTranslationOverlay(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- NEW YOUTUBE-STYLE OVERLAY ---
-  Widget _buildEnhancedVideoControls() {
-    bool isPlaying = false;
-    Duration position = Duration.zero;
-    Duration duration = const Duration(seconds: 1);
-
-    if (_isLocalMedia && _localPlayer != null) {
-      isPlaying = _localPlayer!.state.playing;
-      position = _localPlayer!.state.position;
-      duration = _localPlayer!.state.duration;
-    } else if (_youtubeController != null) {
-      isPlaying = _youtubeController!.value.isPlaying;
-      position = _youtubeController!.value.position;
-      duration = _youtubeController!.metadata.duration;
-    }
-
-    if (duration.inSeconds == 0) duration = const Duration(seconds: 1);
-
-    return AnimatedOpacity(
-      opacity: _showControls ? 1.0 : 0.0,
-      duration: const Duration(milliseconds: 300),
-      child: IgnorePointer(
-        ignoring: !_showControls,
-        child: Container(
-          color: Colors.black.withOpacity(0.4), // Dim overlay
-          child: Stack(
-            children: [
-              // CENTER CONTROLS (Back 10, Play/Pause, Fwd 10)
-              Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      iconSize: 40,
-                      icon: const Icon(Icons.replay_10, color: Colors.white),
-                      onPressed: () => _seekRelative(-10),
-                    ),
-                    const SizedBox(width: 40),
-                    Container(
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.black45,
-                      ),
-                      child: IconButton(
-                        iconSize: 64,
-                        icon: Icon(
-                          isPlaying
-                              ? Icons.pause_circle_filled
-                              : Icons.play_circle_fill,
-                          color: Colors.white,
-                        ),
-                        onPressed: isPlaying ? _pauseMedia : _playMedia,
-                      ),
-                    ),
-                    const SizedBox(width: 40),
-                    IconButton(
-                      iconSize: 40,
-                      icon: const Icon(Icons.forward_10, color: Colors.white),
-                      onPressed: () => _seekRelative(10),
-                    ),
-                  ],
-                ),
-              ),
-
-              // BOTTOM PROGRESS BAR
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [Colors.black87, Colors.transparent],
-                    ),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  child: SafeArea(
-                    top: false,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              "${ReaderUtils.formatDuration(position)} / ${ReaderUtils.formatDuration(duration)}",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.fullscreen_exit,
-                                color: Colors.white,
-                              ),
-                              onPressed: _toggleCustomFullScreen,
-                            ),
-                          ],
-                        ),
-                        SizedBox(
-                          height: 20,
-                          child: SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              activeTrackColor: Colors.red, // YouTube Red
-                              inactiveTrackColor: Colors.white24,
-                              thumbColor: Colors.red,
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 6,
-                              ),
-                              trackHeight: 2,
-                            ),
-                            child: Slider(
-                              value: position.inMilliseconds.toDouble().clamp(
-                                0,
-                                duration.inMilliseconds.toDouble(),
-                              ),
-                              min: 0,
-                              max: duration.inMilliseconds.toDouble(),
-                              onChanged: (v) {
-                                _resetControlsTimer(); // Keep controls visible while dragging
-                                final p = Duration(milliseconds: v.toInt());
-                                if (_isLocalMedia) {
-                                  _localPlayer?.seek(p);
-                                } else {
-                                  _youtubeController?.seekTo(p);
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -1357,433 +1254,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
             onPhraseSelected: _handlePhraseSelected,
             isBigMode: true,
             isListeningMode: false,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ... [FullscreenTranslationCard - Kept Exact Same] ...
-class FullscreenTranslationCard extends StatefulWidget {
-  final String originalText;
-  final Future<String> translationFuture;
-  final Future<String?> Function() onGetAiExplanation;
-  final String targetLanguage;
-  final String nativeLanguage;
-  final int currentStatus;
-  final Function(int, String) onUpdateStatus;
-  final VoidCallback onClose;
-
-  const FullscreenTranslationCard({
-    super.key,
-    required this.originalText,
-    required this.translationFuture,
-    required this.onGetAiExplanation,
-    required this.targetLanguage,
-    required this.nativeLanguage,
-    required this.currentStatus,
-    required this.onUpdateStatus,
-    required this.onClose,
-  });
-
-  @override
-  State<FullscreenTranslationCard> createState() =>
-      _FullscreenTranslationCardState();
-}
-
-class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
-  String _translationText = "Loading...";
-  String? _aiText;
-  bool _isAiLoading = false;
-  final FlutterTts _cardTts = FlutterTts();
-  Offset _position = const Offset(100, 50); // Initial position
-  int _selectedTabIndex = 0;
-  bool _isExpanded = false;
-  WebViewController? _webViewController;
-  bool _isLoadingWeb = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initTts();
-    _loadCombinedTranslations();
-  }
-
-  void _initTts() async {
-    await _cardTts.setLanguage(widget.targetLanguage);
-    await _cardTts.setSpeechRate(0.5);
-  }
-
-  @override
-  void dispose() {
-    _cardTts.stop();
-    super.dispose();
-  }
-
-  Future<void> _loadCombinedTranslations() async {
-    final googleFuture = widget.translationFuture;
-    final myMemoryFuture = _fetchMyMemoryInternal();
-
-    String googleResult = "";
-    try {
-      googleResult = await googleFuture;
-    } catch (_) {}
-
-    String myMemoryResult = "";
-    try {
-      myMemoryResult = await myMemoryFuture;
-    } catch (_) {}
-
-    String combined = "";
-    bool myMemoryValid =
-        myMemoryResult.isNotEmpty &&
-        !myMemoryResult.startsWith("Error") &&
-        !myMemoryResult.startsWith("No results");
-    bool isPhrase = widget.originalText.trim().contains(' ');
-
-    if (isPhrase) {
-      if (googleResult.isNotEmpty) {
-        combined = googleResult;
-        if (myMemoryValid &&
-            myMemoryResult.trim().toLowerCase() !=
-                googleResult.trim().toLowerCase()) {
-          combined += "\n\n[Alternative]\n$myMemoryResult";
-        }
-      } else if (myMemoryValid) {
-        combined = myMemoryResult;
-      }
-    } else {
-      if (myMemoryValid) combined = myMemoryResult;
-      if (googleResult.isNotEmpty) {
-        if (combined.isEmpty)
-          combined = googleResult;
-        else if (combined.trim().toLowerCase() !=
-            googleResult.trim().toLowerCase()) {
-          combined += "\n\n[Google]\n$googleResult";
-        }
-      }
-    }
-    if (mounted) {
-      setState(() {
-        _translationText = combined.isNotEmpty
-            ? combined
-            : "Translation not found.";
-      });
-    }
-  }
-
-  Future<String> _fetchMyMemoryInternal() async {
-    try {
-      final src = LanguageHelper.getLangCode(widget.targetLanguage);
-      final tgt = LanguageHelper.getLangCode(widget.nativeLanguage);
-      final cleanText = widget.originalText.replaceAll('\n', ' ').trim();
-      if (cleanText.isEmpty || cleanText.length > 500) return "";
-
-      final queryParameters = {
-        'q': cleanText,
-        'langpair': '$src|$tgt',
-        'mt': '1',
-      };
-      final uri = Uri.https(
-        'api.mymemory.translated.net',
-        '/get',
-        queryParameters,
-      );
-      final response = await http.get(uri).timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['responseStatus'] == 200 && data['responseData'] != null) {
-          String result = data['responseData']['translatedText'] ?? "";
-          if (!result.contains("MYMEMORY WARNING")) return result;
-        }
-      }
-      return "";
-    } catch (e) {
-      return "";
-    }
-  }
-
-  void _onTabSelected(int index) {
-    setState(() {
-      if (_isExpanded && _selectedTabIndex == index) {
-        _isExpanded = false;
-        _webViewController = null;
-      } else {
-        _selectedTabIndex = index;
-        _isExpanded = true;
-        if (index == 0 && _aiText == null && !_isAiLoading) {
-          _fetchAiExplanation();
-        }
-        if (index > 1)
-          _initializeWebView(index);
-        else
-          _webViewController = null;
-      }
-    });
-  }
-
-  Future<void> _fetchAiExplanation() async {
-    setState(() => _isAiLoading = true);
-    try {
-      final result = await widget.onGetAiExplanation();
-      if (mounted) setState(() => _aiText = result ?? "No explanation.");
-    } catch (e) {
-      if (mounted) setState(() => _aiText = "Error: $e");
-    } finally {
-      if (mounted) setState(() => _isAiLoading = false);
-    }
-  }
-
-  void _initializeWebView(int index) {
-    setState(() => _isLoadingWeb = true);
-    final src = LanguageHelper.getLangCode(widget.targetLanguage);
-    final tgt = LanguageHelper.getLangCode(widget.nativeLanguage);
-    final word = Uri.encodeComponent(widget.originalText);
-    String url = "";
-    if (index == 2) url = "https://www.wordreference.com/${src}en/$word";
-    if (index == 3) url = "https://glosbe.com/$src/$tgt/$word";
-    if (index == 4)
-      url = "https://context.reverso.net/translation/$src-$tgt/$word";
-
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0xFF1C1C1E))
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (_) {
-            if (mounted) setState(() => _isLoadingWeb = false);
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(url));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final flag = LanguageHelper.getFlagEmoji(widget.nativeLanguage);
-    final size = MediaQuery.of(context).size;
-    final width = _isExpanded ? size.width * 0.8 : 400.0;
-    final height = _isExpanded ? size.height * 0.8 : null;
-
-    return Positioned(
-      left: _position.dx,
-      top: _position.dy,
-      child: GestureDetector(
-        onPanUpdate: (details) {
-          setState(() {
-            _position += details.delta;
-          });
-        },
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            width: width,
-            height: height,
-            constraints: BoxConstraints(maxHeight: size.height * 0.9),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1E),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white10),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.5),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.volume_up, color: Colors.blue),
-                        onPressed: () => _cardTts.speak(widget.originalText),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          widget.originalText,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.grey),
-                        onPressed: widget.onClose,
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(color: Colors.white10, height: 1),
-
-                // Body
-                _isExpanded
-                    ? Expanded(child: _buildBodyContent(flag))
-                    : Flexible(child: _buildBodyContent(flag)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBodyContent(String flag) {
-    return SingleChildScrollView(
-      physics: const ClampingScrollPhysics(),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _translationText,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          color: Colors.white70,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(flag, style: const TextStyle(fontSize: 20)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildRankButton("New", 0, Colors.blue),
-                    _buildRankButton("1", 1, const Color(0xFFFBC02D)),
-                    _buildRankButton("2", 2, const Color(0xFFFFA726)),
-                    _buildRankButton("3", 3, const Color(0xFFF57C00)),
-                    _buildRankButton("4", 4, const Color(0xFFEF5350)),
-                    _buildRankButton("Known", 5, Colors.green),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildTabChip("AI", 0),
-                      const SizedBox(width: 8),
-                      _buildTabChip("WordRef", 2),
-                      const SizedBox(width: 8),
-                      _buildTabChip("Glosbe", 3),
-                      const SizedBox(width: 8),
-                      _buildTabChip("Reverso", 4),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_isExpanded)
-            Container(
-              height: 300,
-              width: double.infinity,
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.05)),
-              child: _buildExpandedContent(),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExpandedContent() {
-    if (_selectedTabIndex == 0) {
-      if (_isAiLoading) return const Center(child: CircularProgressIndicator());
-      if (_aiText != null) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: GeminiFormattedText(text: _aiText!),
-        );
-      }
-      return const Center(
-        child: Text(
-          "Tap AI tab to load.",
-          style: TextStyle(color: Colors.grey),
-        ),
-      );
-    }
-    if (_webViewController != null) {
-      return Stack(
-        children: [
-          WebViewWidget(controller: _webViewController!),
-          if (_isLoadingWeb) const Center(child: CircularProgressIndicator()),
-        ],
-      );
-    }
-    return const SizedBox.shrink();
-  }
-
-  Widget _buildRankButton(String label, int status, Color color) {
-    final isActive =
-        (widget.currentStatus == 0 ? 0 : widget.currentStatus) == status;
-    return GestureDetector(
-      onTap: () => widget.onUpdateStatus(status, _translationText),
-      child: Container(
-        width: 40,
-        height: 35,
-        decoration: BoxDecoration(
-          color: isActive ? color : color.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isActive ? Colors.transparent : color.withOpacity(0.5),
-            width: 1.5,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.white : color,
-            fontWeight: FontWeight.bold,
-            fontSize: 10,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabChip(String label, int index) {
-    final isSelected = _isExpanded && _selectedTabIndex == index;
-    return GestureDetector(
-      onTap: () => _onTabSelected(index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.blue : const Color(0xFF2C2C2E),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.white70,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
           ),
         ),
       ),
