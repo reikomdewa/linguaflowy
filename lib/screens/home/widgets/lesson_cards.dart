@@ -62,6 +62,14 @@ class VideoLessonCard extends StatelessWidget {
                                     color: Colors.blue.withOpacity(0.5),
                                   ),
                                 )
+                              : (lesson.type == 'audio')
+                              ? const Center(
+                                  child: Icon(
+                                    Icons.music_note,
+                                    size: 64,
+                                    color: Colors.grey,
+                                  ),
+                                )
                               : const Center(
                                   child: Icon(
                                     Icons.play_circle,
