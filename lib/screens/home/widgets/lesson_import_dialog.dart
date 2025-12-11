@@ -6,14 +6,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 
 // --- MEDIA KIT ---
-import 'package:media_kit/media_kit.dart'; 
+import 'package:media_kit/media_kit.dart';
 
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/transcript_line.dart';
 import 'package:linguaflow/services/lesson_service.dart';
 import 'package:linguaflow/services/web_scraper_service.dart';
-import 'package:linguaflow/utils/subtitle_parser.dart'; 
+import 'package:linguaflow/utils/subtitle_parser.dart';
 
 class LessonImportDialog {
   static void show(
@@ -28,7 +28,8 @@ class LessonImportDialog {
     final lessonBloc = context.read<LessonBloc>();
     final lessonService = context.read<LessonService>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fullLangName = languageNames[currentLanguage] ?? currentLanguage.toUpperCase();
+    final fullLangName =
+        languageNames[currentLanguage] ?? currentLanguage.toUpperCase();
 
     showDialog(
       context: context,
@@ -77,34 +78,39 @@ class _ImportDialogContent extends StatefulWidget {
   State<_ImportDialogContent> createState() => _ImportDialogContentState();
 }
 
-class _ImportDialogContentState extends State<_ImportDialogContent> with SingleTickerProviderStateMixin {
+class _ImportDialogContentState extends State<_ImportDialogContent>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  
+
   // Text/Web Controllers
   late TextEditingController _titleController;
   late TextEditingController _contentController;
   final _webUrlController = TextEditingController();
 
   // Media Controllers
-  final _mediaUrlController = TextEditingController(); 
-  File? _selectedMediaFile; 
+  final _mediaUrlController = TextEditingController();
+  File? _selectedMediaFile;
   File? _selectedSubtitleFile;
-  
-  String? _previewSubtitleText; 
-  
+
+  String? _previewSubtitleText;
+
   bool _isLoading = false;
   String? _errorMsg;
-  String? _mediaWarningMsg; 
+  String? _mediaWarningMsg;
 
   @override
   void initState() {
     super.initState();
     // Ensure MediaKit is initialized
-    try { MediaKit.ensureInitialized(); } catch(_) {} 
-    
+    try {
+      MediaKit.ensureInitialized();
+    } catch (_) {}
+
     _tabController = TabController(length: 2, vsync: this);
     _titleController = TextEditingController(text: widget.initialTitle ?? '');
-    _contentController = TextEditingController(text: widget.initialContent ?? '');
+    _contentController = TextEditingController(
+      text: widget.initialContent ?? '',
+    );
     _mediaUrlController.addListener(_checkYoutubeLink);
   }
 
@@ -122,10 +128,12 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
     final text = _mediaUrlController.text.toLowerCase();
     if (text.contains('youtube.com') || text.contains('youtu.be')) {
       setState(() {
-        _mediaWarningMsg = "YouTube detected. Use downsub.com to get .srt subtitles.";
+        _mediaWarningMsg =
+            "YouTube detected. Use downsub.com to get .srt subtitles.";
       });
     } else {
-      if (_mediaWarningMsg != null && _mediaWarningMsg!.contains('downsub.com')) {
+      if (_mediaWarningMsg != null &&
+          _mediaWarningMsg!.contains('downsub.com')) {
         setState(() => _mediaWarningMsg = null);
       }
     }
@@ -162,17 +170,29 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
   Future<void> _pickMediaFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp4', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'm4a', 'aac', 'flac'],
+      allowedExtensions: [
+        'mp4',
+        'mov',
+        'avi',
+        'mkv',
+        'mp3',
+        'wav',
+        'm4a',
+        'aac',
+        'flac',
+      ],
     );
 
     if (result != null && result.files.single.path != null) {
       setState(() {
         _selectedMediaFile = File(result.files.single.path!);
-        _mediaUrlController.clear(); 
+        _mediaUrlController.clear();
         _mediaWarningMsg = null;
-        
+
         if (_titleController.text.isEmpty) {
-          _titleController.text = path.basenameWithoutExtension(_selectedMediaFile!.path);
+          _titleController.text = path.basenameWithoutExtension(
+            _selectedMediaFile!.path,
+          );
         }
       });
       _validateDuration();
@@ -187,11 +207,11 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
 
     if (result != null && result.files.single.path != null) {
       final file = File(result.files.single.path!);
-      
+
       try {
         final content = await file.readAsString();
         final cleanText = _extractTextNaive(content);
-        
+
         setState(() {
           _selectedSubtitleFile = file;
           _previewSubtitleText = cleanText;
@@ -207,13 +227,13 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
   Future<void> _validateDuration() async {
     if (_selectedMediaFile == null || _selectedSubtitleFile == null) return;
     setState(() => _isLoading = true);
-    
+
     try {
       final player = Player();
-      
+
       // Open file (Audio or Video)
       await player.open(Media(_selectedMediaFile!.path), play: false);
-      
+
       // FIX: Wait for duration to populate (Audio files can be slow to read headers)
       int retries = 0;
       while (player.state.duration == Duration.zero && retries < 10) {
@@ -232,7 +252,8 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
         final diff = (mediaDuration.inSeconds - lastTimestamp.inSeconds).abs();
         if (diff > 20) {
           setState(() {
-            _mediaWarningMsg = "Warning: Subtitle length (${_formatDuration(lastTimestamp)}) differs from media (${_formatDuration(mediaDuration)}).";
+            _mediaWarningMsg =
+                "Warning: Subtitle length (${_formatDuration(lastTimestamp)}) differs from media (${_formatDuration(mediaDuration)}).";
           });
         } else {
           setState(() => _mediaWarningMsg = null);
@@ -277,20 +298,21 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
       try {
         // 1. Prepare Storage
         final appDir = await getApplicationDocumentsDirectory();
-        final String dirPath = '${appDir.path}/lessons/${DateTime.now().millisecondsSinceEpoch}';
+        final String dirPath =
+            '${appDir.path}/lessons/${DateTime.now().millisecondsSinceEpoch}';
         await Directory(dirPath).create(recursive: true);
 
         // 2. Handle Media File (Copy)
         if (_selectedMediaFile != null) {
           final ext = path.extension(_selectedMediaFile!.path).toLowerCase();
-          
+
           // Audio vs Video detection
           if (['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg'].contains(ext)) {
-            type = "video";
+            type = "audio";
           } else {
             type = "video";
           }
-          
+
           final String newMediaPath = '$dirPath/media$ext';
           await _selectedMediaFile!.copy(newMediaPath);
           localMediaPath = newMediaPath;
@@ -302,14 +324,15 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
         }
 
         // 3. Handle Subtitle File (Copy)
-        final String newSubPath = '$dirPath/subs${path.extension(_selectedSubtitleFile!.path)}';
+        final String newSubPath =
+            '$dirPath/subs${path.extension(_selectedSubtitleFile!.path)}';
         await _selectedSubtitleFile!.copy(newSubPath);
         localSubtitlePath = newSubPath;
 
         // 4. Parse Subtitles for Lesson Content
         try {
           finalTranscript = await SubtitleParser.parseFile(newSubPath);
-          
+
           if (finalTranscript.isNotEmpty) {
             finalContent = finalTranscript.map((t) => t.text).join(" ");
           } else {
@@ -320,7 +343,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
           // Fallback to raw text if parsing fails, don't block import
           finalContent = await _selectedSubtitleFile!.readAsString();
         }
-
       } catch (e) {
         // CATCH FILE COPY ERRORS
         if (mounted) {
@@ -335,14 +357,14 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
 
     final sentences = widget.lessonService.splitIntoSentences(finalContent);
 
-     final lesson = LessonModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(), 
+    final lesson = LessonModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
       userId: widget.userId,
       title: _titleController.text,
       language: widget.currentLanguage,
       content: finalContent,
       sentences: sentences,
-      transcript: finalTranscript, 
+      transcript: finalTranscript,
       createdAt: DateTime.now(),
       progress: 0,
       isFavorite: widget.isFavoriteByDefault,
@@ -353,7 +375,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
     );
 
     widget.lessonBloc.add(LessonCreateRequested(lesson));
-    
+
     if (mounted) {
       setState(() => _isLoading = false);
       Navigator.pop(context);
@@ -369,7 +391,10 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
         children: [
           Text(
             'Create Lesson (${widget.fullLangName})',
-            style: TextStyle(color: widget.isDark ? Colors.white : Colors.black, fontSize: 18),
+            style: TextStyle(
+              color: widget.isDark ? Colors.white : Colors.black,
+              fontSize: 18,
+            ),
           ),
           const SizedBox(height: 10),
           TabBar(
@@ -410,10 +435,12 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildMediaSection(),
-                   const SizedBox(height: 16),
-                   TextField(
+                  const SizedBox(height: 16),
+                  TextField(
                     controller: _titleController,
-                    style: TextStyle(color: widget.isDark ? Colors.white : Colors.black),
+                    style: TextStyle(
+                      color: widget.isDark ? Colors.white : Colors.black,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'Lesson Title',
                       border: OutlineInputBorder(),
@@ -432,9 +459,13 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _createLesson,
-          child: _isLoading 
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-            : const Text('Create'),
+          child: _isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Create'),
         ),
       ],
     );
@@ -445,25 +476,40 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: widget.isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
+        color: widget.isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Import from Web", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue)),
+          const Text(
+            "Import from Web",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.blue,
+            ),
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _webUrlController,
-                  style: TextStyle(color: widget.isDark ? Colors.white : Colors.black, fontSize: 13),
+                  style: TextStyle(
+                    color: widget.isDark ? Colors.white : Colors.black,
+                    fontSize: 13,
+                  ),
                   decoration: const InputDecoration(
                     hintText: 'Paste URL...',
                     isDense: true,
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 12,
+                    ),
                   ),
                 ),
               ),
@@ -477,7 +523,10 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
           if (_errorMsg != null && _tabController.index == 0)
             Padding(
               padding: const EdgeInsets.only(top: 4.0),
-              child: Text(_errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 11)),
+              child: Text(
+                _errorMsg!,
+                style: const TextStyle(color: Colors.red, fontSize: 11),
+              ),
             ),
         ],
       ),
@@ -490,13 +539,19 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
         TextField(
           controller: _titleController,
           style: TextStyle(color: widget.isDark ? Colors.white : Colors.black),
-          decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: 'Title',
+            border: OutlineInputBorder(),
+          ),
         ),
         const SizedBox(height: 16),
         TextField(
           controller: _contentController,
           style: TextStyle(color: widget.isDark ? Colors.white : Colors.black),
-          decoration: const InputDecoration(labelText: 'Content', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: 'Content',
+            border: OutlineInputBorder(),
+          ),
           maxLines: 10,
           minLines: 4,
         ),
@@ -508,23 +563,39 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Media Source", style: TextStyle(color: widget.isDark ? Colors.grey : Colors.black87, fontWeight: FontWeight.bold)),
+        Text(
+          "Media Source",
+          style: TextStyle(
+            color: widget.isDark ? Colors.grey : Colors.black87,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 8),
         TextField(
           controller: _mediaUrlController,
-          enabled: _selectedMediaFile == null, 
+          enabled: _selectedMediaFile == null,
           style: TextStyle(color: widget.isDark ? Colors.white : Colors.black),
           decoration: InputDecoration(
             hintText: 'Paste YouTube URL...',
             prefixIcon: const Icon(Icons.link),
             border: const OutlineInputBorder(),
-            suffixIcon: _mediaUrlController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () => _mediaUrlController.clear()) : null,
+            suffixIcon: _mediaUrlController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => _mediaUrlController.clear(),
+                  )
+                : null,
           ),
         ),
         const SizedBox(height: 10),
-        const Center(child: Text("- OR -", style: TextStyle(color: Colors.grey, fontSize: 12))),
+        const Center(
+          child: Text(
+            "- OR -",
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+        ),
         const SizedBox(height: 10),
-        
+
         // File Pickers
         Container(
           width: double.infinity,
@@ -540,24 +611,55 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
                   children: [
                     const Icon(Icons.check_circle, color: Colors.green),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(path.basename(_selectedMediaFile!.path), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: widget.isDark ? Colors.white : Colors.black))),
-                    IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() { _selectedMediaFile = null; _mediaWarningMsg = null; }))
+                    Expanded(
+                      child: Text(
+                        path.basename(_selectedMediaFile!.path),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.isDark ? Colors.white : Colors.black,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => setState(() {
+                        _selectedMediaFile = null;
+                        _mediaWarningMsg = null;
+                      }),
+                    ),
                   ],
                 ),
               ] else ...[
-                 OutlinedButton.icon(onPressed: _mediaUrlController.text.isEmpty ? _pickMediaFile : null, icon: const Icon(Icons.perm_media), label: const Text("Select Video/Audio File")),
-              ]
+                OutlinedButton.icon(
+                  onPressed: _mediaUrlController.text.isEmpty
+                      ? _pickMediaFile
+                      : null,
+                  icon: const Icon(Icons.perm_media),
+                  label: const Text("Select Video/Audio File"),
+                ),
+              ],
             ],
           ),
         ),
-        
+
         const SizedBox(height: 20),
-        Text("Subtitles (.srt / .vtt)", style: TextStyle(color: widget.isDark ? Colors.grey : Colors.black87, fontWeight: FontWeight.bold)),
+        Text(
+          "Subtitles (.srt / .vtt)",
+          style: TextStyle(
+            color: widget.isDark ? Colors.grey : Colors.black87,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(border: Border.all(color: Colors.grey.withOpacity(0.5)), borderRadius: BorderRadius.circular(8), color: widget.isDark ? Colors.black12 : Colors.grey.shade50),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.withOpacity(0.5)),
+            borderRadius: BorderRadius.circular(8),
+            color: widget.isDark ? Colors.black12 : Colors.grey.shade50,
+          ),
           child: Column(
             children: [
               if (_selectedSubtitleFile != null) ...[
@@ -565,15 +667,37 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
                   children: [
                     const Icon(Icons.subtitles, color: Colors.blue),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(path.basename(_selectedSubtitleFile!.path), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: widget.isDark ? Colors.white : Colors.black))),
-                    IconButton(icon: const Icon(Icons.edit, color: Colors.grey), onPressed: _pickSubtitleFile)
+                    Expanded(
+                      child: Text(
+                        path.basename(_selectedSubtitleFile!.path),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.isDark ? Colors.white : Colors.black,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.grey),
+                      onPressed: _pickSubtitleFile,
+                    ),
                   ],
                 ),
                 if (_previewSubtitleText != null)
-                   Padding(padding: const EdgeInsets.only(top: 8.0), child: Text("Preview: ${_previewSubtitleText!.length} chars found.", style: const TextStyle(fontSize: 11, color: Colors.green))),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      "Preview: ${_previewSubtitleText!.length} chars found.",
+                      style: const TextStyle(fontSize: 11, color: Colors.green),
+                    ),
+                  ),
               ] else ...[
-                 OutlinedButton.icon(onPressed: _pickSubtitleFile, icon: const Icon(Icons.closed_caption), label: const Text("Upload Subtitle File")),
-              ]
+                OutlinedButton.icon(
+                  onPressed: _pickSubtitleFile,
+                  icon: const Icon(Icons.closed_caption),
+                  label: const Text("Upload Subtitle File"),
+                ),
+              ],
             ],
           ),
         ),
@@ -582,32 +706,56 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
           Container(
             margin: const EdgeInsets.only(top: 15),
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), border: Border.all(color: Colors.orange.withOpacity(0.5)), borderRadius: BorderRadius.circular(4)),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              border: Border.all(color: Colors.orange.withOpacity(0.5)),
+              borderRadius: BorderRadius.circular(4),
+            ),
             child: Row(
               children: [
                 const Icon(Icons.warning_amber_rounded, color: Colors.orange),
                 const SizedBox(width: 10),
-                Expanded(child: Text(_mediaWarningMsg!, style: TextStyle(fontSize: 12, color: widget.isDark ? Colors.orange.shade200 : Colors.orange.shade900))),
+                Expanded(
+                  child: Text(
+                    _mediaWarningMsg!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: widget.isDark
+                          ? Colors.orange.shade200
+                          : Colors.orange.shade900,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-          
+
         if (_errorMsg != null && _tabController.index == 1)
-          Padding(padding: const EdgeInsets.only(top: 10.0), child: Text(_errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 13))),
+          Padding(
+            padding: const EdgeInsets.only(top: 10.0),
+            child: Text(
+              _errorMsg!,
+              style: const TextStyle(color: Colors.red, fontSize: 13),
+            ),
+          ),
       ],
     );
   }
 
   // --- Helpers ---
-  String _formatDuration(Duration d) => "${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
+  String _formatDuration(Duration d) =>
+      "${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
 
   String _extractTextNaive(String fileContent) {
     final lines = fileContent.split('\n');
     final buffer = StringBuffer();
-    final timePattern = RegExp(r'\d{2}:\d{2}:\d{2}'); 
+    final timePattern = RegExp(r'\d{2}:\d{2}:\d{2}');
     for (var line in lines) {
       String l = line.trim();
-      if (l.isEmpty || int.tryParse(l) != null || (l.contains('-->') && timePattern.hasMatch(l))) continue;
+      if (l.isEmpty ||
+          int.tryParse(l) != null ||
+          (l.contains('-->') && timePattern.hasMatch(l)))
+        continue;
       buffer.writeln(l.replaceAll(RegExp(r'<[^>]*>'), ''));
     }
     return buffer.toString();
@@ -618,11 +766,11 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
     final matches = regex.allMatches(fileContent);
     if (matches.isEmpty) return Duration.zero;
     final lastMatch = matches.last;
-    
+
     int h = lastMatch.group(1) != null ? int.parse(lastMatch.group(1)!) : 0;
     int m = int.parse(lastMatch.group(2)!);
     int s = int.parse(lastMatch.group(3)!);
-    
+
     return Duration(hours: h, minutes: m, seconds: s);
   }
 }
