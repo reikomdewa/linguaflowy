@@ -12,6 +12,7 @@ import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/home/widgets/audio_section.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/screens/home/widgets/home_dialogs.dart'; 
+import 'package:linguaflow/screens/home/widgets/lesson_import_dialog.dart'; // NEW IMPORT
 import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/home_sections.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
@@ -34,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- SHARE LISTENER SUBSCRIPTION ---
   late StreamSubscription _intentDataStreamSubscription; 
-  bool _initialIntentHandled = false; // Prevents duplicate handling on re-builds
+  bool _initialIntentHandled = false; 
 
   @override
   void initState() {
@@ -68,10 +69,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- SHARE LISTENER LOGIC ---
   void _initShareListener() {
     // 1. Listen for sharing while app is running (in memory / background)
-    // This stream stays active as long as the screen is alive.
     _intentDataStreamSubscription = ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> value) {
       if (value.isNotEmpty && value.first.path.isNotEmpty) {
-        // Shared while app was already open
         _handleSharedContent(value.first.path); 
       }
     }, onError: (err) {
@@ -79,17 +78,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     // 2. Handle initial share (Cold Start)
-    // We wrap this in addPostFrameCallback to ensure the widget tree is built 
-    // before we try to show a dialog.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_initialIntentHandled) return;
 
       ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> value) {
         if (value.isNotEmpty && value.first.path.isNotEmpty) {
-             _initialIntentHandled = true; // Mark as handled
+             _initialIntentHandled = true; 
              _handleSharedContent(value.first.path);
-             
-             // Crucial: Clear the intent so it doesn't reappear on restart (if supported by OS/Plugin)
              ReceiveSharingIntent.instance.reset(); 
         }
       });
@@ -127,8 +122,6 @@ class _HomeScreenState extends State<HomeScreen> {
         initialTitle = data['title']!;
         initialContent = data['content']!;
       } else {
-        // Fallback: If scraper fails, maybe it's just a raw link user wants to save?
-        // Or we can pre-fill content with the URL.
         initialContent = sharedText; 
       }
     } else {
@@ -137,8 +130,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
-    // Open existing Create Dialog
-    HomeDialogs.showCreateLessonDialog(
+    // USE THE NEW SEPARATED DIALOG CLASS HERE
+    LessonImportDialog.show(
       context,
       user.id,
       user.currentLanguage,
@@ -272,7 +265,8 @@ class _HomeScreenState extends State<HomeScreen> {
             HomeUtils.buildFloatingButton(
               label: "Import",
               icon: Icons.add_rounded,
-              onTap: () => HomeDialogs.showCreateLessonDialog(
+              // USE THE NEW SEPARATED DIALOG CLASS HERE TOO
+              onTap: () => LessonImportDialog.show(
                 context,
                 user.id,
                 user.currentLanguage,

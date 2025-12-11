@@ -3,11 +3,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/services/lesson_service.dart';
-import 'package:linguaflow/services/web_scraper_service.dart'; // Ensure this is imported
 import 'package:linguaflow/utils/constants.dart';
 
 class HomeDialogs {
+  
+  // --- STATS DIALOG ---
   static void showStatsDialog(
     BuildContext context,
     int knownWords,
@@ -162,20 +162,18 @@ class HomeDialogs {
     );
   }
 
+  // --- LESSON OPTIONS DIALOG ---
   static void showLessonOptions(
       BuildContext context, LessonModel lesson, bool isDark) {
     
-    // 1. DEFINE VARIABLES AT THE TOP LEVEL
     final authState = context.read<AuthBloc>().state;
     String currentUserId = ''; 
     bool canDelete = false;
 
-    // 2. CHECK PERMISSIONS
     if (authState is AuthAuthenticated) {
       final user = authState.user;
       currentUserId = user.id; 
 
-      // Check permissions
       final bool isCreator = (user.id == lesson.userId);
       final bool isAdmin = AppConstants.isAdmin(user.email); 
 
@@ -200,7 +198,6 @@ class HomeDialogs {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle Bar
             Center(
               child: Container(
                 width: 40,
@@ -213,7 +210,6 @@ class HomeDialogs {
               ),
             ),
 
-            // --- FAVORITE OPTION ---
             ListTile(
               leading: Container(
                 padding: const EdgeInsets.all(8),
@@ -240,7 +236,6 @@ class HomeDialogs {
                 style: const TextStyle(color: Colors.grey),
               ),
               onTap: () {
-                // Logic: If system lesson, assign to current user on favorite
                 final newOwnerId = lesson.userId.isEmpty ? currentUserId : lesson.userId;
 
                 final updatedLesson = lesson.copyWith(
@@ -253,7 +248,6 @@ class HomeDialogs {
               },
             ),
 
-            // --- DELETE OPTION (CONDITIONAL) ---
             if (canDelete) ...[
               Divider(color: Colors.grey[800]),
               ListTile(
@@ -298,188 +292,6 @@ class HomeDialogs {
           ],
         ),
       ),
-    );
-  }
-
-  static void showCreateLessonDialog(
-    BuildContext context,
-    String userId,
-    String currentLanguage,
-    Map<String, String> languageNames, {
-    required bool isFavoriteByDefault,
-    String? initialTitle,
-    String? initialContent,
-  }) {
-    // We initialize controllers outside the builder so they persist
-    final titleController = TextEditingController(text: initialTitle ?? '');
-    final contentController = TextEditingController(text: initialContent ?? '');
-    final urlController = TextEditingController(); // New controller for URL
-    
-    final lessonBloc = context.read<LessonBloc>();
-    final lessonService = context.read<LessonService>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fullLangName = languageNames[currentLanguage] ?? currentLanguage.toUpperCase();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false, // Prevent closing while loading
-      builder: (dialogContext) {
-        // StatefulBuilder allows us to update the UI (loading spinner) inside the dialog
-        return StatefulBuilder(
-          builder: (context, setState) {
-            bool isLoading = false;
-            String? errorMsg;
-
-            Future<void> handleUrlImport() async {
-              final url = urlController.text.trim();
-              if (url.isEmpty) return;
-
-              // Hide keyboard
-              FocusScope.of(context).unfocus();
-
-              setState(() {
-                isLoading = true;
-                errorMsg = null;
-              });
-
-              final data = await WebScraperService.scrapeUrl(url);
-
-              if (context.mounted) {
-                setState(() {
-                  isLoading = false;
-                  if (data != null) {
-                    // Auto-fill the fields
-                    titleController.text = data['title'] ?? "";
-                    contentController.text = data['content'] ?? "";
-                    urlController.clear(); // Clear URL field to indicate success
-                  } else {
-                    errorMsg = "Could not extract text. Check the URL.";
-                  }
-                });
-              }
-            }
-
-            return AlertDialog(
-              backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-              title: Text(
-                'Create Lesson ($fullLangName)',
-                style: TextStyle(color: isDark ? Colors.white : Colors.black),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // --- 1. URL IMPORT SECTION ---
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Import from Web",
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: urlController,
-                                  style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 13),
-                                  decoration: const InputDecoration(
-                                    hintText: 'Paste URL here...',
-                                    isDense: true,
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                onPressed: isLoading ? null : handleUrlImport,
-                                icon: isLoading 
-                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
-                                  : const Icon(Icons.download_rounded, color: Colors.blue),
-                                tooltip: "Fetch Content",
-                              ),
-                            ],
-                          ),
-                          if (errorMsg != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: Text(errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 11)),
-                            ),
-                        ],
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    const Divider(),
-                    const SizedBox(height: 16),
-
-                    // --- 2. STANDARD FIELDS ---
-                    TextField(
-                      controller: titleController,
-                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                      decoration: const InputDecoration(
-                        labelText: 'Title',
-                        border: OutlineInputBorder(),
-                        labelStyle: TextStyle(color: Colors.grey),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: contentController,
-                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                      decoration: const InputDecoration(
-                        labelText: 'Content',
-                        border: OutlineInputBorder(),
-                        labelStyle: TextStyle(color: Colors.grey),
-                        alignLabelWithHint: true,
-                      ),
-                      maxLines: 10,
-                      minLines: 4,
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: isLoading ? null : () {
-                    if (titleController.text.isNotEmpty && contentController.text.isNotEmpty) {
-                      final sentences = lessonService.splitIntoSentences(contentController.text);
-                      final lesson = LessonModel(
-                        id: '',
-                        userId: userId,
-                        title: titleController.text,
-                        language: currentLanguage,
-                        content: contentController.text,
-                        sentences: sentences,
-                        createdAt: DateTime.now(),
-                        progress: 0,
-                        isFavorite: isFavoriteByDefault,
-                        type: 'text',
-                      );
-                      lessonBloc.add(LessonCreateRequested(lesson));
-                      Navigator.pop(dialogContext);
-                    }
-                  },
-                  child: const Text('Create'),
-                ),
-              ],
-            );
-          },
-        );
-      },
     );
   }
 }

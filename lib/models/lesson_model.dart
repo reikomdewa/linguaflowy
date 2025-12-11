@@ -14,10 +14,12 @@ class LessonModel {
   final bool isFavorite;
   final String type; // 'text', 'video', 'audio'
   final String difficulty;
-  final String? videoUrl;
   
-  // --- ADDED FIELD ---
-  // This tells the UI if the file is from Assets (true) or Firestore (false)
+  // Media Fields
+  final String? videoUrl;
+  final String? subtitleUrl; // <--- Added this to store the .srt/.vtt path
+
+  // Internal State
   final bool isLocal; 
 
   LessonModel({
@@ -35,7 +37,7 @@ class LessonModel {
     this.type = 'text',
     this.difficulty = 'intermediate',
     this.videoUrl,
-    // Default to false so Firestore lessons don't need this field explicitly
+    this.subtitleUrl,
     this.isLocal = false, 
   });
 
@@ -65,8 +67,10 @@ class LessonModel {
       type: map['type']?.toString() ?? 'text',
       difficulty: map['difficulty']?.toString() ?? 'intermediate',
       videoUrl: map['videoUrl']?.toString(),
-      // We don't read isLocal from Map usually, as it's a runtime flag.
-      // It defaults to false in the constructor.
+      subtitleUrl: map['subtitleUrl']?.toString(),
+      // We don't read isLocal from DB Maps usually, as it defaults to false.
+      // If you are storing local lessons in a local DB (sqflite/hive), 
+      // you might want to map this: isLocal: map['isLocal'] == 1 || map['isLocal'] == true
     );
   }
 
@@ -85,12 +89,13 @@ class LessonModel {
       'type': type,
       'difficulty': difficulty,
       'videoUrl': videoUrl,
-      // NOTE: We do NOT save 'isLocal' to the database. 
-      // It is only for the app to know where the file came from.
+      'subtitleUrl': subtitleUrl,
+      // NOTE: We do NOT save 'isLocal' to the remote Firebase database.
+      // However, if you implement a local database (e.g. Hive/SQLite) for offline mode,
+      // you should include 'isLocal': isLocal ? 1 : 0
     };
   }
 
-  // --- UPDATED COPYWITH ---
   LessonModel copyWith({
     String? id,
     String? userId,
@@ -106,7 +111,7 @@ class LessonModel {
     String? type,
     String? difficulty,
     String? videoUrl,
-    // Add isLocal here so the Service can update it
+    String? subtitleUrl,
     bool? isLocal, 
   }) {
     return LessonModel(
@@ -124,7 +129,8 @@ class LessonModel {
       type: type ?? this.type,
       difficulty: difficulty ?? this.difficulty,
       videoUrl: videoUrl ?? this.videoUrl,
-      isLocal: isLocal ?? this.isLocal, // Assign it
+      subtitleUrl: subtitleUrl ?? this.subtitleUrl,
+      isLocal: isLocal ?? this.isLocal, 
     );
   }
 }

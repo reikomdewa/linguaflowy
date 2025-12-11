@@ -13,24 +13,30 @@ class LessonService {
           .orderBy('createdAt', descending: true)
           .get();
 
+      // Note: Firestore lessons are never 'isLocal' by default
       return snapshot.docs
           .map((doc) => LessonModel.fromMap(doc.data(), doc.id))
           .toList();
     } catch (e) {
-      rethrow;
+      // Return empty list on error (offline) instead of crashing
+      print("Firestore Error: $e");
+      return [];
     }
   }
 
   Future<void> createLesson(LessonModel lesson) async {
     try {
-      await _firestore.collection('lessons').add(lesson.toMap());
+      // Ensure we don't upload local paths to server
+      if (lesson.isLocal) return; 
+      
+      await _firestore.collection('lessons').doc(lesson.id).set(lesson.toMap());
     } catch (e) {
       rethrow;
     }
   }
 
   Future<void> updateLesson(LessonModel lesson) async {
-    if (lesson.id.isEmpty) {
+    if (lesson.id.isEmpty || lesson.isLocal) {
       return;
     }
 

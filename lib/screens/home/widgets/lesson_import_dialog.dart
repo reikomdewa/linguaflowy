@@ -1,0 +1,609 @@
+import 'dart:io';
+import 'dart:math';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
+import 'package:video_player/video_player.dart';
+
+import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
+import 'package:linguaflow/models/lesson_model.dart';
+import 'package:linguaflow/models/transcript_line.dart'; // Required for the fix
+import 'package:linguaflow/services/lesson_service.dart';
+import 'package:linguaflow/services/web_scraper_service.dart';
+import 'package:linguaflow/utils/subtitle_parser.dart'; // Required for the fix
+
+class LessonImportDialog {
+  static void show(
+    BuildContext context,
+    String userId,
+    String currentLanguage,
+    Map<String, String> languageNames, {
+    required bool isFavoriteByDefault,
+    String? initialTitle,
+    String? initialContent,
+  }) {
+    final lessonBloc = context.read<LessonBloc>();
+    final lessonService = context.read<LessonService>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fullLangName = languageNames[currentLanguage] ?? currentLanguage.toUpperCase();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return _ImportDialogContent(
+          userId: userId,
+          currentLanguage: currentLanguage,
+          fullLangName: fullLangName,
+          isFavoriteByDefault: isFavoriteByDefault,
+          initialTitle: initialTitle,
+          initialContent: initialContent,
+          lessonBloc: lessonBloc,
+          lessonService: lessonService,
+          isDark: isDark,
+        );
+      },
+    );
+  }
+}
+
+class _ImportDialogContent extends StatefulWidget {
+  final String userId;
+  final String currentLanguage;
+  final String fullLangName;
+  final bool isFavoriteByDefault;
+  final String? initialTitle;
+  final String? initialContent;
+  final LessonBloc lessonBloc;
+  final LessonService lessonService;
+  final bool isDark;
+
+  const _ImportDialogContent({
+    required this.userId,
+    required this.currentLanguage,
+    required this.fullLangName,
+    required this.isFavoriteByDefault,
+    this.initialTitle,
+    this.initialContent,
+    required this.lessonBloc,
+    required this.lessonService,
+    required this.isDark,
+  });
+
+  @override
+  State<_ImportDialogContent> createState() => _ImportDialogContentState();
+}
+
+class _ImportDialogContentState extends State<_ImportDialogContent> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  
+  // Text/Web Controllers
+  late TextEditingController _titleController;
+  late TextEditingController _contentController;
+  final _webUrlController = TextEditingController();
+
+  // Media Controllers
+  final _mediaUrlController = TextEditingController(); 
+  File? _selectedMediaFile; 
+  File? _selectedSubtitleFile;
+  
+  // We use this string just for preview in the UI, but we re-parse for the model later
+  String? _previewSubtitleText; 
+  
+  bool _isLoading = false;
+  String? _errorMsg;
+  String? _mediaWarningMsg; 
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _titleController = TextEditingController(text: widget.initialTitle ?? '');
+    _contentController = TextEditingController(text: widget.initialContent ?? '');
+    _mediaUrlController.addListener(_checkYoutubeLink);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _titleController.dispose();
+    _contentController.dispose();
+    _webUrlController.dispose();
+    _mediaUrlController.dispose();
+    super.dispose();
+  }
+
+  void _checkYoutubeLink() {
+    final text = _mediaUrlController.text.toLowerCase();
+    if (text.contains('youtube.com') || text.contains('youtu.be')) {
+      setState(() {
+        _mediaWarningMsg = "YouTube detected. Use downsub.com to get .srt subtitles.";
+      });
+    } else {
+      if (_mediaWarningMsg != null && _mediaWarningMsg!.contains('downsub.com')) {
+        setState(() => _mediaWarningMsg = null);
+      }
+    }
+  }
+
+  // --- Web Scraper ---
+  Future<void> _handleWebImport() async {
+    final url = _webUrlController.text.trim();
+    if (url.isEmpty) return;
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _isLoading = true;
+      _errorMsg = null;
+    });
+
+    final data = await WebScraperService.scrapeUrl(url);
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        if (data != null) {
+          _titleController.text = data['title'] ?? "";
+          _contentController.text = data['content'] ?? "";
+          _webUrlController.clear();
+        } else {
+          _errorMsg = "Could not extract text. Check the URL.";
+        }
+      });
+    }
+  }
+
+  // --- Local Media Picker ---
+  Future<void> _pickMediaFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp4', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'm4a', 'aac', 'flac'],
+    );
+
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _selectedMediaFile = File(result.files.single.path!);
+        _mediaUrlController.clear(); 
+        _mediaWarningMsg = null;
+        
+        if (_titleController.text.isEmpty) {
+          _titleController.text = path.basenameWithoutExtension(_selectedMediaFile!.path);
+        }
+      });
+      _validateDuration();
+    }
+  }
+
+  Future<void> _pickSubtitleFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['srt', 'vtt'],
+    );
+
+    if (result != null && result.files.single.path != null) {
+      final file = File(result.files.single.path!);
+      
+      // Parse for preview/validation only
+      try {
+        final content = await file.readAsString();
+        final cleanText = _extractTextNaive(content); // Just for UI preview
+        
+        setState(() {
+          _selectedSubtitleFile = file;
+          _previewSubtitleText = cleanText;
+        });
+        _validateDuration();
+      } catch (e) {
+        setState(() => _errorMsg = "Failed to read subtitle file.");
+      }
+    }
+  }
+
+  // --- Validation ---
+  Future<void> _validateDuration() async {
+    if (_selectedMediaFile == null || _selectedSubtitleFile == null) return;
+    setState(() => _isLoading = true);
+    
+    try {
+      final VideoPlayerController vController = VideoPlayerController.file(_selectedMediaFile!);
+      try {
+        await vController.initialize();
+      } catch (e) {
+        await vController.dispose();
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      Duration mediaDuration = vController.value.duration;
+      // 00:00 Fix
+      if (mediaDuration == Duration.zero) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        mediaDuration = vController.value.duration;
+      }
+      await vController.dispose();
+
+      // Simple Naive Parse for Timestamp check
+      final subContent = await _selectedSubtitleFile!.readAsString();
+      final lastTimestamp = _getLastSubtitleTimestamp(subContent);
+
+      if (mediaDuration.inSeconds > 0 && lastTimestamp != Duration.zero) {
+        final diff = (mediaDuration.inSeconds - lastTimestamp.inSeconds).abs();
+        if (diff > 20) {
+          setState(() {
+            _mediaWarningMsg = "Warning: Subtitle length (${_formatDuration(lastTimestamp)}) differs from media (${_formatDuration(mediaDuration)}).";
+          });
+        }
+      }
+    } catch (e) {
+      print("Validation error: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- Creation Logic ---
+  Future<void> _createLesson() async {
+    if (_titleController.text.isEmpty) {
+      setState(() => _errorMsg = "Title is required");
+      return;
+    }
+
+    String finalContent = "";
+    String type = "text";
+    String? localMediaPath;
+    String? localSubtitlePath;
+    List<TranscriptLine> finalTranscript = [];
+
+    if (_tabController.index == 0) {
+      // TEXT TAB
+      finalContent = _contentController.text;
+      if (finalContent.isEmpty) {
+        setState(() => _errorMsg = "Content is required");
+        return;
+      }
+    } else {
+      // MEDIA TAB
+      if (_selectedSubtitleFile == null) {
+        setState(() => _errorMsg = "Subtitle file is required.");
+        return;
+      }
+
+      setState(() => _isLoading = true);
+
+      // 1. Prepare Storage
+      final appDir = await getApplicationDocumentsDirectory();
+      final String dirPath = '${appDir.path}/lessons/${DateTime.now().millisecondsSinceEpoch}';
+      await Directory(dirPath).create(recursive: true);
+
+      // 2. Handle Media File
+      if (_selectedMediaFile != null) {
+        final ext = path.extension(_selectedMediaFile!.path).toLowerCase();
+        type = ['.mp3', '.wav', '.m4a', '.aac', '.flac'].contains(ext) ? "audio" : "video";
+        
+        final String newMediaPath = '$dirPath/media$ext';
+        await _selectedMediaFile!.copy(newMediaPath);
+        localMediaPath = newMediaPath;
+      } else if (_mediaUrlController.text.isNotEmpty) {
+        type = "video"; // YouTube
+        localMediaPath = _mediaUrlController.text;
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMsg = "Media file or URL is required.";
+        });
+        return;
+      }
+
+      // 3. Handle Subtitle File & Parsing
+      final String newSubPath = '$dirPath/subs${path.extension(_selectedSubtitleFile!.path)}';
+      await _selectedSubtitleFile!.copy(newSubPath);
+      localSubtitlePath = newSubPath;
+
+      try {
+        // CRITICAL FIX: Parse subtitles NOW and save them into the model
+        finalTranscript = await SubtitleParser.parseFile(newSubPath);
+        
+        // Generate content from the clean parsed transcript
+        if (finalTranscript.isNotEmpty) {
+          finalContent = finalTranscript.map((t) => t.text).join(" ");
+        } else {
+          // Fallback if parsing returned empty (shouldn't happen with robust parser)
+          finalContent = await _selectedSubtitleFile!.readAsString();
+        }
+      } catch (e) {
+        print("Error parsing transcript during import: $e");
+        finalContent = await _selectedSubtitleFile!.readAsString();
+      }
+    }
+
+    final sentences = widget.lessonService.splitIntoSentences(finalContent);
+
+     final lesson = LessonModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(), 
+      userId: widget.userId,
+      title: _titleController.text,
+      language: widget.currentLanguage,
+      content: finalContent,
+      sentences: sentences,
+      transcript: finalTranscript, // <--- SAVING THE TRANSCRIPT MAP HERE
+      createdAt: DateTime.now(),
+      progress: 0,
+      isFavorite: widget.isFavoriteByDefault,
+      type: type,
+      videoUrl: localMediaPath,
+      subtitleUrl: localSubtitlePath,
+      isLocal: true, // Only save to local JSON
+    );
+
+    widget.lessonBloc.add(LessonCreateRequested(lesson));
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: widget.isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      contentPadding: EdgeInsets.zero,
+      title: Column(
+        children: [
+          Text(
+            'Create Lesson (${widget.fullLangName})',
+            style: TextStyle(color: widget.isDark ? Colors.white : Colors.black, fontSize: 18),
+          ),
+          const SizedBox(height: 10),
+          TabBar(
+            controller: _tabController,
+            labelColor: Colors.blue,
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: Colors.blue,
+            tabs: const [
+              Tab(icon: Icon(Icons.article_outlined), text: "Text"),
+              Tab(icon: Icon(Icons.perm_media_outlined), text: "Media"),
+            ],
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            // TAB 1
+            SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildWebImportSection(),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  _buildStandardFields(),
+                ],
+              ),
+            ),
+            // TAB 2
+            SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildMediaSection(),
+                   const SizedBox(height: 16),
+                   TextField(
+                    controller: _titleController,
+                    style: TextStyle(color: widget.isDark ? Colors.white : Colors.black),
+                    decoration: const InputDecoration(
+                      labelText: 'Lesson Title',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _createLesson,
+          child: _isLoading 
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Text('Create'),
+        ),
+      ],
+    );
+  }
+
+  // --- Widgets ---
+  Widget _buildWebImportSection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: widget.isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Import from Web", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _webUrlController,
+                  style: TextStyle(color: widget.isDark ? Colors.white : Colors.black, fontSize: 13),
+                  decoration: const InputDecoration(
+                    hintText: 'Paste URL...',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _isLoading ? null : _handleWebImport,
+                icon: const Icon(Icons.download_rounded, color: Colors.blue),
+              ),
+            ],
+          ),
+          if (_errorMsg != null && _tabController.index == 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(_errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 11)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStandardFields() {
+    return Column(
+      children: [
+        TextField(
+          controller: _titleController,
+          style: TextStyle(color: widget.isDark ? Colors.white : Colors.black),
+          decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _contentController,
+          style: TextStyle(color: widget.isDark ? Colors.white : Colors.black),
+          decoration: const InputDecoration(labelText: 'Content', border: OutlineInputBorder()),
+          maxLines: 10,
+          minLines: 4,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMediaSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("Media Source", style: TextStyle(color: widget.isDark ? Colors.grey : Colors.black87, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _mediaUrlController,
+          enabled: _selectedMediaFile == null, 
+          style: TextStyle(color: widget.isDark ? Colors.white : Colors.black),
+          decoration: InputDecoration(
+            hintText: 'Paste YouTube URL...',
+            prefixIcon: const Icon(Icons.link),
+            border: const OutlineInputBorder(),
+            suffixIcon: _mediaUrlController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () => _mediaUrlController.clear()) : null,
+          ),
+        ),
+        const SizedBox(height: 10),
+        const Center(child: Text("- OR -", style: TextStyle(color: Colors.grey, fontSize: 12))),
+        const SizedBox(height: 10),
+        
+        // File Pickers
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.withOpacity(0.5)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: [
+              if (_selectedMediaFile != null) ...[
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(path.basename(_selectedMediaFile!.path), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: widget.isDark ? Colors.white : Colors.black))),
+                    IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() { _selectedMediaFile = null; _mediaWarningMsg = null; }))
+                  ],
+                ),
+              ] else ...[
+                 OutlinedButton.icon(onPressed: _mediaUrlController.text.isEmpty ? _pickMediaFile : null, icon: const Icon(Icons.perm_media), label: const Text("Select Video/Audio File")),
+              ]
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+        Text("Subtitles (.srt / .vtt)", style: TextStyle(color: widget.isDark ? Colors.grey : Colors.black87, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(border: Border.all(color: Colors.grey.withOpacity(0.5)), borderRadius: BorderRadius.circular(8), color: widget.isDark ? Colors.black12 : Colors.grey.shade50),
+          child: Column(
+            children: [
+              if (_selectedSubtitleFile != null) ...[
+                Row(
+                  children: [
+                    const Icon(Icons.subtitles, color: Colors.blue),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(path.basename(_selectedSubtitleFile!.path), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: widget.isDark ? Colors.white : Colors.black))),
+                    IconButton(icon: const Icon(Icons.edit, color: Colors.grey), onPressed: _pickSubtitleFile)
+                  ],
+                ),
+                if (_previewSubtitleText != null)
+                   Padding(padding: const EdgeInsets.only(top: 8.0), child: Text("Preview: ${_previewSubtitleText!.length} chars found.", style: const TextStyle(fontSize: 11, color: Colors.green))),
+              ] else ...[
+                 OutlinedButton.icon(onPressed: _pickSubtitleFile, icon: const Icon(Icons.closed_caption), label: const Text("Upload Subtitle File")),
+              ]
+            ],
+          ),
+        ),
+
+        if (_mediaWarningMsg != null)
+          Container(
+            margin: const EdgeInsets.only(top: 15),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), border: Border.all(color: Colors.orange.withOpacity(0.5)), borderRadius: BorderRadius.circular(4)),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                const SizedBox(width: 10),
+                Expanded(child: Text(_mediaWarningMsg!, style: TextStyle(fontSize: 12, color: widget.isDark ? Colors.orange.shade200 : Colors.orange.shade900))),
+              ],
+            ),
+          ),
+          
+        if (_errorMsg != null && _tabController.index == 1)
+          Padding(padding: const EdgeInsets.only(top: 10.0), child: Text(_errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 13))),
+      ],
+    );
+  }
+
+  // --- Helpers ---
+  String _formatDuration(Duration d) => "${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
+
+  String _extractTextNaive(String fileContent) {
+    // Basic preview extraction only
+    final lines = fileContent.split('\n');
+    final buffer = StringBuffer();
+    final timePattern = RegExp(r'\d{2}:\d{2}:\d{2}'); 
+    for (var line in lines) {
+      String l = line.trim();
+      if (l.isEmpty || int.tryParse(l) != null || (l.contains('-->') && timePattern.hasMatch(l))) continue;
+      buffer.writeln(l.replaceAll(RegExp(r'<[^>]*>'), ''));
+    }
+    return buffer.toString();
+  }
+
+  Duration _getLastSubtitleTimestamp(String fileContent) {
+    final regex = RegExp(r'(\d{2}):(\d{2}):(\d{2})[,.](\d{3})');
+    final matches = regex.allMatches(fileContent);
+    if (matches.isEmpty) return Duration.zero;
+    final lastMatch = matches.last;
+    return Duration(hours: int.parse(lastMatch.group(1)!), minutes: int.parse(lastMatch.group(2)!), seconds: int.parse(lastMatch.group(3)!));
+  }
+}
