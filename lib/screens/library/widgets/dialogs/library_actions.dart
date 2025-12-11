@@ -3,7 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/services/lesson_service.dart';
+import 'package:linguaflow/screens/home/widgets/lesson_import_dialog.dart';
+import 'package:linguaflow/utils/language_helper.dart'; // Import your helper
 
 // --- OPTIONS BOTTOM SHEET ---
 void showLessonOptions(BuildContext context, LessonModel lesson, bool isDark) {
@@ -95,93 +96,19 @@ void showLessonOptions(BuildContext context, LessonModel lesson, bool isDark) {
   );
 }
 
-// --- IMPORT DIALOG ---
+// --- IMPORT DIALOG WRAPPER ---
 void showCreateLessonDialog(
   BuildContext context,
   String userId,
   String currentLanguage, {
   required bool isFavoriteByDefault,
 }) {
-  final titleController = TextEditingController();
-  final contentController = TextEditingController();
-
-  final lessonBloc = context.read<LessonBloc>();
-  final lessonService = context.read<LessonService>();
-  final scaffoldMessenger = ScaffoldMessenger.of(context);
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-
-  showDialog(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-      title: Text(
-        'Import Text',
-        style: TextStyle(color: isDark ? Colors.white : Colors.black),
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              style: TextStyle(color: isDark ? Colors.white : Colors.black),
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: contentController,
-              style: TextStyle(color: isDark ? Colors.white : Colors.black),
-              decoration: const InputDecoration(
-                labelText: 'Content',
-                border: OutlineInputBorder(),
-                hintText: 'Paste text here...',
-              ),
-              maxLines: 8,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (titleController.text.isNotEmpty &&
-                contentController.text.isNotEmpty) {
-              final sentences = lessonService.splitIntoSentences(
-                contentController.text,
-              );
-
-              final lesson = LessonModel(
-                id: '', // Repo will handle ID or assign temp
-                userId: userId,
-                title: titleController.text,
-                language: currentLanguage,
-                content: contentController.text,
-                sentences: sentences,
-                createdAt: DateTime.now(),
-                progress: 0,
-                isFavorite: isFavoriteByDefault,
-                isLocal: true,
-                type: 'text',
-              );
-
-              lessonBloc.add(LessonCreateRequested(lesson));
-              Navigator.pop(dialogContext);
-
-              scaffoldMessenger.showSnackBar(
-                const SnackBar(content: Text('Lesson imported successfully!')),
-              );
-            }
-          },
-          child: const Text('Import'),
-        ),
-      ],
-    ),
+  // Use LanguageHelper to get the map automatically
+  LessonImportDialog.show(
+    context,
+    userId,
+    currentLanguage,
+    LanguageHelper.availableLanguages, 
+    isFavoriteByDefault: isFavoriteByDefault,
   );
 }

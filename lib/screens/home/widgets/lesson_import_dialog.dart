@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data'; // Added for Uint8List
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
@@ -7,6 +8,7 @@ import 'package:path/path.dart' as path;
 
 // --- MEDIA KIT ---
 import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart'; // Added for VideoController
 
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
@@ -101,7 +103,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
   @override
   void initState() {
     super.initState();
-    // Ensure MediaKit is initialized
     try {
       MediaKit.ensureInitialized();
     } catch (_) {}
@@ -171,15 +172,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: [
-        'mp4',
-        'mov',
-        'avi',
-        'mkv',
-        'mp3',
-        'wav',
-        'm4a',
-        'aac',
-        'flac',
+        'mp4', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'm4a', 'aac', 'flac',
       ],
     );
 
@@ -207,11 +200,9 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
 
     if (result != null && result.files.single.path != null) {
       final file = File(result.files.single.path!);
-
       try {
         final content = await file.readAsString();
         final cleanText = _extractTextNaive(content);
-
         setState(() {
           _selectedSubtitleFile = file;
           _previewSubtitleText = cleanText;
@@ -223,18 +214,15 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     }
   }
 
-  // --- Validation using MediaKit ---
+  // --- Validation ---
   Future<void> _validateDuration() async {
     if (_selectedMediaFile == null || _selectedSubtitleFile == null) return;
     setState(() => _isLoading = true);
 
     try {
       final player = Player();
-
-      // Open file (Audio or Video)
       await player.open(Media(_selectedMediaFile!.path), play: false);
 
-      // FIX: Wait for duration to populate (Audio files can be slow to read headers)
       int retries = 0;
       while (player.state.duration == Duration.zero && retries < 10) {
         await Future.delayed(const Duration(milliseconds: 100));
@@ -244,7 +232,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
       Duration mediaDuration = player.state.duration;
       await player.dispose();
 
-      // Parse Subtitle
       final subContent = await _selectedSubtitleFile!.readAsString();
       final lastTimestamp = _getLastSubtitleTimestamp(subContent);
 
@@ -266,6 +253,44 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     }
   }
 
+  // --- NEW: Thumbnail Generation Helper ---
+  Future<String?> _generateThumbnail(String videoPath, String targetDir) async {
+    // 1. Create the player
+    final player = Player();
+    
+    // Note: We do NOT need VideoController for screenshots, just the Player.
+    
+    try {
+      await player.setVolume(0);
+      await player.open(Media(videoPath), play: false);
+      
+      // 2. Wait for video dimensions to ensure metadata is loaded
+      await player.stream.width.firstWhere((w) => w != null && w > 0);
+      
+      // 3. Seek to 1 second to avoid black frames at start
+      await player.seek(const Duration(seconds: 1));
+      
+      // 4. Wait a bit for the frame to decode/render internally
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // 5. Capture screenshot using the PLAYER, not the controller
+      // We specify 'image/jpeg' so we can save it directly to a file
+      final Uint8List? bytes = await player.screenshot(format: 'image/jpeg');
+      
+      if (bytes != null) {
+        final String imagePath = '$targetDir/thumbnail.jpg';
+        await File(imagePath).writeAsBytes(bytes);
+        return imagePath;
+      }
+    } catch (e) {
+      debugPrint("Error generating thumbnail: $e");
+    } finally {
+      // 6. Always dispose the player to prevent memory leaks
+      await player.dispose();
+    }
+    return null;
+  }
+
   // --- Creation Logic ---
   Future<void> _createLesson() async {
     if (_titleController.text.isEmpty) {
@@ -277,6 +302,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     String type = "text";
     String? localMediaPath;
     String? localSubtitlePath;
+    String? localImagePath; // New variable for thumbnail
     List<TranscriptLine> finalTranscript = [];
 
     if (_tabController.index == 0) {
@@ -296,43 +322,43 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
       setState(() => _isLoading = true);
 
       try {
-        // 1. Prepare Storage
         final appDir = await getApplicationDocumentsDirectory();
-        final String dirPath =
-            '${appDir.path}/lessons/${DateTime.now().millisecondsSinceEpoch}';
+        final String dirPath = '${appDir.path}/lessons/${DateTime.now().millisecondsSinceEpoch}';
         await Directory(dirPath).create(recursive: true);
 
-        // 2. Handle Media File (Copy)
+        // Handle Media
         if (_selectedMediaFile != null) {
           final ext = path.extension(_selectedMediaFile!.path).toLowerCase();
-
-          // Audio vs Video detection
+          
           if (['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg'].contains(ext)) {
             type = "audio";
           } else {
             type = "video";
+            
+            // --- NEW: GENERATE THUMBNAIL FOR VIDEO ---
+            // We generate it here once so we don't have to crash the app later
+            localImagePath = await _generateThumbnail(_selectedMediaFile!.path, dirPath);
           }
 
           final String newMediaPath = '$dirPath/media$ext';
           await _selectedMediaFile!.copy(newMediaPath);
           localMediaPath = newMediaPath;
+          
         } else if (_mediaUrlController.text.isNotEmpty) {
-          type = "video"; // YouTube URL default
+          type = "video";
           localMediaPath = _mediaUrlController.text;
         } else {
           throw Exception("Media file or URL is required.");
         }
 
-        // 3. Handle Subtitle File (Copy)
-        final String newSubPath =
-            '$dirPath/subs${path.extension(_selectedSubtitleFile!.path)}';
+        // Handle Subtitle
+        final String newSubPath = '$dirPath/subs${path.extension(_selectedSubtitleFile!.path)}';
         await _selectedSubtitleFile!.copy(newSubPath);
         localSubtitlePath = newSubPath;
 
-        // 4. Parse Subtitles for Lesson Content
+        // Parse Transcript
         try {
           finalTranscript = await SubtitleParser.parseFile(newSubPath);
-
           if (finalTranscript.isNotEmpty) {
             finalContent = finalTranscript.map((t) => t.text).join(" ");
           } else {
@@ -340,11 +366,9 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
           }
         } catch (e) {
           print("Error parsing transcript: $e");
-          // Fallback to raw text if parsing fails, don't block import
           finalContent = await _selectedSubtitleFile!.readAsString();
         }
       } catch (e) {
-        // CATCH FILE COPY ERRORS
         if (mounted) {
           setState(() {
             _isLoading = false;
@@ -371,6 +395,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
       type: type,
       videoUrl: localMediaPath,
       subtitleUrl: localSubtitlePath,
+      imageUrl: localImagePath, // Store the thumbnail path here
       isLocal: true,
     );
 
@@ -382,6 +407,9 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     }
   }
 
+  // --- Widgets ---
+  // (All widgets below remain exactly the same as your original code)
+  
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -414,7 +442,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
         child: TabBarView(
           controller: _tabController,
           children: [
-            // TAB 1
             SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -428,7 +455,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
                 ],
               ),
             ),
-            // TAB 2
             SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -471,7 +497,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     );
   }
 
-  // --- Widgets ---
   Widget _buildWebImportSection() {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -596,7 +621,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
         ),
         const SizedBox(height: 10),
 
-        // File Pickers
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
@@ -742,7 +766,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     );
   }
 
-  // --- Helpers ---
   String _formatDuration(Duration d) =>
       "${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
 

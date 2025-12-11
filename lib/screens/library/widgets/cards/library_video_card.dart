@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/screens/library/widgets/dialogs/library_actions.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
+
+// We removed media_kit imports because we don't need to play video here anymore.
 
 class LibraryVideoCard extends StatefulWidget {
   final LessonModel lesson;
@@ -23,114 +24,37 @@ class LibraryVideoCard extends StatefulWidget {
 }
 
 class _LibraryVideoCardState extends State<LibraryVideoCard> {
-  Player? _player;
-  VideoController? _controller;
-  bool _isFrameReady = false;
   bool _isAudioOnly = false;
 
   @override
   void initState() {
     super.initState();
-    _checkMediaTypeAndInit();
+    _checkMediaType();
   }
 
-  void _checkMediaTypeAndInit() {
-    // 1. Check if it is explicitly marked as audio in your model
+  void _checkMediaType() {
+    // 1. Explicitly marked as audio
     if (widget.lesson.type == 'audio') {
       setState(() => _isAudioOnly = true);
       return;
     }
-    
-    // 2. Fallback: Check extension if type isn't set correctly
+
+    // 2. Fallback: Check extension
     final path = widget.lesson.videoUrl ?? "";
     final ext = path.toLowerCase();
-    if (ext.endsWith('.mp3') || ext.endsWith('.wav') || ext.endsWith('.aac') || ext.endsWith('.m4a')) {
+    if (ext.endsWith('.mp3') ||
+        ext.endsWith('.wav') ||
+        ext.endsWith('.aac') ||
+        ext.endsWith('.m4a')) {
       setState(() => _isAudioOnly = true);
-      return;
-    }
-
-    // 3. It's a video, generate thumbnail
-    _initializeThumbnail();
-  }
-
-  Future<void> _initializeThumbnail() async {
-    // FIX: Always check videoUrl first. Your import logic stores the file path there.
-    String? videoPath = widget.lesson.videoUrl;
-    
-    // Fallback to content ONLY if videoUrl is empty (rare based on your code)
-    if (videoPath == null || videoPath.isEmpty) {
-      videoPath = widget.lesson.content;
-    }
-
-    if (videoPath == null || videoPath.isEmpty) return;
-
-    // Check for YouTube
-    final bool isYoutube = videoPath.toLowerCase().contains('youtube.com') || 
-                           videoPath.toLowerCase().contains('youtu.be');
-
-    // If it's YouTube, we don't use MediaKit (we use the image fetcher in build)
-    if (isYoutube) return;
-
-    // If Local, check if file exists
-    if (widget.lesson.isLocal) {
-       // Normalize path (remove file://)
-       if (videoPath.startsWith('file://')) {
-         videoPath = videoPath.replaceFirst('file://', '');
-       }
-       if (!File(videoPath).existsSync()) {
-         debugPrint("File does not exist at: $videoPath");
-         return;
-       }
-    }
-
-    final player = Player();
-    _player = player;
-
-    final controller = VideoController(
-      player,
-      configuration: const VideoControllerConfiguration(
-        enableHardwareAcceleration: true,
-      ),
-    );
-    _controller = controller;
-
-    try {
-      await player.setVolume(0); 
-      
-      // Auto-play to force decoder
-      await player.open(Media(videoPath), play: true);
-      if (!mounted) return;
-
-      // Wait for metadata
-      await player.stream.width.firstWhere((w) => w != null && w > 0);
-      if (!mounted) return;
-
-      // Skip forward 1 second to avoid black fade-ins
-      await player.seek(const Duration(milliseconds: 1000));
-      if (!mounted) return;
-
-      // Wait for render
-      await controller.waitUntilFirstFrameRendered;
-      if (!mounted) return;
-
-      await player.pause();
-      
-      setState(() {
-        _isFrameReady = true;
-      });
-
-    } catch (e) {
-      debugPrint("Thumbnail generation error: $e");
     }
   }
 
-  @override
-  void dispose() {
-    final player = _player;
-    if (player != null) {
-      player.dispose();
-    }
-    super.dispose();
+  bool get _isYoutube {
+    final path = widget.lesson.videoUrl ?? widget.lesson.content;
+    if (path == null) return false;
+    return path.toLowerCase().contains('youtube.com') ||
+        path.toLowerCase().contains('youtu.be');
   }
 
   String? _getYoutubeId(String url) {
@@ -152,7 +76,9 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => ReaderScreen(lesson: widget.lesson)),
+          MaterialPageRoute(
+            builder: (context) => ReaderScreen(lesson: widget.lesson),
+          ),
         );
       },
       child: Container(
@@ -173,8 +99,11 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
           children: [
             Stack(
               children: [
+                // 1. Thumbnail Area
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
                   child: Container(
                     height: 140,
                     width: double.infinity,
@@ -182,7 +111,8 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
                     child: _buildMediaContent(),
                   ),
                 ),
-                // Only show Play button overlay if it's NOT audio only (Audio has its own icon)
+
+                // 2. Play Button Overlay (Only for Videos)
                 if (!_isAudioOnly)
                   Positioned.fill(
                     child: Center(
@@ -192,12 +122,18 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
                           color: Colors.black.withOpacity(0.5),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+                        child: const Icon(
+                          Icons.play_arrow,
+                          color: Colors.white,
+                          size: 24,
+                        ),
                       ),
                     ),
                   ),
               ],
             ),
+
+            // 3. Details Section
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -207,31 +143,41 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: Text(
-                          widget.lesson.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: widget.isDark ? Colors.white : Colors.black,
+                        child: SizedBox(
+                          height:
+                              14 *
+                              1.2 *
+                              2, // fontSize * lineHeight * numberOfLines
+                          child: Text(
+                            widget.lesson.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: widget.isDark
+                                  ? Colors.white
+                                  : Colors.black,
+                            ),
                           ),
                         ),
                       ),
                       GestureDetector(
-                        onTap: () => showLessonOptions(context, widget.lesson, widget.isDark),
-                        child: const Icon(Icons.more_vert, color: Colors.grey, size: 20),
+                        onTap: () => showLessonOptions(
+                          context,
+                          widget.lesson,
+                          widget.isDark,
+                        ),
+                        child: const Icon(
+                          Icons.more_vert,
+                          color: Colors.grey,
+                          size: 20,
+                        ),
                       ),
                     ],
                   ),
-                  if (_isAudioOnly)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: Text(
-                        "Audio Lesson",
-                        style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                      ),
-                    ),
+                  const SizedBox(height: 6),
+                  SizedBox(height: 14, child: _buildSourceIndicator()),
                 ],
               ),
             ),
@@ -241,8 +187,10 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
     );
   }
 
+  // --- WIDGET HELPERS ---
+
   Widget _buildMediaContent() {
-    // 1. Audio File -> Show Audio Icon
+    // 1. Audio Placeholder
     if (_isAudioOnly) {
       return Container(
         color: widget.isDark ? Colors.grey[800] : Colors.blue[50],
@@ -256,29 +204,38 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
       );
     }
 
-    // 2. Video Ready -> Show Video Frame
-    if (_isFrameReady && _controller != null) {
-      return Video(
-        controller: _controller!,
-        fit: BoxFit.cover,
-        controls: NoVideoControls,
-        pauseUponEnteringBackgroundMode: false,
-      );
+    // 2. Display the Image (Generated Screenshot or Network URL)
+    final String? imagePath = widget.lesson.imageUrl;
+
+    if (imagePath != null && imagePath.isNotEmpty) {
+      // Check if it is a Local File (created by your import function)
+      final File localFile = File(imagePath);
+      if (localFile.existsSync()) {
+        return Image.file(
+          localFile,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+        );
+      }
+      // Else assume it is a Network URL (legacy or web imports)
+      else {
+        return Image.network(
+          imagePath,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+        );
+      }
     }
 
-    // 3. YouTube or Fallback -> Show Image or Icon
+    // 3. Fallback for YouTube or missing images
     return _buildPlaceholder();
   }
 
   Widget _buildPlaceholder() {
-    // Try explicit image URL
-    if (widget.lesson.imageUrl != null && widget.lesson.imageUrl!.isNotEmpty) {
-       return Image.network(widget.lesson.imageUrl!, fit: BoxFit.cover);
-    }
-
-    // Try YouTube Thumbnail
+    // Try to get YouTube thumbnail if no other image exists
     final String? videoPath = widget.lesson.videoUrl;
-    if (videoPath != null && (videoPath.contains('youtube.com') || videoPath.contains('youtu.be'))) {
+    if (videoPath != null &&
+        (videoPath.contains('youtube.com') || videoPath.contains('youtu.be'))) {
       final String? videoId = _getYoutubeId(videoPath);
       if (videoId != null) {
         return Image.network(
@@ -289,7 +246,6 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
       }
     }
 
-    // Final Fallback
     return _buildIconPlaceholder();
   }
 
@@ -297,12 +253,46 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
     return Container(
       color: widget.isDark ? Colors.grey[900] : Colors.grey[200],
       child: Center(
-        child: Icon(
-          Icons.video_library,
-          size: 50,
-          color: Colors.grey[400],
-        ),
+        child: Icon(Icons.video_library, size: 50, color: Colors.grey[400]),
       ),
     );
+  }
+
+  Widget _buildSourceIndicator() {
+    if (_isAudioOnly) {
+      return Row(
+        children: [
+          Icon(Icons.headphones, size: 14, color: Colors.grey[600]),
+          const SizedBox(width: 4),
+          Text(
+            "Audio Lesson",
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_isYoutube) {
+      return Row(
+        children: [
+          const Icon(FontAwesomeIcons.youtube, size: 14, color: Colors.grey),
+        ],
+      );
+    }
+
+    if (widget.lesson.isLocal) {
+      return Row(
+        children: [
+          Icon(Icons.sd_storage, size: 14, color: Colors.grey[600]),
+          const SizedBox(width: 4),
+        ],
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }
