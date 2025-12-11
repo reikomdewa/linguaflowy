@@ -12,7 +12,7 @@ import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/home/widgets/audio_section.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
-import 'package:linguaflow/screens/home/widgets/lesson_import_dialog.dart'; // NEW IMPORT
+import 'package:linguaflow/widgets/lesson_import_dialog.dart'; // NEW IMPORT
 import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/home_sections.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';

@@ -172,7 +172,15 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: [
-        'mp4', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'm4a', 'aac', 'flac',
+        'mp4',
+        'mov',
+        'avi',
+        'mkv',
+        'mp3',
+        'wav',
+        'm4a',
+        'aac',
+        'flac',
       ],
     );
 
@@ -223,10 +231,13 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
       final player = Player();
       await player.open(Media(_selectedMediaFile!.path), play: false);
 
-      int retries = 0;
-      while (player.state.duration == Duration.zero && retries < 10) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        retries++;
+      // Using timeout to prevent stuck logic here too
+      try {
+        await player.stream.duration
+            .firstWhere((d) => d != Duration.zero)
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {
+        // Continue if duration check times out
       }
 
       Duration mediaDuration = player.state.duration;
@@ -253,30 +264,40 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     }
   }
 
-  // --- NEW: Thumbnail Generation Helper ---
+  // --- FIXED: Thumbnail Generation Helper ---
   Future<String?> _generateThumbnail(String videoPath, String targetDir) async {
-    // 1. Create the player
     final player = Player();
-    
-    // Note: We do NOT need VideoController for screenshots, just the Player.
-    
+    // FIX 1: Initialize VideoController. 
+    // This forces media_kit to set up the rendering pipeline (textures), 
+    // which makes screenshotting much more reliable even if not displayed.
+    final controller = VideoController(player);
+
     try {
       await player.setVolume(0);
       await player.open(Media(videoPath), play: false);
-      
-      // 2. Wait for video dimensions to ensure metadata is loaded
-      await player.stream.width.firstWhere((w) => w != null && w > 0);
-      
-      // 3. Seek to 1 second to avoid black frames at start
+
+      // FIX 2: Add timeouts. If the video is corrupt or weird, we shouldn't hang forever.
+      try {
+        // Wait for video dimensions
+        await player.stream.width
+            .firstWhere((w) => w != null && w > 0)
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {
+        debugPrint("Timeout waiting for video width");
+        return null;
+      }
+
+      // Seek to 1 second
       await player.seek(const Duration(seconds: 1));
-      
-      // 4. Wait a bit for the frame to decode/render internally
+
+      // Wait a bit for the frame to decode
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // 5. Capture screenshot using the PLAYER, not the controller
-      // We specify 'image/jpeg' so we can save it directly to a file
-      final Uint8List? bytes = await player.screenshot(format: 'image/jpeg');
-      
+      // FIX 3: Add timeout to the actual screenshot command
+      final Uint8List? bytes = await player
+          .screenshot(format: 'image/jpeg')
+          .timeout(const Duration(seconds: 3));
+
       if (bytes != null) {
         final String imagePath = '$targetDir/thumbnail.jpg';
         await File(imagePath).writeAsBytes(bytes);
@@ -285,7 +306,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     } catch (e) {
       debugPrint("Error generating thumbnail: $e");
     } finally {
-      // 6. Always dispose the player to prevent memory leaks
+      // Always dispose
       await player.dispose();
     }
     return null;
@@ -302,7 +323,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     String type = "text";
     String? localMediaPath;
     String? localSubtitlePath;
-    String? localImagePath; // New variable for thumbnail
+    String? localImagePath; 
     List<TranscriptLine> finalTranscript = [];
 
     if (_tabController.index == 0) {
@@ -323,27 +344,31 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
 
       try {
         final appDir = await getApplicationDocumentsDirectory();
-        final String dirPath = '${appDir.path}/lessons/${DateTime.now().millisecondsSinceEpoch}';
+        final String dirPath =
+            '${appDir.path}/lessons/${DateTime.now().millisecondsSinceEpoch}';
         await Directory(dirPath).create(recursive: true);
 
         // Handle Media
         if (_selectedMediaFile != null) {
           final ext = path.extension(_selectedMediaFile!.path).toLowerCase();
-          
-          if (['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg'].contains(ext)) {
+
+          if (['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg']
+              .contains(ext)) {
             type = "audio";
           } else {
             type = "video";
-            
-            // --- NEW: GENERATE THUMBNAIL FOR VIDEO ---
-            // We generate it here once so we don't have to crash the app later
-            localImagePath = await _generateThumbnail(_selectedMediaFile!.path, dirPath);
+            // Attempt to generate thumbnail, but don't crash if it fails
+            try {
+              localImagePath =
+                  await _generateThumbnail(_selectedMediaFile!.path, dirPath);
+            } catch (e) {
+              print("Skipping thumbnail: $e");
+            }
           }
 
           final String newMediaPath = '$dirPath/media$ext';
           await _selectedMediaFile!.copy(newMediaPath);
           localMediaPath = newMediaPath;
-          
         } else if (_mediaUrlController.text.isNotEmpty) {
           type = "video";
           localMediaPath = _mediaUrlController.text;
@@ -352,7 +377,8 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
         }
 
         // Handle Subtitle
-        final String newSubPath = '$dirPath/subs${path.extension(_selectedSubtitleFile!.path)}';
+        final String newSubPath =
+            '$dirPath/subs${path.extension(_selectedSubtitleFile!.path)}';
         await _selectedSubtitleFile!.copy(newSubPath);
         localSubtitlePath = newSubPath;
 
@@ -395,7 +421,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
       type: type,
       videoUrl: localMediaPath,
       subtitleUrl: localSubtitlePath,
-      imageUrl: localImagePath, // Store the thumbnail path here
+      imageUrl: localImagePath,
       isLocal: true,
     );
 
@@ -408,8 +434,6 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
   }
 
   // --- Widgets ---
-  // (All widgets below remain exactly the same as your original code)
-  
   @override
   Widget build(BuildContext context) {
     return AlertDialog(

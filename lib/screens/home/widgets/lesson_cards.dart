@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
@@ -53,7 +55,31 @@ class VideoLessonCard extends StatelessWidget {
                             (lesson.type == 'video' ||
                                 lesson.type == 'video_native' ||
                                 lesson.type == 'audio'))
-                        ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
+                        // --- FIX STARTS HERE ---
+                        ? (lesson.imageUrl!.startsWith('http')
+                              ? Image.network(
+                                  lesson.imageUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Center(
+                                        child: Icon(
+                                          Icons.broken_image,
+                                          size: 32,
+                                        ),
+                                      ),
+                                )
+                              : Image.file(
+                                  File(lesson.imageUrl!),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Center(
+                                        child: Icon(
+                                          Icons.broken_image,
+                                          size: 32,
+                                        ),
+                                      ),
+                                ))
+                        // --- FIX ENDS HERE ---
                         : (lesson.type == 'text'
                               ? Center(
                                   child: Icon(
