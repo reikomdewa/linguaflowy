@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math'; // Required for min()
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -28,6 +29,7 @@ import 'package:linguaflow/utils/subtitle_parser.dart';
 
 import 'reader_utils.dart';
 import 'widgets/reader_view_modes.dart';
+import 'widgets/interactive_text_display.dart'; 
 
 class ReaderScreen extends StatefulWidget {
   final LessonModel lesson;
@@ -110,6 +112,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint("🚀 ReaderScreen initState");
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     _initGemini();
     _loadVocabulary();
@@ -212,8 +215,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _pageController.dispose();
     _listScrollController.dispose();
     _flutterTts.stop();
-    
-    // Reset Orientation on Dispose
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
@@ -228,7 +229,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.dispose();
   }
 
-  // --- DATA LOADING ---
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     try {
@@ -260,7 +260,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- CONTENT ---
   void _generateSmartChunks() {
     _smartChunks = [];
     if (_activeTranscript.isNotEmpty) {
@@ -306,7 +305,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- MEDIA KIT INITIALIZATION ---
   Future<void> _initializeLocalMediaPlayer(String path) async {
     setState(() => _isInitializingMedia = true);
     
@@ -316,6 +314,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
       await _localPlayer!.open(Media(path));
       
+      int retries = 0;
+      while (_localPlayer!.state.duration == Duration.zero && retries < 15) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        retries++;
+      }
+
       if (mounted) {
         setState(() {
           _isLocalMedia = true;
@@ -329,7 +333,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- SYNC TIMER ---
   void _startSyncTimer() {
     _syncTimer?.cancel();
     _syncTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
@@ -344,7 +347,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     bool isPlaying = false;
     double currentSeconds = 0.0;
 
-    // --- GET STATUS FROM MEDIA KIT OR YOUTUBE ---
     if (_isLocalMedia && _localPlayer != null) {
       isPlaying = _localPlayer!.state.playing;
       currentSeconds = _localPlayer!.state.position.inMilliseconds / 1000.0;
@@ -359,7 +361,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     if (!isPlaying || _activeTranscript.isEmpty) return;
 
-    // 1. Single Sentence Stop
     if (_isSentenceMode && _isPlayingSingleSentence) {
       if (_activeSentenceIndex >= 0 && _activeSentenceIndex < _activeTranscript.length) {
         if (currentSeconds >= _activeTranscript[_activeSentenceIndex].end - 0.05) {
@@ -373,7 +374,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
     }
 
-    // 2. Auto-Scroll Logic
     bool shouldSync = !_isSentenceMode;
 
     if (shouldSync) {
@@ -407,8 +407,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
     }
   }
-
-  // --- MEDIA CONTROLS ---
 
   void _pauseMedia() {
     if (_isLocalMedia && _localPlayer != null) {
@@ -472,7 +470,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // ... [Play Modes, Toggle Playback] ...
   void _playFromStartContinuous() {
     if (_isVideo || _isAudio) {
       if (_activeSentenceIndex != -1 && _activeTranscript.isNotEmpty) {
@@ -551,14 +548,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _handleWordTap(String word, String cleanId, Offset pos) async {
     _activeSelectionClearer?.call(); _activeSelectionClearer = null;
     if (_isCheckingLimit) return;
-    
     final auth = context.read<AuthBloc>().state;
     if (auth is! AuthAuthenticated) return;
-
     final existing = _vocabulary[cleanId];
     final status = _calculateSmartStatus(existing);
     if (existing == null || existing.status != status) _updateWordStatus(cleanId, word, existing?.translation ?? "", status, showDialog: false);
-
     if (auth.user.isPremium) _activateCard(word, cleanId, pos, isPhrase: false);
     else _checkLimitAndActivate(auth.user.id, cleanId, word, pos, false);
   }
@@ -575,14 +569,55 @@ class _ReaderScreenState extends State<ReaderScreen> {
     setState(() { _showCard = true; _selectedText = text; _selectedCleanId = cleanId; _isSelectionPhrase = isPhrase; _cardAnchor = pos; _cardTranslationFuture = svc.translate(text, user.nativeLanguage, widget.lesson.language).then((v) => v ?? ""); });
   }
 
+  // --- UPDATED: CARD RENDERING LOGIC ---
   Widget _buildTranslationOverlay() {
+    // If we are in fullscreen, we render a special simplified card
+    if (_isFullScreen) {
+      return _buildFullscreenTranslationCard();
+    }
+
+    // Normal Portrait Floating Card
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final existing = _isSelectionPhrase ? null : _vocabulary[_selectedCleanId];
+    
     return FloatingTranslationCard(
-      key: ValueKey(_selectedText), originalText: _selectedText, translationFuture: _cardTranslationFuture!,
+      key: ValueKey(_selectedText), 
+      originalText: _selectedText, 
+      translationFuture: _cardTranslationFuture!,
       onGetAiExplanation: () => Gemini.instance.prompt(parts: [Part.text("Explain '$_selectedText' in ${widget.lesson.language} for ${user.nativeLanguage} speaker")]).then((v) => v?.output).catchError((_) => "AI Error"),
-      targetLanguage: widget.lesson.language, nativeLanguage: user.nativeLanguage, currentStatus: existing?.status ?? 0, anchorPosition: _cardAnchor,
-      onUpdateStatus: (s, t) { _updateWordStatus(_selectedCleanId, _selectedText, t, s); _closeTranslationCard(); }, onClose: _closeTranslationCard,
+      targetLanguage: widget.lesson.language, 
+      nativeLanguage: user.nativeLanguage, 
+      currentStatus: existing?.status ?? 0, 
+      anchorPosition: _cardAnchor,
+      onUpdateStatus: (s, t) { _updateWordStatus(_selectedCleanId, _selectedText, t, s); _closeTranslationCard(); }, 
+      onClose: _closeTranslationCard,
+    );
+  }
+
+  // New Helper for Fullscreen Card (Centered, Fixed Width)
+  Widget _buildFullscreenTranslationCard() {
+    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+    final existing = _isSelectionPhrase ? null : _vocabulary[_selectedCleanId];
+
+    return Center(
+      child: Container(
+        width: 350, // Fixed width so it doesn't stretch
+        margin: const EdgeInsets.all(20),
+        child: FloatingTranslationCard(
+          key: ValueKey(_selectedText),
+          originalText: _selectedText,
+          translationFuture: _cardTranslationFuture!,
+          onGetAiExplanation: () => Gemini.instance.prompt(parts: [Part.text("Explain '$_selectedText' in ${widget.lesson.language} for ${user.nativeLanguage} speaker")]).then((v) => v?.output).catchError((_) => "AI Error"),
+          targetLanguage: widget.lesson.language,
+          nativeLanguage: user.nativeLanguage,
+          currentStatus: existing?.status ?? 0,
+          // anchorPosition is ignored by us here because we wrapped it in Center/Container, 
+          // but the widget requires it. We pass dummy zero.
+          anchorPosition: Offset.zero,
+          onUpdateStatus: (s, t) { _updateWordStatus(_selectedCleanId, _selectedText, t, s); _closeTranslationCard(); },
+          onClose: _closeTranslationCard,
+        ),
+      ),
     );
   }
 
@@ -648,14 +683,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // --- UPDATED: FULLSCREEN TOGGLE ---
   void _toggleCustomFullScreen() {
     if (_isFullScreen) {
-      // Exit Fullscreen
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     } else {
-      // Enter Fullscreen (Rotate to Landscape)
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft, 
         DeviceOrientation.landscapeRight
@@ -710,7 +742,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     ));
   }
 
-  // --- UPDATED: CLEAN MEDIA HEADER (PORTRAIT) ---
+  // --- MEDIA HEADER (PORTRAIT) ---
   Widget _buildMediaHeader() {
     if (_isInitializingMedia) return Container(height: _isAudio ? 120 : 220, color: Colors.black, child: const Center(child: CircularProgressIndicator()));
     
@@ -726,13 +758,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
               const Spacer(),
               const Icon(Icons.music_note, color: Colors.white54, size: 40),
               const Spacer(),
-              _buildLocalMediaControls() // Controls at bottom
+              _buildLocalMediaControls() 
             ]
           )
         );
       }
       
-      // Video Player: Gradient Background for Controls, Video Fills Space
+      // Video Player
       return Container(
         height: 220,
         color: Colors.black,
@@ -761,13 +793,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return const SizedBox.shrink();
   }
 
-  // --- UPDATED: CLEAN CONTROLS (Removed solid black box) ---
   Widget _buildLocalMediaControls() {
     final duration = _localPlayer?.state.duration ?? const Duration(seconds: 1);
     final position = _localPlayer?.state.position ?? Duration.zero;
     
     return Container(
-      // Gradient instead of solid black
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.bottomCenter,
@@ -795,7 +825,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     ]));
   }
 
-  // --- UPDATED: FULLSCREEN OVERLAY (YouTube Style) ---
+  // --- FULLSCREEN OVERLAY (YouTube & Local) ---
   Widget _buildFullscreenMedia() {
     return WillPopScope(
       onWillPop: () async { 
@@ -806,31 +836,46 @@ class _ReaderScreenState extends State<ReaderScreen> {
         backgroundColor: Colors.black, 
         body: Stack(
           children: [
-            // 1. Video Layer
-            Center(
-              child: _isLocalMedia 
-                ? Video(controller: _localVideoController!, fit: BoxFit.contain) 
-                : YoutubePlayer(controller: _youtubeController!)
+            // 1. Video Layer (Fill screen)
+            Positioned.fill(
+              child: Center(
+                child: _isLocalMedia 
+                  ? Video(controller: _localVideoController!, fit: BoxFit.contain) 
+                  : FittedBox(
+                      fit: BoxFit.contain, // Fixes Youtube stretching
+                      child: SizedBox(
+                        width: 1600, // Forces high res / proper aspect calculation
+                        height: 900,
+                        child: YoutubePlayer(
+                          controller: _youtubeController!,
+                          aspectRatio: 16/9,
+                        ),
+                      ),
+                    ),
+              ),
             ),
             
-            // 2. Subtitle Overlay (Bottom Center)
+            // 2. Interactive Subtitle Overlay (Bottom Center)
             Positioned(
               bottom: 80, // Above controls
               left: 20,
               right: 20,
-              child: _buildSubtitleOverlayWidget()
+              child: _buildInteractiveSubtitleOverlay()
             ),
 
-            // 3. Controls Layer (Pinned Bottom)
+            // 3. Translation Card (Top Layer)
+            if (_showCard && _cardTranslationFuture != null)
+              _buildTranslationOverlay(),
+
+            // 4. Controls Layer (Pinned Bottom)
             Positioned(
               bottom: 0,
               left: 0,
               right: 0,
               child: _isLocalMedia ? _buildLocalMediaControls() : const SizedBox.shrink() 
-              // Note: YouTube player has its own internal controls in fullscreen
             ),
             
-            // 4. Back Button (Top Left)
+            // 5. Back Button (Top Left)
             Positioned(
               top: 20,
               left: 20,
@@ -845,29 +890,30 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  // Helper for Subtitle Overlay
-  Widget _buildSubtitleOverlayWidget() {
+  // Helper for Interactive Subtitles
+  Widget _buildInteractiveSubtitleOverlay() {
     if (_activeSentenceIndex == -1 || _activeSentenceIndex >= _smartChunks.length) {
       return const SizedBox.shrink();
     }
-    
-    // Don't show if playing single sentence (card view is better) 
-    // unless user wants it, but for YouTube style we usually show it.
     
     return Center(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6), // Semi-transparent black background
-          borderRadius: BorderRadius.circular(4),
+          color: Colors.black.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(8),
         ),
-        child: Text(
-          _smartChunks[_activeSentenceIndex],
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
+        // Force Theme to dark so text is white
+        child: Theme(
+          data: ThemeData.dark(),
+          child: InteractiveTextDisplay(
+            text: _smartChunks[_activeSentenceIndex],
+            sentenceIndex: _activeSentenceIndex,
+            vocabulary: _vocabulary,
+            onWordTap: _handleWordTap, // Fixed method name
+            onPhraseSelected: _handlePhraseSelected, // Fixed method name
+            isBigMode: true, 
+            isListeningMode: false,
           ),
         ),
       ),
