@@ -174,8 +174,8 @@ class _QuizScreenState extends State<QuizScreen> {
     bool isPremium = false;
 
     if (authState is AuthAuthenticated) {
-      targetLang = LanguageHelper.resolveCode(authState.user.currentLanguage);
-      nativeLang = LanguageHelper.resolveCode(authState.user.nativeLanguage);
+      targetLang = LanguageHelper.getLangCode(authState.user.currentLanguage);
+      nativeLang = LanguageHelper.getLangCode(authState.user.nativeLanguage);
       userId = authState.user.id;
       isPremium = authState.user.isPremium;
       if (mounted) {
@@ -249,8 +249,8 @@ class _QuizScreenState extends State<QuizScreen> {
 
     final translationFuture = context.read<TranslationService>().translate(
       originalWord,
-      LanguageHelper.resolveCode(authState.user.nativeLanguage),
-      LanguageHelper.resolveCode(authState.user.currentLanguage),
+      LanguageHelper.getLangCode(authState.user.nativeLanguage),
+      LanguageHelper.getLangCode(authState.user.currentLanguage),
     );
 
     showDialog(

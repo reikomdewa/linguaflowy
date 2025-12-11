@@ -13,7 +13,7 @@ class ContentCMSTab extends StatefulWidget {
 class _ContentCMSTabState extends State<ContentCMSTab> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchText = "";
-  
+
   // Open the Editor Dialog
   void _openEditor(BuildContext context, [DocumentSnapshot? doc]) {
     showDialog(
@@ -31,7 +31,9 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
         content: const Text("This cannot be undone."),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
           TextButton(
             onPressed: () {
               FirebaseFirestore.instance
@@ -50,19 +52,21 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
   // --- REPAIR TOOL ---
   Future<void> _fixOldData() async {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text("Updating database indexes...")));
-    
+    messenger.showSnackBar(
+      const SnackBar(content: Text("Updating database indexes...")),
+    );
+
     final collection = FirebaseFirestore.instance.collection('lessons');
     final snapshot = await collection.get();
-    
+
     int count = 0;
     final batch = FirebaseFirestore.instance.batch();
-    
+
     for (var doc in snapshot.docs) {
       final data = doc.data();
       if (data['title'] != null) {
         batch.update(doc.reference, {
-          'title_lower': data['title'].toString().toLowerCase().trim()
+          'title_lower': data['title'].toString().toLowerCase().trim(),
         });
         count++;
       }
@@ -74,25 +78,30 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
 
   // --- SEARCH LOGIC ---
   Stream<QuerySnapshot> _getStream() {
-    CollectionReference lessonsRef = FirebaseFirestore.instance.collection('lessons');
+    CollectionReference lessonsRef = FirebaseFirestore.instance.collection(
+      'lessons',
+    );
 
     if (_searchText.isEmpty) {
-      return lessonsRef.orderBy('createdAt', descending: true).limit(50).snapshots();
+      return lessonsRef
+          .orderBy('createdAt', descending: true)
+          .limit(50)
+          .snapshots();
     } else {
       final searchLower = _searchText.toLowerCase();
-      return lessonsRef
-          .orderBy('title_lower')
-          .startAt([searchLower])
-          .endAt(['$searchLower\uf8ff'])
-          .snapshots();
+      return lessonsRef.orderBy('title_lower').startAt([searchLower]).endAt([
+        '$searchLower\uf8ff',
+      ]).snapshots();
     }
   }
 
   Future<void> _searchById() async {
     if (_searchCtrl.text.isEmpty) return;
-    setState(() => _searchText = "___ID_SEARCH_MODE___"); 
+    setState(() => _searchText = "___ID_SEARCH_MODE___");
 
-    final docRef = FirebaseFirestore.instance.collection('lessons').doc(_searchCtrl.text.trim());
+    final docRef = FirebaseFirestore.instance
+        .collection('lessons')
+        .doc(_searchCtrl.text.trim());
     final snapshot = await docRef.get();
 
     if (!mounted) return;
@@ -131,7 +140,10 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
             onPressed: () => _openEditor(context),
             backgroundColor: Colors.amber,
             icon: const Icon(Icons.add, color: Colors.black),
-            label: const Text("Add Lesson", style: TextStyle(color: Colors.black)),
+            label: const Text(
+              "Add Lesson",
+              style: TextStyle(color: Colors.black),
+            ),
           ),
         ],
       ),
@@ -147,7 +159,8 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_searchText.isNotEmpty && _searchText != "___ID_SEARCH_MODE___")
+                    if (_searchText.isNotEmpty &&
+                        _searchText != "___ID_SEARCH_MODE___")
                       IconButton(
                         icon: const Icon(Icons.clear),
                         onPressed: () {
@@ -164,7 +177,9 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
                     ),
                   ],
                 ),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 filled: true,
                 fillColor: isDark ? Colors.white10 : Colors.grey[100],
               ),
@@ -172,74 +187,108 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
             ),
           ),
           Expanded(
-            child: _searchText == "___ID_SEARCH_MODE___" 
-            ? const Center(child: CircularProgressIndicator()) 
-            : StreamBuilder<QuerySnapshot>(
-              stream: _getStream(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
-                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            child: _searchText == "___ID_SEARCH_MODE___"
+                ? const Center(child: CircularProgressIndicator())
+                : StreamBuilder<QuerySnapshot>(
+                    stream: _getStream(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError)
+                        return Center(child: Text("Error: ${snapshot.error}"));
+                      if (snapshot.connectionState == ConnectionState.waiting)
+                        return const Center(child: CircularProgressIndicator());
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.search_off, size: 48, color: Colors.grey),
-                        const SizedBox(height: 10),
-                        Text(_searchText.isEmpty ? "No lessons found." : "No matches for '$_searchText'", style: const TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 80),
-                  itemCount: snapshot.data!.docs.length,
-                  itemBuilder: (context, index) {
-                    final doc = snapshot.data!.docs[index];
-                    final data = doc.data() as Map<String, dynamic>;
-
-                    final title = data['title'] ?? 'Untitled';
-                    final langCode = data['language'] ?? 'en';
-                    final diff = data['difficulty'] ?? 'unknown';
-
-                    // USE HELPER FOR FLAG
-                    final flag = LanguageHelper.getFlagEmoji(langCode);
-
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      child: ListTile(
-                        leading: Container(
-                          width: 40, height: 40,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white10 : Colors.grey[200],
-                            shape: BoxShape.circle,
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.search_off,
+                                size: 48,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                _searchText.isEmpty
+                                    ? "No lessons found."
+                                    : "No matches for '$_searchText'",
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                            ],
                           ),
-                          child: Text(flag, style: const TextStyle(fontSize: 24)),
-                        ),
-                        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: SelectableText("$diff • ${doc.id}", maxLines: 1),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => _openEditor(context, doc),
+                        );
+                      }
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 80),
+                        itemCount: snapshot.data!.docs.length,
+                        itemBuilder: (context, index) {
+                          final doc = snapshot.data!.docs[index];
+                          final data = doc.data() as Map<String, dynamic>;
+
+                          final title = data['title'] ?? 'Untitled';
+                          final langCode = data['language'] ?? 'en';
+                          final diff = data['difficulty'] ?? 'unknown';
+
+                          // USE HELPER FOR FLAG
+                          final flag = LanguageHelper.getFlagEmoji(langCode);
+
+                          return Card(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 4,
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
-                              onPressed: () => _deleteLesson(doc.id),
+                            child: ListTile(
+                              leading: Container(
+                                width: 40,
+                                height: 40,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.white10
+                                      : Colors.grey[200],
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  flag,
+                                  style: const TextStyle(fontSize: 24),
+                                ),
+                              ),
+                              title: Text(
+                                title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: SelectableText(
+                                "$diff • ${doc.id}",
+                                maxLines: 1,
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.blue,
+                                    ),
+                                    onPressed: () => _openEditor(context, doc),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () => _deleteLesson(doc.id),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -280,15 +329,19 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
     _videoUrlCtrl = TextEditingController(text: data?['videoUrl'] ?? '');
     _imageUrlCtrl = TextEditingController(text: data?['imageUrl'] ?? '');
     _difficulty = data?['difficulty'] ?? 'intermediate';
-    
+
     // USE HELPER TO RESOLVE LANGUAGE CODE (Safe handling)
     String rawLang = data?['language'] ?? 'en';
-    _language = LanguageHelper.resolveCode(rawLang);
+    _language = LanguageHelper.getLangCode(rawLang);
 
-    if (data != null && data['transcript'] != null && data['transcript'] is List) {
+    if (data != null &&
+        data['transcript'] != null &&
+        data['transcript'] is List) {
       try {
         const encoder = JsonEncoder.withIndent('  ');
-        _jsonTranscriptCtrl = TextEditingController(text: encoder.convert(data['transcript']));
+        _jsonTranscriptCtrl = TextEditingController(
+          text: encoder.convert(data['transcript']),
+        );
       } catch (e) {
         _jsonTranscriptCtrl = TextEditingController(text: "[]");
       }
@@ -302,7 +355,9 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
     if (text.isEmpty) return;
     try {
       final List<Map<String, dynamic>> parsed = [];
-      final RegExp timeReg = RegExp(r'(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})');
+      final RegExp timeReg = RegExp(
+        r'(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})',
+      );
       final blocks = text.split(RegExp(r'\n\s*\n'));
 
       for (var block in blocks) {
@@ -314,35 +369,53 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
           String content = "";
           bool foundTime = false;
           for (var line in lines) {
-            if (line.contains('-->')) { foundTime = true; continue; }
+            if (line.contains('-->')) {
+              foundTime = true;
+              continue;
+            }
             if (foundTime) {
               String cleanLine = line.replaceAll(RegExp(r'<[^>]*>'), '').trim();
-              if (cleanLine.isNotEmpty && !RegExp(r'^\d+$').hasMatch(cleanLine)) {
+              if (cleanLine.isNotEmpty &&
+                  !RegExp(r'^\d+$').hasMatch(cleanLine)) {
                 content += "$cleanLine ";
               }
             }
           }
           if (content.isNotEmpty) {
-            parsed.add({ "start": _parseTime(startStr), "end": _parseTime(endStr), "text": content.trim() });
+            parsed.add({
+              "start": _parseTime(startStr),
+              "end": _parseTime(endStr),
+              "text": content.trim(),
+            });
           }
         }
       }
       if (parsed.isNotEmpty) {
         const encoder = JsonEncoder.withIndent('  ');
-        setState(() { _jsonTranscriptCtrl.text = encoder.convert(parsed); });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Converted ${parsed.length} lines!")));
+        setState(() {
+          _jsonTranscriptCtrl.text = encoder.convert(parsed);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Converted ${parsed.length} lines!")),
+        );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not find timestamps.")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not find timestamps.")),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
   double _parseTime(String timeStr) {
     timeStr = timeStr.replaceAll(',', '.');
     final parts = timeStr.split(':');
-    return (double.parse(parts[0]) * 3600) + (double.parse(parts[1]) * 60) + double.parse(parts[2]);
+    return (double.parse(parts[0]) * 3600) +
+        (double.parse(parts[1]) * 60) +
+        double.parse(parts[2]);
   }
 
   void _save() async {
@@ -357,18 +430,24 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
     try {
       transcriptList = jsonDecode(_jsonTranscriptCtrl.text);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid JSON Transcript.")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Invalid JSON Transcript.")));
       return;
     }
 
     final title = _titleCtrl.text.trim();
-    
+
     final Map<String, dynamic> data = {
       'title': title,
       'title_lower': title.toLowerCase(),
       'content': _contentCtrl.text.trim(),
-      'videoUrl': _videoUrlCtrl.text.trim().isEmpty ? null : _videoUrlCtrl.text.trim(),
-      'imageUrl': _imageUrlCtrl.text.trim().isEmpty ? null : _imageUrlCtrl.text.trim(),
+      'videoUrl': _videoUrlCtrl.text.trim().isEmpty
+          ? null
+          : _videoUrlCtrl.text.trim(),
+      'imageUrl': _imageUrlCtrl.text.trim().isEmpty
+          ? null
+          : _imageUrlCtrl.text.trim(),
       'language': _language, // This comes from LanguageHelper data
       'difficulty': _difficulty,
       'sentences': sentences,
@@ -383,15 +462,20 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
       data['userId'] = 'admin';
       String? customId;
       if (_videoUrlCtrl.text.contains("youtu")) {
-         try {
-           String? videoId;
-           if (_videoUrlCtrl.text.contains("v=")) videoId = _videoUrlCtrl.text.split('v=')[1].split('&')[0];
-           else if (_videoUrlCtrl.text.contains("youtu.be/")) videoId = _videoUrlCtrl.text.split('youtu.be/')[1];
-           if (videoId != null) customId = "yt_$videoId";
-         } catch (_) {}
+        try {
+          String? videoId;
+          if (_videoUrlCtrl.text.contains("v="))
+            videoId = _videoUrlCtrl.text.split('v=')[1].split('&')[0];
+          else if (_videoUrlCtrl.text.contains("youtu.be/"))
+            videoId = _videoUrlCtrl.text.split('youtu.be/')[1];
+          if (videoId != null) customId = "yt_$videoId";
+        } catch (_) {}
       }
       if (customId != null) {
-        await FirebaseFirestore.instance.collection('lessons').doc(customId).set(data);
+        await FirebaseFirestore.instance
+            .collection('lessons')
+            .doc(customId)
+            .set(data);
       } else {
         await FirebaseFirestore.instance.collection('lessons').add(data);
       }
@@ -404,7 +488,7 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     // Sort languages so they appear nicely in the dropdown
     final sortedLanguages = LanguageHelper.availableLanguages.entries.toList()
       ..sort((a, b) => a.value.compareTo(b.value));
@@ -422,26 +506,48 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(widget.doc == null ? "Add Lesson" : "Edit Lesson", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close))
+                  Text(
+                    widget.doc == null ? "Add Lesson" : "Edit Lesson",
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
                 ],
               ),
               const Divider(),
               Expanded(
                 child: ListView(
                   children: [
-                    TextFormField(controller: _titleCtrl, decoration: const InputDecoration(labelText: "Title"), validator: (v) => v!.isEmpty ? 'Required' : null),
+                    TextFormField(
+                      controller: _titleCtrl,
+                      decoration: const InputDecoration(labelText: "Title"),
+                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                    ),
                     const SizedBox(height: 15),
                     Row(
                       children: [
-                        Expanded(child: TextFormField(controller: _videoUrlCtrl, decoration: const InputDecoration(labelText: "YouTube URL"))),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _videoUrlCtrl,
+                            decoration: const InputDecoration(
+                              labelText: "YouTube URL",
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 10),
-                        
+
                         // --- UPDATED LANGUAGE DROPDOWN USING HELPER ---
                         Expanded(
                           child: DropdownButtonFormField<String>(
                             value: _language,
-                            decoration: const InputDecoration(labelText: "Language"),
+                            decoration: const InputDecoration(
+                              labelText: "Language",
+                            ),
                             isExpanded: true,
                             items: sortedLanguages.map((entry) {
                               final code = entry.key;
@@ -449,7 +555,10 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
                               final flag = LanguageHelper.getFlagEmoji(code);
                               return DropdownMenuItem(
                                 value: code,
-                                child: Text("$flag $name", overflow: TextOverflow.ellipsis),
+                                child: Text(
+                                  "$flag $name",
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               );
                             }).toList(),
                             onChanged: (v) => setState(() => _language = v!),
@@ -459,32 +568,73 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
                     ),
                     const SizedBox(height: 15),
                     DropdownButtonFormField<String>(
-                        value: _difficulty,
-                        decoration: const InputDecoration(labelText: "Difficulty"),
-                        items: ['beginner', 'intermediate', 'advanced'].map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
-                        onChanged: (v) => setState(() => _difficulty = v!),
+                      value: _difficulty,
+                      decoration: const InputDecoration(
+                        labelText: "Difficulty",
+                      ),
+                      items: ['beginner', 'intermediate', 'advanced']
+                          .map(
+                            (l) => DropdownMenuItem(value: l, child: Text(l)),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _difficulty = v!),
                     ),
                     const SizedBox(height: 15),
-                    TextFormField(controller: _imageUrlCtrl, decoration: const InputDecoration(labelText: "Image URL")),
+                    TextFormField(
+                      controller: _imageUrlCtrl,
+                      decoration: const InputDecoration(labelText: "Image URL"),
+                    ),
                     const SizedBox(height: 15),
-                    TextFormField(controller: _contentCtrl, maxLines: 4, decoration: const InputDecoration(labelText: "Full Content", alignLabelWithHint: true), validator: (v) => v!.isEmpty ? 'Required' : null),
+                    TextFormField(
+                      controller: _contentCtrl,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: "Full Content",
+                        alignLabelWithHint: true,
+                      ),
+                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                    ),
                     const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("Transcript (JSON)", style: TextStyle(fontWeight: FontWeight.bold)),
-                        TextButton(onPressed: _convertSubtitleFormat, child: const Text("Convert SRT"))
+                        const Text(
+                          "Transcript (JSON)",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        TextButton(
+                          onPressed: _convertSubtitleFormat,
+                          child: const Text("Convert SRT"),
+                        ),
                       ],
                     ),
                     Container(
                       color: isDark ? Colors.black26 : Colors.grey[100],
-                      child: TextFormField(controller: _jsonTranscriptCtrl, maxLines: 6, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                      child: TextFormField(
+                        controller: _jsonTranscriptCtrl,
+                        maxLines: 6,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 10),
-              SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: _save, style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black), child: const Text("Save Lesson")))
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: const Text("Save Lesson"),
+                ),
+              ),
             ],
           ),
         ),

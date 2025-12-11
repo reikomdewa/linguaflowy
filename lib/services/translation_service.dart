@@ -9,17 +9,21 @@ class TranslationService {
   final GoogleTranslator _translator = GoogleTranslator();
 
   // 2. Return String? (Nullable) to handle errors gracefully in UI
-  Future<String?> translate(String text, String targetLang, String sourceLang) async {
+  Future<String?> translate(
+    String text,
+    String targetLang,
+    String sourceLang,
+  ) async {
     if (text.trim().isEmpty) return null;
 
     try {
       // 3. Resolve Language Codes (e.g., "Spanish" -> "es")
       // If you don't do this, the package will throw an error
-      final sCode = LanguageHelper.resolveCode(sourceLang);
-      final tCode = LanguageHelper.resolveCode(targetLang);
+      final sCode = LanguageHelper.getLangCode(sourceLang);
+      final tCode = LanguageHelper.getLangCode(targetLang);
 
       // Don't translate if languages are the same
-      if (sCode == tCode) return null; 
+      if (sCode == tCode) return null;
 
       final translation = await _translator.translate(
         text,
@@ -31,7 +35,7 @@ class TranslationService {
     } catch (e) {
       // 4. Log error but don't crash
       debugPrint("Google Translate Error: $e");
-      return null; 
+      return null;
     }
   }
 }

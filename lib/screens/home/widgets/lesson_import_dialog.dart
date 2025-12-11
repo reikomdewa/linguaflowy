@@ -286,7 +286,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent> with SingleT
           
           // Audio vs Video detection
           if (['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg'].contains(ext)) {
-            type = "audio";
+            type = "video";
           } else {
             type = "video";
           }
