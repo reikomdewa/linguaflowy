@@ -29,7 +29,7 @@ import 'reader_utils.dart';
 import 'widgets/reader_view_modes.dart';
 import 'widgets/interactive_text_display.dart';
 
-// --- NEW IMPORTS (The files we just created) ---
+// --- NEW IMPORTS ---
 import 'widgets/video_controls_overlay.dart';
 import 'widgets/fullscreen_translation_card.dart';
 
@@ -41,7 +41,8 @@ class ReaderScreen extends StatefulWidget {
   _ReaderScreenState createState() => _ReaderScreenState();
 }
 
-class _ReaderScreenState extends State<ReaderScreen> {
+class _ReaderScreenState extends State<ReaderScreen>
+    with WidgetsBindingObserver {
   // --- Data & Config ---
   Map<String, VocabularyItem> _vocabulary = {};
   bool _autoMarkOnSwipe = false;
@@ -62,9 +63,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   bool _isParsingSubtitles = true;
   bool _isPlaying = false;
   bool _isSeeking = false;
+  bool _isPlayingSingleSentence = false;
+
+  // --- Fullscreen State ---
   bool _isFullScreen = false;
   bool _isTransitioningFullscreen = false;
-  bool _isPlayingSingleSentence = false;
+  
+  // FIXED: This GlobalKey now wraps a Container, not the library widget directly.
+  final GlobalKey _videoPlayerKey = GlobalKey();
 
   // --- Controls State (YouTube Style) ---
   bool _showControls = false;
@@ -106,7 +112,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
+    // Observer for detecting physical rotation
+    WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    
     _initGemini();
     _loadVocabulary();
     _loadUserPreferences();
@@ -121,6 +130,31 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _initializeLocalContent();
     } else {
       _finalizeContentInitialization();
+    }
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    // Auto-rotate logic: Only runs if we aren't manually toggling
+    if (!_isTransitioningFullscreen && (_isVideo || _isAudio)) {
+      final view = View.of(context);
+      final physicalSize = view.physicalSize;
+      // Simple check: is width > height?
+      final bool isLandscape = physicalSize.width > physicalSize.height;
+
+      if (isLandscape != _isFullScreen) {
+        setState(() {
+          _isFullScreen = isLandscape;
+        });
+        
+        // Sync System UI
+        if (isLandscape) {
+           SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+        } else {
+           SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+        }
+      }
     }
   }
 
@@ -160,6 +194,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _finalizeContentInitialization() {
     setState(() {
       _generateSmartChunks();
+      // Ensure unique keys are generated once
       _itemKeys = List.generate(_smartChunks.length, (_) => GlobalKey());
       _prepareBookPages();
       _isParsingSubtitles = false;
@@ -198,6 +233,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _syncTimer?.cancel();
     _controlsHideTimer?.cancel();
     _localPlayer?.dispose();
@@ -444,7 +480,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     } else {
       _youtubeController?.pause();
     }
-    _resetControlsTimer(); // Show controls when paused
+    _resetControlsTimer();
   }
 
   void _playMedia() {
@@ -913,208 +949,224 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
+  // --- FULLSCREEN LOGIC (CRITICAL FIX APPLIED) ---
+  
+  // SHARED PLAYER: Reuses the exact same widget instance via GlobalKey.
+  // FIXED: The GlobalKey is now applied to a Container wrapper. 
+  // This prevents conflicts between the library widget's internal keys and our reparenting key.
+  Widget _buildSharedPlayer() {
+    Widget playerWidget;
+    
+    if (_isLocalMedia && _localVideoController != null) {
+      playerWidget = Video(
+        controller: _localVideoController!,
+        controls: NoVideoControls,
+      );
+    } else if (_youtubeController != null) {
+      playerWidget = YoutubePlayer(
+        controller: _youtubeController!,
+        showVideoProgressIndicator: false,
+        width: MediaQuery.of(context).size.width,
+      );
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      key: _videoPlayerKey, // Persistent Key Anchor
+      color: Colors.black,
+      child: playerWidget,
+    );
+  }
+
+  // 2. TOGGLE ACTION
   void _toggleCustomFullScreen() {
     setState(() => _isTransitioningFullscreen = true);
+    
+    final bool targetState = !_isFullScreen;
+    setState(() => _isFullScreen = targetState);
 
-    if (_isFullScreen) {
-      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.manual,
-        overlays: SystemUiOverlay.values,
-      );
-      setState(() => _isFullScreen = false);
-    } else {
+    if (targetState) {
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      setState(() => _isFullScreen = true);
+    } else {
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: SystemUiOverlay.values,
+      );
     }
 
-    Future.delayed(const Duration(milliseconds: 500), () {
+    Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _isTransitioningFullscreen = false);
     });
   }
-@override
+
+  @override
   Widget build(BuildContext context) {
-    // 1. Wrap in OrientationBuilder to detect rotation changes automatically
-    return OrientationBuilder(
-      builder: (context, orientation) {
-        
-        // 2. Check if we should show the Fullscreen Layout
-        // We show it if:
-        // A) The manual flag _isFullScreen is true
-        // B) OR the device is physically in Landscape mode (and it's a video/audio lesson)
-        final bool shouldShowFullscreen = (_isFullScreen || orientation == Orientation.landscape) && 
-                                          (_isVideo || _isAudio);
+    // A. FULLSCREEN WIDGET
+    if (_isFullScreen && (_isVideo || _isAudio)) {
+      return _buildFullscreenMedia();
+    }
 
-        if (shouldShowFullscreen) {
-          // If we are in landscape but the flag is false, sync the flag
-          if (!_isFullScreen) {
-            // Schedule this to run after build to avoid errors
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) setState(() => _isFullScreen = true);
-            });
-          }
-          return _buildFullscreenMedia();
-        }
+    // B. PORTRAIT WIDGET
+    final settings = context.watch<SettingsBloc>().state;
+    final themeData = Theme.of(context).copyWith(
+      scaffoldBackgroundColor: settings.readerTheme == ReaderTheme.dark ? const Color(0xFF1E1E1E) : Colors.white,
+      appBarTheme: AppBarTheme(
+        backgroundColor: settings.readerTheme == ReaderTheme.dark ? const Color(0xFF1E1E1E) : Colors.white,
+        iconTheme: IconThemeData(color: settings.readerTheme == ReaderTheme.dark ? Colors.white : Colors.black),
+      ),
+      textTheme: Theme.of(context).textTheme.apply(
+        bodyColor: settings.readerTheme == ReaderTheme.dark ? Colors.white : Colors.black,
+      ),
+    );
 
-        // --- STANDARD PORTRAIT LAYOUT BELOW ---
-        final settings = context.watch<SettingsBloc>().state;
-        final themeData = Theme.of(context).copyWith(
-          scaffoldBackgroundColor: settings.readerTheme == ReaderTheme.dark
-              ? const Color(0xFF1E1E1E)
-              : Colors.white,
-          appBarTheme: AppBarTheme(
-            backgroundColor: settings.readerTheme == ReaderTheme.dark
-                ? const Color(0xFF1E1E1E)
-                : Colors.white,
-            iconTheme: IconThemeData(
-              color: settings.readerTheme == ReaderTheme.dark
-                  ? Colors.white
-                  : Colors.black,
+    final displayLesson = widget.lesson.copyWith(
+      sentences: _smartChunks,
+      transcript: _activeTranscript,
+    );
+
+    return Theme(
+      data: themeData,
+      child: Scaffold(
+        resizeToAvoidBottomInset: false, 
+        appBar: AppBar(
+          title: Text(widget.lesson.title),
+          actions: [
+            IconButton(
+              icon: Icon(_isListeningMode ? Icons.hearing : Icons.hearing_disabled),
+              onPressed: () => setState(() => _isListeningMode = !_isListeningMode),
             ),
-          ),
-          textTheme: Theme.of(context).textTheme.apply(
-            bodyColor: settings.readerTheme == ReaderTheme.dark
-                ? Colors.white
-                : Colors.black,
-          ),
-        );
-
-        final displayLesson = widget.lesson.copyWith(
-          sentences: _smartChunks,
-          transcript: _activeTranscript,
-        );
-
-        return Theme(
-          data: themeData,
-          child: Scaffold(
-            appBar: AppBar(
-              title: Text(widget.lesson.title),
-              actions: [
-                IconButton(
-                  icon: Icon(
-                    _isListeningMode ? Icons.hearing : Icons.hearing_disabled,
-                  ),
-                  onPressed: () =>
-                      setState(() => _isListeningMode = !_isListeningMode),
-                ),
-                if (!(_isVideo || _isAudio) && !_isSentenceMode)
-                  IconButton(
-                    icon: Icon(
-                      _isPlaying || _isTtsPlaying
-                          ? Icons.pause
-                          : Icons.play_arrow,
-                    ),
-                    onPressed: _toggleTtsFullLesson,
-                  ),
-                IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
-              ],
-            ),
-            body: SafeArea(
-              child: Stack(
+            if (!(_isVideo || _isAudio) && !_isSentenceMode)
+              IconButton(
+                icon: Icon(_isPlaying || _isTtsPlaying ? Icons.pause : Icons.play_arrow),
+                onPressed: _toggleTtsFullLesson,
+              ),
+            IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
+          ],
+        ),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
                 children: [
-                  Column(
-                    children: [
-                      if (_isVideo || _isAudio)
-                        ReaderMediaHeader(
-                          isInitializing: _isInitializingMedia,
-                          isAudio: _isAudio,
-                          isLocalMedia: _isLocalMedia,
-                          localVideoController: _localVideoController,
-                          localPlayer: _localPlayer,
-                          youtubeController: _youtubeController,
-                          onToggleFullscreen: _toggleCustomFullScreen,
-                        ),
-                      if (_isCheckingLimit || _isParsingSubtitles)
-                        const LinearProgressIndicator(minHeight: 2),
-                      Expanded(
-                        child: _isParsingSubtitles
-                            ? const Center(child: Text("Loading content..."))
-                            : _isSentenceMode
-                                ? SentenceModeView(
-                                    chunks: _smartChunks,
-                                    activeIndex: _activeSentenceIndex,
-                                    vocabulary: _vocabulary,
-                                    isVideo: _isVideo || _isAudio,
-                                    isPlaying:
-                                        _isPlaying || _isPlayingSingleSentence,
-                                    isTtsPlaying: _isTtsPlaying,
-                                    onTogglePlayback: _togglePlayback,
-                                    onPlayFromStartContinuous:
-                                        _playFromStartContinuous,
-                                    onPlayContinuous: _playNextContinuous,
-                                    onNext: _goToNextSentence,
-                                    onPrev: _goToPrevSentence,
-                                    onWordTap: _handleWordTap,
-                                    onPhraseSelected: _handlePhraseSelected,
-                                    isLoadingTranslation: _isLoadingTranslation,
-                                    googleTranslation: _googleTranslation,
-                                    myMemoryTranslation: _myMemoryTranslation,
-                                    showError: _showError,
-                                    onRetryTranslation:
-                                        _handleTranslationToggle,
-                                    onTranslateRequest:
-                                        _handleTranslationToggle,
-                                    isListeningMode: _isListeningMode,
-                                  )
-                                : ParagraphModeView(
-                                    lesson: displayLesson,
-                                    bookPages: _bookPages,
-                                    activeSentenceIndex: _activeSentenceIndex,
-                                    currentPage: _currentPage,
-                                    vocabulary: _vocabulary,
-                                    isVideo: _isVideo || _isAudio,
-                                    listScrollController: _listScrollController,
-                                    pageController: _pageController,
-                                    onPageChanged: (i) =>
-                                        setState(() => _currentPage = i),
-                                    onSentenceTap: (i) {
-                                      if ((_isVideo || _isAudio) &&
-                                          i < _activeTranscript.length) {
-                                        _seekToTime(_activeTranscript[i].start);
-                                        _playMedia();
-                                      } else
-                                        _speakSentence(_smartChunks[i], i);
-                                    },
-                                    onVideoSeek: (t) => _seekToTime(t),
-                                    onWordTap: _handleWordTap,
-                                    onPhraseSelected: _handlePhraseSelected,
-                                    isListeningMode: _isListeningMode,
-                                    itemKeys: _itemKeys,
+                  // --- HEADER AREA ---
+                  if (_isVideo || _isAudio)
+                    Container(
+                      width: double.infinity,
+                      color: Colors.black,
+                      child: _isAudio 
+                          ? ReaderMediaHeader(
+                              isInitializing: _isInitializingMedia,
+                              isAudio: true,
+                              isLocalMedia: _isLocalMedia,
+                              localVideoController: null,
+                              localPlayer: _localPlayer,
+                              youtubeController: _youtubeController,
+                              onToggleFullscreen: _toggleCustomFullScreen,
+                            )
+                          // VIDEO: Use Shared Player in Portrait
+                          : AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: Stack(
+                                children: [
+                                  _buildSharedPlayer(),
+                                  Positioned(
+                                    bottom: 8,
+                                    right: 8,
+                                    child: GestureDetector(
+                                      onTap: _toggleCustomFullScreen,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black54,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Icon(Icons.fullscreen, color: Colors.white, size: 24),
+                                      ),
+                                    ),
                                   ),
-                      ),
-                    ],
-                  ),
-                  Positioned(
-                    bottom: 24,
-                    right: 24,
-                    child: FloatingActionButton(
-                      backgroundColor: Theme.of(context).primaryColor,
-                      onPressed: () =>
-                          setState(() => _isSentenceMode = !_isSentenceMode),
-                      child: Icon(
-                        _isSentenceMode ? Icons.menu_book : Icons.short_text,
-                        color: Colors.white,
-                      ),
+                                ],
+                              ),
+                            ),
                     ),
+                    
+                  if (_isCheckingLimit || _isParsingSubtitles)
+                    const LinearProgressIndicator(minHeight: 2),
+                    
+                  Expanded(
+                    child: _isParsingSubtitles
+                        ? const Center(child: Text("Loading content..."))
+                        : _isSentenceMode
+                            ? SentenceModeView(
+                                chunks: _smartChunks,
+                                activeIndex: _activeSentenceIndex,
+                                vocabulary: _vocabulary,
+                                isVideo: _isVideo || _isAudio,
+                                isPlaying: _isPlaying || _isPlayingSingleSentence,
+                                isTtsPlaying: _isTtsPlaying,
+                                onTogglePlayback: _togglePlayback,
+                                onPlayFromStartContinuous: _playFromStartContinuous,
+                                onPlayContinuous: _playNextContinuous,
+                                onNext: _goToNextSentence,
+                                onPrev: _goToPrevSentence,
+                                onWordTap: _handleWordTap,
+                                onPhraseSelected: _handlePhraseSelected,
+                                isLoadingTranslation: _isLoadingTranslation,
+                                googleTranslation: _googleTranslation,
+                                myMemoryTranslation: _myMemoryTranslation,
+                                showError: _showError,
+                                onRetryTranslation: _handleTranslationToggle,
+                                onTranslateRequest: _handleTranslationToggle,
+                                isListeningMode: _isListeningMode,
+                              )
+                            : ParagraphModeView(
+                                lesson: displayLesson,
+                                bookPages: _bookPages,
+                                activeSentenceIndex: _activeSentenceIndex,
+                                currentPage: _currentPage,
+                                vocabulary: _vocabulary,
+                                isVideo: _isVideo || _isAudio,
+                                listScrollController: _listScrollController,
+                                pageController: _pageController,
+                                onPageChanged: (i) => setState(() => _currentPage = i),
+                                onSentenceTap: (i) {
+                                  if ((_isVideo || _isAudio) && i < _activeTranscript.length) {
+                                    _seekToTime(_activeTranscript[i].start);
+                                    _playMedia();
+                                  } else _speakSentence(_smartChunks[i], i);
+                                },
+                                onVideoSeek: (t) => _seekToTime(t),
+                                onWordTap: _handleWordTap,
+                                onPhraseSelected: _handlePhraseSelected,
+                                isListeningMode: _isListeningMode,
+                                itemKeys: _itemKeys,
+                              ),
                   ),
-                  if (_showCard &&
-                      _cardTranslationFuture != null &&
-                      !_isFullScreen)
-                    _buildTranslationOverlay(),
                 ],
               ),
-            ),
+              Positioned(
+                bottom: 24,
+                right: 24,
+                child: FloatingActionButton(
+                  backgroundColor: Theme.of(context).primaryColor,
+                  onPressed: () => setState(() => _isSentenceMode = !_isSentenceMode),
+                  child: Icon(_isSentenceMode ? Icons.menu_book : Icons.short_text, color: Colors.white),
+                ),
+              ),
+              if (_showCard && _cardTranslationFuture != null && !_isFullScreen)
+                _buildTranslationOverlay(),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  // --- FULLSCREEN MODE ---
   Widget _buildFullscreenMedia() {
     return WillPopScope(
       onWillPop: () async {
@@ -1123,44 +1175,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-     
         body: GestureDetector(
           onTap: _toggleControls,
-          // DOUBLE TAP GESTURES for Seek
           onDoubleTapDown: (details) {
             final w = MediaQuery.of(context).size.width;
-            if (details.globalPosition.dx < w / 3) {
-              _seekRelative(-10); // Left side
-            } else if (details.globalPosition.dx > (w * 2 / 3)) {
-              _seekRelative(10); // Right side
-            } else {
-              _toggleControls();
-            }
+            if (details.globalPosition.dx < w / 3) _seekRelative(-10);
+            else if (details.globalPosition.dx > (w * 2 / 3)) _seekRelative(10);
+            else _toggleControls();
           },
           child: Stack(
             alignment: Alignment.center,
             fit: StackFit.expand,
             children: [
+              // SHARED PLAYER - State Preserved via Key
               Center(
-                child: _isLocalMedia && _localVideoController != null
-                    ? Video(
-                        controller: _localVideoController!,
-                        fit: BoxFit.contain,
-                        controls: NoVideoControls,
-                      )
-                    : (_youtubeController != null
-                          ? AspectRatio(
-                              aspectRatio: 16 / 9,
-                              child: YoutubePlayer(
-                                controller: _youtubeController!,
-                                showVideoProgressIndicator: false,
-                                width: double.infinity,
-                              ),
-                            )
-                          : const SizedBox.shrink()),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: _buildSharedPlayer(),
+                ),
               ),
 
-              // 2. Dimmer (when card open)
               if (_showCard)
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -1168,15 +1202,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   child: Container(color: Colors.black.withOpacity(0.5)),
                 ),
 
-              // 3. Subtitles
               Positioned(
-                bottom: _showControls ? 80 : 40,
+                bottom: _showControls ? 60 : 20,
                 left: 32,
                 right: 32,
                 child: _buildInteractiveSubtitleOverlay(),
               ),
 
-              // 4. CUSTOM YOUTUBE-STYLE CONTROLS
               if (!_showCard)
                 VideoControlsOverlay(
                   isPlaying: _isPlaying,
@@ -1185,33 +1217,25 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       : (_youtubeController?.value.position ?? Duration.zero),
                   duration: _isLocalMedia && _localPlayer != null
                       ? _localPlayer!.state.duration
-                      : (_youtubeController?.metadata.duration ??
-                            Duration.zero),
+                      : (_youtubeController?.metadata.duration ?? Duration.zero),
                   showControls: _showControls,
                   onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
                   onSeekRelative: _seekRelative,
                   onSeekTo: (d) {
                     _resetControlsTimer();
-                    if (_isLocalMedia) {
-                      _localPlayer?.seek(d);
-                    } else {
-                      _youtubeController?.seekTo(d);
-                    }
+                    if (_isLocalMedia) _localPlayer?.seek(d);
+                    else _youtubeController?.seekTo(d);
                   },
                   onToggleFullscreen: _toggleCustomFullScreen,
                 ),
 
-              // 5. Back Button (Always visible if controls shown)
               if (!_showCard && _showControls)
                 Positioned(
                   top: 20,
                   left: 20,
                   child: SafeArea(
                     child: Container(
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.black45,
-                      ),
+                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black45),
                       child: IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: _toggleCustomFullScreen,
@@ -1220,7 +1244,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   ),
                 ),
 
-              // 6. Translation Card
               if (_showCard && _cardTranslationFuture != null)
                 _buildTranslationOverlay(),
             ],
@@ -1230,31 +1253,21 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  // --- SUBTITLES ---
   Widget _buildInteractiveSubtitleOverlay() {
-    if (_activeSentenceIndex == -1 ||
-        _activeSentenceIndex >= _smartChunks.length) {
+    if (_activeSentenceIndex == -1 || _activeSentenceIndex >= _smartChunks.length) {
       return const SizedBox.shrink();
     }
-
     return Center(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.75),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Theme(
-          data: ThemeData.dark(),
-          child: InteractiveTextDisplay(
-            text: _smartChunks[_activeSentenceIndex],
-            sentenceIndex: _activeSentenceIndex,
-            vocabulary: _vocabulary,
-            onWordTap: _handleWordTap,
-            onPhraseSelected: _handlePhraseSelected,
-            isBigMode: true,
-            isListeningMode: false,
-          ),
+        child: InteractiveTextDisplay(
+          text: _smartChunks[_activeSentenceIndex],
+          sentenceIndex: _activeSentenceIndex,
+          vocabulary: _vocabulary,
+          onWordTap: _handleWordTap,
+          onPhraseSelected: _handlePhraseSelected,
+          isBigMode: true,
+          isListeningMode: false,
+          isOverlay: true, // Triggers YouTube-style rendering
         ),
       ),
     );
