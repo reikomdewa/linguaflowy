@@ -243,18 +243,15 @@ class HomeDialogs {
                 style: const TextStyle(color: Colors.grey),
               ),
               onTap: () {
-                // DEBUG PRINT
-                print("🔵 [Dialog] User tapped Favorite. CurrentUser: '$currentUserId', LessonOwner: '${lesson.userId}'");
+           
 
                 if (currentUserId.isEmpty) {
-                   print("🔴 [Dialog] User is not authenticated. Aborting.");
                    Navigator.pop(builderContext);
                    return;
                 }
 
                 if (isOwner) {
                   // I own this lesson, so I just update the existing one
-                  print("🟢 [Dialog] User is Owner. Updating existing document.");
                   final updatedLesson = lesson.copyWith(
                     isFavorite: !lesson.isFavorite,
                   );
@@ -262,7 +259,6 @@ class HomeDialogs {
                 } else {
                   // I DO NOT own this lesson (System Lesson)
                   // I must CREATE A COPY in the cloud
-                  print("🟠 [Dialog] System Lesson detected. Creating Cloud Copy.");
                   
                   final newLesson = lesson.copyWith(
                     id: '', // EMPTY ID indicates a new creation

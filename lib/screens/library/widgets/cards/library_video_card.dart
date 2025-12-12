@@ -111,25 +111,6 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
                     child: _buildMediaContent(),
                   ),
                 ),
-
-                // 2. Play Button Overlay (Only for Videos)
-                if (!_isAudioOnly)
-                  Positioned.fill(
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.play_arrow,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
 
@@ -187,11 +168,62 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
     );
   }
 
-  // --- WIDGET HELPERS ---
+  String? _getYoutubeThumbnail(String videoUrl) {
+    if (videoUrl.isEmpty) return null;
+    // Regex to find the video ID from various YouTube URL formats
+    RegExp regExp = RegExp(
+      r'^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*',
+      caseSensitive: false,
+      multiLine: false,
+    );
+    final match = regExp.firstMatch(videoUrl);
+    final String? id = (match != null && match.groupCount >= 7)
+        ? match.group(7)
+        : null;
 
+    // Return high quality thumbnail if ID is found
+    if (id != null && id.length == 11) {
+      return 'https://img.youtube.com/vi/$id/hqdefault.jpg';
+    }
+    return null;
+  }
+
+  // --- WIDGET HELPERS ---
   Widget _buildMediaContent() {
-    // 1. Audio Placeholder
+    // 1. Audio Placeholder Logic
     if (_isAudioOnly) {
+      // --- START NEW CHECK ---
+      // Even if it's audio only, if we have a YouTube link, show the thumbnail
+      final String? youtubeThumb = _getYoutubeThumbnail(
+        widget.lesson.videoUrl!,
+      );
+
+      if (youtubeThumb != null) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              youtubeThumb,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                // If loading image fails, show the headphones icon
+                return Center(
+                  child: Icon(
+                    Icons.headphones,
+                    size: 50,
+                    color: widget.isDark ? Colors.white70 : Colors.blue[300],
+                  ),
+                );
+              },
+            ),
+            // Optional: Add a subtle overlay so white text/icons pop
+            Container(color: Colors.black12),
+          ],
+        );
+      }
+      // --- END NEW CHECK ---
+
+      // Default: No Video URL -> Show Headphones
       return Container(
         color: widget.isDark ? Colors.grey[800] : Colors.blue[50],
         child: Center(
@@ -230,7 +262,8 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
     // 3. Fallback for YouTube or missing images
     return _buildPlaceholder();
   }
-Widget _buildPlaceholder() {
+
+  Widget _buildPlaceholder() {
     // Try to get YouTube thumbnail if no other image exists
     final String? videoPath = widget.lesson.videoUrl;
     if (videoPath != null &&
@@ -239,7 +272,7 @@ Widget _buildPlaceholder() {
       if (videoId != null) {
         // FIX: Added correct YouTube thumbnail URL format
         return Image.network(
-          'https://img.youtube.com/vi/$videoId/0.jpg', 
+          'https://img.youtube.com/vi/$videoId/0.jpg',
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) => _buildIconPlaceholder(),
         );

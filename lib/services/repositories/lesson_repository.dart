@@ -20,11 +20,9 @@ class LessonRepository {
   // --- MAIN SYNC FUNCTION ---
   Future<List<LessonModel>> getAndSyncLessons(String userId, String languageCode) async {
     try {
-      print("🔍 [Repo] Syncing lessons for User: $userId ($languageCode)");
-
       final results = await Future.wait([
         _firestoreService.getLessons(userId, languageCode),
-        _fetchUserLocalImports(userId, languageCode), // <--- This now filters strictly
+        _fetchUserLocalImports(userId, languageCode),
         _localService.fetchStandardLessons(languageCode),
         _localService.fetchNativeVideos(languageCode),
         _localService.fetchTextBooks(languageCode),
@@ -45,22 +43,16 @@ class LessonRepository {
 
       final Map<String, LessonModel> combinedMap = {};
 
-      // 1. System Content (Base Layer)
       for (var lesson in systemLessons) combinedMap[lesson.id] = lesson;
-      
-      // 2. User Cloud Content (Overwrites System)
       for (var lesson in userLessons) combinedMap[lesson.id] = lesson;
-      
-      // 3. User Local Content (Overwrites Everything - HIGHEST PRIORITY)
       for (var lesson in localImports) combinedMap[lesson.id] = lesson;
 
       final allLessons = combinedMap.values.toList();
       allLessons.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-      print("✅ [Repo] Sync Complete. Total Lessons: ${allLessons.length}");
       return allLessons;
     } catch (e) {
-      print("🔴 [Repo] Error in sync: $e");
+      // print("Error in LessonRepository sync: $e");
       return [];
     }
   }
@@ -74,16 +66,15 @@ class LessonRepository {
 
     try {
       if (lesson.id.isEmpty) {
-        // Generate ID manually to prevent "empty path" crash
+        // Generate valid ID for new Cloud Copy
         final String newId = FirebaseFirestore.instance.collection('lessons').doc().id;
         final newLesson = lesson.copyWith(id: newId);
-        
         await _firestoreService.createLesson(newLesson);
       } else {
         await _firestoreService.updateLesson(lesson);
       }
     } catch (e) {
-      print("🔴 [Repo] Cloud Write Failed ($e). Falling back to Local Storage.");
+      // Fallback to local storage on failure
       final localOverride = lesson.copyWith(isLocal: true);
       await _saveLocalImportMetadata(localOverride);
     }
@@ -98,6 +89,7 @@ class LessonRepository {
         await _firestoreService.deleteLesson(lesson.id);
       }
     } catch (e) {
+      // Ensure local cleanup even if cloud fails
       await _deleteLocalImportMetadata(lesson.id);
     }
   }
@@ -121,37 +113,14 @@ class LessonRepository {
 
       final List<dynamic> jsonList = jsonDecode(content);
 
-      // --- DEBUGGING FILTER LOGIC ---
-      int totalFound = 0;
-      int kept = 0;
-
-      final filteredList = jsonList
+      return jsonList
           .where((json) => json is Map<String, dynamic> && json['id'] != null)
-          .map((json) {
-             totalFound++;
-             return LessonModel.fromMap(json, json['id'].toString());
-          })
-          .where((l) {
-            // STRICT FILTER: Only allow lessons belonging to THIS user
-            final bool isOwner = (l.userId == userId);
-            final bool isLang = (l.language == languageCode);
-            
-            if (!isOwner) {
-               // UNCOMMENT THIS LINE TO SEE REJECTIONS IN LOGS
-               // print("🚫 [Repo] Skipping local lesson '${l.title}' - Owned by: ${l.userId}, Requested by: $userId");
-            } else {
-               kept++;
-            }
-            return isOwner && isLang;
-          })
+          .map((json) => LessonModel.fromMap(json, json['id'].toString()))
+          // STRICT FILTER: Only allow lessons belonging to this user
+          .where((l) => l.userId == userId && l.language == languageCode) 
           .map((l) => l.copyWith(isLocal: true)) 
           .toList();
-
-      print("📂 [Repo] Local Imports: Found $totalFound in file. Returning $kept for user $userId.");
-      return filteredList;
-      
     } catch (e) {
-      print("Error reading local imports: $e");
       return [];
     }
   }
@@ -194,7 +163,7 @@ class LessonRepository {
 
       await file.writeAsString(jsonEncode(jsonList));
     } catch (e) {
-      print("Error saving local import: $e");
+      // print("Error saving local import: $e");
     }
   }
 
@@ -211,7 +180,7 @@ class LessonRepository {
       
       await file.writeAsString(jsonEncode(updatedList));
     } catch (e) {
-      print("Error deleting local import: $e");
+      // print("Error deleting local import: $e");
     }
   }
 }

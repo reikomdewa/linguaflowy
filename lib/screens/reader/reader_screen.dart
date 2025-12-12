@@ -168,9 +168,15 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  void _determineMediaType() {
-    // 1. Check for YT Audio ID format
-    if (widget.lesson.id.startsWith('yt_audio_')) {
+ void _determineMediaType() {
+    // 1. Check if the URL indicates YouTube
+    final bool isYoutubeUrl = widget.lesson.videoUrl != null &&
+        (widget.lesson.videoUrl!.toLowerCase().contains('youtube.com') ||
+         widget.lesson.videoUrl!.toLowerCase().contains('youtu.be'));
+
+    // 2. Check for Youtube Audio
+    // Logic: If ID indicates it OR (It's a YouTube URL AND the lesson type is 'audio')
+    if (widget.lesson.id.startsWith('yt_audio_') || (isYoutubeUrl && widget.lesson.type == 'audio')) {
       _isYoutubeAudio = true;
       _isAudio = false; 
       _isVideo = false;
@@ -344,16 +350,19 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   // --- PLAYER INITIALIZATION ---
-  void _initializeYoutubePlayer(String url) {
+void _initializeYoutubePlayer(String url) {
     String? videoId;
     
-    // Detect Youtube Audio IDs
+    // 1. Try to get ID from Lesson ID (Legacy/Optimization)
     if (widget.lesson.id.startsWith('yt_audio_')) {
       videoId = widget.lesson.id.replaceAll('yt_audio_', '');
-      _isYoutubeAudio = true; // Flag for custom audio UI
+      _isYoutubeAudio = true; 
     } else if (widget.lesson.id.startsWith('yt_')) {
       videoId = widget.lesson.id.replaceAll('yt_', '');
-    } else {
+    } 
+    
+    // 2. If not found in ID, extract from URL (Robust Fallback for Favorites)
+    if (videoId == null || videoId.isEmpty) {
       videoId = YoutubePlayer.convertUrlToId(url);
     }
 
@@ -361,7 +370,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       _youtubeController = YoutubePlayerController(
         initialVideoId: videoId,
         flags: const YoutubePlayerFlags(
-          autoPlay: false,
+          autoPlay: false, // Don't auto-play, let the UI handle it
           mute: false,
           enableCaption: false,
           hideControls: true, 
@@ -374,7 +383,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       
       setState(() {
         _isLocalMedia = false;
-        // Don't show video UI for audio lessons
+        // Ensure UI knows it's NOT video if we determined it's audio earlier
         _isVideo = !_isYoutubeAudio; 
       });
       _startSyncTimer();
