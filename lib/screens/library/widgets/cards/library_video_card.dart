@@ -230,16 +230,16 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
     // 3. Fallback for YouTube or missing images
     return _buildPlaceholder();
   }
-
-  Widget _buildPlaceholder() {
+Widget _buildPlaceholder() {
     // Try to get YouTube thumbnail if no other image exists
     final String? videoPath = widget.lesson.videoUrl;
     if (videoPath != null &&
         (videoPath.contains('youtube.com') || videoPath.contains('youtu.be'))) {
       final String? videoId = _getYoutubeId(videoPath);
       if (videoId != null) {
+        // FIX: Added correct YouTube thumbnail URL format
         return Image.network(
-          'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
+          'https://img.youtube.com/vi/$videoId/0.jpg', 
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) => _buildIconPlaceholder(),
         );
@@ -248,6 +248,23 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
 
     return _buildIconPlaceholder();
   }
+  // Widget _buildPlaceholder() {
+  //   // Try to get YouTube thumbnail if no other image exists
+  //   final String? videoPath = widget.lesson.videoUrl;
+  //   if (videoPath != null &&
+  //       (videoPath.contains('youtube.com') || videoPath.contains('youtu.be'))) {
+  //     final String? videoId = _getYoutubeId(videoPath);
+  //     if (videoId != null) {
+  //       return Image.network(
+  //         'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
+  //         fit: BoxFit.cover,
+  //         errorBuilder: (context, error, stackTrace) => _buildIconPlaceholder(),
+  //       );
+  //     }
+  //   }
+
+  //   return _buildIconPlaceholder();
+  // }
 
   Widget _buildIconPlaceholder() {
     return Container(

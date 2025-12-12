@@ -61,6 +61,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   // --- Media State ---
   bool _isVideo = false;
   bool _isAudio = false;
+  bool _isYoutubeAudio = false;
   bool _isLocalMedia = false;
   bool _isInitializingMedia = false;
   bool _isParsingSubtitles = true;
@@ -145,7 +146,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void didChangeMetrics() {
     super.didChangeMetrics();
-    if (!_isTransitioningFullscreen && (_isVideo || _isAudio)) {
+    if (!_isTransitioningFullscreen && (_isVideo || _isAudio || _isYoutubeAudio)) {
       final view = View.of(context);
       final physicalSize = view.physicalSize;
       final bool isLandscape = physicalSize.width > physicalSize.height;
@@ -168,6 +169,14 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _determineMediaType() {
+    // 1. Check for YT Audio ID format
+    if (widget.lesson.id.startsWith('yt_audio_')) {
+      _isYoutubeAudio = true;
+      _isAudio = false; 
+      _isVideo = false;
+      return;
+    }
+
     if (widget.lesson.type == 'audio') {
       _isAudio = true;
     } else if (widget.lesson.type == 'video') {
@@ -211,7 +220,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _initializeMedia() {
-    if ((_isVideo || _isAudio) && widget.lesson.videoUrl != null) {
+    if ((_isVideo || _isAudio || _isYoutubeAudio) && widget.lesson.videoUrl != null) {
       _initPlayerController();
     } else {
       _initializeTts();
@@ -264,14 +273,11 @@ class _ReaderScreenState extends State<ReaderScreen>
     super.dispose();
   }
 
+  // ... (LoadVocab and Preferences methods unchanged) ...
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.id)
-          .collection('vocabulary')
-          .get();
+      final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.id).collection('vocabulary').get();
       final Map<String, VocabularyItem> loadedVocab = {};
       for (var doc in snapshot.docs) {
         final data = doc.data();
@@ -295,12 +301,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   Future<void> _loadUserPreferences() async {
     final authState = context.read<AuthBloc>().state;
     if (authState is AuthAuthenticated) {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(authState.user.id)
-          .collection('preferences')
-          .doc('reader')
-          .get();
+      final doc = await FirebaseFirestore.instance.collection('users').doc(authState.user.id).collection('preferences').doc('reader').get();
       if (doc.exists && mounted) {
         setState(() {
           _autoMarkOnSwipe = doc.data()?['autoMarkOnSwipe'] ?? false;
@@ -345,12 +346,16 @@ class _ReaderScreenState extends State<ReaderScreen>
   // --- PLAYER INITIALIZATION ---
   void _initializeYoutubePlayer(String url) {
     String? videoId;
-    if (widget.lesson.id.startsWith('yt_audio_'))
+    
+    // Detect Youtube Audio IDs
+    if (widget.lesson.id.startsWith('yt_audio_')) {
       videoId = widget.lesson.id.replaceAll('yt_audio_', '');
-    else if (widget.lesson.id.startsWith('yt_'))
+      _isYoutubeAudio = true; // Flag for custom audio UI
+    } else if (widget.lesson.id.startsWith('yt_')) {
       videoId = widget.lesson.id.replaceAll('yt_', '');
-    else
+    } else {
       videoId = YoutubePlayer.convertUrlToId(url);
+    }
 
     if (videoId != null) {
       _youtubeController = YoutubePlayerController(
@@ -359,7 +364,6 @@ class _ReaderScreenState extends State<ReaderScreen>
           autoPlay: false,
           mute: false,
           enableCaption: false,
-          // Hide native controls so our custom overlay works for YouTube too
           hideControls: true, 
           disableDragSeek: false,
           loop: false,
@@ -367,9 +371,11 @@ class _ReaderScreenState extends State<ReaderScreen>
           forceHD: false,
         ),
       );
+      
       setState(() {
         _isLocalMedia = false;
-        _isVideo = true;
+        // Don't show video UI for audio lessons
+        _isVideo = !_isYoutubeAudio; 
       });
       _startSyncTimer();
     }
@@ -380,7 +386,10 @@ class _ReaderScreenState extends State<ReaderScreen>
     try {
       _localPlayer = Player();
       _localVideoController = VideoController(_localPlayer!);
-      await _localPlayer!.open(Media(path));
+      
+      // FIX 1: GHOST AUDIO FIX
+      // Force play: false so it doesn't start in background
+      await _localPlayer!.open(Media(path), play: false); 
 
       int retries = 0;
       while (_localPlayer!.state.duration == Duration.zero && retries < 15) {
@@ -562,6 +571,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     });
   }
 
+  // ... (Nav functions _goToNextSentence etc. unchanged) ...
   void _goToNextSentence() {
     if (_activeSentenceIndex < _smartChunks.length - 1) {
       _handleSwipeMarking(_activeSentenceIndex);
@@ -571,7 +581,7 @@ class _ReaderScreenState extends State<ReaderScreen>
         _resetTranslationState();
         if (_isSentenceMode) _isPlayingSingleSentence = true;
       });
-      if ((_isVideo || _isAudio) &&
+      if ((_isVideo || _isAudio || _isYoutubeAudio) &&
           _activeTranscript.isNotEmpty &&
           next < _activeTranscript.length) {
         _seekToTime(_activeTranscript[next].start);
@@ -588,7 +598,7 @@ class _ReaderScreenState extends State<ReaderScreen>
         _resetTranslationState();
         if (_isSentenceMode) _isPlayingSingleSentence = true;
       });
-      if ((_isVideo || _isAudio) &&
+      if ((_isVideo || _isAudio || _isYoutubeAudio) &&
           _activeTranscript.isNotEmpty &&
           prev < _activeTranscript.length) {
         _seekToTime(_activeTranscript[prev].start);
@@ -598,7 +608,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _playFromStartContinuous() {
-    if (_isVideo || _isAudio) {
+    if (_isVideo || _isAudio || _isYoutubeAudio) {
       if (_activeSentenceIndex != -1 && _activeTranscript.isNotEmpty) {
         setState(() => _isPlayingSingleSentence = false);
         _seekToTime(_activeTranscript[_activeSentenceIndex].start);
@@ -610,7 +620,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _playNextContinuous() {
-    if (_isVideo || _isAudio) {
+    if (_isVideo || _isAudio || _isYoutubeAudio) {
       if (_activeSentenceIndex < _smartChunks.length - 1) {
         _handleSwipeMarking(_activeSentenceIndex);
         setState(() {
@@ -630,7 +640,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _togglePlayback() {
-    if (_isVideo || _isAudio) {
+    if (_isVideo || _isAudio || _isYoutubeAudio) {
       if (_isPlaying) {
         _pauseMedia();
         setState(() => _isPlayingSingleSentence = false);
@@ -699,8 +709,13 @@ class _ReaderScreenState extends State<ReaderScreen>
     setState(() => _showSubtitles = !_showSubtitles);
   }
 
+  // FIX 2: DRAG SELECT FIX (Reset Focus)
   void _closeTranslationCard() {
     if (_showCard) {
+      // Unfocus triggers the SelectableText to release its internal selection state
+      // This allows you to select a new phrase immediately.
+      FocusManager.instance.primaryFocus?.unfocus();
+
       _activeSelectionClearer?.call();
       setState(() {
         _showCard = false;
@@ -708,7 +723,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       });
 
       // RESUME: Check if video was playing before card opened
-      if (_wasPlayingBeforeCard && (_isVideo || _isAudio)) {
+      if (_wasPlayingBeforeCard && (_isVideo || _isAudio || _isYoutubeAudio)) {
         _playMedia();
       }
       _wasPlayingBeforeCard = false;
@@ -737,25 +752,42 @@ class _ReaderScreenState extends State<ReaderScreen>
       _checkLimitAndActivate(auth.user.id, cleanId, word, pos, false);
   }
 
-  // --- PHRASE RECOVERY LOGIC ---
   String _restoreSpaces(String compressedPhrase) {
-    if (_activeSentenceIndex < 0 || _activeSentenceIndex >= _smartChunks.length) {
-      return compressedPhrase;
+    if (_activeSentenceIndex >= 0 && _activeSentenceIndex < _smartChunks.length) {
+      if (_smartChunks[_activeSentenceIndex].contains(compressedPhrase)) {
+        return compressedPhrase;
+      }
     }
-    
-    final fullText = _smartChunks[_activeSentenceIndex];
+    for (final chunk in _smartChunks) {
+      if (chunk.contains(compressedPhrase)) {
+        return compressedPhrase;
+      }
+    }
+
     String pattern = compressedPhrase
         .split('')
         .map((c) => RegExp.escape(c))
         .join(r'\s*');
-        
-    try {
-      final regex = RegExp(pattern, caseSensitive: false);
-      final match = regex.firstMatch(fullText);
-      if (match != null) {
-        return fullText.substring(match.start, match.end);
-      }
-    } catch (_) {}
+    
+    final regex = RegExp(pattern, caseSensitive: false);
+
+    if (_activeSentenceIndex >= 0 && _activeSentenceIndex < _smartChunks.length) {
+      try {
+        final match = regex.firstMatch(_smartChunks[_activeSentenceIndex]);
+        if (match != null) {
+          return _smartChunks[_activeSentenceIndex].substring(match.start, match.end);
+        }
+      } catch (_) {}
+    }
+
+    for (String chunk in _smartChunks) {
+      try {
+        final match = regex.firstMatch(chunk);
+        if (match != null) {
+          return chunk.substring(match.start, match.end);
+        }
+      } catch (_) {}
+    }
     
     return compressedPhrase;
   }
@@ -781,7 +813,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     required bool isPhrase,
   }) {
     // 1. Pause Video if playing
-    if (_isVideo || _isAudio) {
+    if (_isVideo || _isAudio || _isYoutubeAudio) {
       _wasPlayingBeforeCard = _isPlaying;
       if (_isPlaying) {
         _pauseMedia();
@@ -812,7 +844,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     });
   }
 
-  // --- CARD BUILDER ---
+  // ... (Card builder and status updates unchanged) ...
   Widget _buildTranslationOverlay() {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final existing = _isSelectionPhrase ? null : _vocabulary[_selectedCleanId];
@@ -901,7 +933,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     double? timestamp;
     String? sentenceContext;
 
-    if (_isVideo || _isAudio) {
+    if (_isVideo || _isAudio || _isYoutubeAudio) {
       videoUrl = widget.lesson.videoUrl;
       
       // Capture timestamp from current active sentence start time
@@ -1104,10 +1136,79 @@ class _ReaderScreenState extends State<ReaderScreen>
     });
   }
 
+  Widget _buildYoutubeAudioControls() {
+    final duration = _youtubeController?.metadata.duration ?? Duration.zero;
+    final position = _youtubeController?.value.position ?? Duration.zero;
+    final max = duration.inSeconds.toDouble();
+    final value = position.inSeconds.toDouble().clamp(0.0, max);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: const Color(0xFF222222),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                iconSize: 48,
+                color: Colors.white,
+                onPressed: _isPlaying ? _pauseMedia : _playMedia,
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 2,
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      ),
+                      child: Slider(
+                        value: value,
+                        min: 0,
+                        max: max > 0 ? max : 1,
+                        activeColor: Colors.red,
+                        inactiveColor: Colors.grey[700],
+                        onChanged: (v) {
+                          _seekToTime(v);
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _formatDuration(position),
+                            style: const TextStyle(color: Colors.grey, fontSize: 10),
+                          ),
+                          Text(
+                            _formatDuration(duration),
+                            style: const TextStyle(color: Colors.grey, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    )
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(Duration d) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return "${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}";
+  }
+
   @override
   Widget build(BuildContext context) {
     // A. FULLSCREEN WIDGET
-    if (_isFullScreen && (_isVideo || _isAudio)) {
+    if (_isFullScreen && (_isVideo || _isAudio || _isYoutubeAudio)) {
       return _buildFullscreenMedia();
     }
 
@@ -1153,7 +1254,7 @@ class _ReaderScreenState extends State<ReaderScreen>
               onPressed: () =>
                   setState(() => _isListeningMode = !_isListeningMode),
             ),
-            if (!(_isVideo || _isAudio) && !_isSentenceMode)
+            if (!(_isVideo || _isAudio || _isYoutubeAudio) && !_isSentenceMode)
               IconButton(
                 icon: Icon(
                   _isPlaying || _isTtsPlaying ? Icons.pause : Icons.play_arrow,
@@ -1181,7 +1282,6 @@ class _ReaderScreenState extends State<ReaderScreen>
                 }
               },
               itemBuilder: (context) => [
-                // 1. Auto Mark
                 PopupMenuItem(
                   value: 'toggle_swipe',
                   child: Row(
@@ -1197,8 +1297,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                     ],
                   ),
                 ),
-                // 2. CC Toggle (Visible only if video/audio)
-                if (_isVideo || _isAudio)
+                if (_isVideo || _isAudio || _isYoutubeAudio)
                   PopupMenuItem(
                     value: 'toggle_cc',
                     child: Row(
@@ -1222,49 +1321,68 @@ class _ReaderScreenState extends State<ReaderScreen>
               Column(
                 children: [
                   // --- HEADER AREA ---
-                  if (_isVideo || _isAudio)
+                  if (_isVideo || _isAudio || _isYoutubeAudio)
                     Container(
                       width: double.infinity,
                       color: Colors.black,
-                      child: _isAudio
-                          ? ReaderMediaHeader(
-                              isInitializing: _isInitializingMedia,
-                              isAudio: true,
-                              isLocalMedia: _isLocalMedia,
-                              localVideoController: null,
-                              localPlayer: _localPlayer,
-                              youtubeController: _youtubeController,
-                              onToggleFullscreen: _toggleCustomFullScreen,
-                            )
-                          // VIDEO: Use Shared Player in Portrait
-                          : AspectRatio(
-                              aspectRatio: 16 / 9,
-                              child: GestureDetector(
-                                onTap: _toggleControls,
-                                child: Stack(
+                      child: _isYoutubeAudio
+                        // 1. YOUTUBE AUDIO: Video Hidden + Custom Controls
+                        // Use IndexedStack to hide video but keep it active
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                height: 1,
+                                child: IndexedStack(
+                                  index: 0,
                                   children: [
                                     _buildSharedPlayer(),
-                                    // Custom Overlay in Portrait
-                                    VideoControlsOverlay(
-                                      isPlaying: _isPlaying,
-                                      position: (_isSeeking && _optimisticPosition != null)
-                                          ? _optimisticPosition!
-                                          : (_isLocalMedia && _localPlayer != null
-                                              ? _localPlayer!.state.position
-                                              : (_youtubeController?.value.position ?? Duration.zero)),
-                                      duration: _isLocalMedia && _localPlayer != null
-                                          ? _localPlayer!.state.duration
-                                          : (_youtubeController?.metadata.duration ?? Duration.zero),
-                                      showControls: _showControls,
-                                      onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
-                                      onSeekRelative: _seekRelative,
-                                      onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
-                                      onToggleFullscreen: _toggleCustomFullScreen,
-                                    ),
+                                    Container(color: Colors.black),
                                   ],
                                 ),
                               ),
-                            ),
+                              _buildYoutubeAudioControls(),
+                            ],
+                          )
+                        : _isAudio
+                            // 2. NORMAL AUDIO (FILE/LOCAL)
+                            ? ReaderMediaHeader(
+                                isInitializing: _isInitializingMedia,
+                                isAudio: true,
+                                isLocalMedia: _isLocalMedia,
+                                localVideoController: null,
+                                localPlayer: _localPlayer,
+                                youtubeController: _youtubeController,
+                                onToggleFullscreen: _toggleCustomFullScreen,
+                              )
+                            // 3. VIDEO MODE (YOUTUBE VIDEO OR FILE VIDEO)
+                            : AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: GestureDetector(
+                                  onTap: _toggleControls,
+                                  child: Stack(
+                                    children: [
+                                      _buildSharedPlayer(),
+                                      VideoControlsOverlay(
+                                        isPlaying: _isPlaying,
+                                        position: (_isSeeking && _optimisticPosition != null)
+                                            ? _optimisticPosition!
+                                            : (_isLocalMedia && _localPlayer != null
+                                                ? _localPlayer!.state.position
+                                                : (_youtubeController?.value.position ?? Duration.zero)),
+                                        duration: _isLocalMedia && _localPlayer != null
+                                            ? _localPlayer!.state.duration
+                                            : (_youtubeController?.metadata.duration ?? Duration.zero),
+                                        showControls: _showControls,
+                                        onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
+                                        onSeekRelative: _seekRelative,
+                                        onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
+                                        onToggleFullscreen: _toggleCustomFullScreen,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                     ),
 
                   if (_isCheckingLimit || _isParsingSubtitles)
@@ -1278,7 +1396,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                             chunks: _smartChunks,
                             activeIndex: _activeSentenceIndex,
                             vocabulary: _vocabulary,
-                            isVideo: _isVideo || _isAudio,
+                            isVideo: _isVideo || _isAudio || _isYoutubeAudio,
                             isPlaying: _isPlaying || _isPlayingSingleSentence,
                             isTtsPlaying: _isTtsPlaying,
                             onTogglePlayback: _togglePlayback,
@@ -1302,13 +1420,13 @@ class _ReaderScreenState extends State<ReaderScreen>
                             activeSentenceIndex: _activeSentenceIndex,
                             currentPage: _currentPage,
                             vocabulary: _vocabulary,
-                            isVideo: _isVideo || _isAudio,
+                            isVideo: _isVideo || _isAudio || _isYoutubeAudio,
                             listScrollController: _listScrollController,
                             pageController: _pageController,
                             onPageChanged: (i) =>
                                 setState(() => _currentPage = i),
                             onSentenceTap: (i) {
-                              if ((_isVideo || _isAudio) &&
+                              if ((_isVideo || _isAudio || _isYoutubeAudio) &&
                                   i < _activeTranscript.length) {
                                 _seekToTime(_activeTranscript[i].start);
                                 _playMedia();
@@ -1380,7 +1498,6 @@ class _ReaderScreenState extends State<ReaderScreen>
             alignment: Alignment.center,
             fit: StackFit.expand,
             children: [
-              // SHARED PLAYER - State Preserved via Key
               Center(
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
@@ -1423,7 +1540,6 @@ class _ReaderScreenState extends State<ReaderScreen>
                 ),
 
               if (!_showCard && _showControls) ...[
-                // Back Button
                 Positioned(
                   top: 20,
                   left: 20,
@@ -1440,8 +1556,6 @@ class _ReaderScreenState extends State<ReaderScreen>
                     ),
                   ),
                 ),
-                
-                // Subtitle Toggle (Fullscreen Overlay)
                 Positioned(
                   top: 20,
                   right: 20,
