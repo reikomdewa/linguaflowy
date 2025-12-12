@@ -61,7 +61,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
   }
 
   void _processText() {
-    // RESTORED: Original split logic that preserves spacing better
+    // Splits by whitespace but keeps the delimiters to preserve spacing logic
     _tokens = widget.text.split(RegExp(r'(\s+)'));
     
     _tokenKeys.clear();
@@ -149,6 +149,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     final lineHeight = settings.lineHeight;
     final bool isObscured = widget.isListeningMode && !_isRevealed;
 
+    // Standard subtitle background color (Semi-transparent black)
     final Color overlayBlack = Colors.black.withOpacity(0.6);
 
     Widget textContent = Wrap(
@@ -176,38 +177,41 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
         Color textColor = isDark ? Colors.white : Colors.black;
 
         if (widget.isOverlay) {
-          // --- OVERLAY MODE ---
+          // --- OVERLAY MODE (Video) ---
           if (isSpace) {
-            containerColor = overlayBlack; // Color the space black
+            containerColor = overlayBlack; 
           } else {
             final vocabItem = widget.vocabulary[cleanWord];
+            // Treat null (not in DB) as status 0
+            final int status = vocabItem?.status ?? 0;
 
-            if (vocabItem != null) {
-              if (vocabItem.status == 0) {
-                // BLUE (New Word) - High opacity
-                containerColor = Colors.blue.withOpacity(0.8);
-                textColor = Colors.white;
+            if (status == 0) {
+              // 1. UNKNOWN / NEW WORD -> BLUE
+              containerColor = Colors.blue.withOpacity(0.8);
+              textColor = Colors.white;
+            } else if (status < 5) {
+              // 2. LEARNING (Status 1-4) -> PROGRESSIVE COLORS
+              // Use the standard status colors (Red/Orange/Yellow/Green)
+              Color rawColor = ReaderUtils.getWordColor(vocabItem!, true);
+              
+              // Ensure color is visible on video (high opacity)
+              containerColor = rawColor.withOpacity(0.9);
+              
+              // Smart text color: Dark text for bright backgrounds (Yellow/Orange)
+              if (status <= 3) {
+                textColor = Colors.black;
               } else {
-                // SAVED (Yellow/Green/Red) - High opacity
-                Color rawColor = ReaderUtils.getWordColor(vocabItem, true);
-                if (rawColor == Colors.transparent) rawColor = Colors.yellow;
-                
-                containerColor = rawColor.withOpacity(0.9);
-                // Smart text color for readability
-                if (vocabItem.status <= 3) {
-                  textColor = Colors.black;
-                } else {
-                  textColor = Colors.white;
-                }
+                textColor = Colors.white;
               }
             } else {
-              // PLAIN WORD - Black background
+              // 3. KNOWN (Status 5+) -> BLACK STRIP
+              // Removes the "ugly" highlight for mastered words
               containerColor = overlayBlack;
               textColor = Colors.white;
             }
           }
         } else {
-          // --- NORMAL MODE ---
+          // --- NORMAL MODE (Portrait / Text Reader) ---
           if (!isSpace) {
             final vocabItem = widget.vocabulary[cleanWord];
             containerColor = ReaderUtils.getWordColor(vocabItem, isDark);
@@ -215,25 +219,19 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
           }
         }
 
-        // Selection Override
+        // Selection Override (Dragging)
         if (isSelected) {
           containerColor = Colors.purple.withOpacity(0.8);
           textColor = Colors.white;
         }
 
-        // --- PADDING LOGIC (FIX FOR SPACING) ---
-        // Words get horizontal padding (your original look).
-        // Spaces get 0 horizontal padding (so they don't become huge gaps).
-        // In Overlay, we remove vertical padding slightly to make lines compact if needed,
-        // but keeping horizontal padding for words ensures the highlight box isn't too tight.
+        // --- PADDING LOGIC ---
         EdgeInsetsGeometry padding;
         if (isSpace) {
-          // Spaces just need to fill the gap, no extra padding
           padding = widget.isOverlay 
-              ? const EdgeInsets.symmetric(vertical: 2.0) // Match height
+              ? const EdgeInsets.symmetric(vertical: 2.0) 
               : EdgeInsets.zero;
         } else {
-          // Words get the nice spacing you liked
           padding = const EdgeInsets.symmetric(horizontal: 2.5, vertical: 2.0);
         }
 
@@ -248,7 +246,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
             padding: padding,
             decoration: BoxDecoration(
               color: containerColor,
-              // Round corners in normal mode, square in overlay for strip effect
+              // Square corners for overlay to look like captions, rounded for normal
               borderRadius: BorderRadius.circular(widget.isOverlay ? 0 : 4),
               border: isSelected ? Border.all(color: Colors.white, width: 1) : null,
             ),
@@ -258,7 +256,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
                 fontSize: finalFontSize,
                 height: lineHeight,
                 color: textColor,
-                fontWeight: (!isSpace && (widget.vocabulary[cleanWord]?.status ?? 0) > 0)
+                fontWeight: (!isSpace && !widget.isOverlay && (widget.vocabulary[cleanWord]?.status ?? 0) > 0)
                     ? FontWeight.w600
                     : FontWeight.normal,
                 shadows: (widget.isOverlay && containerColor == overlayBlack)

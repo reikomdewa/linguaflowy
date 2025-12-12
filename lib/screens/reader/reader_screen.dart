@@ -65,6 +65,10 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _isSeeking = false;
   bool _isPlayingSingleSentence = false;
 
+  // Optimistic Seek State (Fixes scrubbing)
+  Duration? _optimisticPosition;
+  Timer? _seekResetTimer;
+
   // Track if video was playing before opening card
   bool _wasPlayingBeforeCard = false;
 
@@ -236,6 +240,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _syncTimer?.cancel();
+    _seekResetTimer?.cancel();
     _controlsHideTimer?.cancel();
     _localPlayer?.dispose();
     _youtubeController?.dispose();
@@ -515,8 +520,13 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   Future<void> _seekToTime(double seconds) async {
-    setState(() => _isSeeking = true);
+    _seekResetTimer?.cancel();
     final d = Duration(milliseconds: (seconds * 1000).toInt());
+
+    setState(() {
+      _isSeeking = true;
+      _optimisticPosition = d;
+    });
 
     if (_isLocalMedia && _localPlayer != null) {
       await _localPlayer!.seek(d);
@@ -524,8 +534,13 @@ class _ReaderScreenState extends State<ReaderScreen>
       _youtubeController!.seekTo(d);
     }
 
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted) setState(() => _isSeeking = false);
+    _seekResetTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted) {
+        setState(() {
+          _isSeeking = false;
+          _optimisticPosition = null;
+        });
+      }
     });
   }
 
@@ -715,16 +730,13 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   // --- PHRASE RECOVERY LOGIC ---
-  /// Attempts to find the [compressedPhrase] (which may lack spaces) inside the 
-  /// current active sentence and returns the substring with spaces restored.
   String _restoreSpaces(String compressedPhrase) {
     if (_activeSentenceIndex < 0 || _activeSentenceIndex >= _smartChunks.length) {
       return compressedPhrase;
     }
     
     final fullText = _smartChunks[_activeSentenceIndex];
-    // Create a regex pattern that allows any amount of whitespace between chars
-    // e.g. "hello" -> "h\s*e\s*l\s*l\s*o"
+    // Create regex: "hello" -> "h\s*e\s*l\s*l\s*o"
     String pattern = compressedPhrase
         .split('')
         .map((c) => RegExp.escape(c))
@@ -736,15 +748,12 @@ class _ReaderScreenState extends State<ReaderScreen>
       if (match != null) {
         return fullText.substring(match.start, match.end);
       }
-    } catch (_) {
-      // If regex fails (e.g. invalid chars), fall back to original
-    }
+    } catch (_) {}
     
     return compressedPhrase;
   }
 
   void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
-    // 1. Attempt to restore spaces in the selected text
     final restoredPhrase = _restoreSpaces(phrase);
 
     _activeSelectionClearer?.call();
@@ -1185,20 +1194,18 @@ class _ReaderScreenState extends State<ReaderScreen>
                                     // Custom Overlay in Portrait
                                     VideoControlsOverlay(
                                       isPlaying: _isPlaying,
-                                      position: _isLocalMedia && _localPlayer != null
-                                          ? _localPlayer!.state.position
-                                          : (_youtubeController?.value.position ?? Duration.zero),
+                                      position: (_isSeeking && _optimisticPosition != null)
+                                          ? _optimisticPosition!
+                                          : (_isLocalMedia && _localPlayer != null
+                                              ? _localPlayer!.state.position
+                                              : (_youtubeController?.value.position ?? Duration.zero)),
                                       duration: _isLocalMedia && _localPlayer != null
                                           ? _localPlayer!.state.duration
                                           : (_youtubeController?.metadata.duration ?? Duration.zero),
                                       showControls: _showControls,
                                       onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
                                       onSeekRelative: _seekRelative,
-                                      onSeekTo: (d) {
-                                        _resetControlsTimer();
-                                        if (_isLocalMedia) _localPlayer?.seek(d);
-                                        else _youtubeController?.seekTo(d);
-                                      },
+                                      onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
                                       onToggleFullscreen: _toggleCustomFullScreen,
                                     ),
                                   ],
@@ -1345,9 +1352,11 @@ class _ReaderScreenState extends State<ReaderScreen>
               if (!_showCard)
                 VideoControlsOverlay(
                   isPlaying: _isPlaying,
-                  position: _isLocalMedia && _localPlayer != null
-                      ? _localPlayer!.state.position
-                      : (_youtubeController?.value.position ?? Duration.zero),
+                  position: (_isSeeking && _optimisticPosition != null)
+                      ? _optimisticPosition!
+                      : (_isLocalMedia && _localPlayer != null
+                          ? _localPlayer!.state.position
+                          : (_youtubeController?.value.position ?? Duration.zero)),
                   duration: _isLocalMedia && _localPlayer != null
                       ? _localPlayer!.state.duration
                       : (_youtubeController?.metadata.duration ??
@@ -1355,13 +1364,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                   showControls: _showControls,
                   onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
                   onSeekRelative: _seekRelative,
-                  onSeekTo: (d) {
-                    _resetControlsTimer();
-                    if (_isLocalMedia)
-                      _localPlayer?.seek(d);
-                    else
-                      _youtubeController?.seekTo(d);
-                  },
+                  onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
                   onToggleFullscreen: _toggleCustomFullScreen,
                 ),
 
