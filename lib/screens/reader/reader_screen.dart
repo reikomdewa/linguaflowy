@@ -48,6 +48,9 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _autoMarkOnSwipe = false;
   bool _hasSeenStatusHint = false;
   bool _isListeningMode = false;
+  
+  // Subtitle Toggle State
+  bool _showSubtitles = true;
 
   // --- Media Players ---
   YoutubePlayerController? _youtubeController;
@@ -65,7 +68,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _isSeeking = false;
   bool _isPlayingSingleSentence = false;
 
-  // Optimistic Seek State (Fixes scrubbing)
+  // Optimistic Seek State
   Duration? _optimisticPosition;
   Timer? _seekResetTimer;
 
@@ -356,7 +359,8 @@ class _ReaderScreenState extends State<ReaderScreen>
           autoPlay: false,
           mute: false,
           enableCaption: false,
-          hideControls: false,
+          // Hide native controls so our custom overlay works for YouTube too
+          hideControls: true, 
           disableDragSeek: false,
           loop: false,
           isLive: false,
@@ -690,6 +694,10 @@ class _ReaderScreenState extends State<ReaderScreen>
       _speakSentence(widget.lesson.sentences[start], start);
     }
   }
+  
+  void _toggleSubtitles() {
+    setState(() => _showSubtitles = !_showSubtitles);
+  }
 
   void _closeTranslationCard() {
     if (_showCard) {
@@ -736,7 +744,6 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
     
     final fullText = _smartChunks[_activeSentenceIndex];
-    // Create regex: "hello" -> "h\s*e\s*l\s*l\s*o"
     String pattern = compressedPhrase
         .split('')
         .map((c) => RegExp.escape(c))
@@ -1125,7 +1132,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                 ),
                 onPressed: _toggleTtsFullLesson,
               ),
-            // Updated Menu for Swipe Toggle
+            // Menu: Swipe Toggle AND Captions Toggle
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'toggle_swipe') {
@@ -1141,9 +1148,12 @@ class _ReaderScreenState extends State<ReaderScreen>
                         {'autoMarkOnSwipe': _autoMarkOnSwipe},
                         SetOptions(merge: true),
                       );
+                } else if (value == 'toggle_cc') {
+                  _toggleSubtitles();
                 }
               },
               itemBuilder: (context) => [
+                // 1. Auto Mark
                 PopupMenuItem(
                   value: 'toggle_swipe',
                   child: Row(
@@ -1159,6 +1169,21 @@ class _ReaderScreenState extends State<ReaderScreen>
                     ],
                   ),
                 ),
+                // 2. CC Toggle (Visible only if video/audio)
+                if (_isVideo || _isAudio)
+                  PopupMenuItem(
+                    value: 'toggle_cc',
+                    child: Row(
+                      children: [
+                        Icon(
+                          _showSubtitles ? Icons.closed_caption : Icons.closed_caption_off,
+                          color: Theme.of(context).iconTheme.color,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(_showSubtitles ? 'Hide Captions' : 'Show Captions'),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ],
@@ -1342,12 +1367,13 @@ class _ReaderScreenState extends State<ReaderScreen>
                   child: Container(color: Colors.black.withOpacity(0.5)),
                 ),
 
-              Positioned(
-                bottom: _showControls ? 60 : 20,
-                left: 80,
-                right: 80,
-                child: _buildInteractiveSubtitleOverlay(),
-              ),
+              if (_showSubtitles)
+                Positioned(
+                  bottom: _showControls ? 60 : 20,
+                  left: 80,
+                  right: 80,
+                  child: _buildInteractiveSubtitleOverlay(),
+                ),
 
               if (!_showCard)
                 VideoControlsOverlay(
@@ -1368,7 +1394,8 @@ class _ReaderScreenState extends State<ReaderScreen>
                   onToggleFullscreen: _toggleCustomFullScreen,
                 ),
 
-              if (!_showCard && _showControls)
+              if (!_showCard && _showControls) ...[
+                // Back Button
                 Positioned(
                   top: 20,
                   left: 20,
@@ -1385,6 +1412,28 @@ class _ReaderScreenState extends State<ReaderScreen>
                     ),
                   ),
                 ),
+                
+                // Subtitle Toggle (Fullscreen Overlay)
+                Positioned(
+                  top: 20,
+                  right: 20,
+                  child: SafeArea(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black45,
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                          _showSubtitles ? Icons.closed_caption : Icons.closed_caption_off,
+                          color: _showSubtitles ? Colors.white : Colors.grey,
+                        ),
+                        onPressed: _toggleSubtitles,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
 
               if (_showCard && _cardTranslationFuture != null)
                 _buildTranslationOverlay(),
@@ -1396,7 +1445,8 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   Widget _buildInteractiveSubtitleOverlay() {
-    if (_activeSentenceIndex == -1 ||
+    if (!_showSubtitles || 
+        _activeSentenceIndex == -1 ||
         _activeSentenceIndex >= _smartChunks.length) {
       return const SizedBox.shrink();
     }
