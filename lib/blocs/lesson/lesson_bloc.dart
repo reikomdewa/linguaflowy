@@ -46,14 +46,23 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
     LessonCreateRequested event,
     Emitter<LessonState> emit,
   ) async {
+    // DEBUG PRINT
+    print("🔵 [Bloc] Creating Lesson. ID should be empty: '${event.lesson.id}'");
+    print("🔵 [Bloc] Target: isLocal=${event.lesson.isLocal}, userId=${event.lesson.userId}");
+
+    final currentState = state;
     try {
-      // Repository handles logic for Local vs Firestore based on lesson.isLocal
       await _lessonRepository.saveOrUpdateLesson(event.lesson);
-      
       // Reload the list to show the new item
       add(LessonLoadRequested(event.lesson.userId, event.lesson.language));
     } catch (e) {
-      emit(LessonError(e.toString()));
+      print("🔴 [Bloc] Create Failed: $e");
+      if (currentState is LessonLoaded) {
+        // Prevent list from disappearing on error
+        emit(LessonLoaded(currentState.lessons)); 
+      } else {
+        emit(LessonError(e.toString()));
+      }
     }
   }
 
@@ -63,30 +72,30 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
   ) async {
     final currentState = state;
     
-    // We need the full LessonModel to know if we are deleting a Local file or a Firestore doc
     if (currentState is LessonLoaded) {
+      // 1. Keep a copy of original
+      final originalLessons = currentState.lessons;
+
       try {
-        // 1. Find the lesson object in current state
         final lessonToDelete = currentState.lessons.firstWhere(
           (l) => l.id == event.lessonId,
           orElse: () => throw Exception("Lesson not found in state"),
         );
 
-        // 2. Pass the full object to repository so it knows WHERE to delete from
-        await _lessonRepository.deleteLesson(lessonToDelete);
-        
-        // 3. Optimistically update UI
-        final updatedLessons = currentState.lessons
+        // 2. Optimistic Update (Remove visually)
+        final optimizedList = currentState.lessons
             .where((lesson) => lesson.id != event.lessonId)
             .toList();
         
-        emit(LessonLoaded(updatedLessons));
+        emit(LessonLoaded(optimizedList));
+
+        // 3. Delete from DB
+        await _lessonRepository.deleteLesson(lessonToDelete);
+        
       } catch (e) {
-        emit(LessonError("Failed to delete lesson: $e"));
-        // Optionally trigger a reload to ensure sync
-        // if (currentState.lessons.isNotEmpty) {
-        //   add(LessonLoadRequested(currentState.lessons.first.userId, currentState.lessons.first.language));
-        // }
+        print("🔴 [Bloc] Delete Failed. Reverting UI: $e");
+        // 4. Revert on failure
+        emit(LessonLoaded(originalLessons));
       }
     }
   }
@@ -97,18 +106,22 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
   ) async {
     final currentState = state;
     if (currentState is LessonLoaded) {
-      // Optimistic Update
+      // 1. Keep copy
+      final originalLessons = currentState.lessons;
+
+      // 2. Optimistic Update
       final updatedLessons = currentState.lessons.map((l) {
         return l.id == event.lesson.id ? event.lesson : l;
       }).toList();
       emit(LessonLoaded(updatedLessons));
 
       try {
+        // 3. Save to DB
         await _lessonRepository.saveOrUpdateLesson(event.lesson);
       } catch (e) {
-        // If update fails, revert to previous state or show error
-        // For now, we just emit the error but keep the list (or reload)
-        emit(LessonError("Failed to update lesson: $e"));
+        print("🔴 [Bloc] Update Failed. Reverting UI: $e");
+        // 4. Revert on failure
+        emit(LessonLoaded(originalLessons));
       }
     }
   }
@@ -120,7 +133,6 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
     emit(LessonLoading());
 
     try {
-      // 1. Generate via Gemini
       final newLesson = await _geminiService.generateLesson(
         userId: event.userId,
         topic: event.topic,
@@ -128,10 +140,8 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
         targetLanguage: event.targetLanguage,
       );
 
-      // 2. Save to Database (AI lessons are usually cloud-synced, so isLocal defaults to false)
       await _lessonRepository.saveOrUpdateLesson(newLesson);
 
-      // 3. Emit SUCCESS
       emit(LessonGenerationSuccess(newLesson));
 
     } catch (e) {

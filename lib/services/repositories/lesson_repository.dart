@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math'; 
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:path_provider/path_provider.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/lesson_service.dart';
@@ -18,12 +20,11 @@ class LessonRepository {
   // --- MAIN SYNC FUNCTION ---
   Future<List<LessonModel>> getAndSyncLessons(String userId, String languageCode) async {
     try {
+      print("🔍 [Repo] Syncing lessons for User: $userId ($languageCode)");
+
       final results = await Future.wait([
-        // 1. Cloud Lessons
         _firestoreService.getLessons(userId, languageCode),
-        // 2. User Local Imports (Fixed)
-        _fetchUserLocalImports(userId, languageCode),
-        // 3. System Assets
+        _fetchUserLocalImports(userId, languageCode), // <--- This now filters strictly
         _localService.fetchStandardLessons(languageCode),
         _localService.fetchNativeVideos(languageCode),
         _localService.fetchTextBooks(languageCode),
@@ -44,19 +45,22 @@ class LessonRepository {
 
       final Map<String, LessonModel> combinedMap = {};
 
-      // System Content
+      // 1. System Content (Base Layer)
       for (var lesson in systemLessons) combinedMap[lesson.id] = lesson;
-      // User Cloud Content
+      
+      // 2. User Cloud Content (Overwrites System)
       for (var lesson in userLessons) combinedMap[lesson.id] = lesson;
-      // User Local Content (Overrides others if IDs match)
+      
+      // 3. User Local Content (Overwrites Everything - HIGHEST PRIORITY)
       for (var lesson in localImports) combinedMap[lesson.id] = lesson;
 
       final allLessons = combinedMap.values.toList();
       allLessons.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+      print("✅ [Repo] Sync Complete. Total Lessons: ${allLessons.length}");
       return allLessons;
     } catch (e) {
-      print("Error in LessonRepository sync: $e");
+      print("🔴 [Repo] Error in sync: $e");
       return [];
     }
   }
@@ -65,27 +69,41 @@ class LessonRepository {
   Future<void> saveOrUpdateLesson(LessonModel lesson) async {
     if (lesson.isLocal) {
       await _saveLocalImportMetadata(lesson);
-    } else {
+      return;
+    } 
+
+    try {
       if (lesson.id.isEmpty) {
-        await _firestoreService.createLesson(lesson);
+        // Generate ID manually to prevent "empty path" crash
+        final String newId = FirebaseFirestore.instance.collection('lessons').doc().id;
+        final newLesson = lesson.copyWith(id: newId);
+        
+        await _firestoreService.createLesson(newLesson);
       } else {
         await _firestoreService.updateLesson(lesson);
       }
+    } catch (e) {
+      print("🔴 [Repo] Cloud Write Failed ($e). Falling back to Local Storage.");
+      final localOverride = lesson.copyWith(isLocal: true);
+      await _saveLocalImportMetadata(localOverride);
     }
   }
 
   // --- DELETE ---
   Future<void> deleteLesson(LessonModel lesson) async {
-    if (lesson.isLocal) {
+    try {
+      if (lesson.isLocal) {
+        await _deleteLocalImportMetadata(lesson.id);
+      } else {
+        await _firestoreService.deleteLesson(lesson.id);
+      }
+    } catch (e) {
       await _deleteLocalImportMetadata(lesson.id);
-      // Optional: Clean up actual media files here if desired
-    } else {
-      await _firestoreService.deleteLesson(lesson.id);
     }
   }
 
   // ==========================================================
-  // LOCAL JSON STORAGE (The Fixes are here)
+  // LOCAL JSON STORAGE
   // ==========================================================
 
   Future<File> get _localJsonFile async {
@@ -103,16 +121,35 @@ class LessonRepository {
 
       final List<dynamic> jsonList = jsonDecode(content);
 
-      return jsonList
-          // FIX 1: Filter out bad data where 'id' might be missing
+      // --- DEBUGGING FILTER LOGIC ---
+      int totalFound = 0;
+      int kept = 0;
+
+      final filteredList = jsonList
           .where((json) => json is Map<String, dynamic> && json['id'] != null)
           .map((json) {
-             // FIX 2: Safely parse to model
+             totalFound++;
              return LessonModel.fromMap(json, json['id'].toString());
           })
-          .where((l) => l.userId == userId && l.language == languageCode)
+          .where((l) {
+            // STRICT FILTER: Only allow lessons belonging to THIS user
+            final bool isOwner = (l.userId == userId);
+            final bool isLang = (l.language == languageCode);
+            
+            if (!isOwner) {
+               // UNCOMMENT THIS LINE TO SEE REJECTIONS IN LOGS
+               // print("🚫 [Repo] Skipping local lesson '${l.title}' - Owned by: ${l.userId}, Requested by: $userId");
+            } else {
+               kept++;
+            }
+            return isOwner && isLang;
+          })
           .map((l) => l.copyWith(isLocal: true)) 
           .toList();
+
+      print("📂 [Repo] Local Imports: Found $totalFound in file. Returning $kept for user $userId.");
+      return filteredList;
+      
     } catch (e) {
       print("Error reading local imports: $e");
       return [];
@@ -135,17 +172,23 @@ class LessonRepository {
         }
       }
 
-      final index = currentLessons.indexWhere((l) => l.id == lesson.id);
-      if (index != -1) {
-        currentLessons[index] = lesson;
-      } else {
-        currentLessons.add(lesson);
+      LessonModel lessonToSave = lesson;
+      if (lessonToSave.id.isEmpty) {
+        lessonToSave = lessonToSave.copyWith(
+          id: "local_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}"
+        );
       }
 
-      // FIX 3: Explicitly add 'id' to the map before saving
+      final index = currentLessons.indexWhere((l) => l.id == lessonToSave.id);
+      if (index != -1) {
+        currentLessons[index] = lessonToSave;
+      } else {
+        currentLessons.add(lessonToSave);
+      }
+
       final jsonList = currentLessons.map((l) {
         final map = l.toMap();
-        map['id'] = l.id; // <--- This prevents the Null error on next read
+        map['id'] = l.id; 
         return map;
       }).toList();
 

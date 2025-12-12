@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -166,18 +167,22 @@ class HomeDialogs {
   static void showLessonOptions(
       BuildContext context, LessonModel lesson, bool isDark) {
     
-    final authState = context.read<AuthBloc>().state;
+    // 1. Capture parent context for Bloc access
+    final parentContext = context;
+    
+    final authState = parentContext.read<AuthBloc>().state;
     String currentUserId = ''; 
     bool canDelete = false;
+    bool isOwner = false;
 
     if (authState is AuthAuthenticated) {
       final user = authState.user;
       currentUserId = user.id; 
 
-      final bool isCreator = (user.id == lesson.userId);
+      isOwner = (user.id == lesson.userId);
       final bool isAdmin = AppConstants.isAdmin(user.email); 
 
-      canDelete = isAdmin || isCreator;
+      canDelete = isAdmin || isOwner;
     }
 
     showModalBottomSheet(
@@ -225,25 +230,54 @@ class HomeDialogs {
                 ),
               ),
               title: Text(
-                lesson.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+                lesson.isFavorite ? 'Remove from Favorites' : 'Save to Library',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: isDark ? Colors.white : Colors.black,
                 ),
               ),
               subtitle: Text(
-                lesson.isFavorite ? 'Removed from library.' : 'Saved to library.',
+                isOwner 
+                  ? (lesson.isFavorite ? 'Removed from library.' : 'Saved to library.')
+                  : 'Create a copy in your cloud library.',
                 style: const TextStyle(color: Colors.grey),
               ),
               onTap: () {
-                final newOwnerId = lesson.userId.isEmpty ? currentUserId : lesson.userId;
+                // DEBUG PRINT
+                print("🔵 [Dialog] User tapped Favorite. CurrentUser: '$currentUserId', LessonOwner: '${lesson.userId}'");
 
-                final updatedLesson = lesson.copyWith(
-                  isFavorite: !lesson.isFavorite,
-                  userId: newOwnerId,
-                );
-                
-                context.read<LessonBloc>().add(LessonUpdateRequested(updatedLesson));
+                if (currentUserId.isEmpty) {
+                   print("🔴 [Dialog] User is not authenticated. Aborting.");
+                   Navigator.pop(builderContext);
+                   return;
+                }
+
+                if (isOwner) {
+                  // I own this lesson, so I just update the existing one
+                  print("🟢 [Dialog] User is Owner. Updating existing document.");
+                  final updatedLesson = lesson.copyWith(
+                    isFavorite: !lesson.isFavorite,
+                  );
+                  parentContext.read<LessonBloc>().add(LessonUpdateRequested(updatedLesson));
+                } else {
+                  // I DO NOT own this lesson (System Lesson)
+                  // I must CREATE A COPY in the cloud
+                  print("🟠 [Dialog] System Lesson detected. Creating Cloud Copy.");
+                  
+                  final newLesson = lesson.copyWith(
+                    id: '', // EMPTY ID indicates a new creation
+                    userId: currentUserId, // Assign to ME
+                    isFavorite: true, 
+                    isLocal: false, // FORCE CLOUD SAVE
+                    createdAt: DateTime.now(),
+                  );
+                  
+                  parentContext.read<LessonBloc>().add(LessonCreateRequested(newLesson));
+                  
+                  ScaffoldMessenger.of(parentContext).showSnackBar(
+                    const SnackBar(content: Text("Saving copy to your cloud library...")),
+                  );
+                }
                 Navigator.pop(builderContext);
               },
             ),
@@ -275,7 +309,7 @@ class HomeDialogs {
                         TextButton(
                           onPressed: () {
                             Navigator.pop(ctx);
-                            context
+                            parentContext
                                 .read<LessonBloc>()
                                 .add(LessonDeleteRequested(lesson.id));
                             Navigator.pop(builderContext);
