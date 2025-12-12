@@ -10,9 +10,6 @@ import 'package:linguaflow/utils/srs_algorithm.dart';
 // Import split widgets
 import 'widgets/flashcard_widget.dart';
 
-// You can also put ReviewSessionView and LibraryView in their own files if preferred, 
-// but sticking to the 4-file structure for now.
-
 class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({super.key});
   @override
@@ -28,6 +25,7 @@ class _VocabularyScreenState extends State<VocabularyScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     
+    // Load vocabulary on init
     final authState = context.read<AuthBloc>().state;
     if (authState is AuthAuthenticated) {
       context.read<VocabularyBloc>().add(VocabularyLoadRequested(authState.user.id));
@@ -38,6 +36,18 @@ class _VocabularyScreenState extends State<VocabularyScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF121212) : Colors.grey[100];
+
+    // 1. Get Current Language directly from Auth User
+    final authState = context.watch<AuthBloc>().state;
+    String targetLanguage = '';
+    
+    if (authState is AuthAuthenticated) {
+      // FIXED: Using 'currentLanguage' per your model
+      targetLanguage = authState.user.currentLanguage;
+    } else {
+      // Safety fallback if something is wrong with auth
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
       backgroundColor: bg,
@@ -60,15 +70,44 @@ class _VocabularyScreenState extends State<VocabularyScreen>
           if (state is VocabularyError) return Center(child: Text("Error: ${state.message}"));
 
           if (state is VocabularyLoaded) {
-            final dueItems = state.items.where((i) => SRSAlgorithm.isDue(i)).toList();
+            // 2. FILTER items by authState.user.currentLanguage
+            final languageItems = state.items
+                .where((item) => item.language == targetLanguage)
+                .toList();
+
+            // 3. Calculate Due Items from the filtered list
+            final dueItems = languageItems.where((i) => SRSAlgorithm.isDue(i)).toList();
             dueItems.sort((a, b) => a.status.compareTo(b.status));
+
+            // Empty State for specific language
+            if (languageItems.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.translate, size: 64, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    Text(
+                      "No words saved for this language yet.",
+                      style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Target Language: ${targetLanguage.toUpperCase()}",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              );
+            }
 
             return TabBarView(
               controller: _tabController,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                ReviewSessionView(dueItems: dueItems, allItems: state.items),
-                LibraryView(items: state.items),
+                // Pass the FILTERED lists to the views
+                ReviewSessionView(dueItems: dueItems, allItems: languageItems),
+                LibraryView(items: languageItems),
               ],
             );
           }
@@ -78,7 +117,3 @@ class _VocabularyScreenState extends State<VocabularyScreen>
     );
   }
 }
-
-// ... Include ReviewSessionView and LibraryView classes from previous code here 
-// ... OR extract them to lib/screens/vocabulary/views/ if you want total separation.
-// For the sake of this answer, assume they are pasted here or imported.

@@ -895,6 +895,23 @@ class _ReaderScreenState extends State<ReaderScreen>
     bool showDialog = true,
   }) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+    
+    // --- VIDEO SRS DATA CAPTURE ---
+    String? videoUrl;
+    double? timestamp;
+    String? sentenceContext;
+
+    if (_isVideo || _isAudio) {
+      videoUrl = widget.lesson.videoUrl;
+      
+      // Capture timestamp from current active sentence start time
+      if (_activeSentenceIndex != -1 && 
+          _activeSentenceIndex < _activeTranscript.length) {
+        timestamp = _activeTranscript[_activeSentenceIndex].start;
+        sentenceContext = _activeTranscript[_activeSentenceIndex].text;
+      }
+    }
+
     final item = VocabularyItem(
       id: clean,
       userId: user.id,
@@ -906,9 +923,15 @@ class _ReaderScreenState extends State<ReaderScreen>
       timesEncountered: 1,
       lastReviewed: DateTime.now(),
       createdAt: DateTime.now(),
+      // Store Video Context
+      sourceVideoUrl: videoUrl,
+      timestamp: timestamp,
+      sentenceContext: sentenceContext,
     );
+    
     setState(() => _vocabulary[clean] = item);
     context.read<VocabularyBloc>().add(VocabularyUpdateRequested(item));
+    
     await FirebaseFirestore.instance
         .collection('users')
         .doc(user.id)
@@ -918,7 +941,12 @@ class _ReaderScreenState extends State<ReaderScreen>
           'status': status,
           'translation': trans,
           'lastReviewed': FieldValue.serverTimestamp(),
+          // Store Video Context in Firestore
+          'sourceVideoUrl': videoUrl,
+          'timestamp': timestamp,
+          'sentenceContext': sentenceContext,
         }, SetOptions(merge: true));
+        
     if (showDialog && !_hasSeenStatusHint) {
       setState(() => _hasSeenStatusHint = true);
       ScaffoldMessenger.of(context).showSnackBar(

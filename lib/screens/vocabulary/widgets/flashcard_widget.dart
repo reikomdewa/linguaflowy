@@ -5,7 +5,7 @@ import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/services/mymemory_service.dart';
 import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/utils/srs_algorithm.dart';
-import 'video_srs_player.dart'; // Import the player
+import 'video_srs_player.dart'; 
 
 class Flashcard extends StatefulWidget {
   final VocabularyItem item;
@@ -96,9 +96,6 @@ class _FlashcardState extends State<Flashcard> with SingleTickerProviderStateMix
     final cardBg = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final txtColor = isDark ? Colors.white : Colors.black87;
 
-    // Check if we have video data (assuming fields exist on VocabularyItem)
-    // You might need to add these fields to your model if they aren't there yet.
-    // For now, let's pretend we pass them or they are nullable fields.
     final bool hasVideo = widget.item.sourceVideoUrl != null && 
                           widget.item.sourceVideoUrl!.isNotEmpty;
 
@@ -124,7 +121,7 @@ class _FlashcardState extends State<Flashcard> with SingleTickerProviderStateMix
                   Container(
                     width: double.infinity,
                     margin: const EdgeInsets.symmetric(horizontal: 20),
-                    padding: const EdgeInsets.all(24),
+                    // Removed padding here to let ScrollView handle it
                     decoration: BoxDecoration(
                       color: cardBg,
                       borderRadius: BorderRadius.circular(20),
@@ -136,107 +133,117 @@ class _FlashcardState extends State<Flashcard> with SingleTickerProviderStateMix
                         ),
                       ],
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // --- STATUS BADGE ---
-                        _buildStatusBadge(),
-                        
-                        const SizedBox(height: 16),
+                    // 1. Center acts as a parent for short content
+                    child: Center(
+                      // 2. SingleChildScrollView allows long content (video + text) to scroll
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min, // Shrink wrap content
+                          children: [
+                            // --- STATUS BADGE ---
+                            _buildStatusBadge(),
+                            
+                            const SizedBox(height: 16),
 
-                        // --- VIDEO PLAYER (The Killer Feature) ---
-                        if (hasVideo)
-                          Container(
-                            height: 180,
-                            margin: const EdgeInsets.only(bottom: 20),
-                            child: VideoSRSPlayer(
-                              videoUrl: widget.item.sourceVideoUrl!,
-                              // Default to 0 if not set, or handle logic
-                              startSeconds: widget.item.timestamp ?? 0.0,
-                              // Default loop length 5 seconds
-                              endSeconds: (widget.item.timestamp ?? 0.0) + 5.0, 
-                            ),
-                          ),
-
-                        // --- FRONT (Word) ---
-                        Text(
-                          widget.item.word,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: hasVideo ? 24 : 32, // Smaller if video exists
-                              fontWeight: FontWeight.bold,
-                              color: txtColor),
-                        ),
-
-                        // --- SENTENCE CONTEXT (If available) ---
-                        if (widget.item.sentenceContext != null)
-                           Padding(
-                             padding: const EdgeInsets.only(top: 12.0),
-                             child: Text(
-                               widget.item.sentenceContext!,
-                               textAlign: TextAlign.center,
-                               style: TextStyle(
-                                 fontSize: 16,
-                                 color: isDark ? Colors.grey[300] : Colors.grey[800],
-                                 fontStyle: FontStyle.italic
-                               ),
-                             ),
-                           ),
-
-                        const SizedBox(height: 20),
-
-                        // --- BACK (Revealed Content) ---
-                        FadeTransition(
-                          opacity: _animation,
-                          child: Column(
-                            children: [
-                              Divider(color: Colors.grey.withOpacity(0.3)),
-                              const SizedBox(height: 10),
-                              
-                              Text(
-                                widget.item.translation,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                    fontSize: 24,
-                                    color: Colors.blueAccent,
-                                    fontWeight: FontWeight.w500),
+                            // --- VIDEO PLAYER ---
+                            if (hasVideo)
+                              Container(
+                                height: 200, // Fixed height for video container
+                                margin: const EdgeInsets.only(bottom: 20),
+                                child: VideoSRSPlayer(
+                                  videoUrl: widget.item.sourceVideoUrl!,
+                                  startSeconds: widget.item.timestamp ?? 0.0,
+                                  endSeconds: (widget.item.timestamp ?? 0.0) + 5.0, 
+                                ),
                               ),
 
-                              if (widget.item.notes != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 10.0),
-                                  child: Text(
-                                    widget.item.notes!,
-                                    style: const TextStyle(
-                                        color: Colors.grey, fontStyle: FontStyle.italic),
-                                  ),
-                                ),
+                            // --- FRONT (Word) ---
+                            Text(
+                              widget.item.word,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: hasVideo ? 26 : 32, 
+                                  fontWeight: FontWeight.bold,
+                                  color: txtColor),
+                            ),
 
-                              if (_isRevealed) ...[
-                                const SizedBox(height: 20),
-                                if (_isLoadingExtra)
-                                  const SizedBox(height: 15, width: 15, child: CircularProgressIndicator(strokeWidth: 2))
-                                else
-                                  Column(
-                                    children: [
-                                      if (_myMemoryTranslation != null)
-                                        _buildAltTranslationRow("MyMemory", _myMemoryTranslation!, isDark),
-                                      if (_googleTranslation != null)
-                                        _buildAltTranslationRow("Google", _googleTranslation!, isDark),
-                                    ],
+                            // --- SENTENCE CONTEXT ---
+                            if (widget.item.sentenceContext != null)
+                               Padding(
+                                 padding: const EdgeInsets.only(top: 12.0),
+                                 child: Text(
+                                   widget.item.sentenceContext!,
+                                   textAlign: TextAlign.center,
+                                   style: TextStyle(
+                                     fontSize: 16,
+                                     color: isDark ? Colors.grey[300] : Colors.grey[800],
+                                     fontStyle: FontStyle.italic
+                                   ),
+                                 ),
+                               ),
+
+                            const SizedBox(height: 20),
+
+                            // --- BACK (Revealed Content) ---
+                            FadeTransition(
+                              opacity: _animation,
+                              child: Column(
+                                children: [
+                                  Divider(color: Colors.grey.withOpacity(0.3)),
+                                  const SizedBox(height: 10),
+                                  
+                                  Text(
+                                    widget.item.translation,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        fontSize: 24,
+                                        color: Colors.blueAccent,
+                                        fontWeight: FontWeight.w500),
                                   ),
-                              ]
-                            ],
-                          ),
+
+                                  if (widget.item.notes != null && widget.item.notes!.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 10.0),
+                                      child: Text(
+                                        widget.item.notes!,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                            color: Colors.grey, fontStyle: FontStyle.italic),
+                                      ),
+                                    ),
+
+                                  if (_isRevealed) ...[
+                                    const SizedBox(height: 20),
+                                    if (_isLoadingExtra)
+                                      const SizedBox(height: 15, width: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                                    else
+                                      Column(
+                                        children: [
+                                          if (_myMemoryTranslation != null && _myMemoryTranslation!.isNotEmpty)
+                                            _buildAltTranslationRow("MyMemory", _myMemoryTranslation!, isDark),
+                                          if (_googleTranslation != null && _googleTranslation!.isNotEmpty)
+                                            _buildAltTranslationRow("Google", _googleTranslation!, isDark),
+                                        ],
+                                      ),
+                                  ]
+                                ],
+                              ),
+                            ),
+                            
+                            const SizedBox(height: 20),
+                            
+                            if (!_isRevealed)
+                              Text("Tap to flip", style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                          ],
                         ),
-                        const Spacer(),
-                        if (!_isRevealed)
-                          Text("Tap to flip", style: TextStyle(color: Colors.grey[400], fontSize: 12)),
-                      ],
+                      ),
                     ),
                   ),
 
-                  // Menu Button
+                  // Menu Button (Absolute position, sits on top of scroll view)
                   Positioned(
                     top: 10,
                     right: 30,
@@ -257,6 +264,7 @@ class _FlashcardState extends State<Flashcard> with SingleTickerProviderStateMix
           ),
 
           // --- RATING BUTTONS ---
+          // Outside the scroll view so they are always accessible
           const SizedBox(height: 20),
           SizedBox(
             height: 100,
@@ -281,9 +289,6 @@ class _FlashcardState extends State<Flashcard> with SingleTickerProviderStateMix
     );
   }
 
-  // ... [Helper Methods: _buildSwipeBg, _buildStatusBadge, _showDeleteConfirm, etc. same as before]
-  // Included in full implementation if needed, but omitted here for brevity of the Diff
-  
   Container _buildSwipeBg(Color color, IconData icon, String label, Alignment alignment) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
