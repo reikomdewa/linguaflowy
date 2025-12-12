@@ -13,6 +13,11 @@ class VocabularyItem {
   final DateTime createdAt;
   final String? notes;
 
+  // --- NEW FIELDS FOR VIDEO SRS ---
+  final String? sourceVideoUrl;
+  final double? timestamp; // Seconds
+  final String? sentenceContext;
+
   VocabularyItem({
     required this.id,
     required this.userId,
@@ -25,10 +30,12 @@ class VocabularyItem {
     required this.lastReviewed,
     required this.createdAt,
     this.notes,
+    this.sourceVideoUrl,
+    this.timestamp,
+    this.sentenceContext,
   });
 
   // *** ROBUST COPYWITH ***
-  // Allows you to update specific fields while keeping the rest unchanged.
   VocabularyItem copyWith({
     String? id,
     String? userId,
@@ -41,6 +48,9 @@ class VocabularyItem {
     DateTime? lastReviewed,
     DateTime? createdAt,
     String? notes,
+    String? sourceVideoUrl,
+    double? timestamp,
+    String? sentenceContext,
   }) {
     return VocabularyItem(
       id: id ?? this.id,
@@ -54,11 +64,13 @@ class VocabularyItem {
       lastReviewed: lastReviewed ?? this.lastReviewed,
       createdAt: createdAt ?? this.createdAt,
       notes: notes ?? this.notes,
+      sourceVideoUrl: sourceVideoUrl ?? this.sourceVideoUrl,
+      timestamp: timestamp ?? this.timestamp,
+      sentenceContext: sentenceContext ?? this.sentenceContext,
     );
   }
 
   // *** ROBUST FROMMAP ***
-  // Handles Timestamps (Firestore), Strings (JSON), and Nulls safely.
   factory VocabularyItem.fromMap(Map<String, dynamic> map, String id) {
     
     // Internal helper to parse dates safely
@@ -70,9 +82,16 @@ class VocabularyItem {
       return DateTime.now();
     }
 
+    // Helper to safely parse doubles (for timestamps)
+    double? parseDouble(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+      return null;
+    }
+
     return VocabularyItem(
       id: id,
-      // .toString() prevents crashes if a number gets saved into a text field
       userId: map['userId']?.toString() ?? '',
       word: map['word']?.toString() ?? '',
       baseForm: map['baseForm']?.toString() ?? '',
@@ -89,11 +108,14 @@ class VocabularyItem {
       lastReviewed: parseDate(map['lastReviewed']),
       createdAt: parseDate(map['createdAt']),
       notes: map['notes']?.toString(),
+      // New Video SRS fields
+      sourceVideoUrl: map['sourceVideoUrl']?.toString(),
+      timestamp: parseDouble(map['timestamp']),
+      sentenceContext: map['sentenceContext']?.toString(),
     );
   }
 
   // *** ROBUST TOMAP ***
-  // Saves dates as Timestamps for Firestore (cleaner database types)
   Map<String, dynamic> toMap() {
     return {
       'userId': userId,
@@ -103,10 +125,13 @@ class VocabularyItem {
       'translation': translation,
       'status': status,
       'timesEncountered': timesEncountered,
-      // Convert DateTime to Firestore Timestamp
       'lastReviewed': Timestamp.fromDate(lastReviewed),
       'createdAt': Timestamp.fromDate(createdAt),
       'notes': notes,
+      // New Video SRS fields
+      'sourceVideoUrl': sourceVideoUrl,
+      'timestamp': timestamp,
+      'sentenceContext': sentenceContext,
     };
   }
 }
