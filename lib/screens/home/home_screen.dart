@@ -115,11 +115,28 @@ class _HomeScreenState extends State<HomeScreen> {
     final uri = Uri.tryParse(sharedText);
     bool isUrl = uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
 
+    // 1. Check for YouTube specifically
+    bool isYoutube = false;
+    if (isUrl) {
+      final host = uri.host.toLowerCase();
+      if (host.contains('youtube.com') || host.contains('youtu.be')) {
+        isYoutube = true;
+      }
+    }
+
     String initialTitle = "";
     String initialContent = "";
+    String? initialMediaUrl;
+    int targetTab = 0; // 0 = Text, 1 = Media
 
-    if (isUrl) {
-      // Show loading spinner
+    if (isYoutube) {
+      // HANDLE YOUTUBE
+      targetTab = 1; // Switch to Media tab
+      initialMediaUrl = sharedText; 
+      // We don't scrape YouTube text because it usually fails or returns garbage.
+      // We let the dialog handle the URL in the video field.
+    } else if (isUrl) {
+      // HANDLE NORMAL ARTICLE
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -138,12 +155,12 @@ class _HomeScreenState extends State<HomeScreen> {
         initialContent = sharedText;
       }
     } else {
+      // HANDLE PLAIN TEXT
       initialContent = sharedText;
     }
 
     if (!mounted) return;
 
-    // USE THE NEW SEPARATED DIALOG CLASS HERE
     LessonImportDialog.show(
       context,
       user.id,
@@ -152,6 +169,9 @@ class _HomeScreenState extends State<HomeScreen> {
       isFavoriteByDefault: false,
       initialTitle: initialTitle,
       initialContent: initialContent,
+      // Pass the new parameters
+      initialMediaUrl: initialMediaUrl,
+      initialTabIndex: targetTab,
     );
   }
   // ---------------------------------

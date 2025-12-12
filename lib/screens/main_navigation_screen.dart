@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart'; // Ensure this is imported (comes with flutter_bloc)
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 
 // Screens
@@ -9,6 +10,29 @@ import 'package:linguaflow/screens/profile/profile_screen.dart';
 import 'package:linguaflow/screens/vocabulary/vocabulary_screen.dart';
 import 'package:linguaflow/screens/admin/admin_dashboard_screen.dart';
 import 'package:linguaflow/utils/constants.dart';
+
+// --- VISIBILITY CONTROLLER ---
+// We use this to broadcast the active tab index to deep widgets like the video player
+class ActiveTabNotifier extends InheritedWidget {
+  final int activeIndex;
+
+  const ActiveTabNotifier({
+    super.key,
+    required this.activeIndex,
+    required super.child,
+  });
+
+  static int? of(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<ActiveTabNotifier>()
+        ?.activeIndex;
+  }
+
+  @override
+  bool updateShouldNotify(ActiveTabNotifier oldWidget) {
+    return oldWidget.activeIndex != activeIndex;
+  }
+}
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -20,12 +44,6 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
-  // Update with your real email(s)
-  static const List<String> adminEmails = [
-   
-    "tester_email@gmail.com",
-  ];
-
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
@@ -35,16 +53,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
 
     final user = authState.user;
-final bool isAdmin = AppConstants.isAdmin(user.email);
+    final bool isAdmin = AppConstants.isAdmin(user.email);
 
-    // 1. Build the list of Screens dynamically
+    // 1. Build the list of Screens
     final List<Widget> screens = [
       HomeScreen(),
       const LibraryScreen(),
-      const VocabularyScreen(),
+      const VocabularyScreen(), // Index 2
     ];
 
-    // 2. Build the Navigation Items dynamically
+    // 2. Build the Navigation Items
     final List<BottomNavigationBarItem> navItems = [
       const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
       const BottomNavigationBarItem(
@@ -68,23 +86,26 @@ final bool isAdmin = AppConstants.isAdmin(user.email);
       );
     }
 
-    // --- ALWAYS: Add Profile Tab (at the end) ---
+    // --- ALWAYS: Add Profile Tab ---
     screens.add(ProfileScreen());
     navItems.add(
       const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
     );
 
-    return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: screens),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed, // Needed for 4+ tabs
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels:
-            true, // Good for 5 tabs so users know what they are
-        items: navItems,
+    return ActiveTabNotifier(
+      activeIndex: _currentIndex,
+      child: Scaffold(
+        // IndexedStack keeps state (video playing), so we need the Notifier to tell it to stop
+        body: IndexedStack(index: _currentIndex, children: screens),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: Colors.blue,
+          unselectedItemColor: Colors.grey,
+          showUnselectedLabels: true,
+          items: navItems,
+        ),
       ),
     );
   }

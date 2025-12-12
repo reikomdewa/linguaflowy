@@ -5,6 +5,9 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+// Import the MainNavigationScreen to access ActiveTabNotifier
+import 'package:linguaflow/screens/main_navigation_screen.dart'; 
+
 class VideoSRSPlayer extends StatefulWidget {
   final String videoUrl;
   final double startSeconds;
@@ -31,13 +34,38 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
   VideoController? _localVideoController;
   bool _isLocalReady = false;
 
-  bool _isReady = false; // General ready state for UI
+  bool _isReady = false; 
+
+  // CONSTANT: The index of the Vocabulary Tab in MainNavigationScreen
+  static const int kVocabularyTabIndex = 2;
 
   @override
   void initState() {
     super.initState();
     _checkTypeAndInit();
   }
+
+  // --- AUTO PAUSE LOGIC ---
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Listen to the ActiveTabNotifier we added in MainNavigationScreen
+    final activeTab = ActiveTabNotifier.of(context);
+    
+    if (activeTab != null && activeTab != kVocabularyTabIndex) {
+      _pauseVideo();
+    }
+  }
+
+  void _pauseVideo() {
+    if (_isYoutube && _ytController != null) {
+      if (_ytController!.value.isPlaying) _ytController!.pause();
+    } else if (_localPlayer != null) {
+      if (_localPlayer!.state.playing) _localPlayer!.pause();
+    }
+  }
+  // ------------------------
 
   Future<void> _checkTypeAndInit() async {
     if (widget.videoUrl.toLowerCase().contains('youtube.com') || 
@@ -67,18 +95,13 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
   Future<void> _initLocalMedia() async {
     setState(() => _isYoutube = false);
     
-    // Create MediaKit Player
     _localPlayer = Player();
     _localVideoController = VideoController(_localPlayer!);
 
-    // Open file
     await _localPlayer!.open(Media(widget.videoUrl), play: false);
     
-    // Seek to start position
     final startDuration = Duration(milliseconds: (widget.startSeconds * 1000).toInt());
     await _localPlayer!.seek(startDuration);
-    
-    // Play
     await _localPlayer!.play();
 
     if (mounted) {
@@ -146,7 +169,6 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
               aspectRatio: 16 / 9,
               child: Video(
                 controller: _localVideoController!,
-                // Use minimal controls for the card
                 controls: MaterialVideoControls, 
               ),
             ),
@@ -180,7 +202,7 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: FloatingActionButton.small(
-        heroTag: "replay_srs_${widget.startSeconds}", // Unique tag
+        heroTag: "replay_srs_${widget.startSeconds}",
         backgroundColor: Colors.black54,
         elevation: 0,
         child: const Icon(Icons.replay, color: Colors.white),

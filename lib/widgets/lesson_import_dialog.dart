@@ -16,7 +16,6 @@ import 'package:linguaflow/models/transcript_line.dart';
 import 'package:linguaflow/services/lesson_service.dart';
 import 'package:linguaflow/services/web_scraper_service.dart';
 import 'package:linguaflow/utils/subtitle_parser.dart';
-
 class LessonImportDialog {
   static void show(
     BuildContext context,
@@ -26,6 +25,9 @@ class LessonImportDialog {
     required bool isFavoriteByDefault,
     String? initialTitle,
     String? initialContent,
+    // NEW PARAMS
+    String? initialMediaUrl, 
+    int initialTabIndex = 0, 
   }) {
     final lessonBloc = context.read<LessonBloc>();
     final lessonService = context.read<LessonService>();
@@ -44,6 +46,8 @@ class LessonImportDialog {
           isFavoriteByDefault: isFavoriteByDefault,
           initialTitle: initialTitle,
           initialContent: initialContent,
+          initialMediaUrl: initialMediaUrl, // Pass through
+          initialTabIndex: initialTabIndex, // Pass through
           lessonBloc: lessonBloc,
           lessonService: lessonService,
           isDark: isDark,
@@ -60,6 +64,8 @@ class _ImportDialogContent extends StatefulWidget {
   final bool isFavoriteByDefault;
   final String? initialTitle;
   final String? initialContent;
+  final String? initialMediaUrl; // NEW
+  final int initialTabIndex;     // NEW
   final LessonBloc lessonBloc;
   final LessonService lessonService;
   final bool isDark;
@@ -71,6 +77,8 @@ class _ImportDialogContent extends StatefulWidget {
     required this.isFavoriteByDefault,
     this.initialTitle,
     this.initialContent,
+    this.initialMediaUrl,
+    this.initialTabIndex = 0,
     required this.lessonBloc,
     required this.lessonService,
     required this.isDark,
@@ -80,22 +88,21 @@ class _ImportDialogContent extends StatefulWidget {
   State<_ImportDialogContent> createState() => _ImportDialogContentState();
 }
 
+
+
 class _ImportDialogContentState extends State<_ImportDialogContent>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // Text/Web Controllers
   late TextEditingController _titleController;
   late TextEditingController _contentController;
   final _webUrlController = TextEditingController();
 
-  // Media Controllers
-  final _mediaUrlController = TextEditingController();
+  late TextEditingController _mediaUrlController; // Changed to late to init in initState
   File? _selectedMediaFile;
   File? _selectedSubtitleFile;
 
   String? _previewSubtitleText;
-
   bool _isLoading = false;
   String? _errorMsg;
   String? _mediaWarningMsg;
@@ -107,11 +114,24 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
       MediaKit.ensureInitialized();
     } catch (_) {}
 
-    _tabController = TabController(length: 2, vsync: this);
-    _titleController = TextEditingController(text: widget.initialTitle ?? '');
-    _contentController = TextEditingController(
-      text: widget.initialContent ?? '',
+    // Initialize TabController with the passed index (0 for Text, 1 for Media)
+    _tabController = TabController(
+      length: 2, 
+      vsync: this, 
+      initialIndex: widget.initialTabIndex
     );
+
+    _titleController = TextEditingController(text: widget.initialTitle ?? '');
+    _contentController = TextEditingController(text: widget.initialContent ?? '');
+    
+    // Initialize Media Controller with passed URL if any
+    _mediaUrlController = TextEditingController(text: widget.initialMediaUrl ?? '');
+    
+    // Run the check immediately if we have a URL
+    if (widget.initialMediaUrl != null && widget.initialMediaUrl!.isNotEmpty) {
+      _checkYoutubeLink();
+    }
+    
     _mediaUrlController.addListener(_checkYoutubeLink);
   }
 
