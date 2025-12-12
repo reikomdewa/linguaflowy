@@ -280,6 +280,8 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
       return Row(
         children: [
           const Icon(FontAwesomeIcons.youtube, size: 14, color: Colors.grey),
+          const SizedBox(width: 4),
+          const Text('Online', style: TextStyle(color: Colors.grey)),
         ],
       );
     }
@@ -289,6 +291,7 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
         children: [
           Icon(Icons.sd_storage, size: 14, color: Colors.grey[600]),
           const SizedBox(width: 4),
+          const Text('Local file', style: TextStyle(color: Colors.grey)),
         ],
       );
     }

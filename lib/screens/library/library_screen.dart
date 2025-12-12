@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/screens/library/widgets/dialogs/library_actions.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_text_card.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_video_card.dart';
-
+import 'package:linguaflow/screens/search/library_search.dart';
 
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
@@ -25,64 +26,120 @@ class LibraryScreen extends StatelessWidget {
         backgroundColor: bgColor,
         elevation: 0,
         foregroundColor: textColor,
+        actions: [
+          // --- UPDATED SEARCH BUTTON (MATCHING SCREENSHOT) ---
+          BlocBuilder<LessonBloc, LessonState>(
+            builder: (context, state) {
+              final bool isLoaded = state is LessonLoaded;
+
+              return Padding(
+                padding: const EdgeInsets.only(right: 16.0), // Margin from edge
+                child: Center(
+                  child: InkWell(
+                    onTap: isLoaded
+                        ? () {
+                            showSearch(
+                              context: context,
+                              delegate: LibrarySearchDelegate(
+                                lessons: state.lessons,
+                                isDark: isDark,
+                              ),
+                            );
+                          }
+                        : null,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        // Glassy background style
+                        color: isDark
+                            ? Colors.white.withOpacity(0.1)
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      alignment: Alignment.center,
+                      child: FaIcon(
+                        FontAwesomeIcons.magnifyingGlass,
+                        size: 18,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: BlocBuilder<LessonBloc, LessonState>(
         builder: (context, state) {
           if (state is LessonInitial) {
-            context.read<LessonBloc>().add(LessonLoadRequested(user.id, user.currentLanguage));
+            context.read<LessonBloc>().add(
+              LessonLoadRequested(user.id, user.currentLanguage),
+            );
             return const Center(child: CircularProgressIndicator());
           }
           if (state is LessonLoading) {
             return const Center(child: CircularProgressIndicator());
           }
           if (state is LessonLoaded) {
-            // 1. Filter Imported (Local) Lessons
-            final importedLessons = state.lessons.where((l) => l.isLocal).toList();
-            
-            // 2. Filter Favorite Lessons
-            final favoriteLessons = state.lessons.where((l) => l.isFavorite).toList();
+            final importedLessons = state.lessons
+                .where((l) => l.isLocal)
+                .toList();
+            final favoriteLessons = state.lessons
+                .where((l) => l.isFavorite)
+                .toList();
 
             if (importedLessons.isEmpty && favoriteLessons.isEmpty) {
               return _buildEmptyState();
             }
 
             return SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 100), // Space for FAB
+              padding: const EdgeInsets.only(bottom: 100),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  
-                  // --- SECTION 1: IMPORTED (Horizontal List) ---
+                  // --- IMPORTED (Horizontal) ---
                   if (importedLessons.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                       child: Row(
                         children: [
-                          Icon(Icons.download_for_offline, color: textColor, size: 20),
+                          Icon(
+                            Icons.download_for_offline,
+                            color: textColor,
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             "Imported",
                             style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: textColor),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     SizedBox(
-                      height: 240, // Height for cards
+                      height: 240,
                       child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         scrollDirection: Axis.horizontal,
                         itemCount: importedLessons.length,
                         separatorBuilder: (_, __) => const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           final lesson = importedLessons[index];
-                          const double cardWidth = 220; // Fixed width for horizontal
+                          const double cardWidth = 220;
 
-                          // Check if it is a video to render the video card
-                          if (lesson.type == 'video' || (lesson.videoUrl != null && lesson.videoUrl!.isNotEmpty)) {
+                          if (lesson.type == 'video' ||
+                              (lesson.videoUrl != null &&
+                                  lesson.videoUrl!.isNotEmpty)) {
                             return LibraryVideoCard(
                               lesson: lesson,
                               isDark: isDark,
@@ -100,7 +157,7 @@ class LibraryScreen extends StatelessWidget {
                     ),
                   ],
 
-                  // --- SECTION 2: FAVORITES (Vertical List) ---
+                  // --- FAVORITES (Vertical) ---
                   if (favoriteLessons.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -111,9 +168,10 @@ class LibraryScreen extends StatelessWidget {
                           Text(
                             "Favorites",
                             style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: textColor),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
                           ),
                         ],
                       ),
@@ -126,17 +184,16 @@ class LibraryScreen extends StatelessWidget {
                       separatorBuilder: (_, __) => const SizedBox(height: 16),
                       itemBuilder: (context, index) {
                         final lesson = favoriteLessons[index];
-
-                        // Pass width: null for full-width vertical cards
-                        if (lesson.type == 'video' || (lesson.videoUrl != null && lesson.videoUrl!.isNotEmpty)) {
+                        if (lesson.type == 'video' ||
+                            (lesson.videoUrl != null &&
+                                lesson.videoUrl!.isNotEmpty)) {
                           return LibraryVideoCard(
-                            lesson: lesson, 
+                            lesson: lesson,
                             isDark: isDark,
-                            // width: null implies full width
                           );
                         } else {
                           return LibraryTextCard(
-                            lesson: lesson, 
+                            lesson: lesson,
                             isDark: isDark,
                           );
                         }
@@ -150,8 +207,8 @@ class LibraryScreen extends StatelessWidget {
           return const Center(child: Text('Something went wrong'));
         },
       ),
-      
-      // --- IMPORT BUTTON ---
+
+      // --- FAB ---
       floatingActionButton: Material(
         color: Colors.transparent,
         elevation: 10,

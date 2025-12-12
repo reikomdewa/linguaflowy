@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:linguaflow/screens/search/library_search.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -132,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (isYoutube) {
       // HANDLE YOUTUBE
       targetTab = 1; // Switch to Media tab
-      initialMediaUrl = sharedText; 
+      initialMediaUrl = sharedText;
       // We don't scrape YouTube text because it usually fails or returns garbage.
       // We let the dialog handle the URL in the video field.
     } else if (isUrl) {
@@ -378,6 +380,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // --- APP BAR ---
+  // --- APP BAR ---
   PreferredSizeWidget _buildAppBar(
     BuildContext context,
     dynamic user,
@@ -385,6 +388,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Color? textColor,
   ) {
     final bool isPremium = user.isPremium;
+
     return AppBar(
       elevation: 0,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -392,6 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
       toolbarHeight: 70,
       title: BlocBuilder<VocabularyBloc, VocabularyState>(
         builder: (context, vocabState) {
+          // ... (Your existing Title Logic remains exactly the same) ...
           int knownCount = 0;
           if (vocabState is VocabularyLoaded) {
             knownCount = vocabState.items
@@ -409,8 +414,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () =>
                     HomeLanguageDialogs.showTargetLanguageSelector(context),
                 child: Container(
-                  width: 48,
-                  height: 48,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
@@ -422,11 +427,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   alignment: Alignment.center,
                   child: Text(
                     LanguageHelper.getFlagEmoji(user.currentLanguage),
-                    style: const TextStyle(fontSize: 28),
+                    style: const TextStyle(fontSize: 24),
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 6),
               Expanded(
                 child: InkWell(
                   onTap: () => HomeLanguageDialogs.showLevelSelector(
@@ -441,18 +446,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Row(
                         children: [
-                          Expanded(
+                          Flexible(
                             child: Text(
                               currentLevel,
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: textColor,
-                                letterSpacing: 0.5,
+                                letterSpacing: 0.3,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 2),
                           Icon(
                             Icons.keyboard_arrow_down_rounded,
                             size: 20,
@@ -474,7 +479,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Text(
                             "$knownCount / ${_getNextGoal(knownCount)} words",
                             style: TextStyle(
-                              fontSize: 15,
+                              fontSize: 14,
                               fontWeight: FontWeight.w600,
                               color: isDark
                                   ? Colors.grey.shade400
@@ -492,8 +497,56 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       actions: [
+        // --- UPDATED SEARCH ICON (Matches Screenshot) ---
+        BlocBuilder<LessonBloc, LessonState>(
+          builder: (context, state) {
+            final isLoaded = state is LessonLoaded;
+
+            return Padding(
+              padding: const EdgeInsets.only(
+                right: 8.0,
+              ), // Space between Search and Premium
+              child: InkWell(
+                onTap: isLoaded
+                    ? () {
+                        showSearch(
+                          context: context,
+                          delegate: LibrarySearchDelegate(
+                            lessons: state.lessons,
+                            isDark: isDark,
+                          ),
+                        );
+                      }
+                    : null,
+                borderRadius: BorderRadius.circular(
+                  14,
+                ), // Rounded corners for splash
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    // Dark Mode: Glassy/Dark Grey. Light Mode: Light Grey.
+                    color: isDark
+                        ? Colors.white.withOpacity(0.1)
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(14), // Squircle shape
+                  ),
+                  alignment: Alignment.center,
+                  child: FaIcon(
+                    FontAwesomeIcons.magnifyingGlass,
+                    size: 18,
+                    // Icon color looks slightly muted in screenshot
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+
+        // --- PREMIUM ICON (Unchanged) ---
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
           child: Center(
             child: InkWell(
               onTap: () {
