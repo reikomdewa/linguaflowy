@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math'; 
-import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/lesson_service.dart';
@@ -14,11 +14,14 @@ class LessonRepository {
   LessonRepository({
     required LessonService firestoreService,
     required HybridLessonService localService,
-  })  : _firestoreService = firestoreService,
-        _localService = localService;
+  }) : _firestoreService = firestoreService,
+       _localService = localService;
 
   // --- MAIN SYNC FUNCTION ---
-  Future<List<LessonModel>> getAndSyncLessons(String userId, String languageCode) async {
+  Future<List<LessonModel>> getAndSyncLessons(
+    String userId,
+    String languageCode,
+  ) async {
     try {
       final results = await Future.wait([
         _firestoreService.getLessons(userId, languageCode),
@@ -30,15 +33,15 @@ class LessonRepository {
         _localService.fetchAudioLessons(languageCode),
       ]);
 
-      final userLessons = results[0] as List<LessonModel>;
-      final localImports = results[1] as List<LessonModel>;
-      
+      final userLessons = results[0];
+      final localImports = results[1];
+
       final systemLessons = [
-        ...results[2] as List<LessonModel>,
-        ...results[3] as List<LessonModel>,
-        ...results[4] as List<LessonModel>,
-        ...results[5] as List<LessonModel>,
-        ...results[6] as List<LessonModel>,
+        ...results[2],
+        ...results[3],
+        ...results[4],
+        ...results[5],
+        ...results[6],
       ];
 
       final Map<String, LessonModel> combinedMap = {};
@@ -62,12 +65,15 @@ class LessonRepository {
     if (lesson.isLocal) {
       await _saveLocalImportMetadata(lesson);
       return;
-    } 
+    }
 
     try {
       if (lesson.id.isEmpty) {
         // Generate valid ID for new Cloud Copy
-        final String newId = FirebaseFirestore.instance.collection('lessons').doc().id;
+        final String newId = FirebaseFirestore.instance
+            .collection('lessons')
+            .doc()
+            .id;
         final newLesson = lesson.copyWith(id: newId);
         await _firestoreService.createLesson(newLesson);
       } else {
@@ -103,7 +109,10 @@ class LessonRepository {
     return File('${directory.path}/user_imported_lessons.json');
   }
 
-  Future<List<LessonModel>> _fetchUserLocalImports(String userId, String languageCode) async {
+  Future<List<LessonModel>> _fetchUserLocalImports(
+    String userId,
+    String languageCode,
+  ) async {
     try {
       final file = await _localJsonFile;
       if (!await file.exists()) return [];
@@ -117,8 +126,8 @@ class LessonRepository {
           .where((json) => json is Map<String, dynamic> && json['id'] != null)
           .map((json) => LessonModel.fromMap(json, json['id'].toString()))
           // STRICT FILTER: Only allow lessons belonging to this user
-          .where((l) => l.userId == userId && l.language == languageCode) 
-          .map((l) => l.copyWith(isLocal: true)) 
+          .where((l) => l.userId == userId && l.language == languageCode)
+          .map((l) => l.copyWith(isLocal: true))
           .toList();
     } catch (e) {
       return [];
@@ -144,7 +153,7 @@ class LessonRepository {
       LessonModel lessonToSave = lesson;
       if (lessonToSave.id.isEmpty) {
         lessonToSave = lessonToSave.copyWith(
-          id: "local_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}"
+          id: "local_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}",
         );
       }
 
@@ -157,7 +166,7 @@ class LessonRepository {
 
       final jsonList = currentLessons.map((l) {
         final map = l.toMap();
-        map['id'] = l.id; 
+        map['id'] = l.id;
         return map;
       }).toList();
 
@@ -176,8 +185,10 @@ class LessonRepository {
       if (content.isEmpty) return;
 
       final List<dynamic> jsonList = jsonDecode(content);
-      final updatedList = jsonList.where((item) => item['id'] != lessonId).toList();
-      
+      final updatedList = jsonList
+          .where((item) => item['id'] != lessonId)
+          .toList();
+
       await file.writeAsString(jsonEncode(updatedList));
     } catch (e) {
       // print("Error deleting local import: $e");

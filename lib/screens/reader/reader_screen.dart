@@ -258,17 +258,45 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (envKey != null && envKey.isNotEmpty) Gemini.init(apiKey: envKey);
   }
 
-  @override
+@override
   void dispose() {
+    // 1. Remove Window Observer first to stop listening to metric changes
     WidgetsBinding.instance.removeObserver(this);
+
+    // 2. Cancel ALL timers immediately. 
+    // This is crucial to stop '_checkSync' from trying to access the player 
+    // while we are busy disposing it.
     _syncTimer?.cancel();
     _seekResetTimer?.cancel();
     _controlsHideTimer?.cancel();
-    _localPlayer?.dispose();
+
+    // 3. Safe MediaKit Disposal
+    // We wrap this in try-catch because if Hot Restart happened, 
+    // the native side might already be gone, causing the SIGABRT crash.
+    if (_localPlayer != null) {
+      try {
+        _localPlayer!.stop(); // Stop playback to halt frame callbacks
+        _localPlayer!.dispose(); // Release resources
+      } catch (e) {
+        debugPrint("⚠️ MediaKit dispose warning: $e");
+      }
+    }
+    // Nullify references to prevent accidental access
+    _localVideoController = null;
+    _localPlayer = null;
+
+    // 4. Dispose YouTube Controller
     _youtubeController?.dispose();
+    _youtubeController = null;
+
+    // 5. Stop TTS
+    _flutterTts.stop();
+
+    // 6. Dispose Scroll Controllers
     _pageController.dispose();
     _listScrollController.dispose();
-    _flutterTts.stop();
+
+    // 7. Reset System UI (Orientation & Status Bar)
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
@@ -280,9 +308,9 @@ class _ReaderScreenState extends State<ReaderScreen>
         statusBarIconBrightness: Brightness.dark,
       ),
     );
+
     super.dispose();
   }
-
   // ... (LoadVocab and Preferences methods unchanged) ...
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;

@@ -38,7 +38,7 @@ class ProfileScreen extends StatelessWidget {
             child: Row(
               children: [
                 CircleAvatar(
-                  radius: 50,
+                  radius: 40,
                   backgroundColor: Theme.of(context).primaryColor,
                   child: Text(
                     user.displayName.isNotEmpty
@@ -53,15 +53,28 @@ class ProfileScreen extends StatelessWidget {
                     crossAxisAlignment: .start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisAlignment: .center,
+
                         children: [
-                          Text(
-                            user.displayName,
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
+                          Column(
+                            children: [
+                              Text(
+                                user.displayName,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor,
+                                ),
+                              ),
+                              SizedBox(height: 10),
+                              Text(
+                                user.email,
+                                style: TextStyle(
+                                  color: subTextColor,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
                           IconButton(
                             icon: Icon(
@@ -77,7 +90,6 @@ class ProfileScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      Text(user.email, style: TextStyle(color: subTextColor)),
                     ],
                   ),
                 ),
