@@ -6,13 +6,13 @@ import os
 # List of scripts to run in order.
 SCRIPTS = [
     # 1. GENERATION PHASE (Creates local JSONs)
-    "generate_guided_courses.py",           
-    "generate_audio_library.py",    
-    "generate_beginner_books.py",   
-    "generate_books.py",            
-    "generate_course_content.py",   
+    # "generate_guided_courses.py",           
+    # "generate_audio_library.py",    
+    # "generate_beginner_books.py",   
+    # "generate_books.py",            
+    # "generate_course_content.py",   
     "generate_native_content.py",   
-    "generate_yt_audiobooks.py",
+    # "generate_yt_audiobooks.py",
     
     # 2. UPLOAD PHASE (Syncs to Firebase)
     "sync_to_firebase.py" 

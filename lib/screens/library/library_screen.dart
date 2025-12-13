@@ -6,7 +6,7 @@ import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/screens/library/widgets/dialogs/library_actions.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_text_card.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_video_card.dart';
-import 'package:linguaflow/screens/search/library_search.dart';
+import 'package:linguaflow/screens/search/library_search_delegate.dart';
 
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});

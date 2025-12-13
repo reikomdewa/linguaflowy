@@ -1,196 +1,319 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // Add this import
-import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/screens/library/widgets/cards/library_text_card.dart';
-import 'package:linguaflow/screens/library/widgets/cards/library_video_card.dart';
+import 'package:linguaflow/screens/search/library_search_delegate.dart';
 
-import 'library_search.dart'; // The new search file
+// --- IMPORTS FOR REUSABLE WIDGETS ---
+import 'package:linguaflow/widgets/category_video_section.dart'; // <--- NEW IMPORT
+import 'package:linguaflow/screens/search/category_results_screen.dart'; // <--- NEW IMPORT
 
-class LibraryScreen extends StatelessWidget {
-  const LibraryScreen({super.key});
+class SearchScreen extends StatelessWidget {
+  const SearchScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final user = (context.watch<AuthBloc>().state as AuthAuthenticated).user;
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
-    final textColor = Theme.of(context).textTheme.bodyLarge?.color;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final chipColor = isDark ? const Color(0xFF2C2C2E) : Colors.grey[200];
+    final searchBarColor = isDark ? const Color(0xFF1C1C1E) : Colors.grey[100];
+
+    final Map<String, String> genreMap = {
+      "History": "history",
+      "Info": "news",
+      "True Crime": "crime",
+      "Fiction": "fiction",
+      "Environment": "environment",
+      "Learn & Revise": "education",
+      "Grand Formats": "documentary",
+      "Portraits": "biography",
+      "Ideas": "philosophy",
+      "Documentaries": "documentary",
+      "Health": "health",
+      "Daily Life": "vlog",
+      "Cinema": "cinema",
+      "Humor": "comedy",
+      "Society": "society",
+      "Knowledge+": "science",
+      "Arts": "culture",
+      "Vlogs & Escape": "travel",
+      "Books": "literature",
+      "Music": "music",
+      "Science": "science",
+      "Tech": "tech",
+    };
+    final List<String> categories = genreMap.keys.toList();
 
     return Scaffold(
       backgroundColor: bgColor,
-      appBar: AppBar(
-        title: const Text('My Library'),
-        backgroundColor: bgColor,
-        elevation: 0,
-        foregroundColor: textColor,
-        actions: [
-          // --- SEARCH BUTTON ---
-          BlocBuilder<LessonBloc, LessonState>(
-            builder: (context, state) {
-              // Only enable search if lessons are loaded
-              final bool isLoaded = state is LessonLoaded;
+      body: SafeArea(
+        child: BlocBuilder<LessonBloc, LessonState>(
+          builder: (context, state) {
+            List<LessonModel> allLessons = (state is LessonLoaded)
+                ? state.lessons
+                : [];
+            final allVideos = allLessons
+                .where((l) => l.type == 'video' || l.videoUrl != null)
+                .toList();
 
-              return IconButton(
-                // Use the specific icon requested
-                icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 20),
-                color: textColor,
-                onPressed: isLoaded
-                    ? () {
-                        // Pass the current list of lessons to the search delegate
-                        showSearch(
-                          context: context,
-                          delegate: LibrarySearchDelegate(
-                            lessons: state.lessons,
-                            isDark: isDark,
-                          ),
-                        );
-                      }
-                    : null, // Disable button if loading
-              );
-            },
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: BlocBuilder<LessonBloc, LessonState>(
-        // ... (Rest of your body code remains exactly the same as previous step)
-        builder: (context, state) {
-          if (state is LessonInitial) {
-            context.read<LessonBloc>().add(
-              LessonLoadRequested(user.id, user.currentLanguage),
+            return CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                // Search Bar
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _StickySearchBarDelegate(
+                    isDark: isDark,
+                    searchBarColor: searchBarColor!,
+                    textColor: textColor,
+                    onTap: () => _openSearch(context, isDark),
+                  ),
+                ),
+
+                // "Browse Categories" Header
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 5, 16, 5),
+                    child: Text(
+                      "Browse Categories",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Chip Grid
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  sliver: SliverGrid(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 3.5,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                        ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final uiCategory = categories[index];
+                      return _buildMinimalistChip(
+                        title: uiCategory,
+                        bgColor: chipColor!,
+                        textColor: textColor,
+                        onTap: () => _navigateToCategory(
+                          context,
+                          uiCategory,
+                          genreMap[uiCategory]!,
+                          allVideos,
+                        ),
+                      );
+                    }, childCount: categories.length),
+                  ),
+                ),
+
+                const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+                // --- 1. TRENDING SECTION ---
+                if (allVideos.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: CategoryVideoSection(
+                      title: "Trending Now",
+                      lessons: allVideos.take(8).toList(),
+                      onSeeAll: () =>
+                          _navigateToScreen(context, "Trending Now", allVideos),
+                    ),
+                  ),
+
+                // --- 2. DYNAMIC CATEGORIES ---
+                SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final uiCategory = categories[index];
+                    final categoryLessons = _filterLessons(
+                      allVideos,
+                      genreMap[uiCategory]!,
+                    );
+
+                    if (categoryLessons.isEmpty) return const SizedBox.shrink();
+
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 24),
+                      child: CategoryVideoSection(
+                        title: uiCategory,
+                        lessons: categoryLessons,
+                        onSeeAll: () => _navigateToScreen(
+                          context,
+                          uiCategory,
+                          categoryLessons,
+                        ),
+                      ),
+                    );
+                  }, childCount: categories.length),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 80)),
+              ],
             );
-            return const Center(child: CircularProgressIndicator());
-          }
-          // ... rest of your existing builders
-          if (state is LessonLoaded) {
-            // ... your list view logic
-            // I'm omitting the body here for brevity since it was provided in the previous answer
-            // Just make sure you don't delete your imported/favorite lists!
-            return _buildLibraryContent(
-              state.lessons,
-              isDark,
-              textColor,
-              context,
-            );
-          }
-          return const Center(child: CircularProgressIndicator());
-        },
+          },
+        ),
       ),
     );
   }
 
-  // Helper just to keep the snippet above clean, paste your Body logic here
-  Widget _buildLibraryContent(
-    List<LessonModel> lessons,
-    bool isDark,
-    Color? textColor,
-    BuildContext context,
+  // --- HELPERS ---
+
+  List<LessonModel> _filterLessons(
+    List<LessonModel> videos,
+    String mappedGenre,
   ) {
-    // 1. Filter
-    final importedLessons = lessons.where((l) => l.isLocal).toList();
-    final favoriteLessons = lessons.where((l) => l.isFavorite).toList();
+    return videos.where((l) {
+      final g = l.genre.toLowerCase();
+      final t = l.title.toLowerCase();
+      final k = mappedGenre.toLowerCase();
+      return g.contains(k) || (g == 'general' && t.contains(k));
+    }).toList();
+  }
 
-    if (importedLessons.isEmpty && favoriteLessons.isEmpty) {
-      return _buildEmptyState();
-    }
+  void _navigateToCategory(
+    BuildContext context,
+    String uiCategory,
+    String mappedGenre,
+    List<LessonModel> allVideos,
+  ) {
+    final filtered = _filterLessons(allVideos, mappedGenre);
+    _navigateToScreen(context, uiCategory, filtered);
+  }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 80),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Horizontal Imports
-          if (importedLessons.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                children: [
-                  Icon(Icons.download_for_offline, color: textColor, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    "Imported",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(
-              height: 230,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                scrollDirection: Axis.horizontal,
-                itemCount: importedLessons.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final lesson = importedLessons[index];
-                  const double cardWidth = 200;
-                  if (lesson.type == 'video' || lesson.videoUrl != null) {
-                    return LibraryVideoCard(
-                      lesson: lesson,
-                      isDark: isDark,
-                      width: cardWidth,
-                    );
-                  } else {
-                    return LibraryTextCard(
-                      lesson: lesson,
-                      isDark: isDark,
-                      width: cardWidth,
-                    );
-                  }
-                },
-              ),
-            ),
-          ],
-          // Vertical Favorites
-          if (favoriteLessons.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-              child: Row(
-                children: [
-                  Icon(Icons.star, color: Colors.amber[700], size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    "Favorites",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ListView.separated(
-              padding: const EdgeInsets.all(16),
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: favoriteLessons.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
-              itemBuilder: (context, index) {
-                final lesson = favoriteLessons[index];
-                if (lesson.type == 'video' || lesson.videoUrl != null) {
-                  return LibraryVideoCard(lesson: lesson, isDark: isDark);
-                } else {
-                  return LibraryTextCard(lesson: lesson, isDark: isDark);
-                }
-              },
-            ),
-          ],
-        ],
+  void _navigateToScreen(
+    BuildContext context,
+    String title,
+    List<LessonModel> lessons,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            CategoryResultsScreen(categoryTitle: title, lessons: lessons),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
-    // ... your empty state
-    return Container();
+  void _openSearch(BuildContext context, bool isDark) {
+    final state = context.read<LessonBloc>().state;
+    if (state is LessonLoaded) {
+      showSearch(
+        context: context,
+        delegate: LibrarySearchDelegate(lessons: state.lessons, isDark: isDark),
+      );
+    }
   }
+
+  Widget _buildMinimalistChip({
+    required String title,
+    required Color bgColor,
+    required Color textColor,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ... _StickySearchBarDelegate (keep as is)
+class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
+  final bool isDark;
+  final Color searchBarColor;
+  final Color textColor;
+  final VoidCallback onTap;
+
+  _StickySearchBarDelegate({
+    required this.isDark,
+    required this.searchBarColor,
+    required this.textColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      alignment: Alignment.center,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 45,
+          decoration: BoxDecoration(
+            color: searchBarColor,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Icon(
+                FontAwesomeIcons.magnifyingGlass,
+                color: isDark ? Colors.grey[500] : Colors.grey[600],
+                size: 16,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "Podcasts, episodes, topics...",
+                  style: TextStyle(
+                    color: isDark ? Colors.grey[500] : Colors.grey[600],
+                    fontSize: 15,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  double get maxExtent => 65;
+  @override
+  double get minExtent => 65;
+  @override
+  bool shouldRebuild(covariant _StickySearchBarDelegate oldDelegate) =>
+      oldDelegate.isDark != isDark;
 }

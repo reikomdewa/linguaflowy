@@ -26,6 +26,7 @@ FILES_TO_KEEP = [
 
     # Beginner Books (Keep the list so they can see titles, even if content loads later)
     "beginner_en.json", "beginner_es.json"
+    "de.json"
 ]
 
 def clean_directory(directory):

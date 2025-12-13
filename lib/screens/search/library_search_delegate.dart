@@ -1,20 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-// Import your existing card widgets so the results look exactly like your library
 import 'package:linguaflow/screens/library/widgets/cards/library_text_card.dart';
-import 'package:linguaflow/screens/library/widgets/cards/library_video_card.dart';
+import 'package:linguaflow/screens/library/widgets/cards/library_video_card.dart'; 
 
 class LibrarySearchDelegate extends SearchDelegate {
   final List<LessonModel> lessons;
   final bool isDark;
+  final String? initialQuery; // Add this
 
   LibrarySearchDelegate({
     required this.lessons,
     required this.isDark,
-  });
+    this.initialQuery, 
+  }) {
+    // Set the query if passed (allows auto-search on open)
+    if (initialQuery != null) {
+      query = initialQuery!; 
+    }
+  }
 
   // --- THEME STYLING ---
-  // This ensures the search screen matches your App's dark/light mode
   @override
   ThemeData appBarTheme(BuildContext context) {
     final theme = Theme.of(context);
@@ -80,11 +85,11 @@ class LibrarySearchDelegate extends SearchDelegate {
     // 1. Filter Logic
     final filteredLessons = lessons.where((lesson) {
       final titleLower = lesson.title.toLowerCase();
-      // Optional: Search content too
-      final contentLower = lesson.content.toLowerCase(); 
+      final genreLower = lesson.genre.toLowerCase(); // <--- CHECK GENRE
       final searchLower = query.toLowerCase();
 
-      return titleLower.contains(searchLower) || contentLower.contains(searchLower);
+      // Simple keyword matching: Title OR Genre
+      return titleLower.contains(searchLower) || genreLower.contains(searchLower);
     }).toList();
 
     // 2. Empty State
@@ -117,8 +122,7 @@ class LibrarySearchDelegate extends SearchDelegate {
         itemBuilder: (context, index) {
           final lesson = filteredLessons[index];
 
-          // Use your existing cards
-          if (lesson.type == 'video' || (lesson.videoUrl != null && lesson.videoUrl!.isNotEmpty)) {
+          if (lesson.type == 'video' || lesson.videoUrl != null) {
             return LibraryVideoCard(lesson: lesson, isDark: isDark);
           } else {
             return LibraryTextCard(lesson: lesson, isDark: isDark);

@@ -15,9 +15,12 @@ class LessonModel {
   final String type; // 'text', 'video', 'audio'
   final String difficulty;
   
+  // --- NEW FIELD FOR FILTERS ---
+  final String genre; 
+
   // Media Fields
   final String? videoUrl;
-  final String? subtitleUrl; // <--- Added this to store the .srt/.vtt path
+  final String? subtitleUrl;
 
   // Internal State
   final bool isLocal; 
@@ -36,6 +39,7 @@ class LessonModel {
     this.isFavorite = false,
     this.type = 'text',
     this.difficulty = 'intermediate',
+    this.genre = 'general', // Default value
     this.videoUrl,
     this.subtitleUrl,
     this.isLocal = false, 
@@ -66,11 +70,12 @@ class LessonModel {
       isFavorite: map['isFavorite'] == true,
       type: map['type']?.toString() ?? 'text',
       difficulty: map['difficulty']?.toString() ?? 'intermediate',
+      
+      // --- READ GENRE FROM JSON ---
+      genre: map['genre']?.toString() ?? 'general', 
+      
       videoUrl: map['videoUrl']?.toString(),
       subtitleUrl: map['subtitleUrl']?.toString(),
-      // We don't read isLocal from DB Maps usually, as it defaults to false.
-      // If you are storing local lessons in a local DB (sqflite/hive), 
-      // you might want to map this: isLocal: map['isLocal'] == 1 || map['isLocal'] == true
     );
   }
 
@@ -88,11 +93,9 @@ class LessonModel {
       'isFavorite': isFavorite,
       'type': type,
       'difficulty': difficulty,
+      'genre': genre, // --- SAVE GENRE TO DB ---
       'videoUrl': videoUrl,
       'subtitleUrl': subtitleUrl,
-      // NOTE: We do NOT save 'isLocal' to the remote Firebase database.
-      // However, if you implement a local database (e.g. Hive/SQLite) for offline mode,
-      // you should include 'isLocal': isLocal ? 1 : 0
     };
   }
 
@@ -110,6 +113,7 @@ class LessonModel {
     bool? isFavorite,
     String? type,
     String? difficulty,
+    String? genre, // --- ALLOW UPDATING GENRE ---
     String? videoUrl,
     String? subtitleUrl,
     bool? isLocal, 
@@ -128,6 +132,7 @@ class LessonModel {
       isFavorite: isFavorite ?? this.isFavorite,
       type: type ?? this.type,
       difficulty: difficulty ?? this.difficulty,
+      genre: genre ?? this.genre, // Update logic
       videoUrl: videoUrl ?? this.videoUrl,
       subtitleUrl: subtitleUrl ?? this.subtitleUrl,
       isLocal: isLocal ?? this.isLocal, 
