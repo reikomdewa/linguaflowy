@@ -1547,16 +1547,27 @@ class _ReaderScreenState extends State<ReaderScreen>
       child: Scaffold(
         backgroundColor: Colors.black,
         body: GestureDetector(
+          // --- EXISTING CONTROLS ---
           onTap: _toggleControls,
           onDoubleTapDown: (details) {
             final w = MediaQuery.of(context).size.width;
-            if (details.globalPosition.dx < w / 3)
+            if (details.globalPosition.dx < w / 3) {
               _seekRelative(-10);
-            else if (details.globalPosition.dx > (w * 2 / 3))
+            } else if (details.globalPosition.dx > (w * 2 / 3)) {
               _seekRelative(10);
-            else
+            } else {
               _toggleControls();
+            }
           },
+          
+          // --- NEW: SWIPE DOWN TO EXIT ---
+          onVerticalDragEnd: (details) {
+            // Check if the velocity is downward (positive) and strong enough
+            if (details.primaryVelocity != null && details.primaryVelocity! > 400) {
+              _toggleCustomFullScreen();
+            }
+          },
+
           child: Stack(
             alignment: Alignment.center,
             fit: StackFit.expand,
@@ -1589,13 +1600,13 @@ class _ReaderScreenState extends State<ReaderScreen>
                   position: (_isSeeking && _optimisticPosition != null)
                       ? _optimisticPosition!
                       : (_isLocalMedia && _localPlayer != null
-                            ? _localPlayer!.state.position
-                            : (_youtubeController?.value.position ??
-                                  Duration.zero)),
+                          ? _localPlayer!.state.position
+                          : (_youtubeController?.value.position ??
+                              Duration.zero)),
                   duration: _isLocalMedia && _localPlayer != null
                       ? _localPlayer!.state.duration
                       : (_youtubeController?.metadata.duration ??
-                            Duration.zero),
+                          Duration.zero),
                   showControls: _showControls,
                   onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
                   onSeekRelative: _seekRelative,
@@ -1603,8 +1614,6 @@ class _ReaderScreenState extends State<ReaderScreen>
                   onToggleFullscreen: _toggleCustomFullScreen,
                 ),
 
-              // --- NEW REPLAY BUTTON (Always Visible) ---
-              // This is outside the _showControls check
               if (!_showCard)
                 Positioned(
                   bottom: 100,
@@ -1623,11 +1632,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                   ),
                 ),
 
-              // --- OTHER CONTROLS (Fade in/out) ---
               if (!_showCard && _showControls) ...[
-                // REMOVED: The Back Button (Icons.arrow_back) was here.
-
-                // Keep the Caption Toggle button
                 Positioned(
                   top: 20,
                   right: 20,
