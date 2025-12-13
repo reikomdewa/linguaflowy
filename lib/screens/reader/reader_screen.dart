@@ -871,7 +871,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     });
   }
 
- Widget _buildTranslationOverlay() {
+  Widget _buildTranslationOverlay() {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final existing = _isSelectionPhrase ? null : _vocabulary[_selectedCleanId];
 
@@ -907,8 +907,8 @@ class _ReaderScreenState extends State<ReaderScreen>
       // FIX: Add a ValueKey here based on the selected text/ID.
       // This forces the widget to rebuild completely when the word changes.
       // -----------------------------------------------------------
-      key: ValueKey("$_selectedText$_selectedCleanId"), 
-      
+      key: ValueKey("$_selectedText$_selectedCleanId"),
+
       originalText: _selectedText,
       translationFuture: _cardTranslationFuture!,
       onGetAiExplanation: () => Gemini.instance
@@ -1408,6 +1408,14 @@ class _ReaderScreenState extends State<ReaderScreen>
                               aspectRatio: 16 / 9,
                               child: GestureDetector(
                                 onTap: _toggleControls,
+                                // --- NEW: SWIPE UP TO ENTER FULL SCREEN ---
+                                onVerticalDragEnd: (details) {
+                                  // Check for Upward Swipe (Negative Velocity)
+                                  if (details.primaryVelocity != null &&
+                                      details.primaryVelocity! < -400) {
+                                    _toggleCustomFullScreen();
+                                  }
+                                },
                                 child: Stack(
                                   children: [
                                     _buildSharedPlayer(),
@@ -1559,11 +1567,12 @@ class _ReaderScreenState extends State<ReaderScreen>
               _toggleControls();
             }
           },
-          
+
           // --- NEW: SWIPE DOWN TO EXIT ---
           onVerticalDragEnd: (details) {
             // Check if the velocity is downward (positive) and strong enough
-            if (details.primaryVelocity != null && details.primaryVelocity! > 400) {
+            if (details.primaryVelocity != null &&
+                details.primaryVelocity! > 400) {
               _toggleCustomFullScreen();
             }
           },
@@ -1600,13 +1609,13 @@ class _ReaderScreenState extends State<ReaderScreen>
                   position: (_isSeeking && _optimisticPosition != null)
                       ? _optimisticPosition!
                       : (_isLocalMedia && _localPlayer != null
-                          ? _localPlayer!.state.position
-                          : (_youtubeController?.value.position ??
-                              Duration.zero)),
+                            ? _localPlayer!.state.position
+                            : (_youtubeController?.value.position ??
+                                  Duration.zero)),
                   duration: _isLocalMedia && _localPlayer != null
                       ? _localPlayer!.state.duration
                       : (_youtubeController?.metadata.duration ??
-                          Duration.zero),
+                            Duration.zero),
                   showControls: _showControls,
                   onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
                   onSeekRelative: _seekRelative,
