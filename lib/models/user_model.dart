@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart'; // Needed for Timestamp check if used
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 
 class UserModel {
   final String id;
@@ -12,13 +12,19 @@ class UserModel {
   // Tracks the HISTORY of all languages the user has started.
   final List<String> targetLanguages; 
   
-  // FIX: Added this field to track completed unit IDs (e.g., ['es_u01_basics', ...])
+  // Tracks completed unit IDs (e.g., ['es_u01_basics', ...])
   final List<String> completedLevels; 
 
   final DateTime createdAt;
   final bool isPremium;
   final int xp;
   final Map<String, String> languageLevels; 
+
+  // --- NEW STATS FIELDS ---
+  final int streakDays;
+  final DateTime? lastLoginDate;
+  final int lessonsCompleted;
+  final int totalListeningMinutes;
 
   UserModel({
     required this.id,
@@ -27,11 +33,16 @@ class UserModel {
     this.nativeLanguage = 'en',
     this.currentLanguage = '', 
     this.targetLanguages = const [],
-    this.completedLevels = const [], // Default to empty
+    this.completedLevels = const [], 
     required this.createdAt,
     this.isPremium = false,
     this.xp = 0,
     this.languageLevels = const {}, 
+    // Defaults for new stats
+    this.streakDays = 0,
+    this.lastLoginDate,
+    this.lessonsCompleted = 0,
+    this.totalListeningMinutes = 0,
   });
 
   String get currentLevel {
@@ -53,7 +64,7 @@ class UserModel {
               .toList() ??
           [],
 
-      // FIX: Map the completed levels from Firestore
+      // Map the completed levels
       completedLevels:
           (map['completedLevels'] as List<dynamic>?)
               ?.map((e) => e.toString())
@@ -72,7 +83,21 @@ class UserModel {
       languageLevels: (map['languageLevels'] as Map<String, dynamic>?)?.map(
             (key, value) => MapEntry(key, value.toString()),
           ) ??
-          {}, 
+          {},
+
+      // --- NEW STATS MAPPING ---
+      streakDays: (map['streakDays'] as num?)?.toInt() ?? 0,
+      
+      lessonsCompleted: (map['lessonsCompleted'] as num?)?.toInt() ?? 0,
+      
+      totalListeningMinutes: (map['totalListeningMinutes'] as num?)?.toInt() ?? 0,
+      
+      // Handle lastLoginDate (supports both String and Timestamp)
+      lastLoginDate: map['lastLoginDate'] != null
+          ? (map['lastLoginDate'] is String
+              ? DateTime.tryParse(map['lastLoginDate'])
+              : (map['lastLoginDate'] as Timestamp).toDate())
+          : null,
     );
   }
 
@@ -83,11 +108,16 @@ class UserModel {
       'nativeLanguage': nativeLanguage,
       'currentLanguage': currentLanguage,
       'targetLanguages': targetLanguages,
-      'completedLevels': completedLevels, // Save to Firestore
+      'completedLevels': completedLevels,
       'createdAt': createdAt.toIso8601String(),
       'isPremium': isPremium,
       'xp': xp,
       'languageLevels': languageLevels,
+      // --- NEW STATS TO MAP ---
+      'streakDays': streakDays,
+      'lastLoginDate': lastLoginDate?.toIso8601String(), // Saving as ISO String
+      'lessonsCompleted': lessonsCompleted,
+      'totalListeningMinutes': totalListeningMinutes,
     };
   }
 
@@ -98,11 +128,16 @@ class UserModel {
     String? nativeLanguage,
     String? currentLanguage,
     List<String>? targetLanguages,
-    List<String>? completedLevels, // Add to copyWith
+    List<String>? completedLevels,
     DateTime? createdAt,
     bool? isPremium,
     int? xp,
     Map<String, String>? languageLevels,
+    // New fields in copyWith
+    int? streakDays,
+    DateTime? lastLoginDate,
+    int? lessonsCompleted,
+    int? totalListeningMinutes,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -111,11 +146,16 @@ class UserModel {
       nativeLanguage: nativeLanguage ?? this.nativeLanguage,
       currentLanguage: currentLanguage ?? this.currentLanguage,
       targetLanguages: targetLanguages ?? this.targetLanguages,
-      completedLevels: completedLevels ?? this.completedLevels, // Update logic
+      completedLevels: completedLevels ?? this.completedLevels,
       createdAt: createdAt ?? this.createdAt,
       isPremium: isPremium ?? this.isPremium,
       xp: xp ?? this.xp,
       languageLevels: languageLevels ?? this.languageLevels,
+      // New fields assignment
+      streakDays: streakDays ?? this.streakDays,
+      lastLoginDate: lastLoginDate ?? this.lastLoginDate,
+      lessonsCompleted: lessonsCompleted ?? this.lessonsCompleted,
+      totalListeningMinutes: totalListeningMinutes ?? this.totalListeningMinutes,
     );
   }
 }

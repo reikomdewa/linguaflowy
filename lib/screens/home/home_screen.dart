@@ -487,12 +487,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       // Word Count (e.g. "540 / 1000 words")
                       Row(
                         children: [
-                          const Icon(
-                            Icons.star_rounded,
-                            size: 18,
-                            color: Color(0xFFFFC107),
-                          ),
-                          const SizedBox(width: 6),
                           Text(
                             "$knownCount / $nextGoal words", // Dynamic variables
                             style: TextStyle(
@@ -535,8 +529,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     : null,
                 borderRadius: BorderRadius.circular(14),
                 child: Container(
-                  width: 40,
-                  height: 40,
+                  width: 35,
+                  height: 35,
                   decoration: BoxDecoration(
                     color: isDark
                         ? Colors.white.withOpacity(0.1)
@@ -554,10 +548,50 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           },
         ),
+        InkWell(
+          onTap: () {
+            final vocabState = context.read<VocabularyBloc>().state;
+            List<VocabularyItem> allItems =
+                []; // Use your exact Model class here
 
+            if (vocabState is VocabularyLoaded) {
+              allItems = vocabState.items;
+            }
+
+            HomeDialogs.showStatsDialog(
+              context,
+              user, // Passed from AuthBloc state in build method
+              allItems, // The full vocab list
+              LanguageHelper.availableLanguages,
+            );
+          },
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: 35,
+            height: 35,
+            decoration: BoxDecoration(
+              // Matches your Search button style
+              color: isDark
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.auto_graph_rounded, // or Icons.bar_chart_rounded
+              size: 20,
+              color: isDark ? Colors.white70 : Colors.black54,
+            ),
+          ),
+        ),
         // --- PREMIUM BUTTON ---
         Padding(
-          padding: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
+          padding: const EdgeInsets.only(
+            right: 16,
+            top: 12,
+            bottom: 12,
+            left: 6,
+          ),
           child: Center(
             child: InkWell(
               onTap: () {
@@ -592,7 +626,7 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(20),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
+                  horizontal: 10,
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(

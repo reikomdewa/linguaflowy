@@ -13,7 +13,8 @@ class VocabularyItem {
   final DateTime createdAt;
   final String? notes;
 
-  // --- NEW FIELDS FOR VIDEO SRS ---
+  // --- NEW FIELDS FOR STATS & SRS ---
+  final DateTime? learnedAt; // For Learning Velocity
   final String? sourceVideoUrl;
   final double? timestamp; // Seconds
   final String? sentenceContext;
@@ -30,6 +31,7 @@ class VocabularyItem {
     required this.lastReviewed,
     required this.createdAt,
     this.notes,
+    this.learnedAt, // New
     this.sourceVideoUrl,
     this.timestamp,
     this.sentenceContext,
@@ -48,6 +50,7 @@ class VocabularyItem {
     DateTime? lastReviewed,
     DateTime? createdAt,
     String? notes,
+    DateTime? learnedAt,
     String? sourceVideoUrl,
     double? timestamp,
     String? sentenceContext,
@@ -64,6 +67,7 @@ class VocabularyItem {
       lastReviewed: lastReviewed ?? this.lastReviewed,
       createdAt: createdAt ?? this.createdAt,
       notes: notes ?? this.notes,
+      learnedAt: learnedAt ?? this.learnedAt,
       sourceVideoUrl: sourceVideoUrl ?? this.sourceVideoUrl,
       timestamp: timestamp ?? this.timestamp,
       sentenceContext: sentenceContext ?? this.sentenceContext,
@@ -76,13 +80,21 @@ class VocabularyItem {
     // Internal helper to parse dates safely
     DateTime parseDate(dynamic value) {
       if (value == null) return DateTime.now();
-      if (value is Timestamp) return value.toDate(); // Handles Firestore format
-      if (value is String) return DateTime.tryParse(value) ?? DateTime.now(); // Handles ISO String
+      if (value is Timestamp) return value.toDate(); 
+      if (value is String) return DateTime.tryParse(value) ?? DateTime.now(); 
       if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
       return DateTime.now();
     }
+    
+    // Helper for nullable dates (like learnedAt)
+    DateTime? parseNullableDate(dynamic value) {
+      if (value == null) return null;
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value);
+      return null;
+    }
 
-    // Helper to safely parse doubles (for timestamps)
+    // Helper to safely parse doubles
     double? parseDouble(dynamic value) {
       if (value == null) return null;
       if (value is num) return value.toDouble();
@@ -97,18 +109,18 @@ class VocabularyItem {
       baseForm: map['baseForm']?.toString() ?? '',
       language: map['language']?.toString() ?? '',
       translation: map['translation']?.toString() ?? '',
-      // Safely parse integers
       status: (map['status'] is int) 
           ? map['status'] 
           : int.tryParse(map['status']?.toString() ?? '0') ?? 0,
       timesEncountered: (map['timesEncountered'] is int) 
           ? map['timesEncountered'] 
           : int.tryParse(map['timesEncountered']?.toString() ?? '1') ?? 1,
-      // Use the safe date parser
       lastReviewed: parseDate(map['lastReviewed']),
       createdAt: parseDate(map['createdAt']),
       notes: map['notes']?.toString(),
-      // New Video SRS fields
+      
+      // New Fields
+      learnedAt: parseNullableDate(map['learnedAt']),
       sourceVideoUrl: map['sourceVideoUrl']?.toString(),
       timestamp: parseDouble(map['timestamp']),
       sentenceContext: map['sentenceContext']?.toString(),
@@ -128,7 +140,9 @@ class VocabularyItem {
       'lastReviewed': Timestamp.fromDate(lastReviewed),
       'createdAt': Timestamp.fromDate(createdAt),
       'notes': notes,
-      // New Video SRS fields
+      
+      // New Fields
+      'learnedAt': learnedAt != null ? Timestamp.fromDate(learnedAt!) : null,
       'sourceVideoUrl': sourceVideoUrl,
       'timestamp': timestamp,
       'sentenceContext': sentenceContext,
