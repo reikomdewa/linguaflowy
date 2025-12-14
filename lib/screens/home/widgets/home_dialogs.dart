@@ -4,7 +4,6 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/utils/constants.dart';
-// import 'package:linguaflow/models/user_model.dart'; // Ensure this is imported if you use strict typing
 
 class HomeDialogs {
   // --- 1. SHARED LEVEL CALCULATION LOGIC ---
@@ -65,11 +64,11 @@ class HomeDialogs {
   // --- 2. UPDATED STATS DIALOG ---
   static void showStatsDialog(
     BuildContext context,
-    dynamic user, // Expecting User model
-    List<dynamic> vocabItems, // Expecting List<VocabularyItem>
+    dynamic user,
+    List<dynamic> vocabItems,
     Map<String, String> languageNames,
   ) {
-    // A. FILTER VOCAB FOR CURRENT LANGUAGE
+    // A. FILTER VOCAB
     final currentLangVocab = vocabItems
         .where((v) => v.status > 0 && v.language == user.currentLanguage)
         .toList();
@@ -83,34 +82,24 @@ class HomeDialogs {
     final int nextGoal = stats['nextGoal'];
     final double progress = stats['progress'];
 
-    // C. CALCULATE NEW METRICS
-
-    // 1. 🔥 Streak
-    // Assuming User model has 'streakDays'. Default to 0.
+    // C. CALCULATE METRICS
     final int streak = (user.toMap().containsKey('streakDays'))
         ? user.streakDays
         : 0;
-
-    // 2. 📚 Content Consumed
-    // Assuming User model has 'lessonsCompleted'. Default to 0.
     final int lessonsRead = (user.toMap().containsKey('lessonsCompleted'))
         ? user.lessonsCompleted
         : 0;
 
-    // 3. 📈 Learning Velocity (Words this week)
     final DateTime oneWeekAgo = DateTime.now().subtract(
       const Duration(days: 7),
     );
     final int wordsThisWeek = currentLangVocab.where((v) {
-      // Check if item has a date field (learnedAt or similar).
-      // Adjust 'learnedAt' to match your VocabularyItem field name.
       if (v.toMap().containsKey('learnedAt') && v.learnedAt != null) {
         return (v.learnedAt as DateTime).isAfter(oneWeekAgo);
       }
       return false;
     }).length;
 
-    // 4. 🧠 Text Comprehension %
     double comprehension = 0.0;
     if (knownWords < 1000)
       comprehension = (knownWords / 1000) * 72;
@@ -123,14 +112,20 @@ class HomeDialogs {
     else
       comprehension = 98.0;
 
-    // 5. 🎧 Listening Hours
-    // Assuming User model has 'totalListeningMinutes'.
     final int totalMinutes = (user.toMap().containsKey('totalListeningMinutes'))
         ? user.totalListeningMinutes
         : 0;
     final double listeningHours = totalMinutes / 60;
 
-    // D. UI STYLING
+    // D. SMART FEEDBACK
+    final String feedback = _getSmartFeedback(
+      streak,
+      wordsThisWeek,
+      listeningHours,
+      knownWords,
+    );
+
+    // E. UI VARS
     final langName = languageNames[user.currentLanguage] ?? 'Target Language';
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
@@ -142,201 +137,296 @@ class HomeDialogs {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
+      useSafeArea:
+          true, // <--- FIX: This ensures it respects the top notch/status bar
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: EdgeInsets.fromLTRB(
-          24,
-          24,
-          24,
-          24 + MediaQuery.of(context).viewPadding.bottom,
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewPadding.bottom,
         ),
-        child: SingleChildScrollView(
-          // Added for safety on small screens
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // --- HEADER ---
-              Row(
+        child: Stack(
+          alignment: Alignment.bottomCenter,
+          children: [
+            // 1. SCROLLABLE CONTENT
+            SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 100),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.auto_graph_rounded,
-                      color: Colors.amber[800],
-                      size: 28,
+                  // --- DRAG HANDLE ---
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 24),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[400],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+
+                  // --- HEADER ---
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.auto_graph_rounded,
+                          color: Colors.amber[800],
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "$langName Progress",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          const Text(
+                            "Consistency is key!",
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 32),
+
+                  // --- MAIN LEVEL ---
+                  Center(
+                    child: Column(
+                      children: [
+                        const Text(
+                          "Current Level",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          currentLevel,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // --- PROGRESS BAR ---
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        "$langName Progress",
+                        "Next: $nextLevel",
                         style: TextStyle(
-                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: textColor,
                         ),
                       ),
-                      const Text(
-                        "Consistency is key!",
-                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      Text(
+                        "${nextGoal - knownWords} to go",
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 10,
+                      backgroundColor: isDark
+                          ? Colors.grey[800]
+                          : Colors.grey[200],
+                      valueColor: const AlwaysStoppedAnimation(Colors.blue),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // --- SMART FEEDBACK ---
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.amber.withOpacity(0.1)
+                          : Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.amber.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.lightbulb_outline_rounded,
+                          color: Colors.amber.shade700,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            feedback,
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.4,
+                              color: isDark ? Colors.grey[300] : Colors.black87,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // --- STATS GRID ---
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: 1.5,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    children: [
+                      _buildStatCard(
+                        icon: Icons.local_fire_department_rounded,
+                        iconColor: Colors.deepOrangeAccent,
+                        value: "$streak Days",
+                        label: "Daily Streak",
+                        bgColor: cardBgColor!,
+                        textColor: textColor,
+                      ),
+                      _buildStatCard(
+                        icon: Icons.trending_up_rounded,
+                        iconColor: Colors.greenAccent.shade700,
+                        value: "+$wordsThisWeek",
+                        label: "Words this Week",
+                        bgColor: cardBgColor,
+                        textColor: textColor,
+                      ),
+                      _buildStatCard(
+                        icon: Icons.psychology_rounded,
+                        iconColor: Colors.purpleAccent,
+                        value: "${comprehension.toStringAsFixed(1)}%",
+                        label: "Text Understanding",
+                        bgColor: cardBgColor,
+                        textColor: textColor,
+                      ),
+                      _buildStatCard(
+                        icon: Icons.library_books_rounded,
+                        iconColor: Colors.blueAccent,
+                        value: "$lessonsRead",
+                        label: "Lessons Read",
+                        bgColor: cardBgColor,
+                        textColor: textColor,
+                      ),
+                      _buildStatCard(
+                        icon: Icons.headphones_rounded,
+                        iconColor: Colors.pinkAccent,
+                        value: "${listeningHours.toStringAsFixed(1)} h",
+                        label: "Listening Time",
+                        bgColor: cardBgColor,
+                        textColor: textColor,
                       ),
                     ],
                   ),
                 ],
               ),
-              const Divider(height: 32),
+            ),
 
-              // --- MAIN LEVEL ---
-              Center(
-                child: Column(
-                  children: [
-                    const Text(
-                      "Current Level",
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      currentLevel,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.blue,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // --- PROGRESS BAR ---
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Next: $nextLevel",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                  Text(
-                    "${nextGoal - knownWords} to go",
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 10,
-                  backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
-                  valueColor: const AlwaysStoppedAnimation(Colors.blue),
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              // --- STATS GRID (The New Part) ---
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: 1.5, // Controls height of cards
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                children: [
-                  // 1. Streak
-                  _buildStatCard(
-                    icon: Icons.local_fire_department_rounded,
-                    iconColor: Colors.deepOrangeAccent,
-                    value: "$streak Days",
-                    label: "Daily Streak",
-                    bgColor: cardBgColor!,
-                    textColor: textColor,
-                  ),
-                  // 2. Velocity
-                  _buildStatCard(
-                    icon: Icons.trending_up_rounded,
-                    iconColor: Colors.greenAccent.shade700,
-                    value: "+$wordsThisWeek",
-                    label: "Words this Week",
-                    bgColor: cardBgColor,
-                    textColor: textColor,
-                  ),
-                  // 3. Comprehension
-                  _buildStatCard(
-                    icon: Icons.psychology_rounded,
-                    iconColor: Colors.purpleAccent,
-                    value: "${comprehension.toStringAsFixed(1)}%",
-                    label: "Text Understanding",
-                    bgColor: cardBgColor,
-                    textColor: textColor,
-                  ),
-                  // 4. Content Consumed
-                  _buildStatCard(
-                    icon: Icons.library_books_rounded,
-                    iconColor: Colors.blueAccent,
-                    value: "$lessonsRead",
-                    label: "Lessons Read",
-                    bgColor: cardBgColor,
-                    textColor: textColor,
-                  ),
-                  // 5. Listening Hours (Spans full width or just fits in grid)
-                  _buildStatCard(
-                    icon: Icons.headphones_rounded,
-                    iconColor: Colors.pinkAccent,
-                    value: "${listeningHours.toStringAsFixed(1)} h",
-                    label: "Listening/Watch Time",
-                    bgColor: cardBgColor,
-                    textColor: textColor,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 24),
-
-              // --- BUTTON ---
-              SizedBox(
+            // 2. FLOATING BUTTON
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 24,
+              child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isDark ? Colors.white : Colors.black,
+                    backgroundColor: isDark ? Colors.white : Colors.blue,
                     foregroundColor: isDark ? Colors.black : Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
+                    elevation: 6,
+                    shadowColor: Colors.black38,
                   ),
-                  child: const Text("Keep Learning"),
+                  child: const Text(
+                    "Keep Learning",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // --- HELPER: STAT CARD WIDGET ---
+  // --- SMART FEEDBACK LOGIC ---
+  static String _getSmartFeedback(
+    int streak,
+    int velocity,
+    double hours,
+    int totalWords,
+  ) {
+    if (streak <= 1) {
+      return "Habit Check: Just 5 minutes a day is better than 2 hours once a week. Try to open the app tomorrow to start a streak!";
+    }
+    if (streak >= 7 && streak < 30) {
+      return "You're on fire! 🔥 Staying consistent for a week is the hardest part. Keep this momentum going!";
+    }
+    if (hours > 2.0 && velocity < 5) {
+      return "Great listening skills! 🎧 Don't forget to tap words in the reader to mark them as 'Known'. This tracks your vocabulary growth.";
+    }
+    if (velocity > 50 && hours < 0.5) {
+      return "Huge vocabulary growth! 🚀 Try balancing it with some Audio/Video lessons to train your ear.";
+    }
+    if (totalWords < 500) {
+      return "Focus on the basics. Learning the top 500 words will unlock about 60% of daily conversation.";
+    }
+    if (totalWords > 2000) {
+      return "You have a strong foundation. 🏛️ Try challenging yourself with Native Content (Video Feeds) to test your comprehension.";
+    }
+    return "You're making progress every day. Review your flashcards to move words from 'Learning' to 'Known'.";
+  }
+
+  // --- HELPER: STAT CARD ---
   static Widget _buildStatCard({
     required IconData icon,
     required Color iconColor,
@@ -380,167 +470,4 @@ class HomeDialogs {
     );
   }
 
-  // --- 3. LESSON OPTIONS DIALOG (No changes here) ---
-  static void showLessonOptions(
-    BuildContext context,
-    LessonModel lesson,
-    bool isDark,
-  ) {
-    // ... [Previous code remains exactly the same] ...
-    final parentContext = context;
-    final authState = parentContext.read<AuthBloc>().state;
-    String currentUserId = '';
-    bool canDelete = false;
-    bool isOwner = false;
-
-    if (authState is AuthAuthenticated) {
-      final user = authState.user;
-      currentUserId = user.id;
-      isOwner = (user.id == lesson.userId);
-      final bool isAdmin = AppConstants.isAdmin(user.email);
-      canDelete = isAdmin || isOwner;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (builderContext) => Container(
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: EdgeInsets.only(
-          top: 20,
-          left: 0,
-          right: 0,
-          bottom: MediaQuery.of(builderContext).viewPadding.bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Colors.grey[600],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: lesson.isFavorite
-                      ? Colors.amber.withOpacity(0.1)
-                      : (isDark ? Colors.white10 : Colors.grey[100]),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  lesson.isFavorite ? Icons.star : Icons.star_border,
-                  color: lesson.isFavorite ? Colors.amber : Colors.grey,
-                ),
-              ),
-              title: Text(
-                lesson.isFavorite ? 'Remove from Favorites' : 'Save to Library',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black,
-                ),
-              ),
-              subtitle: Text(
-                isOwner
-                    ? (lesson.isFavorite
-                          ? 'Removed from library.'
-                          : 'Saved to library.')
-                    : 'Create a copy in your cloud library.',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              onTap: () {
-                if (currentUserId.isEmpty) {
-                  Navigator.pop(builderContext);
-                  return;
-                }
-                if (isOwner) {
-                  final updatedLesson = lesson.copyWith(
-                    isFavorite: !lesson.isFavorite,
-                  );
-                  parentContext.read<LessonBloc>().add(
-                    LessonUpdateRequested(updatedLesson),
-                  );
-                } else {
-                  final newLesson = lesson.copyWith(
-                    id: '',
-                    userId: currentUserId,
-                    isFavorite: true,
-                    isLocal: false,
-                    createdAt: DateTime.now(),
-                  );
-                  parentContext.read<LessonBloc>().add(
-                    LessonCreateRequested(newLesson),
-                  );
-                  ScaffoldMessenger.of(parentContext).showSnackBar(
-                    const SnackBar(
-                      content: Text("Saving copy to your cloud library..."),
-                    ),
-                  );
-                }
-                Navigator.pop(builderContext);
-              },
-            ),
-            if (canDelete) ...[
-              Divider(color: Colors.grey[800]),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.delete_outline, color: Colors.red),
-                ),
-                title: const Text(
-                  'Delete Lesson',
-                  style: TextStyle(color: Colors.red),
-                ),
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text("Delete Lesson?"),
-                      content: const Text(
-                        "This cannot be undone. Are you sure?",
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text("Cancel"),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            parentContext.read<LessonBloc>().add(
-                              LessonDeleteRequested(lesson.id),
-                            );
-                            Navigator.pop(builderContext);
-                          },
-                          child: const Text(
-                            "Delete",
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 }

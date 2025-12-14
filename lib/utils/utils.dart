@@ -3,13 +3,225 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
+import 'package:linguaflow/blocs/lesson/lesson_event.dart';
+import 'package:linguaflow/models/lesson_model.dart';
+import 'package:linguaflow/utils/constants.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 // Place this inside your User App code
 // import 'package:device_info_plus/device_info_plus.dart'; // Optional
 // import 'package:package_info_plus/package_info_plus.dart'; // Optional
 
-void showReportBugDialog(BuildContext context, String userId, String userEmail) {
+// --- 3. LESSON OPTIONS DIALOG ---
+void showLessonOptions(
+  BuildContext context,
+  LessonModel lesson,
+  bool isDark, {
+  // 'showDeleteAction' is true when we are in the Library/Profile.
+  // 'showDeleteAction' is false when we are on the Home/Discovery screen.
+  bool showDeleteAction = false,
+}) {
+  final parentContext = context;
+  final authState = parentContext.read<AuthBloc>().state;
+  String currentUserId = '';
+  bool canDelete = false;
+  bool isOwner = false;
+  bool isCreatedByMe = false;
+
+  if (authState is AuthAuthenticated) {
+    final user = authState.user;
+    currentUserId = user.id;
+
+    // 1. Basic Ownership Check
+    isOwner = (user.id == lesson.userId);
+
+    // 2. Check if I am the ORIGINAL creator (Imported/Created)
+    //    If originalAuthorId is null, we assume it's an old lesson created by the user (backward compatibility).
+    //    If originalAuthorId matches userId, it is definitely my creation.
+    isCreatedByMe =
+        isOwner &&
+        (lesson.originalAuthorId == null ||
+            lesson.originalAuthorId == lesson.userId);
+
+    // 3. Admin Check
+    final bool isAdmin = AppConstants.isAdmin(user.email ?? '');
+
+    // 4. FINAL DELETE LOGIC:
+    //    - Admins can delete anything.
+    //    - If I CREATED/IMPORTED it: I can delete it anywhere (Home or Library).
+    //    - If it's a SAVED COPY: I can only delete it if 'showDeleteAction' is true (Library).
+    canDelete = isAdmin || isCreatedByMe || (isOwner && showDeleteAction);
+  }
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (builderContext) => Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        top: 20,
+        left: 0,
+        right: 0,
+        bottom: MediaQuery.of(builderContext).viewPadding.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag Handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.grey[600],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
+          // --- FAVORITE / SAVE BUTTON ---
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: lesson.isFavorite
+                    ? Colors.amber.withOpacity(0.1)
+                    : (isDark ? Colors.white10 : Colors.grey[100]),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                lesson.isFavorite ? Icons.star : Icons.star_border,
+                color: lesson.isFavorite ? Colors.amber : Colors.grey,
+              ),
+            ),
+            title: Text(
+              lesson.isFavorite ? 'Remove from Favorites' : 'Save to Library',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+            ),
+            subtitle: Text(
+              isOwner
+                  ? (lesson.isFavorite
+                        ? 'Unfavorite (removes from library)'
+                        : 'Add to favorites')
+                  : 'Create a copy in your cloud library.',
+              style: const TextStyle(color: Colors.grey),
+            ),
+            onTap: () {
+              if (currentUserId.isEmpty) {
+                Navigator.pop(builderContext);
+                return;
+              }
+
+              if (isOwner) {
+                // Toggle Favorite
+                final updatedLesson = lesson.copyWith(
+                  isFavorite: !lesson.isFavorite,
+                );
+                parentContext.read<LessonBloc>().add(
+                  LessonUpdateRequested(updatedLesson),
+                );
+              } else {
+                // Create Copy
+                final newLesson = lesson.copyWith(
+                  id: '',
+                  userId: currentUserId,
+                  // IMPORTANT: Save the original author's ID so we know it's a copy later
+                  originalAuthorId: lesson.userId,
+                  isFavorite: true,
+                  isLocal: false,
+                  createdAt: DateTime.now(),
+                );
+                parentContext.read<LessonBloc>().add(
+                  LessonCreateRequested(newLesson),
+                );
+                ScaffoldMessenger.of(parentContext).showSnackBar(
+                  const SnackBar(content: Text("Saved to Favorites & Library")),
+                );
+              }
+              Navigator.pop(builderContext);
+            },
+          ),
+
+          // --- DELETE BUTTON ---
+          if (canDelete) ...[
+            Divider(color: Colors.grey[800]),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.delete_outline, color: Colors.red),
+              ),
+              title: const Text(
+                'Delete Lesson',
+                style: TextStyle(color: Colors.red),
+              ),
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text("Delete Lesson?"),
+                    content: Text(
+                      isCreatedByMe
+                          ? "This is your created lesson. Deleting it will remove it permanently for everyone."
+                          : "This will remove the lesson from your library.",
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text("Cancel"),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          parentContext.read<LessonBloc>().add(
+                            LessonDeleteRequested(lesson.id),
+                          );
+                          Navigator.pop(builderContext);
+
+                          ScaffoldMessenger.of(parentContext).showSnackBar(
+                            const SnackBar(
+                              content: Text("Lesson Deleted"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          "Delete",
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+void showReportBugDialog(
+  BuildContext context,
+  String userId,
+  String userEmail,
+) {
   final titleCtrl = TextEditingController();
   final descCtrl = TextEditingController();
   String severity = 'medium';
@@ -26,9 +238,9 @@ void showReportBugDialog(BuildContext context, String userId, String userEmail) 
               TextField(
                 controller: titleCtrl,
                 decoration: const InputDecoration(
-                  labelText: "Subject", 
+                  labelText: "Subject",
                   hintText: "e.g., Audio not playing",
-                  border: OutlineInputBorder()
+                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 15),
@@ -38,23 +250,31 @@ void showReportBugDialog(BuildContext context, String userId, String userEmail) 
                 decoration: const InputDecoration(
                   labelText: "Description",
                   hintText: "Explain what happened step by step...",
-                  border: OutlineInputBorder()
+                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 15),
               DropdownButtonFormField<String>(
                 initialValue: severity,
                 decoration: const InputDecoration(labelText: "Impact"),
-                items: ['low', 'medium', 'high', 'critical'].map((s) => 
-                  DropdownMenuItem(value: s, child: Text(s.toUpperCase()))
-                ).toList(),
+                items: ['low', 'medium', 'high', 'critical']
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(s.toUpperCase()),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (v) => setState(() => severity = v!),
-              )
+              ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
             onPressed: () async {
               if (titleCtrl.text.isEmpty) return;
@@ -62,7 +282,7 @@ void showReportBugDialog(BuildContext context, String userId, String userEmail) 
               // 1. Gather Device Info (Optional but recommended)
               String deviceInfo = "Unknown Device";
               String appVersion = "1.0.0";
-              
+
               /* UNCOMMENT THIS IF YOU INSTALLED THE PACKAGES
               try {
                 final info = await DeviceInfoPlugin().deviceInfo;
@@ -101,17 +321,18 @@ void showReportBugDialog(BuildContext context, String userId, String userEmail) 
   );
 }
 
-     Color getLevelShade(int level, MaterialColor color) {
-          if (level == 0) {
-            return color.shade300; // Lightest shade
-          } else if (level == 1) {
-            return color.shade500; // Moderate shade
-          } else if (level == 2) {
-            return color.shade700; // Darker shade
-          } else {
-            return color.shade800; // Darkest shade
-          }
-        }
+Color getLevelShade(int level, MaterialColor color) {
+  if (level == 0) {
+    return color.shade300; // Lightest shade
+  } else if (level == 1) {
+    return color.shade500; // Moderate shade
+  } else if (level == 2) {
+    return color.shade700; // Darker shade
+  } else {
+    return color.shade800; // Darkest shade
+  }
+}
+
 Widget buildTextBadge(String text, Color bgColor, {double fontSize = 10}) {
   return Container(
     margin: const EdgeInsets.only(right: 3.0), // Spacing between badges
@@ -131,44 +352,44 @@ Widget buildTextBadge(String text, Color bgColor, {double fontSize = 10}) {
     ),
   );
 }
-Widget buildMediaPlaceholder(
-    BuildContext context, {
-    bool isLoading = false,
-    dynamic error,
-    String? message,
-  }) {
-    return Container(
-      height: 450, // Consistent height
-      width: MediaQuery.of(context).size.height * 0.35,
-      margin: const EdgeInsets.only(right: 8.0), // Match image padding
-      decoration: BoxDecoration(
-        color: Colors.grey[850], // Dark placeholder background
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Center(
-        child:
-            isLoading
-                ? const CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white54,
-                )
-                : Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    error != null
-                        ? 'Error loading video:\n${error.toString()}'
-                        : message ?? 'Cannot load media',
-                    style: TextStyle(
-                      color: error != null ? Colors.redAccent : Colors.white60,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-      ),
-    );
-  }
-class Utils {
 
+Widget buildMediaPlaceholder(
+  BuildContext context, {
+  bool isLoading = false,
+  dynamic error,
+  String? message,
+}) {
+  return Container(
+    height: 450, // Consistent height
+    width: MediaQuery.of(context).size.height * 0.35,
+    margin: const EdgeInsets.only(right: 8.0), // Match image padding
+    decoration: BoxDecoration(
+      color: Colors.grey[850], // Dark placeholder background
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Center(
+      child: isLoading
+          ? const CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white54,
+            )
+          : Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                error != null
+                    ? 'Error loading video:\n${error.toString()}'
+                    : message ?? 'Cannot load media',
+                style: TextStyle(
+                  color: error != null ? Colors.redAccent : Colors.white60,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+    ),
+  );
+}
+
+class Utils {
   static Future openLink({required url}) async {
     _launchURL(url);
   }
@@ -198,36 +419,44 @@ class Utils {
 
     return list;
   }
-String timeAgo(DateTime dateTime) {
-  final difference = DateTime.now().difference(dateTime);
-  
-  if (difference.inDays > 365) {
-    return '${(difference.inDays / 365).floor()} ${(difference.inDays / 365).floor() == 1 ? 'year' : 'years'} ago';
-  } else if (difference.inDays > 30) {
-    return '${(difference.inDays / 30).floor()} ${(difference.inDays / 30).floor() == 1 ? 'month' : 'months'} ago';
-  } else if (difference.inDays > 0) {
-    return '${difference.inDays} ${difference.inDays == 1 ? 'day' : 'days'} ago';
-  } else if (difference.inHours > 0) {
-    return '${difference.inHours} ${difference.inHours == 1 ? 'hour' : 'hours'} ago';
-  } else if (difference.inMinutes > 0) {
-    return '${difference.inMinutes} ${difference.inMinutes == 1 ? 'minute' : 'minutes'} ago';
-  } else {
-    return 'Just now';
+
+  String timeAgo(DateTime dateTime) {
+    final difference = DateTime.now().difference(dateTime);
+
+    if (difference.inDays > 365) {
+      return '${(difference.inDays / 365).floor()} ${(difference.inDays / 365).floor() == 1 ? 'year' : 'years'} ago';
+    } else if (difference.inDays > 30) {
+      return '${(difference.inDays / 30).floor()} ${(difference.inDays / 30).floor() == 1 ? 'month' : 'months'} ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} ${difference.inDays == 1 ? 'day' : 'days'} ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} ${difference.inHours == 1 ? 'hour' : 'hours'} ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} ${difference.inMinutes == 1 ? 'minute' : 'minutes'} ago';
+    } else {
+      return 'Just now';
+    }
   }
-}
-String capitalizeFirstLetter(String text) {
-  if (text.isEmpty) return text;
-  return text[0].toUpperCase() + text.substring(1);
-}
-  static Future openEmail(
-      {required String toEmail,
-      required String subject,
-      required String body}) async {
-        String? encodeQueryParameters(Map<String, String> params) {
-  return params.entries
-      .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
-      .join('&');
-}
+
+  String capitalizeFirstLetter(String text) {
+    if (text.isEmpty) return text;
+    return text[0].toUpperCase() + text.substring(1);
+  }
+
+  static Future openEmail({
+    required String toEmail,
+    required String subject,
+    required String body,
+  }) async {
+    String? encodeQueryParameters(Map<String, String> params) {
+      return params.entries
+          .map(
+            (e) =>
+                '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+          )
+          .join('&');
+    }
+
     final url = Uri(
       scheme: 'mailto',
       path: toEmail,
@@ -238,7 +467,6 @@ String capitalizeFirstLetter(String text) {
     await _launchURL(url);
   }
 }
-
 
 String getType(dynamic value) {
   if (value is String) return "string";
@@ -370,4 +598,3 @@ void printSchemaInChunks(String prettyJson) {
     debugPrint(prettyJson, wrapWidth: 1024);
   }
 }
-

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/screens/home/widgets/home_video_feeds.dart';
 import 'package:linguaflow/screens/search/library_search_delegate.dart';
+import 'package:linguaflow/utils/utils.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -807,7 +808,7 @@ class _HomeScreenState extends State<HomeScreen> {
             isDark: isDark,
             onTap: () => _handleLessonTap(lesson),
             onOptionTap: () =>
-                HomeDialogs.showLessonOptions(context, lesson, isDark),
+                showLessonOptions(context, lesson, isDark),
           );
         } else {
           return Center(
@@ -822,7 +823,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   isDark: isDark,
                   onTap: () => _handleLessonTap(lesson),
                   onOptionTap: () =>
-                      HomeDialogs.showLessonOptions(context, lesson, isDark),
+                      showLessonOptions(context, lesson, isDark),
                 ),
               ),
             ),

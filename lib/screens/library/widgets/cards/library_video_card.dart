@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/screens/library/widgets/dialogs/library_actions.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
+import 'package:linguaflow/utils/utils.dart';
 
 // We removed media_kit imports because we don't need to play video here anymore.
 

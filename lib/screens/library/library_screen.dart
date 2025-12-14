@@ -220,7 +220,7 @@ class LibraryScreen extends StatelessWidget {
               context,
               user.id,
               user.currentLanguage,
-              isFavoriteByDefault: true,
+              isFavoriteByDefault: false,
             );
           },
           borderRadius: BorderRadius.circular(30),
@@ -242,7 +242,7 @@ class LibraryScreen extends StatelessWidget {
                 Icon(Icons.add_rounded, color: Colors.white, size: 22),
                 SizedBox(width: 8),
                 Text(
-                  'Import to library',
+                  'Import',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 15,

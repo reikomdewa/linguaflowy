@@ -1,6 +1,7 @@
 import 'package:linguaflow/models/transcript_line.dart';
 
 class LessonModel {
+  
   final String id;
   final String userId;
   final String title;
@@ -15,8 +16,13 @@ class LessonModel {
   final String type; // 'text', 'video', 'audio'
   final String difficulty;
   
-  // --- NEW FIELD FOR FILTERS ---
+  // --- FILTERS ---
   final String genre; 
+
+  // --- NEW FIELD FOR OWNERSHIP ---
+  // If this matches 'userId', it's an original. 
+  // If different, it's a saved copy.
+  final String? originalAuthorId;
 
   // Media Fields
   final String? videoUrl;
@@ -39,13 +45,18 @@ class LessonModel {
     this.isFavorite = false,
     this.type = 'text',
     this.difficulty = 'intermediate',
-    this.genre = 'general', // Default value
+    this.genre = 'general',
+    this.originalAuthorId, // <--- Add to constructor
     this.videoUrl,
     this.subtitleUrl,
     this.isLocal = false, 
   });
 
   String? get mediaUrl => videoUrl; 
+
+  // Helper to easily check if the current lesson object is the original creation
+  // Returns true if the current owner is the original author
+  bool get isOriginal => originalAuthorId == null || userId == originalAuthorId;
 
   factory LessonModel.fromMap(Map<String, dynamic> map, String id) {
     return LessonModel(
@@ -70,10 +81,11 @@ class LessonModel {
       isFavorite: map['isFavorite'] == true,
       type: map['type']?.toString() ?? 'text',
       difficulty: map['difficulty']?.toString() ?? 'intermediate',
-      
-      // --- READ GENRE FROM JSON ---
       genre: map['genre']?.toString() ?? 'general', 
       
+      // --- MAP NEW FIELD ---
+      originalAuthorId: map['originalAuthorId']?.toString(),
+
       videoUrl: map['videoUrl']?.toString(),
       subtitleUrl: map['subtitleUrl']?.toString(),
     );
@@ -93,7 +105,11 @@ class LessonModel {
       'isFavorite': isFavorite,
       'type': type,
       'difficulty': difficulty,
-      'genre': genre, // --- SAVE GENRE TO DB ---
+      'genre': genre,
+      
+      // --- SAVE NEW FIELD ---
+      'originalAuthorId': originalAuthorId, 
+
       'videoUrl': videoUrl,
       'subtitleUrl': subtitleUrl,
     };
@@ -113,7 +129,8 @@ class LessonModel {
     bool? isFavorite,
     String? type,
     String? difficulty,
-    String? genre, // --- ALLOW UPDATING GENRE ---
+    String? genre,
+    String? originalAuthorId, // <--- Add here
     String? videoUrl,
     String? subtitleUrl,
     bool? isLocal, 
@@ -132,7 +149,8 @@ class LessonModel {
       isFavorite: isFavorite ?? this.isFavorite,
       type: type ?? this.type,
       difficulty: difficulty ?? this.difficulty,
-      genre: genre ?? this.genre, // Update logic
+      genre: genre ?? this.genre,
+      originalAuthorId: originalAuthorId ?? this.originalAuthorId, // <--- Add logic
       videoUrl: videoUrl ?? this.videoUrl,
       subtitleUrl: subtitleUrl ?? this.subtitleUrl,
       isLocal: isLocal ?? this.isLocal, 

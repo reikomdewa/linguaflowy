@@ -3,6 +3,7 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart'; // Needed for nav
 import 'package:linguaflow/screens/quiz/widgets/practice_banner_button.dart';
+import 'package:linguaflow/utils/utils.dart';
 import 'home_dialogs.dart'; // Needed for options
 import 'lesson_cards.dart';
 
@@ -25,7 +26,7 @@ Widget _buildCard(
       );
     },
     onOptionTap: () {
-      HomeDialogs.showLessonOptions(context, lesson, isDark);
+      showLessonOptions(context, lesson, isDark,);
     },
   );
 }

@@ -4,6 +4,7 @@ import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
 // Add this import for the dialog
 import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
+import 'package:linguaflow/utils/utils.dart';
 
 class AudioLibrarySection extends StatefulWidget {
   final List<LessonModel> lessons;
@@ -37,7 +38,12 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
         .toList();
 
     final pureAudioLessons = filteredLessons
-        .where((l) => l.userId != 'system_audiobook' && !l.videoUrl!.contains('youtube.com') || l.videoUrl == null)
+        .where(
+          (l) =>
+              l.userId != 'system_audiobook' &&
+                  !l.videoUrl!.contains('youtube.com') ||
+              l.videoUrl == null,
+        )
         .toList();
 
     if (syncedLessons.isEmpty && pureAudioLessons.isEmpty) {
@@ -317,11 +323,7 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
                       const BoxConstraints(), // Removes default padding
                   onPressed: () {
                     // Open the options dialog
-                    HomeDialogs.showLessonOptions(
-                      context,
-                      lesson,
-                      widget.isDark,
-                    );
+                    showLessonOptions(context, lesson, widget.isDark);
                   },
                 ),
               ),
