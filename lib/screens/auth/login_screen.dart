@@ -219,7 +219,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       label: const Text(
                         "Sign in with Google",
-                        style: TextStyle(fontSize: 16, color: Colors.white),
+                        style: TextStyle(fontSize: 16),
                       ),
                     ),
                     const SizedBox(height: 20),

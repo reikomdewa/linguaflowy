@@ -33,7 +33,7 @@ class AuthResetPasswordRequested extends AuthEvent {
 
 class AuthResendVerificationEmail extends AuthEvent {
   final String email;
-  final String password; 
+  final String password;
   AuthResendVerificationEmail(this.email, this.password);
 }
 
@@ -54,11 +54,7 @@ class AuthUpdateUser extends AuthEvent {
   final List<String>? targetLanguages;
   final String? displayName;
 
-  AuthUpdateUser({
-    this.nativeLanguage, 
-    this.targetLanguages, 
-    this.displayName,
-  });
+  AuthUpdateUser({this.nativeLanguage, this.targetLanguages, this.displayName});
 }
 
 class AuthDeleteAccount extends AuthEvent {}
@@ -75,18 +71,24 @@ class AuthIncrementLessonsCompleted extends AuthEvent {}
 // STATES
 // ==========================================
 abstract class AuthState {}
+
 class AuthInitial extends AuthState {}
+
 class AuthLoading extends AuthState {}
+
 class AuthAuthenticated extends AuthState {
   final UserModel user;
   AuthAuthenticated(this.user);
 }
+
 class AuthUnauthenticated extends AuthState {}
+
 class AuthError extends AuthState {
   final String message;
-  final bool isVerificationError; 
+  final bool isVerificationError;
   AuthError(this.message, {this.isVerificationError = false});
 }
+
 class AuthMessage extends AuthState {
   final String message;
   AuthMessage(this.message);
@@ -111,7 +113,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLanguageLevelChanged>(_onAuthLanguageLevelChanged);
     on<AuthUpdateUser>(_onAuthUpdateUser);
     on<AuthDeleteAccount>(_onAuthDeleteAccount);
-    
+
     // New Handlers
     on<AuthUpdateListeningTime>(_onAuthUpdateListeningTime);
     on<AuthIncrementLessonsCompleted>(_onAuthIncrementLessonsCompleted);
@@ -121,12 +123,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   Future<UserModel> _checkAndUpateStreak(UserModel user) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    
+
     DateTime? lastLoginDate = user.lastLoginDate;
     DateTime? lastLoginDay;
-    
+
     if (lastLoginDate != null) {
-      lastLoginDay = DateTime(lastLoginDate.year, lastLoginDate.month, lastLoginDate.day);
+      lastLoginDay = DateTime(
+        lastLoginDate.year,
+        lastLoginDate.month,
+        lastLoginDate.day,
+      );
     }
 
     int newStreak = user.streakDays;
@@ -155,7 +161,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     );
 
     if (needsUpdate || lastLoginDay != today) {
-       try {
+      try {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(user.id)
@@ -163,9 +169,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
               'streakDays': newStreak,
               'lastLoginDate': Timestamp.fromDate(now),
             });
-       } catch (e) {
-         print("Error updating streak: $e");
-       }
+      } catch (e) {
+        print("Error updating streak: $e");
+      }
     }
     return updatedUser;
   }
@@ -176,16 +182,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     if (firebaseUser != null) {
-      await firebaseUser.reload(); 
-      
+      await firebaseUser.reload();
+
       if (firebaseUser.emailVerified) {
-         UserModel? user = await authService.getCurrentUser();
-         if (user != null) {
-           // CHECK STREAK HERE
-           user = await _checkAndUpateStreak(user);
-           emit(AuthAuthenticated(user));
-           return;
-         }
+        UserModel? user = await authService.getCurrentUser();
+        if (user != null) {
+          // CHECK STREAK HERE
+          user = await _checkAndUpateStreak(user);
+          emit(AuthAuthenticated(user));
+          return;
+        }
       }
     }
     emit(AuthUnauthenticated());
@@ -199,10 +205,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       await authService.signIn(event.email, event.password);
       final firebaseUser = FirebaseAuth.instance.currentUser;
-      
+
       if (firebaseUser != null && !firebaseUser.emailVerified) {
         await authService.signOut();
-        emit(AuthError("Email not verified. Please check your inbox.", isVerificationError: true));
+        emit(
+          AuthError(
+            "Email not verified. Please check your inbox.",
+            isVerificationError: true,
+          ),
+        );
       } else {
         UserModel? user = await authService.getCurrentUser();
         if (user != null) {
@@ -244,23 +255,27 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
+
+      // Calculate new total
+      // If the field was null/0 locally, this handles the increment correctly
       final newTotal = currentUser.totalListeningMinutes + event.minutesToAdd;
-      
-      final updatedUser = currentUser.copyWith(
-        totalListeningMinutes: newTotal,
-      );
-      
+
+      final updatedUser = currentUser.copyWith(totalListeningMinutes: newTotal);
+
       // Emit immediately for UI
       emit(AuthAuthenticated(updatedUser));
-      
-      // Save to Firestore
+
+      // SAVE TO FIRESTORE ROBUSTLY
       try {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(currentUser.id)
-            .update({'totalListeningMinutes': newTotal});
+            .set(
+              {'totalListeningMinutes': newTotal},
+              SetOptions(merge: true), // <--- THIS CREATES THE FIELD IF MISSING
+            );
       } catch (e) {
-        print("Error saving listening time: $e");
+        rethrow;
       }
     }
   }
@@ -273,13 +288,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
       final newTotal = currentUser.lessonsCompleted + 1;
-      
-      final updatedUser = currentUser.copyWith(
-        lessonsCompleted: newTotal,
-      );
-      
+
+      final updatedUser = currentUser.copyWith(lessonsCompleted: newTotal);
+
       emit(AuthAuthenticated(updatedUser));
-      
+
       try {
         await FirebaseFirestore.instance
             .collection('users')
@@ -290,7 +303,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       }
     }
   }
-  
+
   // ... (Rest of existing methods: Register, ResetPass, etc. remain unchanged) ...
   Future<void> _onAuthRegisterRequested(
     AuthRegisterRequested event,
@@ -304,7 +317,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         _lastEmailSentTime = DateTime.now();
       } catch (_) {}
       await authService.signOut();
-      emit(AuthMessage("Account created! Verification email sent to ${event.email}."));
+      emit(
+        AuthMessage(
+          "Account created! Verification email sent to ${event.email}.",
+        ),
+      );
       emit(AuthUnauthenticated());
     } catch (e) {
       emit(AuthError(e.toString()));
@@ -318,28 +335,32 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (_lastEmailSentTime != null) {
       final difference = DateTime.now().difference(_lastEmailSentTime!);
       if (difference.inSeconds < 60) {
-        emit(AuthError("Please wait ${60 - difference.inSeconds}s before resending."));
+        emit(
+          AuthError(
+            "Please wait ${60 - difference.inSeconds}s before resending.",
+          ),
+        );
         return;
       }
     }
     emit(AuthLoading());
     try {
-       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: event.email, 
-        password: event.password
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: event.email,
+        password: event.password,
       );
       final user = FirebaseAuth.instance.currentUser;
       if (user != null && !user.emailVerified) {
         await user.sendEmailVerification();
-        _lastEmailSentTime = DateTime.now(); 
-        await authService.signOut(); 
+        _lastEmailSentTime = DateTime.now();
+        await authService.signOut();
         emit(AuthMessage("Verification email resent! Check your spam folder."));
-        emit(AuthUnauthenticated()); 
+        emit(AuthUnauthenticated());
       } else if (user != null && user.emailVerified) {
-         final userModel = await authService.getCurrentUser();
-         if (userModel != null) {
-            emit(AuthAuthenticated(userModel));
-         }
+        final userModel = await authService.getCurrentUser();
+        if (userModel != null) {
+          emit(AuthAuthenticated(userModel));
+        }
       }
     } catch (e) {
       emit(AuthError("Could not resend email: ${e.toString()}"));
@@ -373,7 +394,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
-      final List<String> updatedTargetLanguages = List.from(currentUser.targetLanguages);
+      final List<String> updatedTargetLanguages = List.from(
+        currentUser.targetLanguages,
+      );
       if (!updatedTargetLanguages.contains(event.languageCode)) {
         updatedTargetLanguages.add(event.languageCode);
       }
@@ -402,7 +425,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
-      final updatedLevels = Map<String, String>.from(currentUser.languageLevels);
+      final updatedLevels = Map<String, String>.from(
+        currentUser.languageLevels,
+      );
       updatedLevels[currentUser.currentLanguage] = event.level;
       final updatedUser = currentUser.copyWith(languageLevels: updatedLevels);
       emit(AuthAuthenticated(updatedUser));
@@ -431,9 +456,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthAuthenticated(updatedUser));
       try {
         final updates = <String, dynamic>{};
-        if (event.nativeLanguage != null) updates['nativeLanguage'] = event.nativeLanguage;
-        if (event.targetLanguages != null) updates['targetLanguages'] = event.targetLanguages;
-        if (event.displayName != null) updates['displayName'] = event.displayName;
+        if (event.nativeLanguage != null)
+          updates['nativeLanguage'] = event.nativeLanguage;
+        if (event.targetLanguages != null)
+          updates['targetLanguages'] = event.targetLanguages;
+        if (event.displayName != null)
+          updates['displayName'] = event.displayName;
 
         await FirebaseFirestore.instance
             .collection('users')
@@ -441,7 +469,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             .update(updates);
 
         if (event.displayName != null) {
-          await FirebaseAuth.instance.currentUser?.updateDisplayName(event.displayName);
+          await FirebaseAuth.instance.currentUser?.updateDisplayName(
+            event.displayName,
+          );
         }
       } catch (e) {
         print("Error updating profile: $e");
@@ -457,7 +487,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .delete();
         await user.delete();
         emit(AuthUnauthenticated());
       }

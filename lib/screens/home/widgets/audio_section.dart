@@ -37,7 +37,7 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
         .toList();
 
     final pureAudioLessons = filteredLessons
-        .where((l) => l.userId != 'system_audiobook')
+        .where((l) => l.userId != 'system_audiobook' && !l.videoUrl!.contains('youtube.com') || l.videoUrl == null)
         .toList();
 
     if (syncedLessons.isEmpty && pureAudioLessons.isEmpty) {
