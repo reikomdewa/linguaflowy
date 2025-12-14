@@ -1,10 +1,10 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/services/gemini_service.dart'; 
 import 'lesson_event.dart';
 import 'lesson_state.dart';
 
+// Re-exporting for convenience
 export 'lesson_event.dart';
 export 'lesson_state.dart';
 
@@ -46,56 +46,16 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
     LessonCreateRequested event,
     Emitter<LessonState> emit,
   ) async {
-    // DEBUG PRINT
-    print("🔵 [Bloc] Creating Lesson. ID should be empty: '${event.lesson.id}'");
-    print("🔵 [Bloc] Target: isLocal=${event.lesson.isLocal}, userId=${event.lesson.userId}");
-
     final currentState = state;
     try {
       await _lessonRepository.saveOrUpdateLesson(event.lesson);
-      // Reload the list to show the new item
+      // Reload to ensure we have the generated ID and sync state
       add(LessonLoadRequested(event.lesson.userId, event.lesson.language));
     } catch (e) {
-      print("🔴 [Bloc] Create Failed: $e");
       if (currentState is LessonLoaded) {
-        // Prevent list from disappearing on error
         emit(LessonLoaded(currentState.lessons)); 
       } else {
         emit(LessonError(e.toString()));
-      }
-    }
-  }
-
-  Future<void> _onLessonDeleteRequested(
-    LessonDeleteRequested event,
-    Emitter<LessonState> emit,
-  ) async {
-    final currentState = state;
-    
-    if (currentState is LessonLoaded) {
-      // 1. Keep a copy of original
-      final originalLessons = currentState.lessons;
-
-      try {
-        final lessonToDelete = currentState.lessons.firstWhere(
-          (l) => l.id == event.lessonId,
-          orElse: () => throw Exception("Lesson not found in state"),
-        );
-
-        // 2. Optimistic Update (Remove visually)
-        final optimizedList = currentState.lessons
-            .where((lesson) => lesson.id != event.lessonId)
-            .toList();
-        
-        emit(LessonLoaded(optimizedList));
-
-        // 3. Delete from DB
-        await _lessonRepository.deleteLesson(lessonToDelete);
-        
-      } catch (e) {
-        print("🔴 [Bloc] Delete Failed. Reverting UI: $e");
-        // 4. Revert on failure
-        emit(LessonLoaded(originalLessons));
       }
     }
   }
@@ -106,21 +66,47 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
   ) async {
     final currentState = state;
     if (currentState is LessonLoaded) {
-      // 1. Keep copy
       final originalLessons = currentState.lessons;
 
-      // 2. Optimistic Update
+      // 1. Optimistic Update (Update UI instantly)
       final updatedLessons = currentState.lessons.map((l) {
         return l.id == event.lesson.id ? event.lesson : l;
       }).toList();
       emit(LessonLoaded(updatedLessons));
 
       try {
-        // 3. Save to DB
+        // 2. Save to DB
+        // Use this when marking a lesson as "isCompleted" or "isFavorite"
         await _lessonRepository.saveOrUpdateLesson(event.lesson);
       } catch (e) {
-        print("🔴 [Bloc] Update Failed. Reverting UI: $e");
-        // 4. Revert on failure
+        // 3. Revert on failure
+        emit(LessonLoaded(originalLessons));
+      }
+    }
+  }
+
+  Future<void> _onLessonDeleteRequested(
+    LessonDeleteRequested event,
+    Emitter<LessonState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is LessonLoaded) {
+      final originalLessons = currentState.lessons;
+
+      try {
+        final lessonToDelete = currentState.lessons.firstWhere(
+          (l) => l.id == event.lessonId,
+          orElse: () => throw Exception("Lesson not found in state"),
+        );
+
+        // Optimistic Update
+        final optimizedList = currentState.lessons
+            .where((lesson) => lesson.id != event.lessonId)
+            .toList();
+        emit(LessonLoaded(optimizedList));
+
+        await _lessonRepository.deleteLesson(lessonToDelete);
+      } catch (e) {
         emit(LessonLoaded(originalLessons));
       }
     }
@@ -131,7 +117,6 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
     Emitter<LessonState> emit,
   ) async {
     emit(LessonLoading());
-
     try {
       final newLesson = await _geminiService.generateLesson(
         userId: event.userId,
@@ -141,9 +126,7 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
       );
 
       await _lessonRepository.saveOrUpdateLesson(newLesson);
-
       emit(LessonGenerationSuccess(newLesson));
-
     } catch (e) {
       emit(LessonError("Failed to generate AI lesson: $e"));
     }

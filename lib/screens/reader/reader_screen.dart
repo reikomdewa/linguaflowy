@@ -48,7 +48,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _autoMarkOnSwipe = false;
   bool _hasSeenStatusHint = false;
   bool _isListeningMode = false;
-
+  bool _hasMarkedLessonComplete = false;
   // Subtitle Toggle State
   bool _showSubtitles = true;
 
@@ -258,20 +258,20 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (envKey != null && envKey.isNotEmpty) Gemini.init(apiKey: envKey);
   }
 
-@override
+  @override
   void dispose() {
     // 1. Remove Window Observer first to stop listening to metric changes
     WidgetsBinding.instance.removeObserver(this);
 
-    // 2. Cancel ALL timers immediately. 
-    // This is crucial to stop '_checkSync' from trying to access the player 
+    // 2. Cancel ALL timers immediately.
+    // This is crucial to stop '_checkSync' from trying to access the player
     // while we are busy disposing it.
     _syncTimer?.cancel();
     _seekResetTimer?.cancel();
     _controlsHideTimer?.cancel();
 
     // 3. Safe MediaKit Disposal
-    // We wrap this in try-catch because if Hot Restart happened, 
+    // We wrap this in try-catch because if Hot Restart happened,
     // the native side might already be gone, causing the SIGABRT crash.
     if (_localPlayer != null) {
       try {
@@ -311,6 +311,26 @@ class _ReaderScreenState extends State<ReaderScreen>
 
     super.dispose();
   }
+
+  void _markLessonAsComplete() {
+    if (!_hasMarkedLessonComplete) {
+      _hasMarkedLessonComplete = true;
+
+      // Trigger Auth Event
+      context.read<AuthBloc>().add(AuthIncrementLessonsCompleted());
+
+      // Optional: Show UI feedback
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Lesson Completed! 📚 (+1 to stats)"),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   // ... (LoadVocab and Preferences methods unchanged) ...
   Future<void> _loadVocabulary() async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
@@ -538,6 +558,25 @@ class _ReaderScreenState extends State<ReaderScreen>
           _resetTranslationState();
         });
         _scrollToActiveLine(activeIndex);
+      }
+    }
+    // NEW: Check for media completion
+    if (_isVideo || _isAudio || _isYoutubeAudio) {
+      double totalDuration = 0;
+      double currentPos = 0;
+
+      if (_isLocalMedia && _localPlayer != null) {
+        totalDuration = _localPlayer!.state.duration.inSeconds.toDouble();
+        currentPos = _localPlayer!.state.position.inSeconds.toDouble();
+      } else if (_youtubeController != null) {
+        totalDuration = _youtubeController!.metadata.duration.inSeconds
+            .toDouble();
+        currentPos = _youtubeController!.value.position.inSeconds.toDouble();
+      }
+
+      // If we are within 5 seconds of the end, mark as complete
+      if (totalDuration > 0 && currentPos >= totalDuration - 5) {
+        _markLessonAsComplete();
       }
     }
   }
@@ -1491,27 +1530,52 @@ class _ReaderScreenState extends State<ReaderScreen>
                     child: _isParsingSubtitles
                         ? const Center(child: Text("Loading content..."))
                         : _isSentenceMode
-                        ? SentenceModeView(
-                            chunks: _smartChunks,
-                            activeIndex: _activeSentenceIndex,
-                            vocabulary: _vocabulary,
-                            isVideo: _isVideo || _isAudio || _isYoutubeAudio,
-                            isPlaying: _isPlaying || _isPlayingSingleSentence,
-                            isTtsPlaying: _isTtsPlaying,
-                            onTogglePlayback: _togglePlayback,
-                            onPlayFromStartContinuous: _playFromStartContinuous,
-                            onPlayContinuous: _playNextContinuous,
-                            onNext: _goToNextSentence,
-                            onPrev: _goToPrevSentence,
-                            onWordTap: _handleWordTap,
-                            onPhraseSelected: _handlePhraseSelected,
-                            isLoadingTranslation: _isLoadingTranslation,
-                            googleTranslation: _googleTranslation,
-                            myMemoryTranslation: _myMemoryTranslation,
-                            showError: _showError,
-                            onRetryTranslation: _handleTranslationToggle,
-                            onTranslateRequest: _handleTranslationToggle,
-                            isListeningMode: _isListeningMode,
+                        ? NotificationListener<ScrollNotification>(
+                            // 1. Wrap Sentence Mode
+                            onNotification: (scrollInfo) {
+                              // Check if at bottom
+                              if (scrollInfo.metrics.pixels >=
+                                  scrollInfo.metrics.maxScrollExtent - 50) {
+                                _markLessonAsComplete();
+                              }
+                              return false;
+                            },
+                            child: NotificationListener<ScrollNotification>(
+                              // 2. Wrap Paragraph Mode
+                              onNotification: (scrollInfo) {
+                                // Check if at bottom
+                                if (scrollInfo.metrics.pixels >=
+                                    scrollInfo.metrics.maxScrollExtent - 50) {
+                                  _markLessonAsComplete();
+                                }
+                                return false;
+                              },
+                              child: SentenceModeView(
+                                chunks: _smartChunks,
+                                activeIndex: _activeSentenceIndex,
+                                vocabulary: _vocabulary,
+                                isVideo:
+                                    _isVideo || _isAudio || _isYoutubeAudio,
+                                isPlaying:
+                                    _isPlaying || _isPlayingSingleSentence,
+                                isTtsPlaying: _isTtsPlaying,
+                                onTogglePlayback: _togglePlayback,
+                                onPlayFromStartContinuous:
+                                    _playFromStartContinuous,
+                                onPlayContinuous: _playNextContinuous,
+                                onNext: _goToNextSentence,
+                                onPrev: _goToPrevSentence,
+                                onWordTap: _handleWordTap,
+                                onPhraseSelected: _handlePhraseSelected,
+                                isLoadingTranslation: _isLoadingTranslation,
+                                googleTranslation: _googleTranslation,
+                                myMemoryTranslation: _myMemoryTranslation,
+                                showError: _showError,
+                                onRetryTranslation: _handleTranslationToggle,
+                                onTranslateRequest: _handleTranslationToggle,
+                                isListeningMode: _isListeningMode,
+                              ),
+                            ),
                           )
                         : ParagraphModeView(
                             lesson: displayLesson,

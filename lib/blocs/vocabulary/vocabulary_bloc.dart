@@ -1,54 +1,15 @@
-// ==========================================
-// VOCABULARY BLOC
-// ==========================================
-// File: lib/blocs/vocabulary/vocabulary_bloc.dart
-import 'package:bloc/bloc.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
 
-// Events
-abstract class VocabularyEvent {}
+// Import the separated files
+import 'vocabulary_event.dart';
+import 'vocabulary_state.dart';
 
-class VocabularyLoadRequested extends VocabularyEvent {
-  final String userId;
-  VocabularyLoadRequested(this.userId);
-}
+// Re-export them so other files only need to import the Bloc
+export 'vocabulary_event.dart';
+export 'vocabulary_state.dart';
 
-class VocabularyAddRequested extends VocabularyEvent {
-  final VocabularyItem item;
-  VocabularyAddRequested(this.item);
-}
-
-class VocabularyUpdateRequested extends VocabularyEvent {
-  final VocabularyItem item;
-  VocabularyUpdateRequested(this.item);
-}
-
-// ✅ NEW: Added Delete Event
-class VocabularyDeleteRequested extends VocabularyEvent {
-  final String id;
-  final String userId;
-  VocabularyDeleteRequested({required this.id, required this.userId});
-}
-
-// States
-abstract class VocabularyState {}
-
-class VocabularyInitial extends VocabularyState {}
-
-class VocabularyLoading extends VocabularyState {}
-
-class VocabularyLoaded extends VocabularyState {
-  final List<VocabularyItem> items;
-  VocabularyLoaded(this.items);
-}
-
-class VocabularyError extends VocabularyState {
-  final String message;
-  VocabularyError(this.message);
-}
-
-// Bloc
 class VocabularyBloc extends Bloc<VocabularyEvent, VocabularyState> {
   final VocabularyService vocabularyService;
 
@@ -56,7 +17,6 @@ class VocabularyBloc extends Bloc<VocabularyEvent, VocabularyState> {
     on<VocabularyLoadRequested>(_onVocabularyLoadRequested);
     on<VocabularyAddRequested>(_onVocabularyAddRequested);
     on<VocabularyUpdateRequested>(_onVocabularyUpdateRequested);
-    // ✅ NEW: Register Delete Handler
     on<VocabularyDeleteRequested>(_onVocabularyDeleteRequested);
   }
 
@@ -78,7 +38,17 @@ class VocabularyBloc extends Bloc<VocabularyEvent, VocabularyState> {
     Emitter<VocabularyState> emit,
   ) async {
     try {
-      await vocabularyService.addVocabulary(event.item);
+      VocabularyItem itemToAdd = event.item;
+      
+      // STATS LOGIC: If adding a word directly as "Known", mark the date immediately
+      // This counts towards "Velocity"
+      if (itemToAdd.status > 0 && itemToAdd.learnedAt == null) {
+        itemToAdd = itemToAdd.copyWith(learnedAt: DateTime.now());
+      }
+      
+      await vocabularyService.addVocabulary(itemToAdd);
+      
+      // Reload to ensure sync
       add(VocabularyLoadRequested(event.item.userId));
     } catch (e) {
       emit(VocabularyError(e.toString()));
@@ -90,32 +60,54 @@ class VocabularyBloc extends Bloc<VocabularyEvent, VocabularyState> {
     Emitter<VocabularyState> emit,
   ) async {
     try {
-      await vocabularyService.updateVocabulary(event.item);
+      VocabularyItem updatedItem = event.item;
+
+      // --- STATS LOGIC: TRACK LEARNING VELOCITY ---
+      // We check if the word is graduating from "New" (0) to "Learning/Known" (>0)
       if (state is VocabularyLoaded) {
         final currentItems = (state as VocabularyLoaded).items;
-        final updatedItems = currentItems.map((item) {
-          return item.id == event.item.id ? event.item : item;
+        
+        // Find the old version of this word to compare status
+        final oldItem = currentItems.firstWhere(
+            (i) => i.id == updatedItem.id, 
+            orElse: () => updatedItem
+        );
+
+        // If it was status 0 (New) and is now > 0 (Known/Learning), 
+        // we stamp it with today's date.
+        if (oldItem.status == 0 && updatedItem.status > 0) {
+           updatedItem = updatedItem.copyWith(learnedAt: DateTime.now());
+        }
+      }
+
+      // 1. Save to Database
+      await vocabularyService.updateVocabulary(updatedItem);
+
+      // 2. Optimistic UI Update (Update state immediately without waiting for reload)
+      if (state is VocabularyLoaded) {
+        final currentItems = (state as VocabularyLoaded).items;
+        final updatedList = currentItems.map((item) {
+          return item.id == updatedItem.id ? updatedItem : item;
         }).toList();
-        emit(VocabularyLoaded(updatedItems));
+        
+        emit(VocabularyLoaded(updatedList));
       }
     } catch (e) {
       emit(VocabularyError(e.toString()));
     }
   }
 
-  // ✅ NEW: Handle Delete
   Future<void> _onVocabularyDeleteRequested(
     VocabularyDeleteRequested event,
     Emitter<VocabularyState> emit,
   ) async {
     try {
-      // 1. Call Service to delete from Firebase
+      // 1. Delete from Database
       await vocabularyService.deleteVocabulary(event.userId, event.id);
-
-      // 2. Update Local State immediately (Optimistic Update)
+      
+      // 2. Optimistic UI Update
       if (state is VocabularyLoaded) {
         final currentItems = (state as VocabularyLoaded).items;
-        // Filter out the deleted item
         final updatedItems = currentItems.where((item) => item.id != event.id).toList();
         emit(VocabularyLoaded(updatedItems));
       }

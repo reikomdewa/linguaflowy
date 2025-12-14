@@ -63,6 +63,14 @@ class AuthUpdateUser extends AuthEvent {
 
 class AuthDeleteAccount extends AuthEvent {}
 
+// --- NEW EVENTS FOR STATS ---
+class AuthUpdateListeningTime extends AuthEvent {
+  final int minutesToAdd;
+  AuthUpdateListeningTime(this.minutesToAdd);
+}
+
+class AuthIncrementLessonsCompleted extends AuthEvent {}
+
 // ==========================================
 // STATES
 // ==========================================
@@ -103,6 +111,63 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLanguageLevelChanged>(_onAuthLanguageLevelChanged);
     on<AuthUpdateUser>(_onAuthUpdateUser);
     on<AuthDeleteAccount>(_onAuthDeleteAccount);
+    
+    // New Handlers
+    on<AuthUpdateListeningTime>(_onAuthUpdateListeningTime);
+    on<AuthIncrementLessonsCompleted>(_onAuthIncrementLessonsCompleted);
+  }
+
+  // --- STREAK CALCULATION LOGIC ---
+  Future<UserModel> _checkAndUpateStreak(UserModel user) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    DateTime? lastLoginDate = user.lastLoginDate;
+    DateTime? lastLoginDay;
+    
+    if (lastLoginDate != null) {
+      lastLoginDay = DateTime(lastLoginDate.year, lastLoginDate.month, lastLoginDate.day);
+    }
+
+    int newStreak = user.streakDays;
+    bool needsUpdate = false;
+
+    if (lastLoginDay == null) {
+      // First time
+      newStreak = 1;
+      needsUpdate = true;
+    } else if (today.difference(lastLoginDay).inDays == 0) {
+      // Same day, no streak change, but maybe update exact timestamp
+    } else if (today.difference(lastLoginDay).inDays == 1) {
+      // Consecutive day
+      newStreak += 1;
+      needsUpdate = true;
+    } else {
+      // Missed a day
+      newStreak = 1;
+      needsUpdate = true;
+    }
+
+    // Always update the lastLoginDate to now
+    final updatedUser = user.copyWith(
+      streakDays: newStreak,
+      lastLoginDate: now,
+    );
+
+    if (needsUpdate || lastLoginDay != today) {
+       try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.id)
+            .update({
+              'streakDays': newStreak,
+              'lastLoginDate': Timestamp.fromDate(now),
+            });
+       } catch (e) {
+         print("Error updating streak: $e");
+       }
+    }
+    return updatedUser;
   }
 
   Future<void> _onAuthCheckRequested(
@@ -111,15 +176,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     if (firebaseUser != null) {
-      // Reload to get latest email verification status
       await firebaseUser.reload(); 
       
-      // Note: If you want to force email verification, keep this check.
-      // If you want to allow Google users (who are auto-verified) or unverified users to see the home screen,
-      // you might want to remove the !emailVerified check or handle it softly.
       if (firebaseUser.emailVerified) {
-         final user = await authService.getCurrentUser();
+         UserModel? user = await authService.getCurrentUser();
          if (user != null) {
+           // CHECK STREAK HERE
+           user = await _checkAndUpateStreak(user);
            emit(AuthAuthenticated(user));
            return;
          }
@@ -141,8 +204,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         await authService.signOut();
         emit(AuthError("Email not verified. Please check your inbox.", isVerificationError: true));
       } else {
-        final user = await authService.getCurrentUser();
+        UserModel? user = await authService.getCurrentUser();
         if (user != null) {
+          // CHECK STREAK HERE TOO
+          user = await _checkAndUpateStreak(user);
           emit(AuthAuthenticated(user));
         } else {
           emit(AuthError("User data not found."));
@@ -159,8 +224,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
     try {
-      final UserModel? user = await authService.signInWithGoogle();
+      UserModel? user = await authService.signInWithGoogle();
       if (user != null) {
+        // CHECK STREAK HERE TOO
+        user = await _checkAndUpateStreak(user);
         emit(AuthAuthenticated(user));
       } else {
         emit(AuthUnauthenticated());
@@ -169,20 +236,73 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthError("Google Sign In Failed: ${e.toString()}"));
     }
   }
+
+  // --- NEW HANDLER: LISTENING TIME ---
+  Future<void> _onAuthUpdateListeningTime(
+    AuthUpdateListeningTime event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
+      final newTotal = currentUser.totalListeningMinutes + event.minutesToAdd;
+      
+      final updatedUser = currentUser.copyWith(
+        totalListeningMinutes: newTotal,
+      );
+      
+      // Emit immediately for UI
+      emit(AuthAuthenticated(updatedUser));
+      
+      // Save to Firestore
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.id)
+            .update({'totalListeningMinutes': newTotal});
+      } catch (e) {
+        print("Error saving listening time: $e");
+      }
+    }
+  }
+
+  // --- NEW HANDLER: LESSON COMPLETED ---
+  Future<void> _onAuthIncrementLessonsCompleted(
+    AuthIncrementLessonsCompleted event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
+      final newTotal = currentUser.lessonsCompleted + 1;
+      
+      final updatedUser = currentUser.copyWith(
+        lessonsCompleted: newTotal,
+      );
+      
+      emit(AuthAuthenticated(updatedUser));
+      
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.id)
+            .update({'lessonsCompleted': newTotal});
+      } catch (e) {
+        print("Error incrementing lessons: $e");
+      }
+    }
+  }
   
+  // ... (Rest of existing methods: Register, ResetPass, etc. remain unchanged) ...
   Future<void> _onAuthRegisterRequested(
     AuthRegisterRequested event,
     Emitter<AuthState> emit,
   ) async {
     emit(AuthLoading());
     try {
-      // Ensure authService.signUp writes 'currentLanguage': '' to Firestore
       await authService.signUp(event.email, event.password, event.displayName);
       try {
         await FirebaseAuth.instance.currentUser?.sendEmailVerification();
         _lastEmailSentTime = DateTime.now();
       } catch (_) {}
-
       await authService.signOut();
       emit(AuthMessage("Account created! Verification email sent to ${event.email}."));
       emit(AuthUnauthenticated());
@@ -253,32 +373,22 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
-      
-      // 1. Prepare the new history list
       final List<String> updatedTargetLanguages = List.from(currentUser.targetLanguages);
-      
-      // 2. Add the new language if it's not already in the history
       if (!updatedTargetLanguages.contains(event.languageCode)) {
         updatedTargetLanguages.add(event.languageCode);
       }
-
-      // 3. Create updated user object
       final updatedUser = currentUser.copyWith(
         currentLanguage: event.languageCode,
-        targetLanguages: updatedTargetLanguages, // Update the list
+        targetLanguages: updatedTargetLanguages,
       );
-
-      // 4. Update UI immediately
       emit(AuthAuthenticated(updatedUser));
-
-      // 5. Persist to Firestore
       try {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(updatedUser.id)
             .update({
               'currentLanguage': event.languageCode,
-              'targetLanguages': updatedTargetLanguages, // Save the list
+              'targetLanguages': updatedTargetLanguages,
             });
       } catch (e) {
         print("Error updating language history: $e");
@@ -292,14 +402,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
-      
       final updatedLevels = Map<String, String>.from(currentUser.languageLevels);
       updatedLevels[currentUser.currentLanguage] = event.level;
-      
       final updatedUser = currentUser.copyWith(languageLevels: updatedLevels);
-      
       emit(AuthAuthenticated(updatedUser));
-      
       try {
         await FirebaseFirestore.instance
             .collection('users')
@@ -322,9 +428,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         targetLanguages: event.targetLanguages ?? currentUser.targetLanguages,
         displayName: event.displayName ?? currentUser.displayName,
       );
-      
       emit(AuthAuthenticated(updatedUser));
-      
       try {
         final updates = <String, dynamic>{};
         if (event.nativeLanguage != null) updates['nativeLanguage'] = event.nativeLanguage;
@@ -353,9 +457,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        // Delete Firestore data first
         await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
-        // Then delete Auth account
         await user.delete();
         emit(AuthUnauthenticated());
       }

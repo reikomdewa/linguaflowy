@@ -1,6 +1,9 @@
+import 'dart:async'; // 1. Needed for Timer
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart'; // 2. Needed for Bloc
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:linguaflow/blocs/auth/auth_bloc.dart'; // 3. Import AuthBloc
 import 'package:linguaflow/models/lesson_model.dart';
 
 // --- MANAGER (SINGLETON) ---
@@ -19,7 +22,7 @@ class AudioGlobalManager extends ChangeNotifier {
 
   AudioPlayer get player => _player;
 
-void playLesson(LessonModel lesson) async {
+  void playLesson(LessonModel lesson) async {
     // 1. If clicking the same lesson that is already loaded, just expand the UI
     if (currentLesson?.id == lesson.id) {
       isExpanded = true;
@@ -105,9 +108,80 @@ void playLesson(LessonModel lesson) async {
   }
 }
 
-// --- UI OVERLAY ---
-class AudioPlayerOverlay extends StatelessWidget {
+// --- UI OVERLAY (UPDATED FOR TRACKING) ---
+class AudioPlayerOverlay extends StatefulWidget {
   const AudioPlayerOverlay({super.key});
+
+  @override
+  State<AudioPlayerOverlay> createState() => _AudioPlayerOverlayState();
+}
+
+class _AudioPlayerOverlayState extends State<AudioPlayerOverlay> {
+  // Tracking Variables
+  Timer? _trackingTimer;
+  int _sessionSeconds = 0;
+  bool _wasPlaying = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    // Listen to the manager to handle tracking logic separate from UI rebuilding
+    AudioGlobalManager().addListener(_onManagerChanged);
+  }
+
+  @override
+  void dispose() {
+    AudioGlobalManager().removeListener(_onManagerChanged);
+    _stopTimer();
+    super.dispose();
+  }
+
+  void _onManagerChanged() {
+    final manager = AudioGlobalManager();
+
+    // 1. Handle Timer Start/Stop based on Playing State
+    if (manager.isPlaying && !_wasPlaying) {
+      _startTimer();
+    } else if (!manager.isPlaying && _wasPlaying) {
+      _stopTimer();
+    }
+
+    // 2. Handle Closing/Stopping -> Flush Data
+    // If currentLesson becomes null, the player was closed.
+    if (manager.currentLesson == null && _sessionSeconds > 0) {
+      _flushDataToBloc();
+    }
+
+    _wasPlaying = manager.isPlaying;
+  }
+
+  void _startTimer() {
+    _trackingTimer?.cancel();
+    _trackingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _sessionSeconds++;
+    });
+  }
+
+  void _stopTimer() {
+    _trackingTimer?.cancel();
+  }
+
+  void _flushDataToBloc() {
+    _stopTimer(); // Ensure stopped
+    
+    // Only update if user listened for more than 30 seconds
+    if (_sessionSeconds > 30 && mounted) {
+      final int minutesToAdd = (_sessionSeconds / 60).ceil();
+      
+      // Dispatch Event to AuthBloc
+      context.read<AuthBloc>().add(AuthUpdateListeningTime(minutesToAdd));
+      
+      print("🎧 TRACKING: Added $minutesToAdd minutes of listening time.");
+    }
+    
+    // Reset counter
+    _sessionSeconds = 0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -167,14 +241,10 @@ class _MorphingPlayerCard extends StatelessWidget {
     final double borderRadius = 24.0;
 
     // --- THEME COLORS ---
-    // If expanded:
-    //   Dark Mode: Dark Grey -> Black
-    //   Light Mode: White -> Very Light Grey
     final List<Color> expandedGradient = isDark
         ? [const Color(0xFF2C2C2C), const Color(0xFF000000)]
         : [const Color(0xFFFFFFFF), const Color(0xFFF5F5F5)];
 
-    // Fallback color for mini player
     final Color baseColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
 
     return AnimatedContainer(
@@ -196,7 +266,6 @@ class _MorphingPlayerCard extends StatelessWidget {
             offset: const Offset(0, 5),
           ),
         ],
-        // Gradient applies only when Expanded
         gradient: manager.isExpanded
             ? LinearGradient(
                 colors: expandedGradient,
@@ -333,7 +402,6 @@ class _MorphingPlayerCard extends StatelessWidget {
     final secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final iconColor = isDark ? Colors.white70 : Colors.black54;
     
-    // Play button colors (Inverted for contrast)
     final playBtnBg = isDark ? Colors.white : Colors.black;
     final playBtnIcon = isDark ? Colors.black : Colors.white;
 
