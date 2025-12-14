@@ -85,14 +85,12 @@ class SettingsState {
 }
 
 // --- BLOC ---
-
 class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   SettingsBloc()
       : super(SettingsState(
           themeMode: ThemeMode.system,
           fontSizeScale: 1.0,
-          // 1. DEFAULT STATE: Set to Dark (index 1) for immediate load
-          readerTheme: ReaderTheme.dark, 
+          readerTheme: ReaderTheme.dark,
           fontFamily: 'Roboto',
           lineHeight: 1.5,
         )) {
@@ -104,33 +102,24 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<ChangeLineHeight>(_onChangeLineHeight);
   }
 
+  // ... _onLoadSettings remains the same ...
   Future<void> _onLoadSettings(
       LoadSettings event, Emitter<SettingsState> emit) async {
     final prefs = await SharedPreferences.getInstance();
 
-    // 1. Global Theme
     final themeIndex = prefs.getInt('themeMode') ?? 0;
-    // Safety check for enum range
     final themeMode = (themeIndex >= 0 && themeIndex < ThemeMode.values.length)
         ? ThemeMode.values[themeIndex]
         : ThemeMode.system;
 
-    // 2. Font Size
     final fontScale = prefs.getDouble('fontScale') ?? 1.0;
 
-    // 3. Reader Theme (Sepia, etc)
-    // 0=Light, 1=Dark, 2=Sepia. 
-    // We default to 1 (Dark) if no setting exists.
-    final readerIndex = prefs.getInt('readerTheme') ?? 1; 
-    
+    final readerIndex = prefs.getInt('readerTheme') ?? 1;
     final readerTheme = (readerIndex >= 0 && readerIndex < ReaderTheme.values.length)
         ? ReaderTheme.values[readerIndex]
-        : ReaderTheme.dark; // Fallback to Dark
+        : ReaderTheme.dark;
 
-    // 4. Font Family - Default to Roboto (Sans-Serif)
     final fontFamily = prefs.getString('fontFamily') ?? 'Roboto';
-
-    // 5. Line Height - Default to 1.5
     final lineHeight = prefs.getDouble('lineHeight') ?? 1.5;
 
     emit(SettingsState(
@@ -142,25 +131,54 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     ));
   }
 
+  // --- UPDATED METHOD ---
   Future<void> _onToggleTheme(
       ToggleTheme event, Emitter<SettingsState> emit) async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // 1. Save and Update Global Theme
     await prefs.setInt('themeMode', event.themeMode.index);
-    emit(state.copyWith(themeMode: event.themeMode));
+
+    // 2. Calculate New Reader Theme based on Global Theme
+    ReaderTheme newReaderTheme = state.readerTheme;
+
+    if (event.themeMode == ThemeMode.light) {
+      newReaderTheme = ReaderTheme.light;
+    } else if (event.themeMode == ThemeMode.dark) {
+      newReaderTheme = ReaderTheme.dark;
+    }
+    // Note: If event.themeMode is ThemeMode.system, we usually 
+    // keep the current readerTheme because we don't know if the OS is currently
+    // light or dark inside the Bloc without context.
+
+    // 3. Save Reader Theme (Syncing preferences)
+    if (newReaderTheme != state.readerTheme) {
+      await prefs.setInt('readerTheme', newReaderTheme.index);
+    }
+
+    // 4. Emit State with BOTH updated
+    emit(state.copyWith(
+      themeMode: event.themeMode,
+      readerTheme: newReaderTheme, 
+    ));
   }
 
+  // --- REMAINS THE SAME (The "Unless" condition) ---
+  Future<void> _onChangeReaderTheme(
+      ChangeReaderTheme event, Emitter<SettingsState> emit) async {
+    final prefs = await SharedPreferences.getInstance();
+    // This allows the user to manually override the reader theme 
+    // to Sepia (or others) regardless of what the App Theme is.
+    await prefs.setInt('readerTheme', event.readerTheme.index);
+    emit(state.copyWith(readerTheme: event.readerTheme));
+  }
+
+  // ... _onChangeFontSize, _onChangeFontFamily, _onChangeLineHeight remain the same ...
   Future<void> _onChangeFontSize(
       ChangeFontSize event, Emitter<SettingsState> emit) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('fontScale', event.scaleFactor);
     emit(state.copyWith(fontSizeScale: event.scaleFactor));
-  }
-
-  Future<void> _onChangeReaderTheme(
-      ChangeReaderTheme event, Emitter<SettingsState> emit) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('readerTheme', event.readerTheme.index);
-    emit(state.copyWith(readerTheme: event.readerTheme));
   }
 
   Future<void> _onChangeFontFamily(

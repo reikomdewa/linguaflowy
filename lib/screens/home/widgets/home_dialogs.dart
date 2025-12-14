@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -7,7 +6,63 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/utils/constants.dart';
 
 class HomeDialogs {
-  
+
+  // --- 1. SHARED CALCULATION LOGIC ---
+  static Map<String, dynamic> getLevelDetails(int knownWords) {
+    String currentLevel;
+    String shortLevel; // For the App Bar (e.g., just "A1")
+    String nextLevel;
+    int nextGoal;
+    double progress;
+
+    if (knownWords < 500) {
+      // "Newcomer" usually doesn't have a code, but you can use "A0 - Newcomer" if preferred.
+      currentLevel = "Newcomer"; 
+      shortLevel = "Newcomer";
+      nextLevel = "A1";
+      nextGoal = 500;
+      progress = knownWords / 500;
+    } else if (knownWords < 1000) {
+      currentLevel = "A1 - Beginner"; // CHANGED
+      shortLevel = "A1";
+      nextLevel = "A2";
+      nextGoal = 1000;
+      progress = (knownWords - 500) / 500;
+    } else if (knownWords < 2000) {
+      currentLevel = "A2 - Elementary"; // CHANGED
+      shortLevel = "A2";
+      nextLevel = "B1";
+      nextGoal = 2000;
+      progress = (knownWords - 1000) / 1000;
+    } else if (knownWords < 4000) {
+      currentLevel = "B1 - Intermediate"; // CHANGED
+      shortLevel = "B1";
+      nextLevel = "B2";
+      nextGoal = 4000;
+      progress = (knownWords - 2000) / 2000;
+    } else if (knownWords < 8000) {
+      currentLevel = "B2 - Upper Intermediate"; // CHANGED
+      shortLevel = "B2";
+      nextLevel = "C1";
+      nextGoal = 8000;
+      progress = (knownWords - 4000) / 4000;
+    } else {
+      currentLevel = "C1 - Advanced"; // CHANGED
+      shortLevel = "C1";
+      nextLevel = "C2";
+      nextGoal = 16000;
+      progress = (knownWords - 8000) / 8000;
+    }
+
+    return {
+      'fullLabel': currentLevel,
+      'shortLabel': shortLevel, 
+      'nextLabel': nextLevel,
+      'nextGoal': nextGoal,
+      'progress': progress,
+    };
+  }
+
   // --- STATS DIALOG ---
   static void showStatsDialog(
     BuildContext context,
@@ -15,42 +70,13 @@ class HomeDialogs {
     String languageCode,
     Map<String, String> languageNames,
   ) {
-    String currentLevel = "Beginner";
-    String nextLevel = "A1";
-    int nextGoal = 500;
-    double progress = 0.0;
-
-    if (knownWords < 500) {
-      currentLevel = "Newcomer";
-      nextLevel = "A1";
-      nextGoal = 500;
-      progress = knownWords / 500;
-    } else if (knownWords < 1000) {
-      currentLevel = "A1 (Beginner)";
-      nextLevel = "A2";
-      nextGoal = 1000;
-      progress = (knownWords - 500) / 500;
-    } else if (knownWords < 2000) {
-      currentLevel = "A2 (Elementary)";
-      nextLevel = "B1";
-      nextGoal = 2000;
-      progress = (knownWords - 1000) / 1000;
-    } else if (knownWords < 4000) {
-      currentLevel = "B1 (Intermediate)";
-      nextLevel = "B2";
-      nextGoal = 4000;
-      progress = (knownWords - 2000) / 2000;
-    } else if (knownWords < 8000) {
-      currentLevel = "B2 (Upper Int.)";
-      nextLevel = "C1";
-      nextGoal = 8000;
-      progress = (knownWords - 4000) / 4000;
-    } else {
-      currentLevel = "C1 (Advanced)";
-      nextLevel = "C2";
-      nextGoal = 16000;
-      progress = (knownWords - 8000) / 8000;
-    }
+    // USE THE SHARED LOGIC HERE
+    final stats = getLevelDetails(knownWords);
+    
+    final String currentLevel = stats['fullLabel'];
+    final String nextLevel = stats['nextLabel'];
+    final int nextGoal = stats['nextGoal'];
+    final double progress = stats['progress'];
 
     final langName = languageNames[languageCode] ?? 'Target Language';
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -113,6 +139,7 @@ class HomeDialogs {
                           letterSpacing: 1)),
                   const SizedBox(height: 4),
                   Text(currentLevel,
+                      textAlign: TextAlign.center,
                       style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
@@ -167,9 +194,7 @@ class HomeDialogs {
   static void showLessonOptions(
       BuildContext context, LessonModel lesson, bool isDark) {
     
-    // 1. Capture parent context for Bloc access
     final parentContext = context;
-    
     final authState = parentContext.read<AuthBloc>().state;
     String currentUserId = ''; 
     bool canDelete = false;
@@ -251,20 +276,16 @@ class HomeDialogs {
                 }
 
                 if (isOwner) {
-                  // I own this lesson, so I just update the existing one
                   final updatedLesson = lesson.copyWith(
                     isFavorite: !lesson.isFavorite,
                   );
                   parentContext.read<LessonBloc>().add(LessonUpdateRequested(updatedLesson));
                 } else {
-                  // I DO NOT own this lesson (System Lesson)
-                  // I must CREATE A COPY in the cloud
-                  
                   final newLesson = lesson.copyWith(
-                    id: '', // EMPTY ID indicates a new creation
-                    userId: currentUserId, // Assign to ME
+                    id: '', 
+                    userId: currentUserId, 
                     isFavorite: true, 
-                    isLocal: false, // FORCE CLOUD SAVE
+                    isLocal: false, 
                     createdAt: DateTime.now(),
                   );
                   

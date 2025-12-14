@@ -382,7 +382,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // --- APP BAR ---
-  // --- APP BAR ---
   PreferredSizeWidget _buildAppBar(
     BuildContext context,
     dynamic user,
@@ -398,7 +397,7 @@ class _HomeScreenState extends State<HomeScreen> {
       toolbarHeight: 70,
       title: BlocBuilder<VocabularyBloc, VocabularyState>(
         builder: (context, vocabState) {
-          // ... (Your existing Title Logic remains exactly the same) ...
+          // 1. Calculate Live Word Count
           int knownCount = 0;
           if (vocabState is VocabularyLoaded) {
             knownCount = vocabState.items
@@ -407,11 +406,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
                 .length;
           }
-          final String currentLevel = user.currentLevel;
+
+          // 2. USE SHARED LOGIC (The Fix)
+          // We get the level calculations from HomeDialogs so it matches the stats screen.
+          final levelStats = HomeDialogs.getLevelDetails(knownCount);
+
+          // Use calculated level (e.g. "A1", "B2").
+          // Fallback to user profile level only if count is 0 (fresh start).
+          final String displayLevel = knownCount > 0
+              ? levelStats['fullLabel']
+              : user.currentLevel;
+
+          final int nextGoal = levelStats['nextGoal'];
 
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // --- LANGUAGE FLAG ---
               GestureDetector(
                 onTap: () =>
                     HomeLanguageDialogs.showTargetLanguageSelector(context),
@@ -434,11 +445,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(width: 8),
+
+              // --- LEVEL & PROGRESS TEXT ---
               Expanded(
                 child: InkWell(
                   onTap: () => HomeLanguageDialogs.showLevelSelector(
                     context,
-                    currentLevel,
+                    displayLevel,
                     user.currentLanguage,
                   ),
                   borderRadius: BorderRadius.circular(8),
@@ -446,11 +459,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      // Level Name (e.g. "A2")
                       Row(
                         children: [
                           Flexible(
                             child: Text(
-                              currentLevel,
+                              displayLevel, // Dynamic variable
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -470,6 +484,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 4),
+                      // Word Count (e.g. "540 / 1000 words")
                       Row(
                         children: [
                           const Icon(
@@ -479,7 +494,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            "$knownCount / ${_getNextGoal(knownCount)} words",
+                            "$knownCount / $nextGoal words", // Dynamic variables
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -499,15 +514,13 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       actions: [
-        // --- UPDATED SEARCH ICON (Matches Screenshot) ---
+        // --- SEARCH BUTTON ---
         BlocBuilder<LessonBloc, LessonState>(
           builder: (context, state) {
             final isLoaded = state is LessonLoaded;
 
             return Padding(
-              padding: const EdgeInsets.only(
-                right: 8.0,
-              ), // Space between Search and Premium
+              padding: const EdgeInsets.only(right: 8.0),
               child: InkWell(
                 onTap: isLoaded
                     ? () {
@@ -520,24 +533,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         );
                       }
                     : null,
-                borderRadius: BorderRadius.circular(
-                  14,
-                ), // Rounded corners for splash
+                borderRadius: BorderRadius.circular(14),
                 child: Container(
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    // Dark Mode: Glassy/Dark Grey. Light Mode: Light Grey.
                     color: isDark
                         ? Colors.white.withOpacity(0.1)
                         : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(14), // Squircle shape
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   alignment: Alignment.center,
                   child: FaIcon(
                     FontAwesomeIcons.magnifyingGlass,
                     size: 18,
-                    // Icon color looks slightly muted in screenshot
                     color: isDark ? Colors.white70 : Colors.black54,
                   ),
                 ),
@@ -546,7 +555,7 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
 
-        // --- PREMIUM ICON (Unchanged) ---
+        // --- PREMIUM BUTTON ---
         Padding(
           padding: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
           child: Center(
@@ -630,15 +639,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
     );
-  }
-
-  int _getNextGoal(int count) {
-    if (count < 500) return 500;
-    if (count < 1000) return 1000;
-    if (count < 2000) return 2000;
-    if (count < 4000) return 4000;
-    if (count < 8000) return 8000;
-    return 16000;
   }
 
   Widget _buildGlobalFilterChips(bool isDark) {

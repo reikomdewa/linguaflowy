@@ -11,7 +11,7 @@ class InteractiveTextDisplay extends StatefulWidget {
   final Map<String, VocabularyItem> vocabulary;
   final Function(String word, String cleanId, Offset pos) onWordTap;
   final Function(String phrase, Offset pos, VoidCallback clearSelection)
-      onPhraseSelected;
+  onPhraseSelected;
   final bool isBigMode;
   final bool isOverlay;
   final bool isListeningMode;
@@ -63,7 +63,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
   void _processText() {
     // Splits by whitespace but keeps the delimiters to preserve spacing logic
     _tokens = widget.text.split(RegExp(r'(\s+)'));
-    
+
     _tokenKeys.clear();
     for (int i = 0; i < _tokens.length; i++) {
       _tokenKeys.add(GlobalKey());
@@ -153,7 +153,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     final Color overlayBlack = Colors.black.withOpacity(0.6);
 
     Widget textContent = Wrap(
-      spacing: 0, 
+      spacing: 0,
       runSpacing: widget.isBigMode ? 12 : 6,
       alignment: (widget.isBigMode || widget.isOverlay)
           ? WrapAlignment.center
@@ -179,7 +179,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
         if (widget.isOverlay) {
           // --- OVERLAY MODE (Video) ---
           if (isSpace) {
-            containerColor = overlayBlack; 
+            containerColor = overlayBlack;
           } else {
             final vocabItem = widget.vocabulary[cleanWord];
             // Treat null (not in DB) as status 0
@@ -193,10 +193,10 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
               // 2. LEARNING (Status 1-4) -> PROGRESSIVE COLORS
               // Use the standard status colors (Red/Orange/Yellow/Green)
               Color rawColor = ReaderUtils.getWordColor(vocabItem!, true);
-              
+
               // Ensure color is visible on video (high opacity)
               containerColor = rawColor.withOpacity(0.9);
-              
+
               // Smart text color: Dark text for bright backgrounds (Yellow/Orange)
               if (status <= 3) {
                 textColor = Colors.black;
@@ -215,7 +215,11 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
           if (!isSpace) {
             final vocabItem = widget.vocabulary[cleanWord];
             containerColor = ReaderUtils.getWordColor(vocabItem, isDark);
-            textColor = ReaderUtils.getTextColorForStatus(vocabItem, isSelected, isDark);
+            textColor = ReaderUtils.getTextColorForStatus(
+              vocabItem,
+              isSelected,
+              isDark,
+            );
           }
         }
 
@@ -228,8 +232,8 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
         // --- PADDING LOGIC ---
         EdgeInsetsGeometry padding;
         if (isSpace) {
-          padding = widget.isOverlay 
-              ? const EdgeInsets.symmetric(vertical: 2.0) 
+          padding = widget.isOverlay
+              ? const EdgeInsets.symmetric(vertical: 2.0)
               : EdgeInsets.zero;
         } else {
           padding = const EdgeInsets.symmetric(horizontal: 2.5, vertical: 2.0);
@@ -248,7 +252,9 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
               color: containerColor,
               // Square corners for overlay to look like captions, rounded for normal
               borderRadius: BorderRadius.circular(widget.isOverlay ? 0 : 4),
-              border: isSelected ? Border.all(color: Colors.white, width: 1) : null,
+              border: isSelected
+                  ? Border.all(color: Colors.white, width: 1)
+                  : null,
             ),
             child: Text(
               token,
@@ -256,11 +262,15 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
                 fontSize: finalFontSize,
                 height: lineHeight,
                 color: textColor,
-                fontWeight: (!isSpace && !widget.isOverlay && (widget.vocabulary[cleanWord]?.status ?? 0) > 0)
-                    ? FontWeight.w600
-                    : FontWeight.normal,
+                fontWeight: FontWeight.normal,
                 shadows: (widget.isOverlay && containerColor == overlayBlack)
-                    ? [const Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black)]
+                    ? [
+                        const Shadow(
+                          offset: Offset(0, 1),
+                          blurRadius: 2,
+                          color: Colors.black,
+                        ),
+                      ]
                     : null,
               ),
             ),
@@ -290,9 +300,13 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
                 children: const [
                   Icon(Icons.visibility, color: Colors.white, size: 18),
                   SizedBox(width: 8),
-                  Text("Tap to Reveal",
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text(
+                    "Tap to Reveal",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
             ),
