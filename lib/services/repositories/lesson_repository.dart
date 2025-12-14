@@ -14,59 +14,146 @@ class LessonRepository {
   LessonRepository({
     required LessonService firestoreService,
     required HybridLessonService localService,
-  }) : _firestoreService = firestoreService,
-       _localService = localService;
+  })  : _firestoreService = firestoreService,
+        _localService = localService;
 
-  // --- MAIN SYNC FUNCTION ---
+  // ==========================================================
+  // 1. INITIAL LOAD (CRASH PREVENTION APPLIED)
+  // ==========================================================
+  
   Future<List<LessonModel>> getAndSyncLessons(
     String userId,
-    String languageCode,
-  ) async {
+    String languageCode, {
+    int limit = 20, // <--- SAFETY: Only load 20 at start
+  }) async {
     try {
+      // Helper to handle Firestore failure gracefully (so app works offline)
+      Future<List<LessonModel>> safeFirestoreFetch() async {
+        try {
+          return await _firestoreService.getLessons(
+            userId, 
+            languageCode, 
+            limit: limit
+          );
+        } catch (e) {
+          print("Firestore sync failed (using local only): $e");
+          return [];
+        }
+      }
+
+      // --- UPDATED: Added fetchStorybooks to the list ---
       final results = await Future.wait([
-        _firestoreService.getLessons(userId, languageCode),
-        _fetchUserLocalImports(userId, languageCode),
-        _localService.fetchStandardLessons(languageCode),
-        _localService.fetchNativeVideos(languageCode),
-        _localService.fetchTextBooks(languageCode),
-        _localService.fetchBeginnerBooks(languageCode),
-        _localService.fetchAudioLessons(languageCode),
+        safeFirestoreFetch(),                             // 0: User Cloud (Limited)
+        _fetchUserLocalImports(userId, languageCode),     // 1: User Local
+        _localService.fetchStandardLessons(languageCode), // 2: System Standard
+        _localService.fetchNativeVideos(languageCode),    // 3: System Videos
+        _localService.fetchTextBooks(languageCode),       // 4: System Books
+        _localService.fetchBeginnerBooks(languageCode),   // 5: System Beginner
+        _localService.fetchAudioLessons(languageCode),    // 6: System Audio
+        _localService.fetchStorybooks(languageCode),      // 7: System Short Stories (NEW)
       ]);
 
       final userLessons = results[0];
       final localImports = results[1];
 
+      // Flatten system lessons (Include Index 7 now)
       final systemLessons = [
         ...results[2],
         ...results[3],
         ...results[4],
         ...results[5],
         ...results[6],
+        ...results[7], // <--- ADDED Short Stories
       ];
 
+      // Merge Strategy: Use a Map to handle duplicates
       final Map<String, LessonModel> combinedMap = {};
 
-      for (var lesson in systemLessons) {
-        combinedMap[lesson.id] = lesson;
-      }
-      for (var lesson in userLessons) {
-        combinedMap[lesson.id] = lesson;
-      }
-      for (var lesson in localImports) {
-        combinedMap[lesson.id] = lesson;
-      }
+      // Priority 1: System Content (Base)
+      for (var lesson in systemLessons) combinedMap[lesson.id] = lesson;
+      
+      // Priority 2: User Cloud Content (Overwrites System if IDs match)
+      for (var lesson in userLessons) combinedMap[lesson.id] = lesson;
+      
+      // Priority 3: Local Imports (Highest Priority - for offline edits)
+      for (var lesson in localImports) combinedMap[lesson.id] = lesson;
 
       final allLessons = combinedMap.values.toList();
+      
+      // Sort by Newest First
       allLessons.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
       return allLessons;
     } catch (e) {
-      // print("Error in LessonRepository sync: $e");
+      print("Error in LessonRepository sync: $e");
       return [];
     }
   }
 
-  // --- SAVE / UPDATE ---
+  // ==========================================================
+  // 2. PAGINATION LOGIC (INFINITE SCROLL)
+  // ==========================================================
+
+  /// Call this when the user scrolls to the bottom of the main feed
+  Future<List<LessonModel>> fetchMoreUserLessons(
+    String userId,
+    String languageCode,
+    LessonModel lastLesson, 
+    {int limit = 20}
+  ) async {
+    // We only paginate Cloud lessons. Local lessons are assumed to be loaded.
+    if (lastLesson.isLocal) {
+      return []; 
+    }
+
+    try {
+      return await _firestoreService.getMoreLessons(
+        userId,
+        languageCode,
+        lastLesson, 
+        limit: limit,
+      );
+    } catch (e) {
+      print("Error fetching more lessons: $e");
+      return [];
+    }
+  }
+
+  /// Call this for Horizontal Lists (e.g. "Load more Videos")
+  Future<List<LessonModel>> fetchPagedCategory(
+    String languageCode,
+    String type, // e.g. 'video', 'audio', 'text'
+    {LessonModel? lastLesson, int limit = 10}
+  ) async {
+    return await _localService.fetchPagedSystemLessons(
+      languageCode, 
+      type, 
+      lastLesson: lastLesson, 
+      limit: limit
+    );
+  }
+
+  /// Call this for GENRE Lists (e.g. "History", "Science")
+  Future<List<LessonModel>> fetchPagedGenreLessons(
+    String languageCode,
+    String genreKey, {
+    LessonModel? lastLesson,
+    int limit = 10,
+  }) async {
+    // Note: You must ensure `fetchPagedGenreLessons` exists in LessonService
+    // as discussed in previous steps.
+    return await _firestoreService.fetchPagedGenreLessons(
+      languageCode,
+      genreKey,
+      lastLesson,
+      limit: limit,
+    );
+  }
+
+  // ==========================================================
+  // 3. CRUD OPERATIONS
+  // ==========================================================
+
   Future<void> saveOrUpdateLesson(LessonModel lesson) async {
     if (lesson.isLocal) {
       await _saveLocalImportMetadata(lesson);
@@ -75,24 +162,18 @@ class LessonRepository {
 
     try {
       if (lesson.id.isEmpty) {
-        // Generate valid ID for new Cloud Copy
-        final String newId = FirebaseFirestore.instance
-            .collection('lessons')
-            .doc()
-            .id;
+        final String newId = FirebaseFirestore.instance.collection('lessons').doc().id;
         final newLesson = lesson.copyWith(id: newId);
         await _firestoreService.createLesson(newLesson);
       } else {
         await _firestoreService.updateLesson(lesson);
       }
     } catch (e) {
-      // Fallback to local storage on failure
       final localOverride = lesson.copyWith(isLocal: true);
       await _saveLocalImportMetadata(localOverride);
     }
   }
 
-  // --- DELETE ---
   Future<void> deleteLesson(LessonModel lesson) async {
     try {
       if (lesson.isLocal) {
@@ -101,13 +182,12 @@ class LessonRepository {
         await _firestoreService.deleteLesson(lesson.id);
       }
     } catch (e) {
-      // Ensure local cleanup even if cloud fails
       await _deleteLocalImportMetadata(lesson.id);
     }
   }
 
   // ==========================================================
-  // LOCAL JSON STORAGE
+  // 4. OPTIMIZED LOCAL STORAGE
   // ==========================================================
 
   Future<File> get _localJsonFile async {
@@ -129,10 +209,13 @@ class LessonRepository {
       final List<dynamic> jsonList = jsonDecode(content);
 
       return jsonList
-          .where((json) => json is Map<String, dynamic> && json['id'] != null)
+          .where((json) => 
+              json is Map<String, dynamic> && 
+              json['id'] != null &&
+              json['userId'] == userId && 
+              json['language'] == languageCode
+          )
           .map((json) => LessonModel.fromMap(json, json['id'].toString()))
-          // STRICT FILTER: Only allow lessons belonging to this user
-          .where((l) => l.userId == userId && l.language == languageCode)
           .map((l) => l.copyWith(isLocal: true))
           .toList();
     } catch (e) {

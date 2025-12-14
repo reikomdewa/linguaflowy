@@ -1,5 +1,3 @@
-// File: lib/blocs/lesson/lesson_state.dart
-
 import 'package:equatable/equatable.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 
@@ -14,11 +12,32 @@ class LessonLoading extends LessonState {}
 
 class LessonLoaded extends LessonState {
   final List<LessonModel> lessons;
-  
-  LessonLoaded(this.lessons);
+  // --- NEW: Pagination Flags ---
+  final bool hasReachedMax; // True if no more data in Firestore
+  final bool isLoadingMore; // True if currently fetching next page
+
+   LessonLoaded(
+    this.lessons, {
+    this.hasReachedMax = false,
+    this.isLoadingMore = false,
+  });
+
+  // --- NEW: CopyWith Method ---
+  // Essential for updating flags without losing the list data
+  LessonLoaded copyWith({
+    List<LessonModel>? lessons,
+    bool? hasReachedMax,
+    bool? isLoadingMore,
+  }) {
+    return LessonLoaded(
+      lessons ?? this.lessons,
+      hasReachedMax: hasReachedMax ?? this.hasReachedMax,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+    );
+  }
 
   @override
-  List<Object?> get props => [lessons];
+  List<Object?> get props => [lessons, hasReachedMax, isLoadingMore];
 }
 
 class LessonError extends LessonState {
@@ -30,7 +49,6 @@ class LessonError extends LessonState {
   List<Object?> get props => [message];
 }
 
-// Add this to your existing lesson_state.dart
 class LessonGenerationSuccess extends LessonState {
   final LessonModel lesson;
   LessonGenerationSuccess(this.lesson);

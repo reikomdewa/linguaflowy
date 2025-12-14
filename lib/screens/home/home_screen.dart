@@ -2,27 +2,38 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:linguaflow/screens/home/widgets/home_video_feeds.dart';
-import 'package:linguaflow/screens/search/library_search_delegate.dart';
+import 'package:linguaflow/constants/genre_constants.dart';
+import 'package:linguaflow/screens/home/widgets/sections/genre_feed_section.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
+// BLOCS
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
+
+// MODELS
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
-import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
+
+// WIDGETS & SECTIONS
+import 'package:linguaflow/screens/home/widgets/sections/home_sections.dart';
+// ^^^ Ensure this file contains the Guided/Immersion/Library sections we just fixed
 import 'package:linguaflow/screens/home/widgets/audio_section.dart';
-import 'package:linguaflow/screens/reader/reader_screen.dart';
-import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
-import 'package:linguaflow/widgets/lesson_import_dialog.dart'; // NEW IMPORT
-import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
-import 'package:linguaflow/screens/home/widgets/home_sections.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
+import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
+import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
+import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
+import 'package:linguaflow/widgets/lesson_import_dialog.dart';
+import 'package:linguaflow/widgets/premium_lock_dialog.dart';
+
+// SCREENS
+import 'package:linguaflow/screens/reader/reader_screen.dart';
+import 'package:linguaflow/screens/search/library_search_delegate.dart';
+
+// UTILS
 import 'package:linguaflow/screens/home/utils/home_utils.dart';
 import 'package:linguaflow/utils/language_helper.dart';
-import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 import 'package:linguaflow/services/web_scraper_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -44,8 +55,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-
-    // Setup listeners immediately
     _initShareListener();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -78,24 +87,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- SHARE LISTENER LOGIC ---
   void _initShareListener() {
-    // 1. Listen for sharing while app is running (in memory / background)
     _intentDataStreamSubscription = ReceiveSharingIntent.instance
         .getMediaStream()
-        .listen(
-          (List<SharedMediaFile> value) {
-            if (value.isNotEmpty && value.first.path.isNotEmpty) {
-              _handleSharedContent(value.first.path);
-            }
-          },
-          onError: (err) {
-            debugPrint("getMediaStream error: $err");
-          },
-        );
+        .listen((List<SharedMediaFile> value) {
+          if (value.isNotEmpty && value.first.path.isNotEmpty) {
+            _handleSharedContent(value.first.path);
+          }
+        }, onError: (err) => debugPrint("getMediaStream error: $err"));
 
-    // 2. Handle initial share (Cold Start)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_initialIntentHandled) return;
-
       ReceiveSharingIntent.instance.getInitialMedia().then((
         List<SharedMediaFile> value,
       ) {
@@ -110,47 +111,37 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _handleSharedContent(String sharedText) async {
     if (!mounted) return;
-
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return;
     final user = authState.user;
 
-    // Check if URL
     final uri = Uri.tryParse(sharedText);
     bool isUrl = uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
-
-    // 1. Check for YouTube specifically
     bool isYoutube = false;
+
     if (isUrl) {
       final host = uri.host.toLowerCase();
-      if (host.contains('youtube.com') || host.contains('youtu.be')) {
+      if (host.contains('youtube.com') || host.contains('youtu.be'))
         isYoutube = true;
-      }
     }
 
     String initialTitle = "";
     String initialContent = "";
     String? initialMediaUrl;
-    int targetTab = 0; // 0 = Text, 1 = Media
+    int targetTab = 0;
 
     if (isYoutube) {
-      // HANDLE YOUTUBE
-      targetTab = 1; // Switch to Media tab
+      targetTab = 1;
       initialMediaUrl = sharedText;
-      // We don't scrape YouTube text because it usually fails or returns garbage.
-      // We let the dialog handle the URL in the video field.
     } else if (isUrl) {
-      // HANDLE NORMAL ARTICLE
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (c) => const Center(child: CircularProgressIndicator()),
       );
-
       final data = await WebScraperService.scrapeUrl(sharedText);
-
       if (!mounted) return;
-      Navigator.pop(context); // Hide spinner
+      Navigator.pop(context);
 
       if (data != null) {
         initialTitle = data['title']!;
@@ -159,7 +150,6 @@ class _HomeScreenState extends State<HomeScreen> {
         initialContent = sharedText;
       }
     } else {
-      // HANDLE PLAIN TEXT
       initialContent = sharedText;
     }
 
@@ -173,12 +163,10 @@ class _HomeScreenState extends State<HomeScreen> {
       isFavoriteByDefault: false,
       initialTitle: initialTitle,
       initialContent: initialContent,
-      // Pass the new parameters
       initialMediaUrl: initialMediaUrl,
       initialTabIndex: targetTab,
     );
   }
-  // ---------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -192,6 +180,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
+    // Helper to get 'es', 'fr', etc. for API calls
+    final String currentLangCode = LanguageHelper.getLangCode(
+      user.currentLanguage,
+    );
 
     if (user.currentLanguage.isEmpty) {
       return Scaffold(
@@ -251,8 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }
 
-                        if (lessonState is LessonLoading ||
-                            lessonState is LessonGenerationSuccess) {
+                        if (lessonState is LessonLoading) {
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
@@ -261,6 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (lessonState is LessonLoaded) {
                           var processedLessons = lessonState.lessons;
 
+                          // --- VERTICAL LIST MODE (Global Filters) ---
                           if (_selectedGlobalFilter != 'All') {
                             return _buildFilteredList(
                               processedLessons,
@@ -269,6 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           }
 
+                          // --- DASHBOARD MODE (Horizontal Sections) ---
                           final nativeLessons = processedLessons
                               .where((l) => l.type == 'video_native')
                               .toList();
@@ -312,29 +305,53 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  // 1. GUIDED COURSES (Horizontal Infinite)
                                   GuidedCoursesSection(
+                                    languageCode:
+                                        currentLangCode, // PASSED for pagination
                                     guidedLessons: guidedLessons,
                                     importedLessons: importedLessons,
                                     vocabMap: vocabMap,
                                     isDark: isDark,
                                   ),
+
                                   _buildAIStoryButton(context, isDark),
+
+                                  // 2. IMMERSION / VIDEOS (Horizontal Infinite)
                                   ImmersionSection(
+                                    languageCode:
+                                        currentLangCode, // PASSED for pagination
                                     lessons: nativeLessons,
                                     vocabMap: vocabMap,
                                     isDark: isDark,
                                   ),
+
+                                  // 3. AUDIO (Standard - Audio logic is unique)
                                   if (audioLessons.isNotEmpty)
                                     AudioLibrarySection(
                                       lessons: audioLessons,
                                       isDark: isDark,
                                     ),
+
+                                  // 4. LIBRARY / BOOKS (Horizontal Infinite)
                                   LibrarySection(
+                                    languageCode:
+                                        currentLangCode, // PASSED for pagination
                                     lessons: libraryLessons,
                                     vocabMap: vocabMap,
                                     isDark: isDark,
                                   ),
-                                  const HomeVideoFeeds(),
+                                  ...GenreConstants.categoryMap.entries.map((entry) {
+  return GenreFeedSection(
+    title: entry.key,      // e.g., "Science & Tech"
+    genreKey: entry.value, // e.g., "science"
+    languageCode: currentLangCode,
+    vocabMap: vocabMap,
+    isDark: isDark,
+  );
+}).toList(),
+                                  // Removed HomeVideoFeeds() as requested
+                                  const SizedBox(height: 40),
                                 ],
                               ),
                             ),
@@ -367,7 +384,6 @@ class _HomeScreenState extends State<HomeScreen> {
             HomeUtils.buildFloatingButton(
               label: "Import",
               icon: Icons.add_rounded,
-              // USE THE NEW SEPARATED DIALOG CLASS HERE TOO
               onTap: () => LessonImportDialog.show(
                 context,
                 user.id,
@@ -398,7 +414,6 @@ class _HomeScreenState extends State<HomeScreen> {
       toolbarHeight: 70,
       title: BlocBuilder<VocabularyBloc, VocabularyState>(
         builder: (context, vocabState) {
-          // 1. Calculate Live Word Count
           int knownCount = 0;
           if (vocabState is VocabularyLoaded) {
             knownCount = vocabState.items
@@ -407,23 +422,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
                 .length;
           }
-
-          // 2. USE SHARED LOGIC (The Fix)
-          // We get the level calculations from HomeDialogs so it matches the stats screen.
           final levelStats = HomeDialogs.getLevelDetails(knownCount);
-
-          // Use calculated level (e.g. "A1", "B2").
-          // Fallback to user profile level only if count is 0 (fresh start).
           final String displayLevel = knownCount > 0
               ? levelStats['fullLabel']
               : user.currentLevel;
-
           final int nextGoal = levelStats['nextGoal'];
 
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // --- LANGUAGE FLAG ---
               GestureDetector(
                 onTap: () =>
                     HomeLanguageDialogs.showTargetLanguageSelector(context),
@@ -446,8 +453,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-
-              // --- LEVEL & PROGRESS TEXT ---
               Expanded(
                 child: InkWell(
                   onTap: () => HomeLanguageDialogs.showLevelSelector(
@@ -460,12 +465,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Level Name (e.g. "A2")
                       Row(
                         children: [
                           Flexible(
                             child: Text(
-                              displayLevel, // Dynamic variable
+                              displayLevel,
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -485,11 +489,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      // Word Count (e.g. "540 / 1000 words")
                       Row(
                         children: [
                           Text(
-                            "$knownCount / $nextGoal words", // Dynamic variables
+                            "$knownCount / $nextGoal words",
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -509,11 +512,9 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       actions: [
-        // --- SEARCH BUTTON ---
         BlocBuilder<LessonBloc, LessonState>(
           builder: (context, state) {
             final isLoaded = state is LessonLoaded;
-
             return Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: InkWell(
@@ -552,17 +553,14 @@ class _HomeScreenState extends State<HomeScreen> {
         InkWell(
           onTap: () {
             final vocabState = context.read<VocabularyBloc>().state;
-            List<VocabularyItem> allItems =
-                []; // Use your exact Model class here
-
+            List<VocabularyItem> allItems = [];
             if (vocabState is VocabularyLoaded) {
               allItems = vocabState.items;
             }
-
             HomeDialogs.showStatsDialog(
               context,
-              user, // Passed from AuthBloc state in build method
-              allItems, // The full vocab list
+              user,
+              allItems,
               LanguageHelper.availableLanguages,
             );
           },
@@ -571,7 +569,6 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 35,
             height: 35,
             decoration: BoxDecoration(
-              // Matches your Search button style
               color: isDark
                   ? Colors.white.withOpacity(0.1)
                   : Colors.grey.shade100,
@@ -579,13 +576,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             alignment: Alignment.center,
             child: Icon(
-              Icons.auto_graph_rounded, // or Icons.bar_chart_rounded
+              Icons.auto_graph_rounded,
               size: 20,
               color: isDark ? Colors.white70 : Colors.black54,
             ),
           ),
         ),
-        // --- PREMIUM BUTTON ---
         Padding(
           padding: const EdgeInsets.only(
             right: 16,
@@ -788,9 +784,8 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isDark,
   ) {
     final filtered = lessons.where((l) {
-      if (_selectedGlobalFilter == 'Videos') {
+      if (_selectedGlobalFilter == 'Videos')
         return l.type == 'video' || l.type == 'video_native';
-      }
       if (_selectedGlobalFilter == 'Audio') return l.type == 'audio';
       if (_selectedGlobalFilter == 'Text') return l.type == 'text';
       return true;
@@ -808,8 +803,7 @@ class _HomeScreenState extends State<HomeScreen> {
             vocabMap: vocabMap,
             isDark: isDark,
             onTap: () => _handleLessonTap(lesson),
-            onOptionTap: () =>
-                showLessonOptions(context, lesson, isDark),
+            onOptionTap: () => showLessonOptions(context, lesson, isDark),
           );
         } else {
           return Center(
@@ -823,8 +817,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   vocabMap: vocabMap,
                   isDark: isDark,
                   onTap: () => _handleLessonTap(lesson),
-                  onOptionTap: () =>
-                      showLessonOptions(context, lesson, isDark),
+                  onOptionTap: () => showLessonOptions(context, lesson, isDark),
                 ),
               ),
             ),

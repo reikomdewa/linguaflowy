@@ -1,5 +1,3 @@
-
-
 import 'package:equatable/equatable.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 
@@ -7,10 +5,7 @@ abstract class LessonEvent extends Equatable {
   @override
   List<Object?> get props => [];
 }
-class LessonUpdateRequested extends LessonEvent {
-  final LessonModel lesson;
-  LessonUpdateRequested(this.lesson);
-}
+
 class LessonLoadRequested extends LessonEvent {
   final String userId;
   final String languageCode;
@@ -21,10 +16,22 @@ class LessonLoadRequested extends LessonEvent {
   List<Object?> get props => [userId, languageCode];
 }
 
+// --- NEW: Event to trigger infinite scroll ---
+class LoadMoreLessons extends LessonEvent {} 
+// ---------------------------------------------
+
 class LessonCreateRequested extends LessonEvent {
   final LessonModel lesson;
   
   LessonCreateRequested(this.lesson);
+
+  @override
+  List<Object?> get props => [lesson];
+}
+
+class LessonUpdateRequested extends LessonEvent {
+  final LessonModel lesson;
+  LessonUpdateRequested(this.lesson);
 
   @override
   List<Object?> get props => [lesson];
@@ -39,8 +46,6 @@ class LessonDeleteRequested extends LessonEvent {
   List<Object?> get props => [lessonId];
 }
 
-
-
 class LessonGenerateRequested extends LessonEvent {
   final String userId;
   final String topic;
@@ -53,4 +58,7 @@ class LessonGenerateRequested extends LessonEvent {
     required this.level,
     required this.targetLanguage,
   });
+
+  @override
+  List<Object?> get props => [userId, topic, level, targetLanguage];
 }

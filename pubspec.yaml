@@ -125,6 +125,7 @@ flutter:
      - assets/beginner_books/
      - assets/course_videos/
      - assets/audio_library/
+     - assets/storybooks_lessons/
      - assets/youtube_audio_library/
      - assets/images/linguaflow_logo.png
      - assets/images/linguaflow_logo_transparent.png

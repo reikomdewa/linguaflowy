@@ -4,31 +4,62 @@ import 'package:linguaflow/models/lesson_model.dart';
 class LessonService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<List<LessonModel>> getLessons(String userId, String languageCode) async {
+  // --- 1. INITIAL FETCH (With Crash Protection) ---
+  Future<List<LessonModel>> getLessons(
+    String userId, 
+    String languageCode, 
+    {int limit = 20} // <--- ADDED: Defaults to 20 to prevent OOM Crash
+  ) async {
     try {
       final snapshot = await _firestore
           .collection('lessons')
           .where('userId', isEqualTo: userId)
           .where('language', isEqualTo: languageCode)
           .orderBy('createdAt', descending: true)
+          .limit(limit) // <--- CRITICAL: Limits download size
           .get();
 
-      // Note: Firestore lessons are never 'isLocal' by default
       return snapshot.docs
           .map((doc) => LessonModel.fromMap(doc.data(), doc.id))
           .toList();
     } catch (e) {
-      // Return empty list on error (offline) instead of crashing
-      print("Firestore Error: $e");
+      print("Firestore Error (Initial Fetch): $e");
       return [];
     }
   }
 
+  // --- 2. PAGINATION FETCH (Load More) ---
+  Future<List<LessonModel>> getMoreLessons(
+    String userId,
+    String languageCode,
+    LessonModel lastLesson, // The last lesson currently on screen
+    {int limit = 20}
+  ) async {
+    try {
+      final snapshot = await _firestore
+          .collection('lessons')
+          .where('userId', isEqualTo: userId)
+          .where('language', isEqualTo: languageCode)
+          .orderBy('createdAt', descending: true)
+          // Tell Firestore to start AFTER the date of the last lesson we have
+          .startAfter([Timestamp.fromDate(lastLesson.createdAt)]) 
+          .limit(limit)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => LessonModel.fromMap(doc.data(), doc.id))
+          .toList();
+    } catch (e) {
+      print("Firestore Error (Pagination): $e");
+      return [];
+    }
+  }
+
+  // --- CRUD OPERATIONS (Unchanged) ---
+
   Future<void> createLesson(LessonModel lesson) async {
     try {
-      // Ensure we don't upload local paths to server
       if (lesson.isLocal) return; 
-      
       await _firestore.collection('lessons').doc(lesson.id).set(lesson.toMap());
     } catch (e) {
       rethrow;
@@ -36,9 +67,7 @@ class LessonService {
   }
 
   Future<void> updateLesson(LessonModel lesson) async {
-    if (lesson.id.isEmpty || lesson.isLocal) {
-      return;
-    }
+    if (lesson.id.isEmpty || lesson.isLocal) return;
 
     try {
       await _firestore
@@ -64,5 +93,37 @@ class LessonService {
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
+  }
+  // --- PAGINATION FOR GENRES ---
+  Future<List<LessonModel>> fetchPagedGenreLessons(
+    String languageCode,
+    String genreKey,
+    LessonModel? lastLesson, {
+    int limit = 10,
+  }) async {
+    try {
+      // Look for videos in this language with the specific genre
+      var query = _firestore
+          .collection('lessons')
+          .where('language', isEqualTo: languageCode)
+          .where('genre', isEqualTo: genreKey) // Strict genre match
+          // We generally only want system/native videos in feeds, not user created ones
+          .where('userId', whereIn: ['system', 'system_native']) 
+          .orderBy('createdAt', descending: true);
+
+      if (lastLesson != null) {
+        query = query.startAfter([Timestamp.fromDate(lastLesson.createdAt)]);
+      }
+
+      final snapshot = await query.limit(limit).get();
+
+      return snapshot.docs.map((doc) {
+        return LessonModel.fromMap(doc.data(), doc.id);
+      }).toList();
+    } catch (e) {
+      print("Genre Fetch Error ($genreKey): $e");
+      // You will likely need to create an Index link from the console for this to work
+      return [];
+    }
   }
 }
