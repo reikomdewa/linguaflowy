@@ -9,42 +9,20 @@ import 'package:linguaflow/screens/search/library_search_delegate.dart';
 import 'package:linguaflow/widgets/category_video_section.dart';
 import 'package:linguaflow/screens/search/category_results_screen.dart';
 
+// --- SHARED CONSTANTS ---
+import 'package:linguaflow/constants/genre_constants.dart';
+
 class SearchScreen extends StatelessWidget {
   const SearchScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = isDark ? Colors.white : Colors.black;
     final chipColor = isDark ? const Color(0xFF2C2C2E) : Colors.grey[200];
     final searchBarColor = isDark ? const Color(0xFF1C1C1E) : Colors.grey[100];
-
-    // 1. MASTER LIST: All possible categories (Kept for future use)
-    final Map<String, String> genreMap = {
-      "History": "history",
-      "Info": "news",
-      "True Crime": "crime",
-      "Fiction": "fiction",
-      "Environment": "environment",
-      "Learn & Revise": "education",
-      "Grand Formats": "documentary",
-      "Portraits": "biography",
-      "Ideas": "philosophy",
-      "Documentaries": "documentary",
-      "Health": "health",
-      "Daily Life": "vlog",
-      "Cinema": "cinema",
-      "Humor": "comedy",
-      "Society": "society",
-      "Knowledge+": "science",
-      "Arts": "culture",
-      "Vlogs & Escape": "travel",
-      "Books": "literature",
-      "Music": "music",
-      "Science": "science",
-      "Tech": "tech",
-    };
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -60,10 +38,10 @@ class SearchScreen extends StatelessWidget {
                 .where((l) => l.type == 'video' || l.videoUrl != null)
                 .toList();
 
-            // 2. FILTER LOGIC: Only show chips that have matching videos
-            // We iterate through the master list keys and keep only those that return results.
-            final List<String> activeCategories = genreMap.keys.where((uiCategory) {
-              final mappedGenre = genreMap[uiCategory]!;
+            // FILTER LOGIC: Only show chips that have matching videos
+            // We iterate through the master shared map
+            final List<String> activeCategories = GenreConstants.categoryMap.keys.where((uiCategory) {
+              final mappedGenre = GenreConstants.categoryMap[uiCategory]!;
               final matches = _filterLessons(allVideos, mappedGenre);
               return matches.isNotEmpty;
             }).toList();
@@ -98,7 +76,7 @@ class SearchScreen extends StatelessWidget {
                     ),
                   ),
 
-                // 3. CHIP GRID: Now uses 'activeCategories' instead of the full list
+                // CHIP GRID: Now uses 'activeCategories' from the shared constant
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -121,7 +99,7 @@ class SearchScreen extends StatelessWidget {
                         onTap: () => _navigateToCategory(
                           context,
                           uiCategory,
-                          genreMap[uiCategory]!,
+                          GenreConstants.categoryMap[uiCategory]!,
                           allVideos,
                         ),
                       );
@@ -143,16 +121,14 @@ class SearchScreen extends StatelessWidget {
                   ),
 
                 // --- 2. DYNAMIC CATEGORIES (Vertical List) ---
-                // We also use 'activeCategories' here so the order matches the chips
                 SliverList(
                   delegate: SliverChildBuilderDelegate((context, index) {
                     final uiCategory = activeCategories[index];
                     final categoryLessons = _filterLessons(
                       allVideos,
-                      genreMap[uiCategory]!,
+                      GenreConstants.categoryMap[uiCategory]!,
                     );
 
-                    // (Double check, though activeCategories logic ensures this is not empty)
                     if (categoryLessons.isEmpty) return const SizedBox.shrink();
 
                     return Padding(
@@ -170,7 +146,7 @@ class SearchScreen extends StatelessWidget {
                   }, childCount: activeCategories.length),
                 ),
                 
-                // Show a friendly message if everything is empty
+                // Empty State
                 if (allVideos.isEmpty)
                    SliverToBoxAdapter(
                     child: Padding(
@@ -275,7 +251,7 @@ class SearchScreen extends StatelessWidget {
   }
 }
 
-// ... _StickySearchBarDelegate (keep as is)
+// --- STICKY SEARCH BAR DELEGATE (Unchanged) ---
 class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
   final bool isDark;
   final Color searchBarColor;

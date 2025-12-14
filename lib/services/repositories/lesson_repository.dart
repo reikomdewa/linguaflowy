@@ -46,9 +46,15 @@ class LessonRepository {
 
       final Map<String, LessonModel> combinedMap = {};
 
-      for (var lesson in systemLessons) combinedMap[lesson.id] = lesson;
-      for (var lesson in userLessons) combinedMap[lesson.id] = lesson;
-      for (var lesson in localImports) combinedMap[lesson.id] = lesson;
+      for (var lesson in systemLessons) {
+        combinedMap[lesson.id] = lesson;
+      }
+      for (var lesson in userLessons) {
+        combinedMap[lesson.id] = lesson;
+      }
+      for (var lesson in localImports) {
+        combinedMap[lesson.id] = lesson;
+      }
 
       final allLessons = combinedMap.values.toList();
       allLessons.sort((a, b) => b.createdAt.compareTo(a.createdAt));

@@ -192,10 +192,12 @@ class _ContentCMSTabState extends State<ContentCMSTab> {
                 : StreamBuilder<QuerySnapshot>(
                     stream: _getStream(),
                     builder: (context, snapshot) {
-                      if (snapshot.hasError)
+                      if (snapshot.hasError) {
                         return Center(child: Text("Error: ${snapshot.error}"));
-                      if (snapshot.connectionState == ConnectionState.waiting)
+                      }
+                      if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
+                      }
 
                       if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                         return Center(
@@ -464,9 +466,9 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
       if (_videoUrlCtrl.text.contains("youtu")) {
         try {
           String? videoId;
-          if (_videoUrlCtrl.text.contains("v="))
+          if (_videoUrlCtrl.text.contains("v=")) {
             videoId = _videoUrlCtrl.text.split('v=')[1].split('&')[0];
-          else if (_videoUrlCtrl.text.contains("youtu.be/"))
+          } else if (_videoUrlCtrl.text.contains("youtu.be/"))
             videoId = _videoUrlCtrl.text.split('youtu.be/')[1];
           if (videoId != null) customId = "yt_$videoId";
         } catch (_) {}
@@ -544,7 +546,7 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
                         // --- UPDATED LANGUAGE DROPDOWN USING HELPER ---
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _language,
+                            initialValue: _language,
                             decoration: const InputDecoration(
                               labelText: "Language",
                             ),
@@ -568,7 +570,7 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
                     ),
                     const SizedBox(height: 15),
                     DropdownButtonFormField<String>(
-                      value: _difficulty,
+                      initialValue: _difficulty,
                       decoration: const InputDecoration(
                         labelText: "Difficulty",
                       ),

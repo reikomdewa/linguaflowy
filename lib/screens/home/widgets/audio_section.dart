@@ -3,7 +3,6 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
 // Add this import for the dialog
-import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
 import 'package:linguaflow/utils/utils.dart';
 
 class AudioLibrarySection extends StatefulWidget {

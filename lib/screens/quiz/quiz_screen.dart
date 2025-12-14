@@ -43,7 +43,7 @@ class _QuizScreenState extends State<QuizScreen> {
   String _targetLangName = 'English';
   String _targetFlag = '🇬🇧';
   Timer? _cooldownTimer;
-  int _secondsRemaining = 0;
+  final int _secondsRemaining = 0;
   int _retryCount = 0;
   bool _hasLoaded = false;
 
@@ -290,8 +290,9 @@ class _QuizScreenState extends State<QuizScreen> {
         title: BlocBuilder<QuizBloc, QuizState>(
           builder: (context, state) {
             if (state.status == QuizStatus.loading ||
-                state.status == QuizStatus.error)
+                state.status == QuizStatus.error) {
               return const SizedBox();
+            }
             return ClipRRect(
               borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
@@ -307,8 +308,9 @@ class _QuizScreenState extends State<QuizScreen> {
           BlocBuilder<QuizBloc, QuizState>(
             builder: (context, state) {
               if (state.status == QuizStatus.loading ||
-                  state.status == QuizStatus.error)
+                  state.status == QuizStatus.error) {
                 return const SizedBox();
+              }
               return Padding(
                 padding: const EdgeInsets.only(right: 20.0),
                 child: Row(

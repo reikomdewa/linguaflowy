@@ -392,7 +392,9 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
       context: context,
       barrierColor: Colors.transparent,
       builder: (context) => FloatingTranslationCard(
-        onGetAiExplanation: ()async{},
+        onGetAiExplanation: ()async{
+          return null;
+        },
         originalText: originalText,
         translationFuture: translationFuture,
         targetLanguage: widget.lesson.language,

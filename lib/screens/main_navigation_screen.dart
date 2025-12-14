@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
-import 'package:linguaflow/utils/constants.dart';
+import 'package:linguaflow/constants/constants.dart';
 
 // Screens
 import 'package:linguaflow/screens/home/home_screen.dart';

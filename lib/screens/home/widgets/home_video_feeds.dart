@@ -5,6 +5,9 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/widgets/category_video_section.dart';
 import 'package:linguaflow/screens/search/category_results_screen.dart';
 
+// IMPORT THE NEW CONSTANTS FILE
+import 'package:linguaflow/constants/genre_constants.dart'; 
+
 class HomeVideoFeeds extends StatelessWidget {
   const HomeVideoFeeds({super.key});
 
@@ -15,7 +18,7 @@ class HomeVideoFeeds extends StatelessWidget {
         if (state is LessonLoaded) {
           final allLessons = state.lessons;
 
-          // --- HELPER: Filter Logic (Matches SearchScreen logic) ---
+          // --- HELPER: Filter Logic ---
           List<LessonModel> getByGenre(String genreKey) {
             return allLessons.where((l) {
               // Ensure it is a video
@@ -25,45 +28,39 @@ class HomeVideoFeeds extends StatelessWidget {
               final t = l.title.toLowerCase();
               final k = genreKey.toLowerCase();
               
-              // Match genre tag OR title keyword
+              // Match genre tag strictly OR title loosely if genre is generic
               return g.contains(k) || (g == 'general' && t.contains(k));
             }).toList();
           }
 
-          // --- DEFINE YOUR HOME SECTIONS HERE ---
-          final scienceVideos = getByGenre('science');
-          final historyVideos = getByGenre('history');
-          final newsVideos = getByGenre('news');
-          final vlogVideos = getByGenre('vlog');
+          // --- DYNAMIC SECTION GENERATION ---
+          final List<Widget> sections = [];
 
-          // Return a Column so it fits inside your Home ListView
+          // Iterate using the shared GenreConstants map
+          GenreConstants.categoryMap.forEach((displayTitle, genreKey) {
+            final categoryVideos = getByGenre(genreKey);
+
+            if (categoryVideos.isNotEmpty) {
+              sections.add(
+                _buildSection(context, displayTitle, categoryVideos)
+              );
+            }
+          });
+
           return Column(
-            children: [
-              if (scienceVideos.isNotEmpty)
-                _buildSection(context, "Science Picks", scienceVideos),
-              
-              if (historyVideos.isNotEmpty)
-                _buildSection(context, "Historical Gems", historyVideos),
-              
-              if (newsVideos.isNotEmpty)
-                _buildSection(context, "News & Society", newsVideos),
-
-              if (vlogVideos.isNotEmpty)
-                _buildSection(context, "Daily Life Vlogs", vlogVideos),
-            ],
+            children: sections,
           );
         }
         
-        // Return empty while loading (Home usually has its own global loader)
         return const SizedBox.shrink(); 
       },
     );
   }
 
-  // --- INTERNAL HELPER TO REDUCE CODE DUPLICATION ---
+  // --- INTERNAL HELPER ---
   Widget _buildSection(BuildContext context, String title, List<LessonModel> lessons) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24.0), // Spacing between sections
+      padding: const EdgeInsets.only(bottom: 24.0),
       child: CategoryVideoSection(
         title: title,
         lessons: lessons,

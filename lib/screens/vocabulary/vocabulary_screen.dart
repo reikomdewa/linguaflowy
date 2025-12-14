@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
-import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/vocabulary/views/library_view.dart';
 import 'package:linguaflow/screens/vocabulary/views/review_session_view.dart';
 import 'package:linguaflow/utils/srs_algorithm.dart';
 
 // Import split widgets
-import 'widgets/flashcard_widget.dart';
 
 class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({super.key});

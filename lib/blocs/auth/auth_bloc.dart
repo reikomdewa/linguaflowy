@@ -456,12 +456,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthAuthenticated(updatedUser));
       try {
         final updates = <String, dynamic>{};
-        if (event.nativeLanguage != null)
+        if (event.nativeLanguage != null) {
           updates['nativeLanguage'] = event.nativeLanguage;
-        if (event.targetLanguages != null)
+        }
+        if (event.targetLanguages != null) {
           updates['targetLanguages'] = event.targetLanguages;
-        if (event.displayName != null)
+        }
+        if (event.displayName != null) {
           updates['displayName'] = event.displayName;
+        }
 
         await FirebaseFirestore.instance
             .collection('users')

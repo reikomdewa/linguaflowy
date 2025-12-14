@@ -821,8 +821,9 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
       String l = line.trim();
       if (l.isEmpty ||
           int.tryParse(l) != null ||
-          (l.contains('-->') && timePattern.hasMatch(l)))
+          (l.contains('-->') && timePattern.hasMatch(l))) {
         continue;
+      }
       buffer.writeln(l.replaceAll(RegExp(r'<[^>]*>'), ''));
     }
     return buffer.toString();

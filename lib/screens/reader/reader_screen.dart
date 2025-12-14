@@ -403,14 +403,18 @@ class _ReaderScreenState extends State<ReaderScreen>
   void _generateSmartChunks() {
     _smartChunks = [];
     if (_activeTranscript.isNotEmpty) {
-      for (var t in _activeTranscript) _smartChunks.add(t.text);
+      for (var t in _activeTranscript) {
+        _smartChunks.add(t.text);
+      }
       return;
     }
     List<String> rawSentences = widget.lesson.sentences;
-    if (rawSentences.isEmpty)
+    if (rawSentences.isEmpty) {
       rawSentences = widget.lesson.content.split(RegExp(r'(?<=[.!?])\s+'));
-    for (String sentence in rawSentences)
+    }
+    for (String sentence in rawSentences) {
       if (sentence.trim().isNotEmpty) _smartChunks.add(sentence.trim());
+    }
   }
 
   void _prepareBookPages() {
@@ -780,10 +784,11 @@ class _ReaderScreenState extends State<ReaderScreen>
     await _flutterTts.setLanguage(widget.lesson.language);
     await _flutterTts.setSpeechRate(_ttsSpeed);
     _flutterTts.setCompletionHandler(() {
-      if (!_isSentenceMode)
+      if (!_isSentenceMode) {
         _playNextTtsSentence();
-      else
+      } else {
         setState(() => _isTtsPlaying = false);
+      }
     });
   }
 
@@ -845,7 +850,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (auth is! AuthAuthenticated) return;
     final existing = _vocabulary[cleanId];
     final status = _calculateSmartStatus(existing);
-    if (existing == null || existing.status != status)
+    if (existing == null || existing.status != status) {
       _updateWordStatus(
         cleanId,
         word,
@@ -853,10 +858,12 @@ class _ReaderScreenState extends State<ReaderScreen>
         status,
         showDialog: false,
       );
-    if (auth.user.isPremium)
+    }
+    if (auth.user.isPremium) {
       _activateCard(word, cleanId, pos, isPhrase: false);
-    else
+    } else {
       _checkLimitAndActivate(auth.user.id, cleanId, word, pos, false);
+    }
   }
 
   String _restoreSpaces(String compressedPhrase) {
@@ -1012,10 +1019,11 @@ class _ReaderScreenState extends State<ReaderScreen>
     setState(() => _isCheckingLimit = true);
     final access = await _checkAndIncrementFreeLimit(uid);
     setState(() => _isCheckingLimit = false);
-    if (access)
+    if (access) {
       _activateCard(w, cid, p, isPhrase: phrase);
-    else
+    } else {
       _showLimitDialog();
+    }
   }
 
   Future<bool> _checkAndIncrementFreeLimit(String uid) async => true;
@@ -1119,8 +1127,9 @@ class _ReaderScreenState extends State<ReaderScreen>
   int _calculateSmartStatus(VocabularyItem? item) {
     if (item == null || item.status == 0) return 1;
     if (item.status >= 5) return 5;
-    if (DateTime.now().difference(item.lastReviewed).inHours >= 1)
+    if (DateTime.now().difference(item.lastReviewed).inHours >= 1) {
       return item.status + 1;
+    }
     return item.status;
   }
 
@@ -1152,18 +1161,20 @@ class _ReaderScreenState extends State<ReaderScreen>
         sourceLang: widget.lesson.language,
         targetLang: user.nativeLanguage,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _googleTranslation = g;
           _myMemoryTranslation = m;
           _isLoadingTranslation = false;
         });
+      }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoadingTranslation = false;
           _showError = true;
         });
+      }
     }
   }
 
@@ -1605,8 +1616,9 @@ class _ReaderScreenState extends State<ReaderScreen>
                                           i < _activeTranscript.length) {
                                         _seekToTime(_activeTranscript[i].start);
                                         _playMedia();
-                                      } else
+                                      } else {
                                         _speakSentence(_smartChunks[i], i);
+                                      }
                                     },
                                     onVideoSeek: (t) => _seekToTime(t),
                                     onWordTap: _handleWordTap,

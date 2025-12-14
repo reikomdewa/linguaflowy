@@ -6,9 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
-import 'package:linguaflow/blocs/lesson/lesson_event.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/utils/constants.dart';
+import 'package:linguaflow/constants/constants.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 // Place this inside your User App code

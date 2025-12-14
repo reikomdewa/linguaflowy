@@ -4,10 +4,8 @@
 // ==========================================
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:http/http.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
-import 'package:linguaflow/screens/vocabulary/vocabulary_screen.dart';
 import 'package:linguaflow/screens/vocabulary/widgets/flashcard_widget.dart';
 import 'package:linguaflow/utils/srs_algorithm.dart';
 

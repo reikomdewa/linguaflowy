@@ -33,9 +33,9 @@ class _LibraryViewState extends State<LibraryView> {
 
       // Status Filter
       bool matchesStatus = true;
-      if (_selectedFilter == 0)
+      if (_selectedFilter == 0) {
         matchesStatus = item.status == 0; // New
-      else if (_selectedFilter == 1)
+      } else if (_selectedFilter == 1)
         matchesStatus = item.status > 0 && item.status < 5; // Learning
       else if (_selectedFilter == 2)
         matchesStatus = item.status == 5; // Known

@@ -53,7 +53,6 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
 
   bool get _isYoutube {
     final path = widget.lesson.videoUrl ?? widget.lesson.content;
-    if (path == null) return false;
     return path.toLowerCase().contains('youtube.com') ||
         path.toLowerCase().contains('youtu.be');
   }

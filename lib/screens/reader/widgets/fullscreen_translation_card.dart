@@ -100,9 +100,9 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
     } else {
       if (myMemoryValid) combined = myMemoryResult;
       if (googleResult.isNotEmpty) {
-        if (combined.isEmpty)
+        if (combined.isEmpty) {
           combined = googleResult;
-        else if (combined.trim().toLowerCase() !=
+        } else if (combined.trim().toLowerCase() !=
             googleResult.trim().toLowerCase()) {
           combined += "\n\n[Google]\n$googleResult";
         }
@@ -160,10 +160,11 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
         if (index == 0 && _aiText == null && !_isAiLoading) {
           _fetchAiExplanation();
         }
-        if (index > 1)
+        if (index > 1) {
           _initializeWebView(index);
-        else
+        } else {
           _webViewController = null;
+        }
       }
     });
   }
@@ -188,8 +189,9 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
     String url = "";
     if (index == 2) url = "https://www.wordreference.com/${src}en/$word";
     if (index == 3) url = "https://glosbe.com/$src/$tgt/$word";
-    if (index == 4)
+    if (index == 4) {
       url = "https://context.reverso.net/translation/$src-$tgt/$word";
+    }
 
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)

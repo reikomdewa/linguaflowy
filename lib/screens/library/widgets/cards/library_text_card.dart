@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
-import 'package:linguaflow/screens/library/widgets/dialogs/library_actions.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/utils/utils.dart';
 

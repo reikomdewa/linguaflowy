@@ -21,7 +21,6 @@ import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:video_player_media_kit/video_player_media_kit.dart';
 
 // --- SCREENS ---
 import 'package:linguaflow/screens/auth/login_screen.dart';

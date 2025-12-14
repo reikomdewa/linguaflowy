@@ -49,9 +49,7 @@ class AuthService {
       await googleSignIn.initialize();
 
       // 2. Authenticate the user
-      final GoogleSignInAccount googleUser = await googleSignIn.authenticate();
-      
-      if (googleUser == null) return null; // User cancelled
+      final GoogleSignInAccount googleUser = await googleSignIn.authenticate(); // User cancelled
 
       // 3. Get ID Token (Authentication)
       // Note: In v7, this is synchronous

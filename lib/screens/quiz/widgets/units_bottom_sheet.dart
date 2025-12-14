@@ -111,8 +111,9 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
           print("SNAPSHOT ERROR: ${snapshot.error}");
           return const Center(child: Text("Load error. Check Console."));
         }
-        if (snapshot.connectionState == ConnectionState.waiting)
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         List<QueryDocumentSnapshot> docs = snapshot.data?.docs ?? [];
         if (docs.isEmpty) {
@@ -139,8 +140,9 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
             break;
           }
         }
-        if (firstIncompleteIndex == -1 && completedIds.isNotEmpty)
+        if (firstIncompleteIndex == -1 && completedIds.isNotEmpty) {
           firstIncompleteIndex = docs.length;
+        }
         if (completedIds.isEmpty) firstIncompleteIndex = 0;
 
         return ListView.builder(
@@ -158,18 +160,18 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
             final List<dynamic> questions = data['questions'] ?? [];
 
             LessonStatus status;
-            if (index < firstIncompleteIndex)
+            if (index < firstIncompleteIndex) {
               status = LessonStatus.completed;
-            else if (index == firstIncompleteIndex)
+            } else if (index == firstIncompleteIndex)
               status = LessonStatus.current;
             else
               status = LessonStatus.locked;
 
             // UI Grouping
             bool isFirstInUnit = false;
-            if (index == 0)
+            if (index == 0) {
               isFirstInUnit = true;
-            else {
+            } else {
               final prevData = docs[index - 1].data() as Map<String, dynamic>;
               final int prevUnit =
                   int.tryParse(prevData['unitIndex']?.toString() ?? '0') ?? 0;
@@ -177,9 +179,9 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
             }
 
             bool isLastInUnit = false;
-            if (index == docs.length - 1)
+            if (index == docs.length - 1) {
               isLastInUnit = true;
-            else {
+            } else {
               final nextData = docs[index + 1].data() as Map<String, dynamic>;
               final int nextUnit =
                   int.tryParse(nextData['unitIndex']?.toString() ?? '0') ?? 0;
@@ -335,10 +337,11 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
       );
       if (!mounted) return;
       setState(() => _isLoading = false);
-      if (canAccess)
+      if (canAccess) {
         _navigateToQuiz(questions, levelId);
-      else
+      } else {
         _showLimitDialog();
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -386,8 +389,9 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
                 context: context,
                 builder: (context) => const PremiumLockDialog(),
               ).then((unlocked) {
-                if (unlocked == true)
+                if (unlocked == true) {
                   context.read<AuthBloc>().add(AuthCheckRequested());
+                }
               });
             },
             child: const Text("Upgrade"),

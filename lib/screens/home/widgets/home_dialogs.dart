@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/utils/constants.dart';
+import 'package:linguaflow/constants/constants.dart';
 
 class HomeDialogs {
   // --- 1. SHARED LEVEL CALCULATION LOGIC ---
@@ -101,9 +101,9 @@ class HomeDialogs {
     }).length;
 
     double comprehension = 0.0;
-    if (knownWords < 1000)
+    if (knownWords < 1000) {
       comprehension = (knownWords / 1000) * 72;
-    else if (knownWords < 2000)
+    } else if (knownWords < 2000)
       comprehension = 72 + ((knownWords - 1000) / 1000) * 8;
     else if (knownWords < 4000)
       comprehension = 80 + ((knownWords - 2000) / 2000) * 10;

@@ -288,7 +288,7 @@ class ProfileDialogs {
                 ),
                 const SizedBox(height: 15),
                 DropdownButtonFormField<String>(
-                  value: severity,
+                  initialValue: severity,
                   decoration: const InputDecoration(labelText: "Impact"),
                   items: ['low', 'medium', 'high', 'critical']
                       .map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase())))

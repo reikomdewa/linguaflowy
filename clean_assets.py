@@ -22,7 +22,7 @@ FILES_TO_KEEP = [
     "lessons_fr.json", "lessons_de.json",
     
     # Native Content (Maybe keep one trending list per language)
-    "trending_en.json", "trending_es.json",
+    "trending_en.json", "trending_es.json", "trending_fr.json"
 
     # Beginner Books (Keep the list so they can see titles, even if content loads later)
     "beginner_en.json", "beginner_es.json"
