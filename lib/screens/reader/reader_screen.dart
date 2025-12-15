@@ -915,12 +915,30 @@ class _ReaderScreenState extends State<ReaderScreen>
     final restoredPhrase = _restoreSpaces(phrase);
     _activeSelectionClearer?.call();
     _activeSelectionClearer = clear;
-    _activateCard(
-      restoredPhrase,
-      ReaderUtils.generateCleanId(restoredPhrase),
-      pos,
-      isPhrase: true,
-    );
+
+    // --- NEW LOGIC START ---
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return;
+
+    // Check Premium Status
+    if (authState.user.isPremium) {
+      _activateCard(
+        restoredPhrase,
+        ReaderUtils.generateCleanId(restoredPhrase),
+        pos,
+        isPhrase: true,
+      );
+    } else {
+      // Apply limit check for non-premium users on phrases too
+      _checkLimitAndActivate(
+        authState.user.id,
+        ReaderUtils.generateCleanId(restoredPhrase),
+        restoredPhrase,
+        pos,
+        true, // isPhrase
+      );
+    }
+    // --- NEW LOGIC END ---
   }
 
   void _activateCard(
@@ -1026,7 +1044,60 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  Future<bool> _checkAndIncrementFreeLimit(String uid) async => true;
+  // Define your limit constant
+  static const int _dailyLookupsLimit = 5;
+
+  Future<bool> _checkAndIncrementFreeLimit(String uid) async {
+    // 1. Get today's date string (YYYY-MM-DD) to reset limits daily
+    final String todayStr = DateTime.now().toIso8601String().split('T').first;
+
+    final DocumentReference usageRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('usage')
+        .doc('dictionary_limit');
+
+    try {
+      return await FirebaseFirestore.instance.runTransaction((
+        transaction,
+      ) async {
+        final snapshot = await transaction.get(usageRef);
+
+        if (!snapshot.exists) {
+          // First time using it today
+          transaction.set(usageRef, {
+            'date': todayStr,
+            'count': 1, // Count this as the first one
+          });
+          return true; // ALLOW
+        }
+
+        final data = snapshot.data() as Map<String, dynamic>;
+        final String lastDate = data['date'] ?? '';
+        final int currentCount = data['count'] ?? 0;
+
+        if (lastDate != todayStr) {
+          // It's a new day, reset count
+          transaction.set(usageRef, {'date': todayStr, 'count': 1});
+          return true; // ALLOW
+        } else {
+          // Same day, check limit
+          if (currentCount < _dailyLookupsLimit) {
+            transaction.update(usageRef, {'count': currentCount + 1});
+            return true; // ALLOW
+          } else {
+            return false; // DENY
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint("Error checking limit: $e");
+      // In case of error (offline), you might want to allow or deny.
+      // Denying prevents exploit, allowing prevents frustration.
+      return false;
+    }
+  }
+
   void _showLimitDialog() =>
       showDialog(context: context, builder: (c) => const PremiumLockDialog());
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:linguaflow/screens/reader/utils/media_lifecycle.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -41,7 +42,7 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
   @override
   void initState() {
     super.initState();
-    _checkTypeAndInit();
+  
   }
 
   // --- AUTO PAUSE LOGIC ---
@@ -49,10 +50,17 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // Listen to the ActiveTabNotifier
     final activeTab = ActiveTabNotifier.of(context);
 
-    if (activeTab != null && activeTab != kVocabularyTabIndex) {
+    // If this tab just became active and we haven't initialized yet:
+    if (activeTab == kVocabularyTabIndex &&
+        !_isReady &&
+        _localPlayer == null &&
+        _ytController == null) {
+      _checkTypeAndInit();
+    }
+    // If tab is inactive, pause
+    else if (activeTab != kVocabularyTabIndex) {
       _pauseVideo();
     }
   }
@@ -135,24 +143,24 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
     }
   }
 
-  // --- ROBUST DISPOSE ---
   @override
   void dispose() {
     // 1. YouTube Disposal
     _ytController?.dispose();
     _ytController = null;
 
-    // 2. MediaKit Disposal (Robust Wrap)
-    if (_localPlayer != null) {
-      try {
-        _localPlayer!.stop(); // Stop engine to prevent callbacks
-        _localPlayer!.dispose(); // Release resources
-      } catch (e) {
-        debugPrint("⚠️ MediaKit SRS dispose warning: $e");
-      }
-    }
-    _localPlayer = null;
+    // 2. DETACH VIDEO CONTROLLER FIRST
+    // This is critical. It cuts the wire between the C++ texture and Flutter.
+    // If you don't do this, C++ tries to draw a frame on a dead widget -> CRASH.
     _localVideoController = null;
+
+    // 3. SAFE PLAYER DISPOSAL
+    // We hand the player over to our Lifecycle Manager.
+    // We immediately nullify our local reference.
+    if (_localPlayer != null) {
+      MediaLifecycle.disposeSafe(_localPlayer);
+      _localPlayer = null;
+    }
 
     super.dispose();
   }
