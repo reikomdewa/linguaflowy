@@ -9,12 +9,9 @@ import 'package:linguaflow/utils/language_helper.dart';
 
 class FloatingTranslationCard extends StatefulWidget {
   final String originalText;
-  final String? baseForm; // <--- ADDED: Base form (Lemma)
+  final String? baseForm; 
   final Future<String> translationFuture; 
-  
-  // Passed as a function for Lazy Loading
   final Future<String?> Function() onGetAiExplanation; 
-  
   final String targetLanguage;
   final String nativeLanguage;
   final int currentStatus;
@@ -25,7 +22,7 @@ class FloatingTranslationCard extends StatefulWidget {
   const FloatingTranslationCard({
     super.key,
     required this.originalText,
-    this.baseForm, // <--- ADDED to constructor
+    this.baseForm, 
     required this.translationFuture,
     required this.onGetAiExplanation, 
     required this.targetLanguage,
@@ -42,6 +39,7 @@ class FloatingTranslationCard extends StatefulWidget {
 
 class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   String _translationText = "Loading...";
+  String? _rootTranslation; // Stores the meaning of the root (e.g., "to eat")
   
   // AI State
   String? _aiText;
@@ -53,7 +51,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   // Dragging State
   Offset _dragOffset = Offset.zero;
 
-  // Tabs: 0=AI, 1=Reserved, 2=WordRef, 3=Glosbe, 4=Reverso
+  // Tabs
   int _selectedTabIndex = 0; 
   bool _isExpanded = false;
   
@@ -66,12 +64,29 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     super.initState();
     _initTts();
     _loadCombinedTranslations();
+    _loadRootTranslation(); // <--- Fetch meaning for the root word
   }
 
-  // --- COMBINED LOADING LOGIC ---
+  // --- ROOT TRANSLATION LOGIC ---
+  Future<void> _loadRootTranslation() async {
+    if (widget.baseForm == null || widget.baseForm == widget.originalText) return;
+    
+    // Simple fetch for the root word
+    final result = await _fetchTranslationApi(widget.baseForm!);
+    if (result.isNotEmpty && !result.startsWith("Error") && !result.startsWith("No results")) {
+      if (mounted) {
+        setState(() {
+          _rootTranslation = result;
+        });
+      }
+    }
+  }
+
+  // --- MAIN TRANSLATION LOGIC ---
   Future<void> _loadCombinedTranslations() async {
     final googleFuture = widget.translationFuture;
-    final myMemoryFuture = _fetchMyMemoryInternal();
+    // Use the helper for the main text
+    final myMemoryFuture = _fetchTranslationApi(widget.originalText);
 
     String googleResult = "";
     try {
@@ -149,11 +164,12 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     return code;
   }
 
-  Future<String> _fetchMyMemoryInternal() async {
+  // Helper method to fetch translation for ANY text (Main or Root)
+  Future<String> _fetchTranslationApi(String textToTranslate) async {
     try {
       final src = _sanitizeLangCode(widget.targetLanguage);
       final tgt = _sanitizeLangCode(widget.nativeLanguage);
-      final cleanText = widget.originalText.replaceAll('\n', ' ').trim();
+      final cleanText = textToTranslate.replaceAll('\n', ' ').trim();
       
       if (cleanText.isEmpty) return "";
       if (cleanText.length > 500) return "No results (Text too long)";
@@ -190,7 +206,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   String _getWebUrl(int index) {
     final src = _sanitizeLangCode(widget.targetLanguage);
     final tgt = _sanitizeLangCode(widget.nativeLanguage);
-    final word = Uri.encodeComponent(widget.baseForm ?? widget.originalText); // Search using baseForm if available
+    final word = Uri.encodeComponent(widget.baseForm ?? widget.originalText);
 
     switch(index) {
       case 2: return "https://www.wordreference.com/${src}en/$word";
@@ -384,7 +400,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
             ],
           ),
           
-          // --- ADDED: BASE FORM (LEMMA) DISPLAY ---
+          // --- UPDATED: ROOT + MEANING DISPLAY ---
           if (widget.baseForm != null) ...[
              const SizedBox(height: 8),
              Container(
@@ -404,6 +420,12 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
                        text: widget.baseForm,
                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                      ),
+                     // If we have fetched the meaning, show it
+                     if (_rootTranslation != null)
+                       TextSpan(
+                         text: " ($_rootTranslation)",
+                         style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13, fontStyle: FontStyle.italic),
+                       ),
                    ]
                  ),
                ),

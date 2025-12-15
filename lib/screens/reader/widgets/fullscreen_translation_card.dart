@@ -8,7 +8,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 class FullscreenTranslationCard extends StatefulWidget {
   final String originalText;
-  final String? baseForm; // <--- ADDED: Base Form parameter
+  final String? baseForm; 
   final Future<String> translationFuture;
   final Future<String?> Function() onGetAiExplanation;
   final String targetLanguage;
@@ -20,7 +20,7 @@ class FullscreenTranslationCard extends StatefulWidget {
   const FullscreenTranslationCard({
     super.key,
     required this.originalText,
-    this.baseForm, // <--- ADDED to constructor
+    this.baseForm, 
     required this.translationFuture,
     required this.onGetAiExplanation,
     required this.targetLanguage,
@@ -37,10 +37,11 @@ class FullscreenTranslationCard extends StatefulWidget {
 
 class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
   String _translationText = "Loading...";
+  String? _rootTranslation; // Stores meaning of root
   String? _aiText;
   bool _isAiLoading = false;
   final FlutterTts _cardTts = FlutterTts();
-  Offset _position = const Offset(100, 50); // Initial position
+  Offset _position = const Offset(100, 50); 
   int _selectedTabIndex = 0;
   bool _isExpanded = false;
   WebViewController? _webViewController;
@@ -51,6 +52,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
     super.initState();
     _initTts();
     _loadCombinedTranslations();
+    _loadRootTranslation(); // <--- Fetch meaning for the root word
   }
 
   void _initTts() async {
@@ -64,9 +66,25 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
     super.dispose();
   }
 
+  // --- ROOT TRANSLATION LOGIC ---
+  Future<void> _loadRootTranslation() async {
+    if (widget.baseForm == null || widget.baseForm == widget.originalText) return;
+    
+    // Simple fetch for the root word
+    final result = await _fetchTranslationApi(widget.baseForm!);
+    if (result.isNotEmpty && !result.startsWith("Error") && !result.startsWith("No results")) {
+      if (mounted) {
+        setState(() {
+          _rootTranslation = result;
+        });
+      }
+    }
+  }
+
+  // --- MAIN TRANSLATION LOGIC ---
   Future<void> _loadCombinedTranslations() async {
     final googleFuture = widget.translationFuture;
-    final myMemoryFuture = _fetchMyMemoryInternal();
+    final myMemoryFuture = _fetchTranslationApi(widget.originalText);
 
     String googleResult = "";
     try {
@@ -116,11 +134,12 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
     }
   }
 
-  Future<String> _fetchMyMemoryInternal() async {
+  // Helper method to fetch translation for ANY text
+  Future<String> _fetchTranslationApi(String textToTranslate) async {
     try {
       final src = LanguageHelper.getLangCode(widget.targetLanguage);
       final tgt = LanguageHelper.getLangCode(widget.nativeLanguage);
-      final cleanText = widget.originalText.replaceAll('\n', ' ').trim();
+      final cleanText = textToTranslate.replaceAll('\n', ' ').trim();
       if (cleanText.isEmpty || cleanText.length > 500) return "";
 
       final queryParameters = {
@@ -185,8 +204,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
     final src = LanguageHelper.getLangCode(widget.targetLanguage);
     final tgt = LanguageHelper.getLangCode(widget.nativeLanguage);
     
-    // --- UPDATED: Use Base Form for Dictionary Search ---
-    // If baseForm exists, use it. Otherwise use original text.
+    // Use base form for better dictionary lookup
     final searchText = widget.baseForm ?? widget.originalText;
     final word = Uri.encodeComponent(searchText);
 
@@ -321,7 +339,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
                   ],
                 ),
                 
-                // --- ADDED: BASE FORM (LEMMA) DISPLAY ---
+                // --- UPDATED: ROOT + MEANING DISPLAY ---
                 if (widget.baseForm != null) ...[
                    const SizedBox(height: 8),
                    Container(
@@ -341,6 +359,12 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
                              text: widget.baseForm,
                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                            ),
+                           // If we have fetched the meaning, show it
+                           if (_rootTranslation != null)
+                             TextSpan(
+                               text: " ($_rootTranslation)",
+                               style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13, fontStyle: FontStyle.italic),
+                             ),
                          ]
                        ),
                      ),
