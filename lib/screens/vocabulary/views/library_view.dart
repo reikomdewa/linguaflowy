@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -246,8 +248,38 @@ class _LibraryViewState extends State<LibraryView> {
       ),
     );
   }
- Future<void> _showVideoContext(VocabularyItem item) async { 
-    // 3. Await the dialog. This pauses execution here until the dialog is closed.
+
+  Future<void> _showVideoContext(VocabularyItem item) async {
+    final videoUrl = item.sourceVideoUrl;
+
+    if (videoUrl == null || videoUrl.isEmpty) return;
+
+    // 1. CHECK IF FILE EXISTS LOCALLY
+    // If it is NOT a network URL (YouTube/HTTP), we check the file system.
+    bool isNetwork =
+        videoUrl.toLowerCase().contains('http') ||
+        videoUrl.toLowerCase().contains('youtube');
+
+    if (!isNetwork) {
+      final file = File(videoUrl);
+      if (!file.existsSync()) {
+        // File is missing: Show SnackBar and STOP.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "You deleted the local file so cannot show the context where you saw this",
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return; // <--- Do not open the dialog
+      }
+    }
+
+    // 2. File exists (or is YouTube), proceed to show Dialog
     await showDialog(
       context: context,
       builder: (context) {
@@ -287,7 +319,7 @@ class _LibraryViewState extends State<LibraryView> {
                 height: 250,
                 width: double.infinity,
                 child: VideoSRSPlayer(
-                  videoUrl: item.sourceVideoUrl!,
+                  videoUrl: videoUrl,
                   startSeconds: item.timestamp ?? 0.0,
                   endSeconds: (item.timestamp ?? 0.0) + 10.0,
                   isStandalone: true,
@@ -313,12 +345,8 @@ class _LibraryViewState extends State<LibraryView> {
       },
     );
 
-    // 4. FORCE PORTRAIT ON CLOSE
-    // This runs immediately after the dialog pops.
-    // Even if the video player left the app in Landscape, this snaps it back.
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-    ]);
+    // 3. FORCE PORTRAIT ON CLOSE
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
 
   Widget _buildFilterChip(String label, int value) {
