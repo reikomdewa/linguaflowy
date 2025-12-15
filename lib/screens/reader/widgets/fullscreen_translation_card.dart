@@ -1,7 +1,4 @@
-
-// ... [FullscreenTranslationCard - Kept Exact Same] ...
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +8,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 class FullscreenTranslationCard extends StatefulWidget {
   final String originalText;
+  final String? baseForm; // <--- ADDED: Base Form parameter
   final Future<String> translationFuture;
   final Future<String?> Function() onGetAiExplanation;
   final String targetLanguage;
@@ -22,6 +20,7 @@ class FullscreenTranslationCard extends StatefulWidget {
   const FullscreenTranslationCard({
     super.key,
     required this.originalText,
+    this.baseForm, // <--- ADDED to constructor
     required this.translationFuture,
     required this.onGetAiExplanation,
     required this.targetLanguage,
@@ -185,7 +184,12 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
     setState(() => _isLoadingWeb = true);
     final src = LanguageHelper.getLangCode(widget.targetLanguage);
     final tgt = LanguageHelper.getLangCode(widget.nativeLanguage);
-    final word = Uri.encodeComponent(widget.originalText);
+    
+    // --- UPDATED: Use Base Form for Dictionary Search ---
+    // If baseForm exists, use it. Otherwise use original text.
+    final searchText = widget.baseForm ?? widget.originalText;
+    final word = Uri.encodeComponent(searchText);
+
     String url = "";
     if (index == 2) url = "https://www.wordreference.com/${src}en/$word";
     if (index == 3) url = "https://glosbe.com/$src/$tgt/$word";
@@ -316,6 +320,34 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
                     Text(flag, style: const TextStyle(fontSize: 20)),
                   ],
                 ),
+                
+                // --- ADDED: BASE FORM (LEMMA) DISPLAY ---
+                if (widget.baseForm != null) ...[
+                   const SizedBox(height: 8),
+                   Container(
+                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                     decoration: BoxDecoration(
+                       color: Colors.white.withOpacity(0.08),
+                       borderRadius: BorderRadius.circular(6),
+                     ),
+                     child: RichText(
+                       text: TextSpan(
+                         children: [
+                           const TextSpan(
+                             text: "Root: ",
+                             style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic),
+                           ),
+                           TextSpan(
+                             text: widget.baseForm,
+                             style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                           ),
+                         ]
+                       ),
+                     ),
+                   ),
+                ],
+                // ----------------------------------------
+
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

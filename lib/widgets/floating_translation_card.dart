@@ -9,9 +9,10 @@ import 'package:linguaflow/utils/language_helper.dart';
 
 class FloatingTranslationCard extends StatefulWidget {
   final String originalText;
-  final Future<String> translationFuture; // Google Translation from parent
+  final String? baseForm; // <--- ADDED: Base form (Lemma)
+  final Future<String> translationFuture; 
   
-  // Passed as a function for Lazy Loading (only calls API when clicked)
+  // Passed as a function for Lazy Loading
   final Future<String?> Function() onGetAiExplanation; 
   
   final String targetLanguage;
@@ -24,6 +25,7 @@ class FloatingTranslationCard extends StatefulWidget {
   const FloatingTranslationCard({
     super.key,
     required this.originalText,
+    this.baseForm, // <--- ADDED to constructor
     required this.translationFuture,
     required this.onGetAiExplanation, 
     required this.targetLanguage,
@@ -68,13 +70,9 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
 
   // --- COMBINED LOADING LOGIC ---
   Future<void> _loadCombinedTranslations() async {
-    // 1. Start fetching Google (Parent Future) immediately
     final googleFuture = widget.translationFuture;
-    
-    // 2. Start fetching MyMemory (Internal)
     final myMemoryFuture = _fetchMyMemoryInternal();
 
-    // 3. Wait for Google first (Since you mentioned it works fine)
     String googleResult = "";
     try {
       googleResult = await googleFuture;
@@ -85,18 +83,14 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
       myMemoryResult = await myMemoryFuture;
     } catch (_) {}
 
-    // 4. Combine Logic
     String combined = "";
     bool myMemoryValid = myMemoryResult.isNotEmpty && 
                          !myMemoryResult.startsWith("Error") && 
                          !myMemoryResult.startsWith("No results");
 
-    // Strategy: For Sentences (spaces detected), prioritize Google. 
-    // For single words, MyMemory often has better definitions, so show it first.
     bool isPhrase = widget.originalText.trim().contains(' ');
 
     if (isPhrase) {
-      // --- PHRASE MODE: Google First ---
       if (googleResult.isNotEmpty) {
         combined = googleResult;
         if (myMemoryValid && myMemoryResult.trim().toLowerCase() != googleResult.trim().toLowerCase()) {
@@ -106,7 +100,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
         combined = myMemoryResult;
       }
     } else {
-      // --- WORD MODE: MyMemory First ---
       if (myMemoryValid) {
         combined = myMemoryResult;
       }
@@ -149,10 +142,8 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     super.dispose();
   }
 
-  // --- API LOGIC (MyMemory Internal Helper) ---
   String _sanitizeLangCode(String code) {
     if (code.isEmpty) return 'en';
-    // MyMemory expects "en", "es", not "en-US"
     if (code.contains('_')) return code.split('_')[0];
     if (code.contains('-')) return code.split('-')[0];
     return code;
@@ -162,34 +153,26 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     try {
       final src = _sanitizeLangCode(widget.targetLanguage);
       final tgt = _sanitizeLangCode(widget.nativeLanguage);
-      
       final cleanText = widget.originalText.replaceAll('\n', ' ').trim();
       
       if (cleanText.isEmpty) return "";
-      // MyMemory GET limit is around 500 chars. Longer phrases fail.
       if (cleanText.length > 500) return "No results (Text too long)";
 
-      // Use Uri.https for safer encoding of phrases with special chars
       final queryParameters = {
         'q': cleanText,
         'langpair': '$src|$tgt',
-        'mt': '1' // Force Machine Translation if no memory match
+        'mt': '1' 
       };
 
       final uri = Uri.https('api.mymemory.translated.net', '/get', queryParameters);
-      
       final response = await http.get(uri).timeout(const Duration(seconds: 5));
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
-        // Check internal status (sometimes HTTP is 200 but status is 4xx)
         if (data['responseStatus'] != 200) return "No results found.";
 
         if (data['responseData'] != null) {
           String result = data['responseData']['translatedText'] ?? "";
-          
-          // Check for MyMemory errors or echoes (common with MT failures)
           if (result.contains("MYMEMORY WARNING") || 
               result.trim().toLowerCase() == cleanText.toLowerCase()) {
             return "No results found.";
@@ -207,8 +190,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   String _getWebUrl(int index) {
     final src = _sanitizeLangCode(widget.targetLanguage);
     final tgt = _sanitizeLangCode(widget.nativeLanguage);
-    // Use proper encoding for URLs
-    final word = Uri.encodeComponent(widget.originalText);
+    final word = Uri.encodeComponent(widget.baseForm ?? widget.originalText); // Search using baseForm if available
 
     switch(index) {
       case 2: return "https://www.wordreference.com/${src}en/$word";
@@ -260,7 +242,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     });
   }
 
-  // --- LAZY AI FETCHER ---
   Future<void> _fetchAiExplanation() async {
     setState(() => _isAiLoading = true);
     try {
@@ -402,6 +383,34 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
               Text(flagAsset, style: const TextStyle(fontSize: 20)),
             ],
           ),
+          
+          // --- ADDED: BASE FORM (LEMMA) DISPLAY ---
+          if (widget.baseForm != null) ...[
+             const SizedBox(height: 8),
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+               decoration: BoxDecoration(
+                 color: Colors.white.withOpacity(0.08),
+                 borderRadius: BorderRadius.circular(6),
+               ),
+               child: RichText(
+                 text: TextSpan(
+                   children: [
+                     const TextSpan(
+                       text: "Root: ",
+                       style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic),
+                     ),
+                     TextSpan(
+                       text: widget.baseForm,
+                       style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                     ),
+                   ]
+                 ),
+               ),
+             ),
+          ],
+          // ----------------------------------------
+          
           const SizedBox(height: 16),
           const Text("RANK WORD KNOWLEDGE", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
           const SizedBox(height: 8),

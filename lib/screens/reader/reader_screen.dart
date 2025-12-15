@@ -8,6 +8,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/screens/completion/completion_screen.dart';
+import 'package:linguaflow/services/local_lemmatizer.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -127,13 +128,15 @@ class _ReaderScreenState extends State<ReaderScreen>
   Future<String>? _cardTranslationFuture;
   VoidCallback? _activeSelectionClearer;
   late AuthBloc _authBloc;
+
+   String? _selectedBaseForm; 
   @override
   void initState() {
     super.initState();
     _authBloc = context.read<AuthBloc>();
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-
+ LocalLemmatizer().load(widget.lesson.language); 
     _initGemini();
     _loadVocabulary();
     _loadUserPreferences();
@@ -940,8 +943,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
     // --- NEW LOGIC END ---
   }
-
-  void _activateCard(
+void _activateCard(
     String text,
     String cleanId,
     Offset pos, {
@@ -958,14 +960,25 @@ class _ReaderScreenState extends State<ReaderScreen>
       setState(() => _isTtsPlaying = false);
     }
     _flutterTts.speak(text);
+    
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final svc = context.read<TranslationService>();
+
+    // --- NEW LOGIC: Get the Base Form ---
+    // If it's a phrase, we usually don't lemmatize, so default to text.
+    // If it's a word, look it up!
+    final String lemma = isPhrase 
+        ? text 
+        : LocalLemmatizer().getLemma(text);
+
     setState(() {
       _showCard = true;
       _selectedText = text;
       _selectedCleanId = cleanId;
+      _selectedBaseForm = lemma; // <--- Store it here
       _isSelectionPhrase = isPhrase;
       _cardAnchor = pos;
+      
       _cardTranslationFuture = svc
           .translate(text, user.nativeLanguage, widget.lesson.language)
           .then((v) => v ?? "");
@@ -980,6 +993,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       return FloatingTranslationCard(
         key: ValueKey(_selectedText),
         originalText: _selectedText,
+           baseForm: (_selectedBaseForm != _selectedText) ? _selectedBaseForm : null, 
         translationFuture: _cardTranslationFuture!,
         onGetAiExplanation: () => Gemini.instance
             .prompt(
@@ -1006,6 +1020,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     return FullscreenTranslationCard(
       key: ValueKey("$_selectedText$_selectedCleanId"),
       originalText: _selectedText,
+        baseForm: (_selectedBaseForm != _selectedText) ? _selectedBaseForm : null,
       translationFuture: _cardTranslationFuture!,
       onGetAiExplanation: () => Gemini.instance
           .prompt(
@@ -1109,7 +1124,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     bool showDialog = true,
   }) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-
+ String detectedBaseForm = LocalLemmatizer().getLemma(orig);
     // 1. Get Video Context (Existing logic)
     String? videoUrl;
     double? timestamp;
@@ -1140,8 +1155,8 @@ class _ReaderScreenState extends State<ReaderScreen>
     final item = VocabularyItem(
       id: clean,
       userId: user.id,
-      word: clean,
-      baseForm: clean,
+      word: orig,
+      baseForm: detectedBaseForm,
       language: widget.lesson.language,
       translation: trans,
       status: status,

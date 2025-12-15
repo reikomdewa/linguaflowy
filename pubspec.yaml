@@ -147,6 +147,8 @@ flutter:
      - assets/images/linguaflow_logo.png
      - assets/images/linguaflow_logo_transparent.png
 
+     - assets/dictionaries/
+
   
   # An image asset can be specified in either of two ways:
   
