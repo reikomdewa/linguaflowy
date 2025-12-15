@@ -77,22 +77,24 @@ class LibraryScreen extends StatelessWidget {
         builder: (context, state) {
           if (state is LessonInitial) {
             context.read<LessonBloc>().add(
-                  LessonLoadRequested(user.id, user.currentLanguage),
-                );
+              LessonLoadRequested(user.id, user.currentLanguage),
+            );
             return const Center(child: CircularProgressIndicator());
           }
           if (state is LessonLoading) {
             return const Center(child: CircularProgressIndicator());
           }
           if (state is LessonLoaded) {
-            final importedLessons =
-                state.lessons.where((l) => l.isLocal).toList();
-            final favoriteLessons =
-                state.lessons.where((l) => l.isFavorite).toList();
+            final importedLessons = state.lessons
+                .where((l) => l.isLocal)
+                .toList();
+            final favoriteLessons = state.lessons
+                .where((l) => l.isFavorite)
+                .toList();
 
-            // We handle empty state inside the ScrollView now to allow Playlists 
+            // We handle empty state inside the ScrollView now to allow Playlists
             // to show up even if lessons are empty, or handle fully empty state if needed.
-            
+
             return SingleChildScrollView(
               padding: const EdgeInsets.only(bottom: 100),
               child: Column(
@@ -130,8 +132,7 @@ class LibraryScreen extends StatelessWidget {
                         ),
                         scrollDirection: Axis.horizontal,
                         itemCount: importedLessons.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(width: 12),
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           final lesson = importedLessons[index];
                           const double cardWidth = 220;
@@ -165,8 +166,7 @@ class LibraryScreen extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
                       child: Row(
                         children: [
-                          Icon(Icons.star,
-                              color: Colors.amber[700], size: 20),
+                          Icon(Icons.star, color: Colors.amber[700], size: 20),
                           const SizedBox(width: 8),
                           Text(
                             "Favorites",
@@ -184,8 +184,7 @@ class LibraryScreen extends StatelessWidget {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: favoriteLessons.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: 16),
+                      separatorBuilder: (_, __) => const SizedBox(height: 16),
                       itemBuilder: (context, index) {
                         final lesson = favoriteLessons[index];
                         if (lesson.type == 'video' ||
@@ -204,7 +203,7 @@ class LibraryScreen extends StatelessWidget {
                       },
                     ),
                   ],
-                  
+
                   // Empty State Fallback if absolutely nothing exists
                   if (importedLessons.isEmpty && favoriteLessons.isEmpty)
                     _buildEmptyStateCheck(user.id),
@@ -267,7 +266,12 @@ class LibraryScreen extends StatelessWidget {
   }
 
   // --- PLAYLIST SECTION WIDGET ---
-  Widget _buildPlaylistsSection(BuildContext context, String userId, bool isDark, Color? textColor) {
+  Widget _buildPlaylistsSection(
+    BuildContext context,
+    String userId,
+    bool isDark,
+    Color? textColor,
+  ) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
@@ -289,7 +293,11 @@ class LibraryScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
               child: Row(
                 children: [
-                  Icon(Icons.playlist_play_rounded, color: Colors.blueAccent, size: 22),
+                  Icon(
+                    Icons.playlist_play_rounded,
+                    color: Colors.blueAccent,
+                    size: 22,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     "Playlists",
@@ -302,10 +310,10 @@ class LibraryScreen extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Horizontal Scroll View for Playlists
             SizedBox(
-              height: 100, // Compact height for the pill buttons
+              height: 120, // Compact height for the pill buttons
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 scrollDirection: Axis.horizontal,
@@ -356,7 +364,7 @@ class LibraryScreen extends StatelessWidget {
       builder: (context, snapshot) {
         // If loading or we have playlists, show nothing (UI is handling it)
         if (!snapshot.hasData) return const SizedBox.shrink();
-        
+
         // If playlists exist, we are not truly empty.
         if (snapshot.data!.docs.isNotEmpty) return const SizedBox.shrink();
 

@@ -102,6 +102,7 @@ dependencies:
   
 
   bloc: any
+  youtube_explode_dart: ^3.0.5
 dev_dependencies:
   flutter_test:
     sdk: flutter

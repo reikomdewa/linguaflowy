@@ -8,7 +8,8 @@ class PlaylistOpenButton extends StatelessWidget {
   final String playlistName;
   final String playlistId;
   final List<dynamic> lessonIds; // IDs stored in the playlist document
-  final String currentUserId; // Needed to fetch lesson details from user's collection
+  final String
+  currentUserId; // Needed to fetch lesson details from user's collection
   final bool isDark;
 
   const PlaylistOpenButton({
@@ -63,13 +64,15 @@ class PlaylistOpenButton extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                
+
                 // Text Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
                         playlistName,
                         style: TextStyle(
                           fontSize: 18,
@@ -78,11 +81,13 @@ class PlaylistOpenButton extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        "${lessonIds.length} Lessons",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      Expanded(
+                        child: Text(
+                          "${lessonIds.length} Lessons",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          ),
                         ),
                       ),
                     ],
@@ -144,7 +149,7 @@ class _PlaylistContentSheet extends StatefulWidget {
 
 class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
   late Future<List<LessonModel>> _lessonsFuture;
-  
+
   // Local cache of loaded lessons to pass to the player immediately
   List<LessonModel> _loadedLessons = [];
 
@@ -164,7 +169,10 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
     // STEP 1: Check Local Cache (SharedPreferences)
     // ---------------------------------------------------------
     final cacheService = LessonCacheService();
-    final List<String> targetIds = widget.lessonIds.map((e) => e.toString()).toSet().toList();
+    final List<String> targetIds = widget.lessonIds
+        .map((e) => e.toString())
+        .toSet()
+        .toList();
 
     for (String id in targetIds) {
       final cachedLesson = await cacheService.getLesson(id);
@@ -188,7 +196,10 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
     final List<String> foundCloudIds = [];
 
     // Helper to process chunks (Firestore 'whereIn' limit is 10)
-    Future<void> fetchChunk(List<String> chunk, CollectionReference collection) async {
+    Future<void> fetchChunk(
+      List<String> chunk,
+      CollectionReference collection,
+    ) async {
       try {
         final snapshot = await collection
             .where(FieldPath.documentId, whereIn: chunk)
@@ -197,12 +208,12 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
         for (var doc in snapshot.docs) {
           final data = doc.data() as Map<String, dynamic>;
           final lesson = LessonModel.fromMap(data, doc.id);
-          
+
           fetchedFromCloud.add(lesson);
           foundCloudIds.add(doc.id);
-          
+
           // IMPORTANT: Cache this new lesson for next time!
-          await cacheService.cacheLesson(lesson); 
+          await cacheService.cacheLesson(lesson);
         }
       } catch (e) {
         debugPrint("Error fetching chunk from ${collection.path}: $e");
@@ -213,26 +224,30 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
     for (var i = 0; i < missingIds.length; i += 10) {
       final end = (i + 10 < missingIds.length) ? i + 10 : missingIds.length;
       final chunk = missingIds.sublist(i, end);
-      
+
       await fetchChunk(
-        chunk, 
+        chunk,
         FirebaseFirestore.instance
             .collection('users')
             .doc(widget.userId)
-            .collection('lessons')
+            .collection('lessons'),
       );
     }
 
     // B. Check Global/Public Collection for whatever is STILL missing
-    final stillMissing = missingIds.where((id) => !foundCloudIds.contains(id)).toList();
+    final stillMissing = missingIds
+        .where((id) => !foundCloudIds.contains(id))
+        .toList();
     if (stillMissing.isNotEmpty) {
       for (var i = 0; i < stillMissing.length; i += 10) {
-        final end = (i + 10 < stillMissing.length) ? i + 10 : stillMissing.length;
+        final end = (i + 10 < stillMissing.length)
+            ? i + 10
+            : stillMissing.length;
         final chunk = stillMissing.sublist(i, end);
 
         await fetchChunk(
-          chunk, 
-          FirebaseFirestore.instance.collection('lessons')
+          chunk,
+          FirebaseFirestore.instance.collection('lessons'),
         );
       }
     }
@@ -245,7 +260,10 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
   }
 
   // Helper to maintain playlist order
-  List<LessonModel> _orderLessons(List<LessonModel> unsorted, List<String> orderIds) {
+  List<LessonModel> _orderLessons(
+    List<LessonModel> unsorted,
+    List<String> orderIds,
+  ) {
     final Map<String, LessonModel> map = {for (var l in unsorted) l.id: l};
     List<LessonModel> ordered = [];
     for (String id in orderIds) {
@@ -264,9 +282,9 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
           .collection('playlists')
           .doc(widget.playlistId)
           .update({
-        'lessonIds': FieldValue.arrayRemove([lessonId])
-      });
-      
+            'lessonIds': FieldValue.arrayRemove([lessonId]),
+          });
+
       // Update local UI
       setState(() {
         widget.lessonIds.remove(lessonId);
@@ -298,7 +316,9 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
   @override
   Widget build(BuildContext context) {
     final bgColor = widget.isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final cardColor = widget.isDark ? const Color(0xFF2C2C2C) : Colors.grey[100];
+    final cardColor = widget.isDark
+        ? const Color(0xFF2C2C2C)
+        : Colors.grey[100];
     final textColor = widget.isDark ? Colors.white : Colors.black87;
     final subTextColor = widget.isDark ? Colors.grey[400] : Colors.grey[600];
 
@@ -329,7 +349,10 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
 
               // --- HEADER ---
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 0,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -345,13 +368,18 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
                     // PLAY ALL BUTTON (Header)
                     if (widget.lessonIds.isNotEmpty)
                       FloatingActionButton.small(
-                        backgroundColor: widget.isDark ? const Color(0xFF6C63FF) : Colors.blueAccent,
+                        backgroundColor: widget.isDark
+                            ? const Color(0xFF6C63FF)
+                            : Colors.blueAccent,
                         onPressed: () {
-                           if (_loadedLessons.isNotEmpty) {
-                             _openPlayer(0);
-                           }
+                          if (_loadedLessons.isNotEmpty) {
+                            _openPlayer(0);
+                          }
                         },
-                        child: const Icon(Icons.play_arrow, color: Colors.white),
+                        child: const Icon(
+                          Icons.play_arrow,
+                          color: Colors.white,
+                        ),
                       ),
                   ],
                 ),
@@ -369,7 +397,7 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
                     }
 
                     final lessons = snapshot.data ?? [];
-                    
+
                     // Capture lessons for the Play Button to use
                     _loadedLessons = lessons;
 
@@ -378,9 +406,16 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.playlist_remove, size: 64, color: subTextColor),
+                            Icon(
+                              Icons.playlist_remove,
+                              size: 64,
+                              color: subTextColor,
+                            ),
                             const SizedBox(height: 16),
-                            Text("Playlist is empty", style: TextStyle(color: subTextColor)),
+                            Text(
+                              "Playlist is empty",
+                              style: TextStyle(color: subTextColor),
+                            ),
                           ],
                         ),
                       );
@@ -393,7 +428,13 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final lesson = lessons[index];
-                        return _buildLessonItem(lesson, cardColor!, textColor, subTextColor, index);
+                        return _buildLessonItem(
+                          lesson,
+                          cardColor!,
+                          textColor,
+                          subTextColor,
+                          index,
+                        );
                       },
                     );
                   },
@@ -407,7 +448,12 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
   }
 
   Widget _buildLessonItem(
-      LessonModel lesson, Color cardBg, Color txtColor, Color? subTxtColor, int index) {
+    LessonModel lesson,
+    Color cardBg,
+    Color txtColor,
+    Color? subTxtColor,
+    int index,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: cardBg,
@@ -425,8 +471,11 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
             child: lesson.imageUrl != null && lesson.imageUrl!.isNotEmpty
                 ? Image.network(lesson.imageUrl!, fit: BoxFit.cover)
                 : Icon(
-                    lesson.type == 'video' ? Icons.videocam : 
-                    lesson.type == 'audio' ? Icons.audiotrack : Icons.article,
+                    lesson.type == 'video'
+                        ? Icons.videocam
+                        : lesson.type == 'audio'
+                        ? Icons.audiotrack
+                        : Icons.article,
                     color: Colors.white54,
                     size: 20,
                   ),
