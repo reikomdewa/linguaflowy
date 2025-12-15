@@ -14,27 +14,19 @@ CHUNK_SIZE = 15000
 
 # EXPANDED CATALOG OF PROJECT GUTENBERG IDS
 BOOKS_CATALOG = {
-    'fr': [
-        24116, 13526, 4650, 17989, 14163, 26557, 20649, 19202, 1234, 4666, 5711
+       'en': [
+        14640, # McGuffey's Primer
+        14668, # McGuffey's First Reader
+        14642, # McGuffey's Second Reader
+        14766, # McGuffey's Third Reader
+        14880, # McGuffey's Fourth Reader
+        25639, # Graded Memory Selections
     ],
     'es': [
-        2000, 15353, 34090, 26558, 17029, 2938, 25330, 1619
+        15353, # Cuentos de Hadas (Fairy tales are naturally simple)
+        26558, # Niebla (Intermediate)
     ],
-    'en': [
-        11, 84, 1342, 1952, 1524, 98, 1661, 1260, 2591, 76
-    ],
-    'de': [
-        5220, 2591, 2197, 19323, 5323, 2009, 7849
-    ],
-    'it': [
-        5000, 8800, 208, 10842, 22566, 34218, 24072
-    ],
-    'pt': [
-        55752, 26233, 23321, 8284, 29040, 33056
-    ],
-    'ja': [
-        48422
-    ]
+    
 }
 
 def get_headers():

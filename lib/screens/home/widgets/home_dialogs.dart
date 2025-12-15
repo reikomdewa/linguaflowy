@@ -1,9 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:linguaflow/blocs/auth/auth_bloc.dart';
-import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
-import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/constants/constants.dart';
+
 
 class HomeDialogs {
   // --- 1. SHARED LEVEL CALCULATION LOGIC ---

@@ -1,38 +1,25 @@
 class LanguageHelper {
   // =========================================================
-  // 1. Map of Supported Languages (Code -> Name)
+  // 1. Map of Supported Languages
+  //    (Popular first, then A-Z)
   // =========================================================
   static const Map<String, String> availableLanguages = {
-    // --- Global / European / Asian ---
-    'ar': 'Arabic',
-    'cs': 'Czech',
-    'da': 'Danish',
-    'de': 'German',
-    'el': 'Greek',
+    // --- 🌟 POPULAR / MOST COMMON ---
     'en': 'English',
     'es': 'Spanish',
-    'fi': 'Finnish',
     'fr': 'French',
-    'hi': 'Hindi',
-    'hu': 'Hungarian',
-    'id': 'Indonesian',
-    'it': 'Italian',
-    'ja': 'Japanese',
-    'ko': 'Korean',
-    'nl': 'Dutch',
-    'no': 'Norwegian',
-    'pl': 'Polish',
-    'pt': 'Portuguese',
-    'ro': 'Romanian',
-    'ru': 'Russian',
-    'sv': 'Swedish',
-    'th': 'Thai',
-    'tr': 'Turkish',
-    'uk': 'Ukrainian',
-    'vi': 'Vietnamese',
+    'de': 'German',
     'zh': 'Chinese',
+    'ja': 'Japanese',
+    'ar': 'Arabic',
+    'pt': 'Portuguese',
+    'it': 'Italian',
+    'ru': 'Russian',
+    'ko': 'Korean',
+    'hi': 'Hindi',
+    'sw': 'Swahili', // Included in top list as it's a major lingua franca
 
-    // --- African Languages (Masakhane / Local) ---
+    // --- 🔤 A-Z LIST (All Others) ---
     'ach': 'Acholi',
     'ada': 'Adangme',
     'adh': 'Adhola',
@@ -40,81 +27,95 @@ class LanguageHelper {
     'alz': 'Alur',
     'am': 'Amharic',
     'anu': 'Anuak',
+    'luc': 'Aringa',
     'bem': 'Bemba',
     'bxk': 'Bukusu',
-    'cce': 'Rukiga',
-    'dag': 'Dagbani',
+    'ny': 'Chichewa',
+    'cs': 'Czech',
     'dga': 'Dagaare',
-    'dje': 'Zarma',
+    'dag': 'Dagbani',
+    'da': 'Danish',
+    'nl': 'Dutch',
     'ee': 'Ewe',
     'fat': 'Fanti',
+    'fi': 'Finnish',
+    'gur': 'Frafra',
     'ff': 'Fula',
     'gaa': 'Ga',
+    'toh': 'Gitonga',
     'gjn': 'Gonja',
-    'gur': 'Frafra',
+    'el': 'Greek',
     'guz': 'Gusii',
     'ha': 'Hausa',
     'ha-ne': 'Hausa (Niger)',
     'hz': 'Herero',
-    'kam': 'Kamba',
-    'kdj': 'Karamojong',
+    'hu': 'Hungarian',
+    'id': 'Indonesian',
     'keo': 'Kakwa',
-    'ki': 'Kikuyu',
-    'kj': 'Kuanyama',
     'kln': 'Kalenjin',
-    'koo': 'Konjo',
-    'kpz': 'Kupsabiny',
+    'kam': 'Kamba',
     'kr': 'Kanuri',
+    'kdj': 'Karamojong',
+    'xsm': 'Kasem',
+    'ki': 'Kikuyu',
+    'rw': 'Kinyarwanda',
+    'koo': 'Konjo',
+    'kj': 'Kuanyama',
+    'kpz': 'Kupsabiny',
     'kwn': 'Kwangali',
     'laj': 'Lango',
+    'loz': 'Lozi',
     'lg': 'Luganda',
     'lgg': 'Lugbara',
     'lgg-official': 'Lugbara (Official)',
-    'lko': 'Olukhayo',
-    'loz': 'Lozi',
-    'lsm': 'Saamia',
-    'luc': 'Aringa',
+    'nle': 'Lunyole',
     'luo': 'Luo',
-    'lwg': 'Wanga',
-    'mas': 'Maasai',
-    'mer': 'Meru',
     'mhi': 'Ma\'di',
-    'mhw': 'Mbukushu',
+    'mas': 'Maasai',
     'myx': 'Masaba',
+    'mhw': 'Mbukushu',
+    'mer': 'Meru',
     'naq': 'Nama',
     'ng': 'Ndonga',
-    'nle': 'Lunyole',
-    'nr': 'South Ndebele',
     'nso': 'Northern Sotho (Sepedi)',
+    'no': 'Norwegian',
     'nuj': 'Nyole',
-    'ny': 'Chichewa',
+    'nzi': 'Nzema',
+    'lko': 'Olukhayo',
+    'om': 'Oromo',
+    'pl': 'Polish',
+    'ro': 'Romanian',
+    'cce': 'Rukiga',
     'nyn': 'Runyankore',
     'nyu': 'Runyoro',
-    'nzi': 'Nzema',
-    'om': 'Oromo',
-    'rw': 'Kinyarwanda',
+    'ttj': 'Rutooro',
+    'lsm': 'Saamia',
     'saq': 'Samburu',
+    'xog': 'Soga',
     'so': 'Somali',
-    'ss': 'Swati',
+    'nr': 'South Ndebele',
     'st': 'Southern Sotho',
-    'sw': 'Swahili',
+    'ss': 'Swati',
+    'sv': 'Swedish',
     'teo': 'Teso',
+    'th': 'Thai',
     'ti': 'Tigrinya',
-    'tn': 'Tswana',
-    'toh': 'Gitonga',
     'toi': 'Tonga (Zambia)',
     'ts': 'Tsonga',
     'tsc': 'Tswa',
-    'ttj': 'Rutooro',
+    'tn': 'Tswana',
     'tuv': 'Turkana',
+    'tr': 'Turkish',
     'tw-akua': 'Twi (Akuapem)',
     'tw-asan': 'Twi (Asante)',
+    'uk': 'Ukrainian',
     've': 'Venda',
+    'vi': 'Vietnamese',
+    'lwg': 'Wanga',
     'xh': 'Xhosa',
-    'xog': 'Soga',
-    'xsm': 'Kasem',
     'yo': 'Yoruba',
     'zne': 'Zande',
+    'dje': 'Zarma',
     'zu': 'Zulu',
   };
 
@@ -140,8 +141,7 @@ class LanguageHelper {
       }
     }
 
-    // 3. Fallback / Fuzzy search (optional: remove if strict matching is preferred)
-    // This catches cases like "Tonga" matching "Tonga (Zambia)"
+    // 3. Fallback / Fuzzy search
     for (var entry in availableLanguages.entries) {
       if (entry.value.toLowerCase().contains(clean)) {
         return entry.key;
@@ -164,7 +164,7 @@ class LanguageHelper {
       case 'fr': return '🇫🇷';
       case 'de': return '🇩🇪';
       case 'it': return '🇮🇹';
-      case 'pt': return '🇵🇹'; // Or 🇧🇷 depending on preference
+      case 'pt': return '🇵🇹';
       case 'ru': return '🇷🇺';
       case 'zh': return '🇨🇳';
       case 'ja': return '🇯🇵';
@@ -213,7 +213,7 @@ class LanguageHelper {
       case 'nuj': // Nyole
       case 'nyn': // Runyankore
       case 'nyu': // Runyoro
-      case 'te':  // Teso (Standard code usually teo)
+      case 'te':  // Teso
       case 'teo': // Teso
       case 'ttj': // Rutooro
       case 'cce': // Rukiga
@@ -257,7 +257,7 @@ class LanguageHelper {
       case 'kln': // Kalenjin
       case 'kpz': // Kupsabiny
       case 'luo': // Luo
-      case 'mas': // Maasai (also TZ)
+      case 'mas': // Maasai
       case 'mer': // Meru
       case 'saq': // Samburu
       case 'tuv': // Turkana
@@ -266,7 +266,7 @@ class LanguageHelper {
       // --- NIGERIA 🇳🇬 ---
       case 'ha': // Hausa
       case 'yo': // Yoruba
-      case 'kr': // Kanuri (also Chad/Niger/Cameroon)
+      case 'kr': // Kanuri
         return '🇳🇬';
 
       // --- NAMIBIA 🇳🇦 ---
@@ -281,7 +281,7 @@ class LanguageHelper {
       // --- ETHIOPIA 🇪🇹 ---
       case 'am':  // Amharic
       case 'om':  // Oromo
-      case 'ti':  // Tigrinya (also Eritrea)
+      case 'ti':  // Tigrinya
       case 'anu': // Anuak
         return '🇪🇹';
 
@@ -296,18 +296,18 @@ class LanguageHelper {
         return '🇲🇿';
 
       // --- TANZANIA 🇹🇿 ---
-      case 'sw': // Swahili (Official in TZ, KE, UG) - usually mapped to TZ or KE
+      case 'sw': // Swahili
         return '🇹🇿';
 
       // --- OTHERS ---
-      case 'rw': return '🇷🇼'; // Kinyarwanda -> Rwanda
-      case 'so': return '🇸🇴'; // Somali -> Somalia
-      case 'ny': return '🇲🇼'; // Chichewa -> Malawi
-      case 'ff': return '🇸🇳'; // Fula -> Senegal (Pan-African, but Senegal is common)
-      case 'zne': return '🇸🇸'; // Zande -> South Sudan
+      case 'rw': return '🇷🇼'; // Kinyarwanda
+      case 'so': return '🇸🇴'; // Somali
+      case 'ny': return '🇲🇼'; // Chichewa
+      case 'ff': return '🇸🇳'; // Fula
+      case 'zne': return '🇸🇸'; // Zande
 
       default:
-        return '🌍'; // Universal / Unknown
+        return '🌍';
     }
   }
 

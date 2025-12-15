@@ -1,0 +1,4 @@
+Recommendation for "5fish" (Global Recordings Network)
+The script above handles Tatoeba and Archive.org. For 5fish (which is the best for Acholi, Alur, etc.), they don't have a public open API, but you can manually add a "Web Resource" link in your app for those languages.
+Pattern: https://5fish.mobi/us/search?q=[Language Name]
+Action: When a user selects a rare language like "Alur", you can show a button "Listen to 5fish Audio" that opens this URL in a WebView or Browser. It is the most reliable way to give them access to 50+ hours of audio without complex scraping.
