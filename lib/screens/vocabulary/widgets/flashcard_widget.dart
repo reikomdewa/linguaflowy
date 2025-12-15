@@ -1,3 +1,4 @@
+import 'dart:io'; // <--- ADDED: Required for File checking
 import 'dart:math'; // Required for Random
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -47,8 +48,24 @@ class _FlashcardState extends State<Flashcard>
     _animation = Tween<double>(begin: 0, end: 1).animate(_controller);
 
     // --- SMART LOGIC SETUP ---
-    _hasVideo = widget.item.sourceVideoUrl != null &&
-        widget.item.sourceVideoUrl!.isNotEmpty;
+    // FIX: Verify if the file actually exists before enabling the player
+    final videoUrl = widget.item.sourceVideoUrl;
+
+    if (videoUrl != null && videoUrl.isNotEmpty) {
+      // Check if it is a remote URL (YouTube or HTTP)
+      if (videoUrl.toLowerCase().contains('http://') || 
+          videoUrl.toLowerCase().contains('https://') || 
+          videoUrl.toLowerCase().contains('youtube')) {
+        _hasVideo = true; 
+      } 
+      // It is a local file, check if it actually exists on disk
+      else {
+        final file = File(videoUrl);
+        _hasVideo = file.existsSync();
+      }
+    } else {
+      _hasVideo = false;
+    }
 
     if (_hasVideo) {
       // 1. New words (Status 0 or 1) need context: Show video 100% of the time.

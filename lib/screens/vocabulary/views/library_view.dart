@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/utils/srs_algorithm.dart';
@@ -245,10 +246,9 @@ class _LibraryViewState extends State<LibraryView> {
       ),
     );
   }
-
-  // --- DIALOG TO PLAY VIDEO ---
-  void _showVideoContext(VocabularyItem item) {
-    showDialog(
+ Future<void> _showVideoContext(VocabularyItem item) async { 
+    // 3. Await the dialog. This pauses execution here until the dialog is closed.
+    await showDialog(
       context: context,
       builder: (context) {
         return Dialog(
@@ -290,6 +290,7 @@ class _LibraryViewState extends State<LibraryView> {
                   videoUrl: item.sourceVideoUrl!,
                   startSeconds: item.timestamp ?? 0.0,
                   endSeconds: (item.timestamp ?? 0.0) + 10.0,
+                  isStandalone: true,
                 ),
               ),
 
@@ -311,6 +312,13 @@ class _LibraryViewState extends State<LibraryView> {
         );
       },
     );
+
+    // 4. FORCE PORTRAIT ON CLOSE
+    // This runs immediately after the dialog pops.
+    // Even if the video player left the app in Landscape, this snaps it back.
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
   }
 
   Widget _buildFilterChip(String label, int value) {
