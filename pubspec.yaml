@@ -81,6 +81,7 @@ dependencies:
   flutter_markdown_plus: ^1.0.5
   webview_flutter: ^4.13.0
   html_unescape: ^2.0.0
+  audio_session: ^0.2.2
   xml: ^6.3.0
   url_launcher: ^6.3.2
   fl_chart: ^1.1.1
@@ -129,6 +130,7 @@ flutter:
      - assets/audio_library/
      - assets/storybooks_lessons/
      - assets/youtube_audio_library/
+    
     #media
      - assets/images/linguaflow_logo.png
      - assets/images/linguaflow_logo_transparent.png

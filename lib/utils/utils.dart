@@ -8,6 +8,7 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/constants/constants.dart';
+import 'package:linguaflow/services/lesson_cache_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 // Place this inside your User App code
@@ -15,12 +16,18 @@ import 'package:url_launcher/url_launcher.dart';
 // import 'package:package_info_plus/package_info_plus.dart'; // Optional
 
 // --- 3. LESSON OPTIONS DIALOG ---
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+// Keep your existing imports...
+import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
+import 'package:linguaflow/models/lesson_model.dart';
+
 void showLessonOptions(
   BuildContext context,
   LessonModel lesson,
   bool isDark, {
-  // 'showDeleteAction' is true when we are in the Library/Profile.
-  // 'showDeleteAction' is false when we are on the Home/Discovery screen.
   bool showDeleteAction = false,
 }) {
   final parentContext = context;
@@ -33,25 +40,11 @@ void showLessonOptions(
   if (authState is AuthAuthenticated) {
     final user = authState.user;
     currentUserId = user.id;
-
-    // 1. Basic Ownership Check
     isOwner = (user.id == lesson.userId);
-
-    // 2. Check if I am the ORIGINAL creator (Imported/Created)
-    //    If originalAuthorId is null, we assume it's an old lesson created by the user (backward compatibility).
-    //    If originalAuthorId matches userId, it is definitely my creation.
-    isCreatedByMe =
-        isOwner &&
+    isCreatedByMe = isOwner &&
         (lesson.originalAuthorId == null ||
             lesson.originalAuthorId == lesson.userId);
-
-    // 3. Admin Check
     final bool isAdmin = AppConstants.isAdmin(user.email ?? '');
-
-    // 4. FINAL DELETE LOGIC:
-    //    - Admins can delete anything.
-    //    - If I CREATED/IMPORTED it: I can delete it anywhere (Home or Library).
-    //    - If it's a SAVED COPY: I can only delete it if 'showDeleteAction' is true (Library).
     canDelete = isAdmin || isCreatedByMe || (isOwner && showDeleteAction);
   }
 
@@ -112,8 +105,8 @@ void showLessonOptions(
             subtitle: Text(
               isOwner
                   ? (lesson.isFavorite
-                        ? 'Unfavorite (removes from library)'
-                        : 'Add to favorites')
+                      ? 'Unfavorite (removes from library)'
+                      : 'Add to favorites')
                   : 'Create a copy in your cloud library.',
               style: const TextStyle(color: Colors.grey),
             ),
@@ -122,29 +115,25 @@ void showLessonOptions(
                 Navigator.pop(builderContext);
                 return;
               }
-
               if (isOwner) {
-                // Toggle Favorite
                 final updatedLesson = lesson.copyWith(
                   isFavorite: !lesson.isFavorite,
                 );
-                parentContext.read<LessonBloc>().add(
-                  LessonUpdateRequested(updatedLesson),
-                );
+                parentContext
+                    .read<LessonBloc>()
+                    .add(LessonUpdateRequested(updatedLesson));
               } else {
-                // Create Copy
                 final newLesson = lesson.copyWith(
                   id: '',
                   userId: currentUserId,
-                  // IMPORTANT: Save the original author's ID so we know it's a copy later
                   originalAuthorId: lesson.userId,
                   isFavorite: true,
                   isLocal: false,
                   createdAt: DateTime.now(),
                 );
-                parentContext.read<LessonBloc>().add(
-                  LessonCreateRequested(newLesson),
-                );
+                parentContext
+                    .read<LessonBloc>()
+                    .add(LessonCreateRequested(newLesson));
                 ScaffoldMessenger.of(parentContext).showSnackBar(
                   const SnackBar(content: Text("Saved to Favorites & Library")),
                 );
@@ -153,9 +142,43 @@ void showLessonOptions(
             },
           ),
 
+          Divider(color: Colors.grey[800], indent: 20, endIndent: 20),
+
+          // --- NEW: ADD TO PLAYLIST BUTTON ---
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blueAccent.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.playlist_add, color: Colors.blueAccent),
+            ),
+            title: Text(
+              'Add to Playlist',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+            ),
+            subtitle: const Text(
+              'Add to an existing playlist or create new',
+              style: TextStyle(color: Colors.grey),
+            ),
+            onTap: () {
+              // Close the bottom sheet first
+              Navigator.pop(builderContext);
+              
+              if (currentUserId.isNotEmpty) {
+                // Open the Playlist Selection Dialog
+                _showPlaylistSelector(context, currentUserId, lesson, isDark);
+              }
+            },
+          ),
+
           // --- DELETE BUTTON ---
           if (canDelete) ...[
-            Divider(color: Colors.grey[800]),
+            Divider(color: Colors.grey[800], indent: 20, endIndent: 20),
             ListTile(
               leading: Container(
                 padding: const EdgeInsets.all(8),
@@ -167,7 +190,7 @@ void showLessonOptions(
               ),
               title: const Text(
                 'Delete Lesson',
-                style: TextStyle(color: Colors.red),
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
               ),
               onTap: () {
                 showDialog(
@@ -187,11 +210,10 @@ void showLessonOptions(
                       TextButton(
                         onPressed: () {
                           Navigator.pop(ctx);
-                          parentContext.read<LessonBloc>().add(
-                            LessonDeleteRequested(lesson.id),
-                          );
+                          parentContext
+                              .read<LessonBloc>()
+                              .add(LessonDeleteRequested(lesson.id));
                           Navigator.pop(builderContext);
-
                           ScaffoldMessenger.of(parentContext).showSnackBar(
                             const SnackBar(
                               content: Text("Lesson Deleted"),
@@ -199,10 +221,8 @@ void showLessonOptions(
                             ),
                           );
                         },
-                        child: const Text(
-                          "Delete",
-                          style: TextStyle(color: Colors.red),
-                        ),
+                        child: const Text("Delete",
+                            style: TextStyle(color: Colors.red)),
                       ),
                     ],
                   ),
@@ -214,6 +234,213 @@ void showLessonOptions(
       ),
     ),
   );
+}
+
+// -----------------------------------------------------------------------------
+// HELPER FUNCTIONS FOR PLAYLISTS
+// -----------------------------------------------------------------------------
+
+void _showPlaylistSelector(
+    BuildContext context, String userId, LessonModel lesson, bool isDark) {
+  showDialog(
+    context: context,
+    builder: (context) {
+      // Logic to create a new playlist
+      final TextEditingController newPlaylistController =
+          TextEditingController();
+
+      return AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          "Select Playlist",
+          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 1. Input to Create New
+              TextField(
+                controller: newPlaylistController,
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                decoration: InputDecoration(
+                  hintText: "Create new playlist...",
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.add_circle, color: Colors.blue),
+                    onPressed: () async {
+                      if (newPlaylistController.text.trim().isNotEmpty) {
+                        await _createNewPlaylistAndAddLesson(
+                          context,
+                          userId,
+                          newPlaylistController.text.trim(),
+                          lesson,
+                        );
+                        if (context.mounted) Navigator.pop(context);
+                      }
+                    },
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // 2. List of Existing Playlists
+              Flexible(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(userId)
+                      .collection('playlists')
+                      .orderBy('updatedAt', descending: true)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return const Text("Error loading playlists");
+                    }
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final docs = snapshot.data?.docs ?? [];
+
+                    if (docs.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: Text(
+                          "No playlists yet.",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final data = docs[index].data() as Map<String, dynamic>;
+                        final String playlistName = data['name'] ?? 'Untitled';
+                        final String playlistId = docs[index].id;
+                        final List<dynamic> lessonIds = data['lessonIds'] ?? [];
+                        final bool alreadyAdded =
+                            lessonIds.contains(lesson.id);
+
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            Icons.playlist_play,
+                            color: isDark ? Colors.white70 : Colors.black87,
+                          ),
+                          title: Text(
+                            playlistName,
+                            style: TextStyle(
+                              color: isDark ? Colors.white : Colors.black,
+                            ),
+                          ),
+                          subtitle: Text(
+                            "${lessonIds.length} lessons",
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                          trailing: alreadyAdded
+                              ? const Icon(Icons.check, color: Colors.green)
+                              : null,
+                          onTap: () async {
+                            if (!alreadyAdded) {
+                              await _addToExistingPlaylist(
+                                context,
+                                userId,
+                                playlistId,
+                                lesson,
+                              );
+                              if (context.mounted) Navigator.pop(context);
+                            } else {
+                               ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Already in this playlist")),
+                              );
+                            }
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Future<void> _createNewPlaylistAndAddLesson(BuildContext context, String userId,
+    String name, LessonModel lesson) async {
+  try {
+    // 1. CACHE LOCALLY FIRST
+    await LessonCacheService().cacheLesson(lesson);
+
+    // 2. Perform Firestore Operations
+    final ref = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('playlists')
+        .doc();
+
+    await ref.set({
+      'id': ref.id,
+      'name': name,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'lessonIds': [lesson.id], 
+      'thumbnailUrl': lesson.imageUrl ?? '',
+    });
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Created playlist '$name'")),
+      );
+    }
+  } catch (e) {
+    debugPrint("Error creating playlist: $e");
+  }
+}
+
+// Logic: Add to Existing Playlist
+Future<void> _addToExistingPlaylist(BuildContext context, String userId,
+    String playlistId, LessonModel lesson) async {
+  try {
+    // 1. CACHE LOCALLY FIRST
+    await LessonCacheService().cacheLesson(lesson);
+
+    // 2. Perform Firestore Operations
+    final ref = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('playlists')
+        .doc(playlistId);
+
+    await ref.update({
+      'lessonIds': FieldValue.arrayUnion([lesson.id]),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Added to playlist")),
+      );
+    }
+  } catch (e) {
+    debugPrint("Error adding to playlist: $e");
+  }
 }
 
 void showReportBugDialog(
