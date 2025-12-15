@@ -109,6 +109,16 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_native_splash: ^2.4.7
+
+
+flutter_native_splash:
+  color: "#FF121212" # Background color (white)
+  image: assets/images/linguaflow_logo.png # Your app logo
+  # branding: assets/images/branding.png # Optional: Text at bottom
+  android_12:
+    image: assets/images/linguaflow_logo.png 
+    color: "#FF121212"
 
 
 # The following section is specific to Flutter packages.

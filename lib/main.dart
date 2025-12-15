@@ -25,12 +25,12 @@ import 'package:media_kit/media_kit.dart';
 // --- SCREENS ---
 import 'package:linguaflow/screens/auth/login_screen.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart'; 
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-   MediaKit.ensureInitialized();
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
 
-  
   // 1. Load Env & Init Gemini
   await dotenv.load(fileName: ".env");
   final apiKey = dotenv.env['GEMINI_API_KEY'];
@@ -40,7 +40,7 @@ void main() async {
 
   // 2. Init Firebase
   await Firebase.initializeApp();
-
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   // 3. Init Audio Background
   await JustAudioBackground.init(
     androidNotificationChannelId: 'com.ryanheise.bg_demo.channel.audio',
@@ -81,8 +81,9 @@ class LinguaflowApp extends StatelessWidget {
           ),
           // 2. AUTH BLOC
           BlocProvider(
-            create: (context) => AuthBloc(context.read<AuthService>())
-              ..add(AuthCheckRequested()),
+            create: (context) =>
+                AuthBloc(context.read<AuthService>())
+                  ..add(AuthCheckRequested()),
           ),
           // 3. LESSON BLOC
           BlocProvider<LessonBloc>(
@@ -92,12 +93,11 @@ class LinguaflowApp extends StatelessWidget {
             ),
           ),
           // 4. QUIZ BLOC
-          BlocProvider<QuizBloc>(
-            create: (context) => QuizBloc(),
-          ),
+          BlocProvider<QuizBloc>(create: (context) => QuizBloc()),
           // 5. VOCABULARY BLOC
           BlocProvider(
-            create: (context) => VocabularyBloc(context.read<VocabularyService>()),
+            create: (context) =>
+                VocabularyBloc(context.read<VocabularyService>()),
           ),
         ],
         // Listen to SettingsBloc to change ThemeMode dynamically
@@ -106,7 +106,7 @@ class LinguaflowApp extends StatelessWidget {
             return MaterialApp(
               title: 'LinguaFlow',
               debugShowCheckedModeBanner: false,
-              
+
               // --- DYNAMIC THEME MODE ---
               // This controls System vs Light vs Dark
               themeMode: settings.themeMode,
@@ -164,10 +164,23 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) {
+        
+        // 1. User is Authenticated -> Remove Splash & Go Home
         if (state is AuthAuthenticated) {
+          FlutterNativeSplash.remove(); 
           return MainNavigationScreen();
         }
-        return LoginScreen();
+        
+        // 2. User is Logged Out -> Remove Splash & Show Login
+        if (state is AuthUnauthenticated) {
+          FlutterNativeSplash.remove();
+          return LoginScreen();
+        }
+
+        // 3. Still Loading (AuthInitial)
+        // The Native Splash is still "Preserved" and covering the screen.
+        // So we can just return an empty container behind it.
+        return const SizedBox.shrink(); 
       },
     );
   }
