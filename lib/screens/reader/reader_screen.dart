@@ -134,12 +134,13 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void initState() {
     super.initState();
+   
     _authBloc = context.read<AuthBloc>();
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
  LocalLemmatizer().load(widget.lesson.language); 
     _initGemini();
-    _loadVocabulary();
+      _startVocabularyStream();
     _loadUserPreferences();
     _determineMediaType();
 
@@ -270,7 +271,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void dispose() {
     _stopListeningTracker();
-
+    _vocabSubscription?.cancel();
     // 2. FLUSH DATA: Send Listening Hours to Bloc
     // FIX: Use '_authBloc' instead of 'context.read<AuthBloc>()'
     if (_secondsListenedInSession > 10) {
@@ -358,14 +359,19 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  Future<void> _loadVocabulary() async {
-    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.id)
-          .collection('vocabulary')
-          .get();
+ // --- PRO FIX: Stream Vocabulary ---
+  void _startVocabularyStream() {
+    final state = context.read<AuthBloc>().state;
+    if (state is! AuthAuthenticated) return;
+    final user = state.user;
+
+    _vocabSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.id)
+        .collection('vocabulary')
+        .snapshots(includeMetadataChanges: true) // This ensures cached data emits instantly
+        .listen((snapshot) {
+      
       final Map<String, VocabularyItem> loadedVocab = {};
       for (var doc in snapshot.docs) {
         final data = doc.data();
@@ -380,10 +386,14 @@ class _ReaderScreenState extends State<ReaderScreen>
           timesEncountered: data['timesEncountered'] ?? 1,
           lastReviewed: ReaderUtils.parseDateTime(data['lastReviewed']),
           createdAt: ReaderUtils.parseDateTime(data['createdAt']),
+          learnedAt: ReaderUtils.parseDateTime(data['learnedAt']),
+          sourceVideoUrl: data['sourceVideoUrl'],
+          timestamp: data['timestamp'],
+          sentenceContext: data['sentenceContext'],
         );
       }
       if (mounted) setState(() => _vocabulary = loadedVocab);
-    } catch (e) {}
+    });
   }
 
   Future<void> _loadUserPreferences() async {
