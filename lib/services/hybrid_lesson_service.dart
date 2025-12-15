@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/transcript_line.dart';
+import 'package:linguaflow/utils/logger.dart';
 
 class HybridLessonService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -155,7 +156,7 @@ class HybridLessonService {
         return _mapJsonToLesson(data, languageCode, foundUserId);
       }).toList();
     } catch (e) {
-      print("Pagination Error ($categoryType): $e");
+      printLog("Pagination Error ($categoryType): $e");
       return [];
     }
   }
@@ -194,7 +195,7 @@ class HybridLessonService {
       for (var item in local) item.id: item,
     };
 
-    // 2. Add remote files ONLY if they don't exist in local 
+    // 2. Add remote files ONLY if they don't exist in local
     // (We prioritize Local for speed, but Remote adds new content)
     for (var item in remote) {
       if (!lessonMap.containsKey(item.id)) {
@@ -247,7 +248,7 @@ class HybridLessonService {
         return _mapJsonToLesson(data, languageCode, userIds.first);
       }).toList();
     } catch (e) {
-      print("🔥 FIRESTORE ERROR (Language: $languageCode): $e");
+      printLog("🔥 FIRESTORE ERROR (Language: $languageCode): $e");
       return [];
     }
   }
@@ -291,7 +292,7 @@ class HybridLessonService {
       isFavorite: jsonItem['isFavorite'] ?? false,
       progress: jsonItem['progress'] ?? 0,
       // Pass genre if available, specifically for short stories
-      genre: jsonItem['genre'] ?? 'general', 
+      genre: jsonItem['genre'] ?? 'general',
     );
   }
 

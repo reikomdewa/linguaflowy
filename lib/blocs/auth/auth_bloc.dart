@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/auth_service.dart';
+import 'package:linguaflow/utils/logger.dart';
 
 // ==========================================
 // EVENTS
@@ -170,7 +171,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
               'lastLoginDate': Timestamp.fromDate(now),
             });
       } catch (e) {
-        print("Error updating streak: $e");
+        printLog("Error updating streak: $e");
       }
     }
     return updatedUser;
@@ -299,7 +300,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             .doc(currentUser.id)
             .update({'lessonsCompleted': newTotal});
       } catch (e) {
-        print("Error incrementing lessons: $e");
+        printLog("Error incrementing lessons: $e");
       }
     }
   }
@@ -414,7 +415,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
               'targetLanguages': updatedTargetLanguages,
             });
       } catch (e) {
-        print("Error updating language history: $e");
+        printLog("Error updating language history: $e");
       }
     }
   }
@@ -437,7 +438,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             .doc(currentUser.id)
             .update({'languageLevels': updatedLevels});
       } catch (e) {
-        print("Error updating language level: $e");
+        printLog("Error updating language level: $e");
       }
     }
   }
@@ -477,7 +478,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           );
         }
       } catch (e) {
-        print("Error updating profile: $e");
+        printLog("Error updating profile: $e");
       }
     }
   }

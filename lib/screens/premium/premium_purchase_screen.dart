@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_paypal_payment/flutter_paypal_payment.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/utils/logger.dart';
 
 class PremiumPurchaseScreen extends StatefulWidget {
   const PremiumPurchaseScreen({super.key});
@@ -57,21 +58,21 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
           ],
           note: "Contact us for any questions on your order.",
           onSuccess: (Map params) async {
-            print("onSuccess: $params");
+            printLog("onSuccess: $params");
             await _upgradeUserToPremium();
             if (mounted) {
               Navigator.pop(context); // Close PayPal View
             }
           },
           onError: (error) {
-            print("onError: $error");
+            printLog("onError: $error");
             if (mounted) Navigator.pop(context);
             ScaffoldMessenger.of(
               context,
             ).showSnackBar(SnackBar(content: Text("Payment failed: $error")));
           },
           onCancel: () {
-            print('cancelled:');
+            printLog('cancelled:');
             if (mounted) Navigator.pop(context);
           },
         ),
@@ -105,7 +106,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
         Navigator.pop(context);
       }
     } catch (e) {
-      print("Upgrade Error: $e");
+      printLog("Upgrade Error: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(

@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:linguaflow/models/transcript_line.dart';
+import 'package:linguaflow/utils/logger.dart';
 import 'package:xml/xml.dart' as xml;
 
 class YoutubeParser {
@@ -24,8 +25,9 @@ class YoutubeParser {
       final title = data['videoDetails']?['title'] ?? 'Untitled Video';
 
       // Extract captions
-      final captionTracks = data['captions']?['playerCaptionsTracklistRenderer']
-          ?['captionTracks'] as List?;
+      final captionTracks =
+          data['captions']?['playerCaptionsTracklistRenderer']?['captionTracks']
+              as List?;
 
       if (captionTracks == null || captionTracks.isEmpty) {
         throw Exception('No captions available for this video');
@@ -33,7 +35,7 @@ class YoutubeParser {
 
       // Find the best matching caption track
       String? subtitleUrl;
-      
+
       // First try: exact language match
       for (var track in captionTracks) {
         if (track['languageCode'] == targetLang) {
@@ -61,13 +63,14 @@ class YoutubeParser {
         throw Exception('Could not find subtitle URL');
       }
 
-      print('🔍 Raw subtitle URL: "$subtitleUrl"'); // Debug
+      printLog('🔍 Raw subtitle URL: "$subtitleUrl"'); // Debug
 
       // ⚠️ CRITICAL FIX: Ensure the URL is complete with domain
       subtitleUrl = subtitleUrl.trim();
-      
+
       // Check if URL doesn't start with http:// or https://
-      if (!subtitleUrl.startsWith('http://') && !subtitleUrl.startsWith('https://')) {
+      if (!subtitleUrl.startsWith('http://') &&
+          !subtitleUrl.startsWith('https://')) {
         // It's a relative URL, prepend YouTube domain
         if (!subtitleUrl.startsWith('/')) {
           subtitleUrl = '/$subtitleUrl';
@@ -75,11 +78,11 @@ class YoutubeParser {
         subtitleUrl = 'https://www.youtube.com$subtitleUrl';
       }
 
-      print('✅ Fixed subtitle URL: "$subtitleUrl"'); // Debug
+      printLog('✅ Fixed subtitle URL: "$subtitleUrl"'); // Debug
 
       // Download and parse the XML subtitles
       final transcriptLines = await _fetchAndParseSubtitles(subtitleUrl);
-      
+
       // Create full content text
       final fullContent = transcriptLines.map((line) => line.text).join(' ');
 
@@ -89,19 +92,20 @@ class YoutubeParser {
         'fullContent': fullContent,
       };
     } catch (e) {
-      print('❌ Error in processExtractedData: $e');
+      printLog('❌ Error in processExtractedData: $e');
       rethrow;
     }
   }
 
   Future<List<TranscriptLine>> _fetchAndParseSubtitles(String url) async {
     try {
-      print('🌐 Downloading subtitles from: $url');
-      
+      printLog('🌐 Downloading subtitles from: $url');
+
       final response = await http.get(
         Uri.parse(url),
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
       );
 
@@ -109,7 +113,7 @@ class YoutubeParser {
         throw Exception('Failed to download subtitles: ${response.statusCode}');
       }
 
-      print('✅ Subtitles downloaded (${response.body.length} chars)');
+      printLog('✅ Subtitles downloaded (${response.body.length} chars)');
 
       // Parse XML
       final document = xml.XmlDocument.parse(response.body);
@@ -126,24 +130,26 @@ class YoutubeParser {
           final start = double.tryParse(startStr) ?? 0.0;
           final duration = double.tryParse(durationStr ?? '0') ?? 0.0;
 
-          lines.add(TranscriptLine(
-            start: start,
-            // duration: duration,
-            end: start + duration,
-            text: text.trim(),
-          ));
+          lines.add(
+            TranscriptLine(
+              start: start,
+              // duration: duration,
+              end: start + duration,
+              text: text.trim(),
+            ),
+          );
         }
       }
 
-      print('✅ Parsed ${lines.length} subtitle lines');
-      
+      printLog('✅ Parsed ${lines.length} subtitle lines');
+
       if (lines.isEmpty) {
         throw Exception('No subtitle lines found');
       }
-      
+
       return lines;
     } catch (e) {
-      print('❌ Error fetching subtitles: $e');
+      printLog('❌ Error fetching subtitles: $e');
       rethrow;
     }
   }

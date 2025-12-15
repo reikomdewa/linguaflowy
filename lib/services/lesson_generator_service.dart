@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:linguaflow/models/lesson_content.dart';
+import 'package:linguaflow/utils/logger.dart';
 
 class LessonGeneratorService {
   // No constructor needed. We rely on the global Gemini.instance
@@ -76,7 +77,7 @@ class LessonGeneratorService {
       // 5. Map to Model
       return LessonAIContent.fromJson(data);
     } catch (e) {
-      print("Lesson Plan Generation Error: $e");
+      printLog("Lesson Plan Generation Error: $e");
       // Return fallback content so the app doesn't crash
       return _getFallbackContent();
     }

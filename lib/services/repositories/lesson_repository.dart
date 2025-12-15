@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/services/home_feed_cache_service.dart';
+import 'package:linguaflow/utils/logger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/lesson_service.dart';
@@ -11,20 +12,24 @@ import 'package:linguaflow/services/hybrid_lesson_service.dart';
 class LessonRepository {
   final LessonService _firestoreService;
   final HybridLessonService _localService;
-    final HomeFeedCacheService _cacheService = HomeFeedCacheService();
+  final HomeFeedCacheService _cacheService = HomeFeedCacheService();
 
   LessonRepository({
     required LessonService firestoreService,
     required HybridLessonService localService,
-  })  : _firestoreService = firestoreService,
-        _localService = localService;
+  }) : _firestoreService = firestoreService,
+       _localService = localService;
 
   // ==========================================================
   // 1. INITIAL LOAD (CRASH PREVENTION APPLIED)
   // ==========================================================
-    Future<List<LessonModel>> getCachedLessons(String userId, String languageCode) async {
+  Future<List<LessonModel>> getCachedLessons(
+    String userId,
+    String languageCode,
+  ) async {
     return await _cacheService.loadCachedFeed(userId, languageCode);
   }
+
   Future<List<LessonModel>> getAndSyncLessons(
     String userId,
     String languageCode, {
@@ -35,26 +40,28 @@ class LessonRepository {
       Future<List<LessonModel>> safeFirestoreFetch() async {
         try {
           return await _firestoreService.getLessons(
-            userId, 
-            languageCode, 
-            limit: limit
+            userId,
+            languageCode,
+            limit: limit,
           );
         } catch (e) {
-          print("Firestore sync failed (using local only): $e");
+          printLog("Firestore sync failed (using local only): $e");
           return [];
         }
       }
 
       // --- UPDATED: Added fetchStorybooks to the list ---
       final results = await Future.wait([
-        safeFirestoreFetch(),                             // 0: User Cloud (Limited)
-        _fetchUserLocalImports(userId, languageCode),     // 1: User Local
+        safeFirestoreFetch(), // 0: User Cloud (Limited)
+        _fetchUserLocalImports(userId, languageCode), // 1: User Local
         _localService.fetchStandardLessons(languageCode), // 2: System Standard
-        _localService.fetchNativeVideos(languageCode),    // 3: System Videos
-        _localService.fetchTextBooks(languageCode),       // 4: System Books
-        _localService.fetchBeginnerBooks(languageCode),   // 5: System Beginner
-        _localService.fetchAudioLessons(languageCode),    // 6: System Audio
-        _localService.fetchStorybooks(languageCode),      // 7: System Short Stories (NEW)
+        _localService.fetchNativeVideos(languageCode), // 3: System Videos
+        _localService.fetchTextBooks(languageCode), // 4: System Books
+        _localService.fetchBeginnerBooks(languageCode), // 5: System Beginner
+        _localService.fetchAudioLessons(languageCode), // 6: System Audio
+        _localService.fetchStorybooks(
+          languageCode,
+        ), // 7: System Short Stories (NEW)
       ]);
 
       final userLessons = results[0];
@@ -75,29 +82,39 @@ class LessonRepository {
 
       // Priority 1: System Content (Base)
       for (var lesson in systemLessons) combinedMap[lesson.id] = lesson;
-      
+
       // Priority 2: User Cloud Content (Overwrites System if IDs match)
       for (var lesson in userLessons) combinedMap[lesson.id] = lesson;
-      
+
       // Priority 3: Local Imports (Highest Priority - for offline edits)
       for (var lesson in localImports) combinedMap[lesson.id] = lesson;
 
       final allLessons = combinedMap.values.toList();
-      
+
       // Sort by Newest First
       allLessons.sort((a, b) => b.createdAt.compareTo(a.createdAt));
- _cacheService.saveFeedToCache(userId, languageCode, allLessons);
+      _cacheService.saveFeedToCache(userId, languageCode, allLessons);
       return allLessons;
     } catch (e) {
-      print("Error in LessonRepository sync: $e");
+      printLog("Error in LessonRepository sync: $e");
       return [];
     }
   }
-Future<List<LessonModel>> getCachedGenreLessons(String userId, String languageCode, String genreKey) async {
+
+  Future<List<LessonModel>> getCachedGenreLessons(
+    String userId,
+    String languageCode,
+    String genreKey,
+  ) async {
     return await _cacheService.loadGenreFeed(userId, languageCode, genreKey);
   }
 
-  Future<void> cacheGenreLessons(String userId, String languageCode, String genreKey, List<LessonModel> lessons) async {
+  Future<void> cacheGenreLessons(
+    String userId,
+    String languageCode,
+    String genreKey,
+    List<LessonModel> lessons,
+  ) async {
     await _cacheService.saveGenreFeed(userId, languageCode, genreKey, lessons);
   }
   // ==========================================================
@@ -108,23 +125,23 @@ Future<List<LessonModel>> getCachedGenreLessons(String userId, String languageCo
   Future<List<LessonModel>> fetchMoreUserLessons(
     String userId,
     String languageCode,
-    LessonModel lastLesson, 
-    {int limit = 20}
-  ) async {
+    LessonModel lastLesson, {
+    int limit = 20,
+  }) async {
     // We only paginate Cloud lessons. Local lessons are assumed to be loaded.
     if (lastLesson.isLocal) {
-      return []; 
+      return [];
     }
 
     try {
       return await _firestoreService.getMoreLessons(
         userId,
         languageCode,
-        lastLesson, 
+        lastLesson,
         limit: limit,
       );
     } catch (e) {
-      print("Error fetching more lessons: $e");
+      printLog("Error fetching more lessons: $e");
       return [];
     }
   }
@@ -132,14 +149,15 @@ Future<List<LessonModel>> getCachedGenreLessons(String userId, String languageCo
   /// Call this for Horizontal Lists (e.g. "Load more Videos")
   Future<List<LessonModel>> fetchPagedCategory(
     String languageCode,
-    String type, // e.g. 'video', 'audio', 'text'
-    {LessonModel? lastLesson, int limit = 10}
-  ) async {
+    String type, { // e.g. 'video', 'audio', 'text'
+    LessonModel? lastLesson,
+    int limit = 10,
+  }) async {
     return await _localService.fetchPagedSystemLessons(
-      languageCode, 
-      type, 
-      lastLesson: lastLesson, 
-      limit: limit
+      languageCode,
+      type,
+      lastLesson: lastLesson,
+      limit: limit,
     );
   }
 
@@ -172,7 +190,10 @@ Future<List<LessonModel>> getCachedGenreLessons(String userId, String languageCo
 
     try {
       if (lesson.id.isEmpty) {
-        final String newId = FirebaseFirestore.instance.collection('lessons').doc().id;
+        final String newId = FirebaseFirestore.instance
+            .collection('lessons')
+            .doc()
+            .id;
         final newLesson = lesson.copyWith(id: newId);
         await _firestoreService.createLesson(newLesson);
       } else {
@@ -219,11 +240,12 @@ Future<List<LessonModel>> getCachedGenreLessons(String userId, String languageCo
       final List<dynamic> jsonList = jsonDecode(content);
 
       return jsonList
-          .where((json) => 
-              json is Map<String, dynamic> && 
-              json['id'] != null &&
-              json['userId'] == userId && 
-              json['language'] == languageCode
+          .where(
+            (json) =>
+                json is Map<String, dynamic> &&
+                json['id'] != null &&
+                json['userId'] == userId &&
+                json['language'] == languageCode,
           )
           .map((json) => LessonModel.fromMap(json, json['id'].toString()))
           .map((l) => l.copyWith(isLocal: true))
@@ -271,7 +293,7 @@ Future<List<LessonModel>> getCachedGenreLessons(String userId, String languageCo
 
       await file.writeAsString(jsonEncode(jsonList));
     } catch (e) {
-      // print("Error saving local import: $e");
+      // printLog("Error saving local import: $e");
     }
   }
 
@@ -290,7 +312,7 @@ Future<List<LessonModel>> getCachedGenreLessons(String userId, String languageCo
 
       await file.writeAsString(jsonEncode(updatedList));
     } catch (e) {
-      // print("Error deleting local import: $e");
+      // printLog("Error deleting local import: $e");
     }
   }
 }

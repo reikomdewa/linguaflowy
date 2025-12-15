@@ -6,6 +6,7 @@ import 'package:linguaflow/screens/quiz/quiz_screen.dart';
 import 'package:linguaflow/screens/learn/learn_screen.dart';
 import 'package:linguaflow/screens/quiz/widgets/unit_path_card.dart';
 import 'package:linguaflow/services/quiz_limit_service.dart';
+import 'package:linguaflow/utils/logger.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 class UnitsBottomSheet extends StatefulWidget {
@@ -108,7 +109,7 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          print("SNAPSHOT ERROR: ${snapshot.error}");
+          printLog("SNAPSHOT ERROR: ${snapshot.error}");
           return const Center(child: Text("Load error. Check Console."));
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -213,7 +214,7 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
   List<QueryDocumentSnapshot> _sortLessons(
     List<QueryDocumentSnapshot> unsortedDocs,
   ) {
-    print("--- START SORTING (${unsortedDocs.length} items) ---");
+    printLog("--- START SORTING (${unsortedDocs.length} items) ---");
 
     List<QueryDocumentSnapshot> sorted = List.from(unsortedDocs);
 
@@ -229,7 +230,7 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
 
       // If units are different, sort by unit
       if (unitCompare != 0) {
-        print(
+        printLog(
           "Different units: ${dataA['topic']} (Unit $unitA) vs ${dataB['topic']} (Unit $unitB) -> $unitCompare",
         );
         return unitCompare;
@@ -244,8 +245,8 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
 
       int dateCompare = dateA.compareTo(dateB);
 
-      print("Same unit ($unitA): ${dataA['topic']} vs ${dataB['topic']}");
-      print("   DateA: $dateA | DateB: $dateB -> $dateCompare");
+      printLog("Same unit ($unitA): ${dataA['topic']} vs ${dataB['topic']}");
+      printLog("   DateA: $dateA | DateB: $dateB -> $dateCompare");
 
       // If dates are the same, use document ID as final tiebreaker
       if (dateCompare == 0) {
@@ -255,11 +256,11 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
       return dateCompare;
     });
 
-    print("--- END SORTING ---");
-    print("Final order:");
+    printLog("--- END SORTING ---");
+    printLog("Final order:");
     for (int i = 0; i < sorted.length; i++) {
       final data = sorted[i].data() as Map<String, dynamic>;
-      print("  $i: ${data['topic']} (Unit ${data['unitIndex']})");
+      printLog("  $i: ${data['topic']} (Unit ${data['unitIndex']})");
     }
 
     return sorted;

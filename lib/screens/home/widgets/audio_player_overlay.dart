@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart'; // 3. Import AuthBloc
 import 'package:linguaflow/models/lesson_model.dart';
+import 'package:linguaflow/utils/logger.dart';
 
 // --- MANAGER (SINGLETON) ---
 class AudioGlobalManager extends ChangeNotifier {
@@ -52,7 +53,6 @@ class AudioGlobalManager extends ChangeNotifier {
     // 4. Load Audio with System Notification Data
     try {
       if (lesson.videoUrl != null && lesson.videoUrl!.isNotEmpty) {
-        
         // Create the Metadata for the Notification Center
         final mediaItem = MediaItem(
           id: lesson.id,
@@ -71,10 +71,10 @@ class AudioGlobalManager extends ChangeNotifier {
         await _player.setAudioSource(audioSource);
         _player.play();
       } else {
-        print("AUDIO_MANAGER: Error - URL is null or empty");
+        printLog("AUDIO_MANAGER: Error - URL is null or empty");
       }
     } catch (e) {
-      print("AUDIO_MANAGER: Error setting audio source: $e");
+      printLog("AUDIO_MANAGER: Error setting audio source: $e");
     }
   }
 
@@ -121,7 +121,7 @@ class _AudioPlayerOverlayState extends State<AudioPlayerOverlay> {
   Timer? _trackingTimer;
   int _sessionSeconds = 0;
   bool _wasPlaying = false;
-  
+
   @override
   void initState() {
     super.initState();
@@ -168,17 +168,17 @@ class _AudioPlayerOverlayState extends State<AudioPlayerOverlay> {
 
   void _flushDataToBloc() {
     _stopTimer(); // Ensure stopped
-    
+
     // Only update if user listened for more than 30 seconds
     if (_sessionSeconds > 30 && mounted) {
       final int minutesToAdd = (_sessionSeconds / 60).ceil();
-      
+
       // Dispatch Event to AuthBloc
       context.read<AuthBloc>().add(AuthUpdateListeningTime(minutesToAdd));
-      
-      print("🎧 TRACKING: Added $minutesToAdd minutes of listening time.");
+
+      printLog("🎧 TRACKING: Added $minutesToAdd minutes of listening time.");
     }
-    
+
     // Reset counter
     _sessionSeconds = 0;
   }
@@ -362,10 +362,7 @@ class _MorphingPlayerCard extends StatelessWidget {
                 ),
                 Text(
                   "Swipe up to expand",
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: subTextColor,
-                  ),
+                  style: TextStyle(fontSize: 11, color: subTextColor),
                 ),
               ],
             ),
@@ -396,12 +393,12 @@ class _MorphingPlayerCard extends StatelessWidget {
   // --- EXPANDED CONTENT ---
   Widget _buildExpandedContent(BuildContext context, bool isDark) {
     final lesson = manager.currentLesson!;
-    
+
     // Theme-aware colors
     final mainTextColor = isDark ? Colors.white : Colors.black;
     final secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final iconColor = isDark ? Colors.white70 : Colors.black54;
-    
+
     final playBtnBg = isDark ? Colors.white : Colors.black;
     final playBtnIcon = isDark ? Colors.black : Colors.white;
 
@@ -443,7 +440,7 @@ class _MorphingPlayerCard extends StatelessWidget {
                       BoxShadow(
                         color: Colors.black.withOpacity(0.2),
                         blurRadius: 15,
-                      )
+                      ),
                     ],
                     image: lesson.imageUrl != null
                         ? DecorationImage(
@@ -476,7 +473,9 @@ class _MorphingPlayerCard extends StatelessWidget {
                         trackHeight: 4,
                         thumbColor: mainTextColor,
                         activeTrackColor: mainTextColor,
-                        inactiveTrackColor: isDark ? Colors.white24 : Colors.black12,
+                        inactiveTrackColor: isDark
+                            ? Colors.white24
+                            : Colors.black12,
                         thumbShape: const RoundSliderThumbShape(
                           enabledThumbRadius: 6,
                         ),
@@ -540,7 +539,7 @@ class _MorphingPlayerCard extends StatelessWidget {
                             color: Colors.black.withOpacity(0.1),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
-                          )
+                          ),
                         ],
                       ),
                       child: IconButton(

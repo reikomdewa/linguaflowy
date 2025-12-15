@@ -9,6 +9,7 @@ import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/constants/constants.dart';
 import 'package:linguaflow/services/lesson_cache_service.dart';
+import 'package:linguaflow/utils/logger.dart';
 import 'package:linguaflow/utils/playlist_helper_functions.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -24,6 +25,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
+
+export 'logger.dart';
 
 void showLessonOptions(
   BuildContext context,
@@ -42,7 +45,8 @@ void showLessonOptions(
     final user = authState.user;
     currentUserId = user.id;
     isOwner = (user.id == lesson.userId);
-    isCreatedByMe = isOwner &&
+    isCreatedByMe =
+        isOwner &&
         (lesson.originalAuthorId == null ||
             lesson.originalAuthorId == lesson.userId);
     final bool isAdmin = AppConstants.isAdmin(user.email ?? '');
@@ -106,8 +110,8 @@ void showLessonOptions(
             subtitle: Text(
               isOwner
                   ? (lesson.isFavorite
-                      ? 'Unfavorite (removes from library)'
-                      : 'Add to favorites')
+                        ? 'Unfavorite (removes from library)'
+                        : 'Add to favorites')
                   : 'Create a copy in your cloud library.',
               style: const TextStyle(color: Colors.grey),
             ),
@@ -120,9 +124,9 @@ void showLessonOptions(
                 final updatedLesson = lesson.copyWith(
                   isFavorite: !lesson.isFavorite,
                 );
-                parentContext
-                    .read<LessonBloc>()
-                    .add(LessonUpdateRequested(updatedLesson));
+                parentContext.read<LessonBloc>().add(
+                  LessonUpdateRequested(updatedLesson),
+                );
               } else {
                 final newLesson = lesson.copyWith(
                   id: '',
@@ -132,9 +136,9 @@ void showLessonOptions(
                   isLocal: false,
                   createdAt: DateTime.now(),
                 );
-                parentContext
-                    .read<LessonBloc>()
-                    .add(LessonCreateRequested(newLesson));
+                parentContext.read<LessonBloc>().add(
+                  LessonCreateRequested(newLesson),
+                );
                 ScaffoldMessenger.of(parentContext).showSnackBar(
                   const SnackBar(content: Text("Saved to Favorites & Library")),
                 );
@@ -169,7 +173,7 @@ void showLessonOptions(
             onTap: () {
               // Close the bottom sheet first
               Navigator.pop(builderContext);
-              
+
               if (currentUserId.isNotEmpty) {
                 // Open the Playlist Selection Dialog
                 showPlaylistSelector(context, currentUserId, lesson, isDark);
@@ -191,7 +195,10 @@ void showLessonOptions(
               ),
               title: const Text(
                 'Delete Lesson',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               onTap: () {
                 showDialog(
@@ -211,9 +218,9 @@ void showLessonOptions(
                       TextButton(
                         onPressed: () {
                           Navigator.pop(ctx);
-                          parentContext
-                              .read<LessonBloc>()
-                              .add(LessonDeleteRequested(lesson.id));
+                          parentContext.read<LessonBloc>().add(
+                            LessonDeleteRequested(lesson.id),
+                          );
                           Navigator.pop(builderContext);
                           ScaffoldMessenger.of(parentContext).showSnackBar(
                             const SnackBar(
@@ -222,8 +229,10 @@ void showLessonOptions(
                             ),
                           );
                         },
-                        child: const Text("Delete",
-                            style: TextStyle(color: Colors.red)),
+                        child: const Text(
+                          "Delete",
+                          style: TextStyle(color: Colors.red),
+                        ),
                       ),
                     ],
                   ),
@@ -236,8 +245,6 @@ void showLessonOptions(
     ),
   );
 }
-
-
 
 void showReportBugDialog(
   BuildContext context,
@@ -539,7 +546,7 @@ Future<void> printFirestoreSchema() async {
     }
   }
 
-  // print(jsonEncode(schemaJson));
+  // printLog(jsonEncode(schemaJson));
   // ... inside your printFirestoreSchema function, after the loop ...
 
   // Use an encoder to "pretty print" the JSON output
@@ -557,18 +564,18 @@ Future<void> printFirestoreSchema() async {
   // --- 3. WRITE THE STRING TO THE FILE ---
   // try {
   //   await file.writeAsString(prettyJson);
-  //   print("✅ Success! Schema saved to: ${file.path}");
+  //   printLog("✅ Success! Schema saved to: ${file.path}");
   // } catch (e) {
-  //   print("❌ Error saving schema file: $e");
+  //   printLog("❌ Error saving schema file: $e");
   // }
 
   // You can still print it to the console if you want
-  print("--- Firestore Schema (from 1-document sample) ---");
-  //  print(prettyJson);
+  printLog("--- Firestore Schema (from 1-document sample) ---");
+  //  printLog(prettyJson);
   printSchemaInChunks(prettyJson);
-  print('⚡⚡⚡⚡⚡⚡⚡⚡⚡');
+  printLog('⚡⚡⚡⚡⚡⚡⚡⚡⚡');
   // await writeOutputToFile(prettyJson, 'schema_output.json');
-  print("-------------------------------------------------");
+  printLog("-------------------------------------------------");
 }
 
 Future<void> writeOutputToFile(String content, String filename) async {

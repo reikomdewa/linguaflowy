@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/screens/quiz/widgets/quiz_level.dart';
+import 'package:linguaflow/utils/logger.dart';
 
 class QuizPathRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -15,7 +16,7 @@ class QuizPathRepository {
 
       return snapshot.docs.map((doc) => QuizLevel.fromMap(doc.data())).toList();
     } catch (e) {
-      print("Error fetching quiz path: $e");
+      printLog("Error fetching quiz path: $e");
       return [];
     }
   }

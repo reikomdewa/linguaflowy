@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
+import 'package:linguaflow/utils/logger.dart';
 
 class VocabularyService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -16,15 +17,14 @@ class VocabularyService {
           .collection('users')
           .doc(userId)
           .collection('vocabulary')
-          .get(); 
+          .get();
 
       // 2. Map safely using the fixed Model
       return snapshot.docs.map((doc) {
         return VocabularyItem.fromMap(doc.data(), doc.id);
       }).toList();
-      
     } catch (e) {
-      print("Error in VocabularyService.getVocabulary: $e");
+      printLog("Error in VocabularyService.getVocabulary: $e");
       return [];
     }
   }
@@ -64,7 +64,7 @@ class VocabularyService {
           .doc(vocabularyId) // The ID from the model is already the Doc ID
           .delete();
     } catch (e) {
-      print("Error deleting vocabulary: $e");
+      printLog("Error deleting vocabulary: $e");
       throw Exception("Failed to delete vocabulary item");
     }
   }

@@ -3,6 +3,7 @@ import 'dart:typed_data'; // Added for Uint8List
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:linguaflow/utils/logger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 
@@ -16,6 +17,7 @@ import 'package:linguaflow/models/transcript_line.dart';
 import 'package:linguaflow/services/lesson_service.dart';
 import 'package:linguaflow/services/web_scraper_service.dart';
 import 'package:linguaflow/utils/subtitle_parser.dart';
+
 class LessonImportDialog {
   static void show(
     BuildContext context,
@@ -26,8 +28,8 @@ class LessonImportDialog {
     String? initialTitle,
     String? initialContent,
     // NEW PARAMS
-    String? initialMediaUrl, 
-    int initialTabIndex = 0, 
+    String? initialMediaUrl,
+    int initialTabIndex = 0,
   }) {
     final lessonBloc = context.read<LessonBloc>();
     final lessonService = context.read<LessonService>();
@@ -65,7 +67,7 @@ class _ImportDialogContent extends StatefulWidget {
   final String? initialTitle;
   final String? initialContent;
   final String? initialMediaUrl; // NEW
-  final int initialTabIndex;     // NEW
+  final int initialTabIndex; // NEW
   final LessonBloc lessonBloc;
   final LessonService lessonService;
   final bool isDark;
@@ -88,8 +90,6 @@ class _ImportDialogContent extends StatefulWidget {
   State<_ImportDialogContent> createState() => _ImportDialogContentState();
 }
 
-
-
 class _ImportDialogContentState extends State<_ImportDialogContent>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
@@ -98,7 +98,8 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
   late TextEditingController _contentController;
   final _webUrlController = TextEditingController();
 
-  late TextEditingController _mediaUrlController; // Changed to late to init in initState
+  late TextEditingController
+  _mediaUrlController; // Changed to late to init in initState
   File? _selectedMediaFile;
   File? _selectedSubtitleFile;
 
@@ -116,22 +117,26 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
 
     // Initialize TabController with the passed index (0 for Text, 1 for Media)
     _tabController = TabController(
-      length: 2, 
-      vsync: this, 
-      initialIndex: widget.initialTabIndex
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
     );
 
     _titleController = TextEditingController(text: widget.initialTitle ?? '');
-    _contentController = TextEditingController(text: widget.initialContent ?? '');
-    
+    _contentController = TextEditingController(
+      text: widget.initialContent ?? '',
+    );
+
     // Initialize Media Controller with passed URL if any
-    _mediaUrlController = TextEditingController(text: widget.initialMediaUrl ?? '');
-    
+    _mediaUrlController = TextEditingController(
+      text: widget.initialMediaUrl ?? '',
+    );
+
     // Run the check immediately if we have a URL
     if (widget.initialMediaUrl != null && widget.initialMediaUrl!.isNotEmpty) {
       _checkYoutubeLink();
     }
-    
+
     _mediaUrlController.addListener(_checkYoutubeLink);
   }
 
@@ -278,7 +283,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
         }
       }
     } catch (e) {
-      print("Validation error: $e");
+      printLog("Validation error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -287,8 +292,8 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
   // --- FIXED: Thumbnail Generation Helper ---
   Future<String?> _generateThumbnail(String videoPath, String targetDir) async {
     final player = Player();
-    // FIX 1: Initialize VideoController. 
-    // This forces media_kit to set up the rendering pipeline (textures), 
+    // FIX 1: Initialize VideoController.
+    // This forces media_kit to set up the rendering pipeline (textures),
     // which makes screenshotting much more reliable even if not displayed.
     final controller = VideoController(player);
 
@@ -343,7 +348,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
     String type = "text";
     String? localMediaPath;
     String? localSubtitlePath;
-    String? localImagePath; 
+    String? localImagePath;
     List<TranscriptLine> finalTranscript = [];
 
     if (_tabController.index == 0) {
@@ -372,17 +377,18 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
         if (_selectedMediaFile != null) {
           final ext = path.extension(_selectedMediaFile!.path).toLowerCase();
 
-          if (['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg']
-              .contains(ext)) {
+          if (['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg'].contains(ext)) {
             type = "audio";
           } else {
             type = "video";
             // Attempt to generate thumbnail, but don't crash if it fails
             try {
-              localImagePath =
-                  await _generateThumbnail(_selectedMediaFile!.path, dirPath);
+              localImagePath = await _generateThumbnail(
+                _selectedMediaFile!.path,
+                dirPath,
+              );
             } catch (e) {
-              print("Skipping thumbnail: $e");
+              printLog("Skipping thumbnail: $e");
             }
           }
 
@@ -411,7 +417,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
             finalContent = await _selectedSubtitleFile!.readAsString();
           }
         } catch (e) {
-          print("Error parsing transcript: $e");
+          printLog("Error parsing transcript: $e");
           finalContent = await _selectedSubtitleFile!.readAsString();
         }
       } catch (e) {

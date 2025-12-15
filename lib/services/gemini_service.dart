@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:linguaflow/models/lesson_model.dart';
+import 'package:linguaflow/utils/logger.dart';
 import 'package:uuid/uuid.dart';
 
 class GeminiService {
-  
   // No constructor needed. We rely on the global instance initialized in main.dart
 
   Future<LessonModel> generateLesson({
@@ -13,7 +13,8 @@ class GeminiService {
     required String targetLanguage,
     required String userId,
   }) async {
-    final prompt = """
+    final prompt =
+        """
       You are a language teacher. 
       Target Language Code: $targetLanguage
       Level: $level
@@ -40,8 +41,10 @@ class GeminiService {
       if (responseText == null) throw Exception("Empty response from AI");
 
       // 1. Clean Markdown (Gemini often wraps JSON in ```json ... ```)
-      responseText = responseText.replaceAll(RegExp(r'^```json|```$'), '').trim();
-      
+      responseText = responseText
+          .replaceAll(RegExp(r'^```json|```$'), '')
+          .trim();
+
       // 2. Decode
       final Map<String, dynamic> data = jsonDecode(responseText);
 
@@ -52,16 +55,18 @@ class GeminiService {
         title: data['title']?.toString() ?? 'AI Lesson',
         language: targetLanguage,
         content: data['content']?.toString() ?? '',
-        
+
         // Safely convert list to Strings
-        sentences: (data['sentences'] as List<dynamic>?)
-            ?.map((e) => e.toString())
-            .toList() ?? [],
-            
+        sentences:
+            (data['sentences'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [],
+
         // FORCE EMPTY TRANSCRIPT to fix the "Null is not subtype of num" crash.
         // AI text generation doesn't reliably create the numeric timecodes your model expects.
-        transcript: [], 
-        
+        transcript: [],
+
         createdAt: DateTime.now(),
         difficulty: data['difficulty']?.toString() ?? level,
         type: 'ai_story',
@@ -69,7 +74,7 @@ class GeminiService {
         progress: 0,
       );
     } catch (e) {
-      print("Gemini Parsing Error: $e");
+      printLog("Gemini Parsing Error: $e");
       throw Exception("Failed to generate lesson. Try a different topic.");
     }
   }

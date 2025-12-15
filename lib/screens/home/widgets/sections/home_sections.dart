@@ -41,7 +41,7 @@ class GuidedCoursesSection extends StatefulWidget {
   final Map<String, VocabularyItem> vocabMap;
   final bool isDark;
   // We need language code to fetch more
-  final String languageCode; 
+  final String languageCode;
 
   const GuidedCoursesSection({
     super.key,
@@ -58,8 +58,14 @@ class GuidedCoursesSection extends StatefulWidget {
 
 class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
   String _guidedTab = 'All';
-  final List<String> _guidedTabsList = ['All', 'Beginner', 'Intermediate', 'Advanced', 'Imported'];
-  
+  final List<String> _guidedTabsList = [
+    'All',
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+    'Imported',
+  ];
+
   // --- PAGINATION STATE ---
   late List<LessonModel> _allGuidedLessons;
   final ScrollController _scrollController = ScrollController();
@@ -90,7 +96,8 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
 
   void _onScroll() {
     if (_isImportedTab) return; // Don't paginate imported tab
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
       _loadMore();
     }
   }
@@ -105,7 +112,10 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
     try {
       // Fetch 'guided' type from repo
       final repo = context.read<LessonRepository>();
-      final lastLesson = _allGuidedLessons.lastWhere((l) => !l.isLocal, orElse: () => _allGuidedLessons.last);
+      final lastLesson = _allGuidedLessons.lastWhere(
+        (l) => !l.isLocal,
+        orElse: () => _allGuidedLessons.last,
+      );
 
       final newLessons = await repo.fetchPagedCategory(
         widget.languageCode,
@@ -122,7 +132,7 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
         });
       }
     } catch (e) {
-      print("Error loading more guided: $e");
+      printLog("Error loading more guided: $e");
     } finally {
       setState(() => _isLoadingMore = false);
     }
@@ -144,7 +154,9 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
         displayLessons = nonImportedLessons.toList();
       } else {
         displayLessons = nonImportedLessons
-            .where((l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase())
+            .where(
+              (l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase(),
+            )
             .toList();
       }
     }
@@ -176,16 +188,21 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
           ),
         ),
         if (displayLessons.isEmpty && !_isLoadingMore)
-           Container(
+          Container(
             height: 240,
             alignment: Alignment.center,
-            child: Text("No courses found.", style: TextStyle(color: Colors.grey)),
-           )
+            child: Text(
+              "No courses found.",
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
         else
           SizedBox(
             height: 240,
             child: ListView.separated(
-              controller: _isImportedTab ? null : _scrollController, // Only attach scroll listener if fetching from server
+              controller: _isImportedTab
+                  ? null
+                  : _scrollController, // Only attach scroll listener if fetching from server
               padding: const EdgeInsets.symmetric(horizontal: 16),
               scrollDirection: Axis.horizontal,
               // +1 for Spinner if loading
@@ -193,10 +210,12 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
               separatorBuilder: (ctx, i) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
                 if (index >= displayLessons.length) {
-                  return const Center(child: Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: CircularProgressIndicator(),
-                  ));
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
                 }
                 return _buildCard(
                   context,
@@ -230,7 +249,12 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
               ),
             ),
             if (isSelected)
-              Container(margin: const EdgeInsets.only(top: 4), height: 2, width: 20, color: Colors.blue),
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                height: 2,
+                width: 20,
+                color: Colors.blue,
+              ),
           ],
         ),
       ),
@@ -261,7 +285,12 @@ class ImmersionSection extends StatefulWidget {
 
 class _ImmersionSectionState extends State<ImmersionSection> {
   String _nativeDifficultyTab = 'All';
-  final List<String> _difficultyTabs = ['All', 'Beginner', 'Intermediate', 'Advanced'];
+  final List<String> _difficultyTabs = [
+    'All',
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+  ];
 
   // --- PAGINATION STATE ---
   late List<LessonModel> _immersionLessons;
@@ -283,7 +312,8 @@ class _ImmersionSectionState extends State<ImmersionSection> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
       _loadMore();
     }
   }
@@ -300,7 +330,7 @@ class _ImmersionSectionState extends State<ImmersionSection> {
       // Call the pagination method specifically for VIDEOS
       final newLessons = await repo.fetchPagedCategory(
         widget.languageCode,
-        'video', 
+        'video',
         lastLesson: lastLesson,
         limit: 10,
       );
@@ -313,7 +343,7 @@ class _ImmersionSectionState extends State<ImmersionSection> {
         });
       }
     } catch (e) {
-      print("Error loading videos: $e");
+      printLog("Error loading videos: $e");
     } finally {
       setState(() => _isLoadingMore = false);
     }
@@ -325,7 +355,11 @@ class _ImmersionSectionState extends State<ImmersionSection> {
     final displayVideos = _nativeDifficultyTab == 'All'
         ? _immersionLessons
         : _immersionLessons
-              .where((l) => l.difficulty.toLowerCase() == _nativeDifficultyTab.toLowerCase())
+              .where(
+                (l) =>
+                    l.difficulty.toLowerCase() ==
+                    _nativeDifficultyTab.toLowerCase(),
+              )
               .toList();
 
     return Column(
@@ -353,7 +387,10 @@ class _ImmersionSectionState extends State<ImmersionSection> {
           Container(
             height: 150,
             alignment: Alignment.center,
-            child: const Text("No videos found", style: TextStyle(color: Colors.grey)),
+            child: const Text(
+              "No videos found",
+              style: TextStyle(color: Colors.grey),
+            ),
           )
         else
           SizedBox(
@@ -367,10 +404,12 @@ class _ImmersionSectionState extends State<ImmersionSection> {
               separatorBuilder: (ctx, i) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
                 if (index >= displayVideos.length) {
-                  return const Center(child: Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ));
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
                 }
                 return _buildCard(
                   context,
@@ -398,11 +437,18 @@ class _ImmersionSectionState extends State<ImmersionSection> {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? (widget.isDark ? Colors.white : Colors.black) : Colors.grey[500],
+                color: isSelected
+                    ? (widget.isDark ? Colors.white : Colors.black)
+                    : Colors.grey[500],
               ),
             ),
             if (isSelected)
-              Container(margin: const EdgeInsets.only(top: 4), height: 2, width: 20, color: Colors.red),
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                height: 2,
+                width: 20,
+                color: Colors.red,
+              ),
           ],
         ),
       ),
@@ -433,7 +479,12 @@ class LibrarySection extends StatefulWidget {
 
 class _LibrarySectionState extends State<LibrarySection> {
   String _libraryDifficultyTab = 'All';
-  final List<String> _difficultyTabs = ['All', 'Beginner', 'Intermediate', 'Advanced'];
+  final List<String> _difficultyTabs = [
+    'All',
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+  ];
 
   // --- PAGINATION STATE ---
   late List<LessonModel> _libraryLessons;
@@ -455,7 +506,8 @@ class _LibrarySectionState extends State<LibrarySection> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
       _loadMore();
     }
   }
@@ -471,7 +523,7 @@ class _LibrarySectionState extends State<LibrarySection> {
 
       final newLessons = await repo.fetchPagedCategory(
         widget.languageCode,
-        'book', 
+        'book',
         lastLesson: lastLesson,
         limit: 10,
       );
@@ -484,7 +536,7 @@ class _LibrarySectionState extends State<LibrarySection> {
         });
       }
     } catch (e) {
-      print("Error loading books: $e");
+      printLog("Error loading books: $e");
     } finally {
       setState(() => _isLoadingMore = false);
     }
@@ -503,7 +555,11 @@ class _LibrarySectionState extends State<LibrarySection> {
     final displayBooks = _libraryDifficultyTab == 'All'
         ? sortedLessons
         : sortedLessons
-              .where((l) => l.difficulty.toLowerCase() == _libraryDifficultyTab.toLowerCase())
+              .where(
+                (l) =>
+                    l.difficulty.toLowerCase() ==
+                    _libraryDifficultyTab.toLowerCase(),
+              )
               .toList();
 
     return Column(
@@ -531,7 +587,10 @@ class _LibrarySectionState extends State<LibrarySection> {
           Container(
             height: 150,
             alignment: Alignment.center,
-            child: const Text("No books found", style: TextStyle(color: Colors.grey)),
+            child: const Text(
+              "No books found",
+              style: TextStyle(color: Colors.grey),
+            ),
           )
         else
           SizedBox(
@@ -545,10 +604,12 @@ class _LibrarySectionState extends State<LibrarySection> {
               separatorBuilder: (ctx, i) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
                 if (index >= displayBooks.length) {
-                  return const Center(child: Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ));
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
                 }
                 return _buildCard(
                   context,
@@ -576,11 +637,18 @@ class _LibrarySectionState extends State<LibrarySection> {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? (widget.isDark ? Colors.white : Colors.black) : Colors.grey[500],
+                color: isSelected
+                    ? (widget.isDark ? Colors.white : Colors.black)
+                    : Colors.grey[500],
               ),
             ),
             if (isSelected)
-              Container(margin: const EdgeInsets.only(top: 4), height: 2, width: 20, color: Colors.green),
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                height: 2,
+                width: 20,
+                color: Colors.green,
+              ),
           ],
         ),
       ),

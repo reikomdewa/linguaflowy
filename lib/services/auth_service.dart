@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:linguaflow/models/user_model.dart';
+import 'package:linguaflow/utils/logger.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -44,12 +45,13 @@ class AuthService {
   Future<UserModel?> signInWithGoogle() async {
     try {
       final googleSignIn = GoogleSignIn.instance;
-      
+
       // 1. Initialize (Required in v7)
       await googleSignIn.initialize();
 
       // 2. Authenticate the user
-      final GoogleSignInAccount googleUser = await googleSignIn.authenticate(); // User cancelled
+      final GoogleSignInAccount googleUser = await googleSignIn
+          .authenticate(); // User cancelled
 
       // 3. Get ID Token (Authentication)
       // Note: In v7, this is synchronous
@@ -58,7 +60,8 @@ class AuthService {
       // 4. Get Access Token (Authorization) - CHANGED IN v7
       // We must explicitly request the token for the 'email' scope.
       // Firebase requires this token to create a credential on some platforms.
-      final googleAuthClient = await googleUser.authorizationClient.authorizationForScopes(['email']);
+      final googleAuthClient = await googleUser.authorizationClient
+          .authorizationForScopes(['email']);
 
       if (googleAuthClient == null) {
         throw Exception("Could not authorize Google Sign In.");
@@ -71,14 +74,18 @@ class AuthService {
       );
 
       // 6. Sign in to Firebase
-      final UserCredential userCredential = 
-          await _auth.signInWithCredential(credential);
-      
+      final UserCredential userCredential = await _auth.signInWithCredential(
+        credential,
+      );
+
       final User? firebaseUser = userCredential.user;
 
       if (firebaseUser != null) {
         // 7. Check/Create User Document
-        final doc = await _firestore.collection('users').doc(firebaseUser.uid).get();
+        final doc = await _firestore
+            .collection('users')
+            .doc(firebaseUser.uid)
+            .get();
 
         if (doc.exists) {
           return UserModel.fromMap(doc.data()!, doc.id);
@@ -90,13 +97,16 @@ class AuthService {
             createdAt: DateTime.now(),
           );
 
-          await _firestore.collection('users').doc(newUser.id).set(newUser.toMap());
+          await _firestore
+              .collection('users')
+              .doc(newUser.id)
+              .set(newUser.toMap());
 
           return newUser;
         }
       }
     } catch (e) {
-      print("Google Sign In Error: $e");
+      printLog("Google Sign In Error: $e");
       throw Exception("Google Sign In failed: $e");
     }
     return null;

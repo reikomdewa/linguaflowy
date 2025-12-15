@@ -12,7 +12,7 @@ import 'package:linguaflow/utils/utils.dart';
 
 class CategoryResultsScreen extends StatefulWidget {
   final String categoryTitle;
-  
+
   // OPTION A: Pass a static list
   final List<LessonModel>? initialLessons;
 
@@ -35,7 +35,7 @@ class CategoryResultsScreen extends StatefulWidget {
 class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
   late List<LessonModel> _lessons;
   final ScrollController _scrollController = ScrollController();
-  
+
   bool _isDynamicMode = false;
   bool _isLoading = false;
   bool _isLoadingMore = false;
@@ -47,7 +47,7 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
   @override
   void initState() {
     super.initState();
-    
+
     if (widget.initialLessons != null && widget.initialLessons!.isNotEmpty) {
       _lessons = List.from(widget.initialLessons!);
       _isDynamicMode = false;
@@ -68,25 +68,28 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
 
   void _onScroll() {
     if (!_isDynamicMode) return;
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
       _loadMore();
     }
   }
 
   Future<void> _loadInitialData() async {
     if (widget.genreKey == null || widget.languageCode == null) return;
-    
+
     setState(() => _isLoading = true);
     try {
       final repo = context.read<LessonRepository>();
-      
+
       // Add Timeout to prevent infinite loading screen
-      final results = await repo.fetchPagedGenreLessons(
-        widget.languageCode!,
-        widget.genreKey!,
-        limit: _pageSize,
-      ).timeout(const Duration(seconds: 10));
-      
+      final results = await repo
+          .fetchPagedGenreLessons(
+            widget.languageCode!,
+            widget.genreKey!,
+            limit: _pageSize,
+          )
+          .timeout(const Duration(seconds: 10));
+
       if (mounted) {
         setState(() {
           _lessons = results;
@@ -105,7 +108,7 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
   Future<void> _loadMore() async {
     // 1. Guard clauses
     if (_isLoadingMore || _hasReachedMax || _lessons.isEmpty) return;
-    
+
     setState(() => _isLoadingMore = true);
 
     try {
@@ -113,12 +116,14 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
       final lastLesson = _lessons.last;
 
       // 2. Fetch with Timeout
-      final newLessons = await repo.fetchPagedGenreLessons(
-        widget.languageCode!,
-        widget.genreKey!,
-        lastLesson: lastLesson,
-        limit: _pageSize,
-      ).timeout(const Duration(seconds: 10)); // Force stop after 10s
+      final newLessons = await repo
+          .fetchPagedGenreLessons(
+            widget.languageCode!,
+            widget.genreKey!,
+            lastLesson: lastLesson,
+            limit: _pageSize,
+          )
+          .timeout(const Duration(seconds: 10)); // Force stop after 10s
 
       if (mounted) {
         setState(() {
@@ -127,14 +132,16 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
           } else {
             // Deduplicate logic
             final existingIds = _lessons.map((l) => l.id).toSet();
-            final uniqueNew = newLessons.where((l) => !existingIds.contains(l.id)).toList();
-            
+            final uniqueNew = newLessons
+                .where((l) => !existingIds.contains(l.id))
+                .toList();
+
             if (uniqueNew.isEmpty) {
               // If we fetched items but they were all duplicates, we are effectively done
               _hasReachedMax = true;
             } else {
               _lessons.addAll(uniqueNew);
-              
+
               // 3. Smart Limit Check
               // If we asked for 15 and got fewer, we know there is no more data.
               if (newLessons.length < _pageSize) {
@@ -146,7 +153,7 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
       }
     } catch (e) {
       // On error or timeout, we simply stop the spinner so the user can try again later
-      print("Load more failed or timed out: $e");
+      printLog("Load more failed or timed out: $e");
     } finally {
       // 4. Always ensure the spinner turns off
       if (mounted) {
@@ -158,7 +165,7 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     final vocabState = context.watch<VocabularyBloc>().state;
     Map<String, VocabularyItem> vocabMap = {};
     if (vocabState is VocabularyLoaded) {
@@ -168,47 +175,54 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.categoryTitle),
-        elevation: 0,
-      ),
-      body: _isLoading 
+      appBar: AppBar(title: Text(widget.categoryTitle), elevation: 0),
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _lessons.isEmpty
-              ? Center(child: Text("No videos found for ${widget.categoryTitle}", style: const TextStyle(color: Colors.grey)))
-              : ListView.separated(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _lessons.length + (_isDynamicMode ? 1 : 0),
-                  separatorBuilder: (ctx, i) => const SizedBox(height: 16),
-                  itemBuilder: (context, index) {
-                    // Spinner / End Logic
-                    if (index >= _lessons.length) {
-                      // If we reached max, show nothing (or a "No more items" text)
-                      if (_hasReachedMax || !_isDynamicMode) return const SizedBox(height: 20);
-                      
-                      // Show Spinner only if we are actively loading
-                      return const Center(child: Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: CircularProgressIndicator(),
-                      ));
-                    }
+          ? Center(
+              child: Text(
+                "No videos found for ${widget.categoryTitle}",
+                style: const TextStyle(color: Colors.grey),
+              ),
+            )
+          : ListView.separated(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
+              itemCount: _lessons.length + (_isDynamicMode ? 1 : 0),
+              separatorBuilder: (ctx, i) => const SizedBox(height: 16),
+              itemBuilder: (context, index) {
+                // Spinner / End Logic
+                if (index >= _lessons.length) {
+                  // If we reached max, show nothing (or a "No more items" text)
+                  if (_hasReachedMax || !_isDynamicMode)
+                    return const SizedBox(height: 20);
 
-                    final lesson = _lessons[index];
-                    return VideoLessonCard(
-                      lesson: lesson,
-                      vocabMap: vocabMap,
-                      isDark: isDark,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)),
-                        );
-                      },
-                      onOptionTap: () => showLessonOptions(context, lesson, isDark),
+                  // Show Spinner only if we are actively loading
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+
+                final lesson = _lessons[index];
+                return VideoLessonCard(
+                  lesson: lesson,
+                  vocabMap: vocabMap,
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ReaderScreen(lesson: lesson),
+                      ),
                     );
                   },
-                ),
+                  onOptionTap: () => showLessonOptions(context, lesson, isDark),
+                );
+              },
+            ),
     );
   }
 }
