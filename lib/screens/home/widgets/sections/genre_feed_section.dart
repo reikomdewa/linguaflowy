@@ -5,7 +5,8 @@ import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart'; // Ensure correct import for VideoLessonCard
 import 'package:linguaflow/screens/reader/reader_screen.dart';
-import 'package:linguaflow/screens/home/widgets/home_dialogs.dart'; // For options
+import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
+import 'package:linguaflow/utils/utils.dart'; // For options
 
 class GenreFeedSection extends StatefulWidget {
   final String title;
@@ -172,7 +173,7 @@ class _GenreFeedSectionState extends State<GenreFeedSection>
                       },
                       onOptionTap: () {
                         // Ensure showLessonOptions is available/imported
-                        // showLessonOptions(context, lesson, widget.isDark);
+                        showLessonOptions(context, lesson, widget.isDark);
                       },
                     );
                   },

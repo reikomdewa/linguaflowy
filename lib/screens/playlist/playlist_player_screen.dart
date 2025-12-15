@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -10,11 +9,10 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 
 // --- Internal App Imports ---
-import 'package:linguaflow/screens/reader/utils/media_lifecycle.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
@@ -45,26 +43,23 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
   late LessonModel _currentLesson;
   bool _isChangingTrack = false;
 
-  // --- Data & Config ---
-  Map<String, VocabularyItem> _vocabulary = {};
-
-  // Media Players
+  // --- Players ---
   YoutubePlayerController? _youtubeController;
-  Player? _localPlayer;
-  VideoController? _localVideoController;
-
-  // Timers & Trackers
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  
+  // --- Timers & Trackers ---
   Timer? _syncTimer;
   Timer? _listeningTrackingTimer;
   int _secondsListenedInSession = 0;
 
   // --- Media State ---
-  bool _isVideo = false;
-  bool _isAudio = false;
-  bool _isYoutubeAudio = false;
-  bool _isLocalMedia = false;
+  bool _isYoutube = false;
   bool _isPlaying = false;
+  
+  // Progress Bar State
   bool _isSeeking = false;
+  Duration _currentPosition = Duration.zero;
+  Duration _totalDuration = Duration.zero;
 
   // Subtitles / Text
   List<String> _smartChunks = [];
@@ -75,8 +70,6 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
 
   // Translation / Dictionary
   bool _showCard = false;
-  String? _googleTranslation;
-  bool _isLoadingTranslation = false;
   String _selectedText = "";
   String _selectedCleanId = "";
   Future<String>? _cardTranslationFuture;
@@ -84,20 +77,15 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
   // TTS Fallback
   final FlutterTts _flutterTts = FlutterTts();
 
-  late AuthBloc _authBloc;
-
   @override
   void initState() {
     super.initState();
-    _authBloc = context.read<AuthBloc>();
     WidgetsBinding.instance.addObserver(this);
-
     _currentIndex = widget.initialIndex;
     _initGemini();
-    _loadVocabulary();
     _configureAudioSession();
-
-    // Start the first lesson
+    
+    // Start First Lesson
     _loadCurrentLesson();
   }
 
@@ -106,186 +94,252 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
     await session.configure(const AudioSessionConfiguration.speech());
   }
 
-  /// Loads the lesson at _currentIndex
+  // --- LOAD LOGIC ---
+
   void _loadCurrentLesson() async {
-    // 1. Update UI immediately to show loading state and new title
     setState(() {
       _isChangingTrack = true;
       _currentLesson = widget.playlist[_currentIndex];
-      _activeTranscript = _currentLesson.transcript;
+      _activeTranscript = _currentLesson.transcript; 
       _activeSentenceIndex = -1;
       _isPlaying = false;
-      _googleTranslation = null;
+      _currentPosition = Duration.zero;
+      _totalDuration = Duration.zero;
       _showCard = false;
     });
 
-    // Reset Scroll Position
     if (_listScrollController.hasClients) {
       _listScrollController.jumpTo(0);
     }
 
     try {
-      // 2. Parse Subtitles (if needed and not already parsed)
-      if ((_currentLesson.subtitleUrl != null &&
-              _currentLesson.subtitleUrl!.isNotEmpty) &&
-          _activeTranscript.isEmpty) {
-        try {
-          final lines = await SubtitleParser.parseFile(
-            _currentLesson.subtitleUrl!,
-          );
-          if (mounted) _activeTranscript = lines;
-        } catch (e) {
-          debugPrint("Error parsing subs: $e");
-        }
+      // 1. Initial Content Generation (Fallback)
+      _generateSmartChunks(); 
+
+      // 2. Parse Subtitles (Async)
+      if ((_currentLesson.subtitleUrl?.isNotEmpty ?? false) && _activeTranscript.isEmpty) {
+        SubtitleParser.parseFile(_currentLesson.subtitleUrl!).then((lines) {
+          if (mounted) {
+            setState(() {
+              _activeTranscript = lines;
+              _generateSmartChunks(); 
+              _itemKeys = List.generate(_smartChunks.length, (_) => GlobalKey());
+            });
+          }
+        }).catchError((e) {
+          debugPrint("Subtitle parse error: $e");
+        });
+      } else {
+        _itemKeys = List.generate(_smartChunks.length, (_) => GlobalKey());
       }
 
-      // 3. Prepare Text Chunks
-      _generateSmartChunks();
-      _itemKeys = List.generate(_smartChunks.length, (_) => GlobalKey());
-
-      // 4. Initialize Media
+      // 3. Initialize Media
       await _initializeMedia();
 
-      // 5. Ready to play
       if (mounted) {
         setState(() => _isChangingTrack = false);
-        _playMedia();
+        _startListeningTracker();
       }
     } catch (e) {
-      debugPrint("CRITICAL ERROR LOADING LESSON: $e");
-      // Ensure UI doesn't get stuck in loading state even if media fails
-      if (mounted) {
-        setState(() => _isChangingTrack = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error loading track: $e")),
-        );
-      }
+      debugPrint("Error loading lesson: $e");
+      if (mounted) setState(() => _isChangingTrack = false);
     }
   }
 
   void _generateSmartChunks() {
     _smartChunks = [];
     if (_activeTranscript.isNotEmpty) {
-      for (var t in _activeTranscript) {
-        _smartChunks.add(t.text);
-      }
+      for (var t in _activeTranscript) _smartChunks.add(t.text);
       return;
     }
-    List<String> rawSentences = _currentLesson.sentences;
-    if (rawSentences.isEmpty) {
-      rawSentences = _currentLesson.content.split(RegExp(r'(?<=[.!?])\s+'));
+    List<String> raw = _currentLesson.sentences;
+    if (raw.isEmpty) {
+      raw = _currentLesson.content.split(RegExp(r'(?<=[.!?])\s+'));
     }
-    for (String sentence in rawSentences) {
-      if (sentence.trim().isNotEmpty) _smartChunks.add(sentence.trim());
+    for (String s in raw) {
+      if (s.trim().isNotEmpty) _smartChunks.add(s.trim());
     }
   }
 
   Future<void> _initializeMedia() async {
-    // Stop and cleanup old player first
-    _disposePlayers();
-
     final url = _currentLesson.videoUrl;
 
-    // Fallback to TTS if no media URL
+    // A. Fallback to TTS
     if (url == null || url.isEmpty) {
+      _disposeMediaControllers();
       await _flutterTts.setLanguage(_currentLesson.language);
-      if (mounted) {
-        setState(() {
-          _isAudio = false;
-          _isVideo = false;
-          _isYoutubeAudio = false;
-        });
-      }
+      if (mounted) setState(() { _isYoutube = false; });
       return;
     }
 
-    bool isYoutube = url.toLowerCase().contains('youtube.com') ||
-        url.toLowerCase().contains('youtu.be');
-
-    // Determine Type
-    bool isVid = true;
-    bool isAud = false;
-    bool isYtAud = false;
-
-    if (_currentLesson.id.startsWith('yt_audio_') ||
-        (isYoutube && _currentLesson.type == 'audio')) {
-      isYtAud = true;
-      isVid = false;
-    } else if (_currentLesson.type == 'audio' ||
-        ['mp3', 'wav', 'm4a'].any((ext) => url.endsWith(ext))) {
-      isAud = true;
-      isVid = false;
-    }
+    bool isYt = url.toLowerCase().contains('youtube.com') || url.toLowerCase().contains('youtu.be');
 
     if (mounted) {
-      setState(() {
-        _isVideo = isVid;
-        _isAudio = isAud;
-        _isYoutubeAudio = isYtAud;
-      });
+      setState(() { _isYoutube = isYt; });
     }
 
-    if (isYoutube) {
+    if (isYt) {
+      // --- YOUTUBE MODE ---
+      await _audioPlayer.stop(); // Stop audio player
+      
       String? videoId = YoutubePlayer.convertUrlToId(url);
       if (videoId != null) {
-        _youtubeController = YoutubePlayerController(
-          initialVideoId: videoId,
-          flags: const YoutubePlayerFlags(
-            autoPlay: true,
-            hideControls: true,
-            enableCaption: false,
-          ),
-        );
-        if (mounted) {
-          setState(() => _isLocalMedia = false);
-          _startSyncTimer();
+        if (_youtubeController != null) {
+          _youtubeController!.load(videoId);
+        } else {
+          _youtubeController = YoutubePlayerController(
+            initialVideoId: videoId,
+            flags: const YoutubePlayerFlags(
+              autoPlay: true,
+              hideControls: true, 
+              enableCaption: false,
+            ),
+          );
         }
       }
     } else {
-      // MEDIA KIT
-      _localPlayer = Player();
-      _localVideoController = VideoController(_localPlayer!);
-
-      // Important for Android background audio
-      if (Platform.isAndroid) {
-         // _localPlayer!.setPlaylistMode(PlaylistMode.none);
+      // --- AUDIO MODE (JustAudio) ---
+      if (_youtubeController != null) {
+        _youtubeController!.pause(); // Pause YT
       }
 
-      await _localPlayer!.open(Media(url), play: false);
-      if (mounted) {
-        setState(() => _isLocalMedia = true);
-        _startSyncTimer();
+      try {
+        await _audioPlayer.stop(); // Reset state
+        
+        // FIX: Proper URI parsing for local files vs network
+        Uri uri;
+        if (url.startsWith('http')) {
+          uri = Uri.parse(url);
+        } else {
+          // It's a local file path
+          uri = Uri.file(url);
+        }
+
+        // Configure Source with Metadata (Notification Center)
+        final source = AudioSource.uri(
+          uri,
+          tag: MediaItem(
+            id: _currentLesson.id,
+            album: "LinguaFlow",
+            title: _currentLesson.title,
+            artist: _currentLesson.language,
+            artUri: _currentLesson.imageUrl != null 
+                ? Uri.parse(_currentLesson.imageUrl!) 
+                : null,
+          ),
+        );
+        
+        await _audioPlayer.setAudioSource(source);
+        _audioPlayer.play();
+      } catch (e) {
+        debugPrint("Error loading audio: $e");
+        // Fallback or alert user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error playing audio: $e"))
+          );
+        }
       }
     }
+
+    // Start Unified Sync Timer
+    _startSyncTimer();
   }
 
-  void _disposePlayers() {
+  void _disposeMediaControllers() {
     _syncTimer?.cancel();
-    _youtubeController?.dispose();
-    _youtubeController = null;
-
-    _localVideoController = null;
-
-    if (_localPlayer != null) {
-      MediaLifecycle.disposeSafe(_localPlayer);
-      _localPlayer = null;
-    }
+    _audioPlayer.stop();
   }
 
   @override
   void dispose() {
     _stopListeningTracker();
-
     if (_secondsListenedInSession > 10) {
-      final int minutes = (_secondsListenedInSession / 60).ceil();
-      _authBloc.add(AuthUpdateListeningTime(minutes));
+      final minutes = (_secondsListenedInSession / 60).ceil();
+      context.read<AuthBloc>().add(AuthUpdateListeningTime(minutes));
     }
-
+    
     WidgetsBinding.instance.removeObserver(this);
-    _disposePlayers();
+    _syncTimer?.cancel();
+    _youtubeController?.dispose();
+    _audioPlayer.dispose();
     _flutterTts.stop();
     _listScrollController.dispose();
     super.dispose();
+  }
+
+  // --- SYNC ENGINE (Unified) ---
+  
+  void _startSyncTimer() {
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(const Duration(milliseconds: 200), (_) => _checkSync());
+  }
+
+  void _checkSync() {
+    if (_isSeeking || _isChangingTrack) return;
+
+    bool playing = false;
+    double currentSec = 0.0;
+    double totalSec = 0.0;
+
+    // Read from Active Player
+    if (_isYoutube && _youtubeController != null) {
+      playing = _youtubeController!.value.isPlaying;
+      currentSec = _youtubeController!.value.position.inMilliseconds / 1000.0;
+      totalSec = _youtubeController!.metadata.duration.inSeconds.toDouble();
+    } else {
+      // JustAudio
+      playing = _audioPlayer.playing;
+      currentSec = _audioPlayer.position.inMilliseconds / 1000.0;
+      totalSec = (_audioPlayer.duration?.inSeconds ?? 0).toDouble();
+      
+      // FIX: Ensure UI knows if player finished
+      if (_audioPlayer.processingState == ProcessingState.completed) {
+        playing = false;
+      }
+    }
+
+    // Update State
+    if (mounted) {
+      setState(() {
+        if (playing != _isPlaying) _isPlaying = playing;
+        _currentPosition = Duration(milliseconds: (currentSec * 1000).toInt());
+        _totalDuration = Duration(milliseconds: (totalSec * 1000).toInt());
+      });
+    }
+
+    // Auto-Advance
+    if (totalSec > 0 && currentSec >= totalSec - 1.0) {
+      _playNext();
+      return;
+    }
+
+    // Transcript Sync
+    if (_activeTranscript.isNotEmpty) {
+      int activeIndex = -1;
+      for (int i = 0; i < _activeTranscript.length; i++) {
+        if (currentSec >= _activeTranscript[i].start && currentSec < _activeTranscript[i].end) {
+          activeIndex = i;
+          break;
+        }
+      }
+      
+      if (activeIndex != -1 && activeIndex != _activeSentenceIndex) {
+        setState(() => _activeSentenceIndex = activeIndex);
+        _scrollToActiveLine(activeIndex);
+      }
+    }
+  }
+
+  void _scrollToActiveLine(int index) {
+    if (index >= 0 && index < _itemKeys.length && _itemKeys[index].currentContext != null) {
+      Scrollable.ensureVisible(
+        _itemKeys[index].currentContext!,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        alignment: 0.5,
+      );
+    }
   }
 
   // --- PLAYBACK CONTROLS ---
@@ -296,11 +350,7 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
       setState(() => _currentIndex++);
       _loadCurrentLesson();
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Playlist Completed!")),
-        );
-      }
+       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Playlist Completed!")));
     }
   }
 
@@ -311,111 +361,43 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
     }
   }
 
-  void _playMedia() {
-    if (_isLocalMedia && _localPlayer != null) {
-      _localPlayer!.play();
-    } else {
-      _youtubeController?.play();
-    }
-    _startListeningTracker();
-  }
-
-  void _pauseMedia() {
-    if (_isLocalMedia && _localPlayer != null) {
-      _localPlayer!.pause();
-    } else {
-      _youtubeController?.pause();
-    }
-    _stopListeningTracker();
-  }
-
   void _togglePlayback() {
-    if (_isPlaying) {
-      _pauseMedia();
+    if (_isYoutube && _youtubeController != null) {
+      if (_isPlaying) _youtubeController!.pause();
+      else _youtubeController!.play();
     } else {
-      _playMedia();
-    }
-  }
-
-  // --- SYNC ENGINE ---
-  void _startSyncTimer() {
-    _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(
-      const Duration(milliseconds: 200),
-      (_) => _checkSync(),
-    );
-  }
-
-  void _checkSync() {
-    if (_isSeeking || _isChangingTrack) return;
-
-    bool isPlaying = false;
-    double currentSeconds = 0.0;
-    double totalDuration = 0.0;
-
-    if (_isLocalMedia && _localPlayer != null) {
-      isPlaying = _localPlayer!.state.playing;
-      currentSeconds = _localPlayer!.state.position.inMilliseconds / 1000.0;
-      totalDuration = _localPlayer!.state.duration.inSeconds.toDouble();
-    } else if (_youtubeController != null) {
-      isPlaying = _youtubeController!.value.isPlaying;
-      currentSeconds =
-          _youtubeController!.value.position.inMilliseconds / 1000.0;
-      totalDuration =
-          _youtubeController!.metadata.duration.inSeconds.toDouble();
-    }
-
-    if (isPlaying != _isPlaying) {
-      setState(() => _isPlaying = isPlaying);
-    }
-
-    // Auto-Advance Logic
-    if (totalDuration > 0 && currentSeconds >= totalDuration - 1.5) {
-      _playNext();
-      return;
-    }
-
-    if (_activeTranscript.isNotEmpty) {
-      int activeIndex = -1;
-      for (int i = 0; i < _activeTranscript.length; i++) {
-        if (currentSeconds >= _activeTranscript[i].start &&
-            currentSeconds < _activeTranscript[i].end) {
-          activeIndex = i;
-          break;
-        }
-      }
-      if (activeIndex == -1 && currentSeconds > 0) {
-        for (int i = 0; i < _activeTranscript.length; i++) {
-          if (_activeTranscript[i].start > currentSeconds) {
-            activeIndex = i > 0 ? i - 1 : 0;
-            break;
-          }
-        }
-      }
-
-      if (activeIndex != -1 && activeIndex != _activeSentenceIndex) {
-        setState(() => _activeSentenceIndex = activeIndex);
-        _scrollToActiveLine(activeIndex);
+      // FIX: Handle Replay if finished
+      if (_audioPlayer.processingState == ProcessingState.completed) {
+        _audioPlayer.seek(Duration.zero);
+        _audioPlayer.play();
+      } else {
+        if (_isPlaying) _audioPlayer.pause();
+        else _audioPlayer.play();
       }
     }
   }
 
-  void _scrollToActiveLine(int index) {
-    if (index >= 0 &&
-        index < _itemKeys.length &&
-        _itemKeys[index].currentContext != null) {
-      Scrollable.ensureVisible(
-        _itemKeys[index].currentContext!,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        alignment: 0.5,
-      );
+  void _onSeek(double value) {
+    final newPos = Duration(seconds: value.toInt());
+    if (_isYoutube && _youtubeController != null) {
+      _youtubeController!.seekTo(newPos);
+    } else {
+      _audioPlayer.seek(newPos);
     }
   }
 
-  void _loadVocabulary() {
-    // Implement vocabulary loading if needed
+  void _seekRelative(int seconds) {
+    final newPos = _currentPosition + Duration(seconds: seconds);
+    final clamped = Duration(seconds: newPos.inSeconds.clamp(0, _totalDuration.inSeconds));
+    
+    if (_isYoutube && _youtubeController != null) {
+      _youtubeController!.seekTo(clamped);
+    } else {
+      _audioPlayer.seek(clamped);
+    }
   }
+
+  // --- TRACKING & HELPERS ---
 
   void _initGemini() {
     final envKey = dotenv.env['GEMINI_API_KEY'];
@@ -424,15 +406,17 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
 
   void _startListeningTracker() {
     _listeningTrackingTimer?.cancel();
-    _listeningTrackingTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) => _secondsListenedInSession++,
-    );
+    _listeningTrackingTimer = Timer.periodic(const Duration(seconds: 1), (_) => _secondsListenedInSession++);
   }
-
   void _stopListeningTracker() => _listeningTrackingTimer?.cancel();
 
-  // --- UI BUILDING ---
+  String _formatDuration(Duration d) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return "${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}";
+  }
+
+  // --- UI CONSTRUCTION ---
+
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -442,18 +426,13 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
       appBar: AppBar(
         title: Column(
           children: [
-            const Text(
-              "Now Playing",
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            Text(
-              "Track ${_currentIndex + 1} of ${widget.playlist.length}",
-              style: TextStyle(
-                fontSize: 14,
-                color: isDark ? Colors.white : Colors.black,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            const Text("Now Playing", style: TextStyle(fontSize: 12, color: Colors.grey)),
+            Text("Track ${_currentIndex + 1} of ${widget.playlist.length}",
+                style: TextStyle(
+                  fontSize: 14, 
+                  color: isDark ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.bold
+                )),
           ],
         ),
         centerTitle: true,
@@ -470,122 +449,88 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
           ),
         ],
       ),
-      // --- FIX 1: SAFE AREA & STACK STRUCTURE ---
       body: SafeArea(
-        top: false, // Don't cut off video at top
-        bottom: false, // We'll handle bottom padding manually or via sub-SafeArea
+        top: false, bottom: false,
         child: Stack(
           children: [
             Column(
               children: [
-                // 1. MEDIA AREA (Video/Audio)
-                // We keep this OUT of SafeArea so video touches top edge
-                if (_isVideo || _isAudio || _isYoutubeAudio)
-                  Container(
-                    height: _isVideo ? 220 : 0,
-                    width: double.infinity,
-                    color: Colors.black,
-                    child: _isVideo ? _buildSharedPlayer() : null,
-                  ),
+                // 1. MEDIA AREA
+                Container(
+                  height: _isYoutube ? 220 : 0.1, // Hide if not YT
+                  width: double.infinity,
+                  color: Colors.black,
+                  child: _isYoutube && _youtubeController != null
+                      ? YoutubePlayer(controller: _youtubeController!)
+                      : null,
+                ),
 
-                // 2. CONTENT AREA (Rest of the screen)
+                // 2. CONTENT AREA
                 Expanded(
                   child: SafeArea(
-                    top: false, // Already below video
+                    top: false,
                     child: Column(
                       children: [
-                        // A. THUMBNAIL (For Audio Mode)
-                        if (!_isVideo)
+                        // A. AUDIO THUMBNAIL (Only if not youtube)
+                        if (!_isYoutube)
                           Padding(
                             padding: const EdgeInsets.all(20.0),
                             child: Container(
-                              width: 150,
-                              height: 150,
+                              width: 150, height: 150,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  const BoxShadow(
-                                    color: Colors.black26,
-                                    blurRadius: 10,
-                                  ),
-                                ],
+                                boxShadow: [const BoxShadow(color: Colors.black26, blurRadius: 10)],
                                 image: DecorationImage(
-                                  image: _currentLesson.imageUrl != null &&
-                                          _currentLesson.imageUrl!.isNotEmpty
+                                  image: _currentLesson.imageUrl != null 
                                       ? NetworkImage(_currentLesson.imageUrl!)
-                                      : const AssetImage(
-                                              'assets/images/placeholder_audio.png')
-                                          as ImageProvider,
+                                      : const AssetImage('assets/images/placeholder_audio.png') as ImageProvider,
                                   fit: BoxFit.cover,
                                 ),
                               ),
                             ),
                           ),
 
-                        // B. LESSON INFO
+                        // B. TITLE INFO
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Column(
                             children: [
                               Text(
                                 _currentLesson.title,
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
+                                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center, maxLines: 2,
                               ),
                               const SizedBox(height: 5),
-                              Text(
-                                _currentLesson.language,
-                                style: const TextStyle(color: Colors.grey),
-                              ),
+                              Text(_currentLesson.language, style: const TextStyle(color: Colors.grey)),
                             ],
                           ),
                         ),
-
                         const Divider(),
 
                         // C. TRANSCRIPT
                         Expanded(
-                          child: _isChangingTrack
-                              ? const Center(child: CircularProgressIndicator())
-                              : _smartChunks.isEmpty
-                                  ? const Center(
-                                      child: Text("No transcript available"))
-                                  : ListView.separated(
-                                      controller: _listScrollController,
-                                      padding: const EdgeInsets.all(20),
-                                      itemCount: _smartChunks.length,
-                                      separatorBuilder: (_, __) =>
-                                          const SizedBox(height: 12),
-                                      itemBuilder: (context, index) {
-                                        final isActive =
-                                            index == _activeSentenceIndex;
-                                        return InteractiveTextDisplay(
-                                          key: _itemKeys[index],
-                                          text: _smartChunks[index],
-                                          sentenceIndex: index,
-                                          vocabulary: _vocabulary,
-                                          onWordTap: (word, cleanId, pos) {
-                                            _showDictionary(word, cleanId);
-                                          },
-                                          onPhraseSelected:
-                                              (phrase, pos, clear) {
-                                            _showDictionary(
-                                              phrase,
-                                              ReaderUtils.generateCleanId(
-                                                  phrase),
-                                            );
-                                          },
-                                          isBigMode: isActive,
-                                          isListeningMode: false,
-                                          isOverlay: false,
-                                      
-                                        );
-                                      },
-                                    ),
+                          child: _smartChunks.isEmpty
+                              ? const Center(child: Text("No transcript available"))
+                              : ListView.separated(
+                                  controller: _listScrollController,
+                                  padding: const EdgeInsets.all(20),
+                                  itemCount: _smartChunks.length,
+                                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                  itemBuilder: (context, index) {
+                                    final isActive = index == _activeSentenceIndex;
+                                    return InteractiveTextDisplay(
+                                      key: _itemKeys[index],
+                                      text: _smartChunks[index],
+                                      sentenceIndex: index,
+                                      vocabulary: const {}, 
+                                      onWordTap: (w, c, p) => _showDictionary(w, c),
+                                      onPhraseSelected: (p, pos, c) => _showDictionary(p, ReaderUtils.generateCleanId(p)),
+                                      isBigMode: isActive,
+                                      isListeningMode: false,
+                                      isOverlay: false,
+                                    );
+                                  },
+                                ),
                         ),
 
                         // D. CONTROLS
@@ -599,9 +544,7 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
 
             if (_showCard)
               Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
+                bottom: 0, left: 0, right: 0,
                 child: _buildDictionarySheet(),
               ),
           ],
@@ -610,88 +553,145 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
     );
   }
 
-  Widget _buildSharedPlayer() {
-    if (_isLocalMedia && _localVideoController != null) {
-      return Video(controller: _localVideoController!);
-    } else if (_youtubeController != null) {
-      return YoutubePlayer(controller: _youtubeController!);
-    }
-    return const SizedBox.shrink();
-  }
-
   Widget _buildPlayerControls() {
+    final textColor = Theme.of(context).textTheme.bodyMedium?.color;
+    const mainColor = Colors.red;
+
+    final double maxVal = _totalDuration.inSeconds.toDouble();
+    double currentVal = _currentPosition.inSeconds.toDouble();
+    if (currentVal > maxVal) currentVal = maxVal;
+    if (currentVal < 0) currentVal = 0;
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
       color: Theme.of(context).scaffoldBackgroundColor,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // PREV
-          IconButton(
-            icon: const Icon(Icons.skip_previous, size: 32),
-            onPressed:
-                _currentIndex > 0 ? _playPrev : null, // Disable if first
-            color: _currentIndex > 0 ? null : Colors.grey,
+          // SLIDER
+          Row(
+            children: [
+              Text(_formatDuration(_currentPosition), style: TextStyle(fontSize: 12, color: textColor)),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 4.0,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6.0),
+                    activeTrackColor: mainColor,
+                    inactiveTrackColor: mainColor.withOpacity(0.2),
+                    thumbColor: mainColor,
+                    overlayColor: mainColor.withOpacity(0.2),
+                  ),
+                  child: Slider(
+                    value: currentVal,
+                    min: 0,
+                    max: maxVal > 0 ? maxVal : 1.0,
+                    onChanged: (value) {
+                      setState(() {
+                        _currentPosition = Duration(seconds: value.toInt());
+                      });
+                    },
+                    onChangeStart: (_) => setState(() => _isSeeking = true),
+                    onChangeEnd: (value) {
+                      _isSeeking = false;
+                      _onSeek(value);
+                    },
+                  ),
+                ),
+              ),
+              Text(_formatDuration(_totalDuration), style: TextStyle(fontSize: 12, color: textColor)),
+            ],
           ),
-          // REWIND
-          IconButton(
-            icon: const Icon(Icons.replay_10),
-            onPressed: () {
-              if (_localPlayer != null) {
-                _localPlayer!.seek(
-                  _localPlayer!.state.position - const Duration(seconds: 10),
-                );
-              }
-              if (_youtubeController != null) {
-                _youtubeController!.seekTo(
-                  _youtubeController!.value.position -
-                      const Duration(seconds: 10),
-                );
-              }
-            },
-          ),
-          // PLAY/PAUSE
-          FloatingActionButton(
-            backgroundColor: Theme.of(context).primaryColor,
-            onPressed: _togglePlayback,
-            child: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
-          ),
-          // FORWARD
-          IconButton(
-            icon: const Icon(Icons.forward_10),
-            onPressed: () {
-              if (_localPlayer != null) {
-                _localPlayer!.seek(
-                  _localPlayer!.state.position + const Duration(seconds: 10),
-                );
-              }
-              if (_youtubeController != null) {
-                _youtubeController!.seekTo(
-                  _youtubeController!.value.position +
-                      const Duration(seconds: 10),
-                );
-              }
-            },
-          ),
-          // NEXT
-          IconButton(
-            icon: const Icon(Icons.skip_next, size: 32),
-            onPressed: _currentIndex < widget.playlist.length - 1
-                ? _playNext
-                : null,
-            color: _currentIndex < widget.playlist.length - 1
-                ? null
-                : Colors.grey,
+
+          const SizedBox(height: 5),
+
+          // BUTTONS
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.skip_previous, size: 32),
+                onPressed: _currentIndex > 0 ? _playPrev : null,
+                color: _currentIndex > 0 ? null : Colors.grey,
+              ),
+              IconButton(
+                icon: const Icon(Icons.replay_10),
+                onPressed: () => _seekRelative(-10),
+              ),
+              FloatingActionButton(
+                backgroundColor: mainColor,
+                onPressed: _togglePlayback,
+                child: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white),
+              ),
+              IconButton(
+                icon: const Icon(Icons.forward_10),
+                onPressed: () => _seekRelative(10),
+              ),
+              IconButton(
+                icon: const Icon(Icons.skip_next, size: 32),
+                onPressed: _currentIndex < widget.playlist.length - 1 ? _playNext : null,
+                color: _currentIndex < widget.playlist.length - 1 ? null : Colors.grey,
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
+  // --- DICTIONARY & UI HELPERS ---
+
+  void _showDictionary(String text, String cleanId) {
+    if (_isPlaying) _togglePlayback();
+    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+    final svc = context.read<TranslationService>();
+
+    setState(() {
+      _showCard = true;
+      _selectedText = text;
+      _selectedCleanId = cleanId;
+      _cardTranslationFuture = svc.translate(text, user.nativeLanguage, _currentLesson.language).then((v) => v ?? "");
+    });
+  }
+
+  Widget _buildDictionarySheet() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      height: 250, padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [const BoxShadow(blurRadius: 10, color: Colors.black26)],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(_selectedText, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _showCard = false)),
+              ],
+            ),
+            const Divider(),
+            FutureBuilder<String>(
+              future: _cardTranslationFuture,
+              builder: (ctx, snap) {
+                if (snap.connectionState == ConnectionState.waiting) return const CircularProgressIndicator();
+                return Text(snap.data ?? "No translation", style: TextStyle(fontSize: 18, color: isDark ? Colors.white : Colors.black));
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showPlaylistBottomSheet() {
     showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
+      context: context, backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
@@ -700,41 +700,17 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
         child: SafeArea(
           child: Column(
             children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  "Up Next",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-              ),
+              const Padding(padding: EdgeInsets.all(16), child: Text("Up Next", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
               Expanded(
                 child: ListView.builder(
                   itemCount: widget.playlist.length,
                   itemBuilder: (context, index) {
                     final item = widget.playlist[index];
-                    final isCurrent = index == _currentIndex;
                     return ListTile(
-                      selected: isCurrent,
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: item.imageUrl != null
-                            ? Image.network(
-                                item.imageUrl!,
-                                width: 50,
-                                height: 50,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                width: 50,
-                                height: 50,
-                                color: Colors.grey,
-                              ),
-                      ),
+                      selected: index == _currentIndex,
+                      leading: Image.network(item.imageUrl ?? '', width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(Icons.audio_file)),
                       title: Text(item.title, maxLines: 1),
                       subtitle: Text(item.language),
-                      trailing: isCurrent
-                          ? const Icon(Icons.equalizer, color: Colors.blue)
-                          : null,
                       onTap: () {
                         Navigator.pop(context);
                         if (index != _currentIndex) {
@@ -748,79 +724,6 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  // --- DICTIONARY ---
-  void _showDictionary(String text, String cleanId) {
-    if (_isPlaying) _pauseMedia();
-    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
-    final svc = context.read<TranslationService>();
-
-    setState(() {
-      _showCard = true;
-      _selectedText = text;
-      _selectedCleanId = cleanId;
-      _isLoadingTranslation = true;
-      _cardTranslationFuture = svc
-          .translate(text, user.nativeLanguage, _currentLesson.language)
-          .then((v) => v ?? "");
-    });
-  }
-
-  Widget _buildDictionarySheet() {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF2C2C2C) : Colors.white;
-    final txt = isDark ? Colors.white : Colors.black;
-
-    return Container(
-      height: 250,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [const BoxShadow(blurRadius: 10, color: Colors.black26)],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _selectedText,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: txt,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => setState(() => _showCard = false),
-                ),
-              ],
-            ),
-            const Divider(),
-            const SizedBox(height: 10),
-            FutureBuilder<String>(
-              future: _cardTranslationFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) return const Text("Error loading");
-                return Text(
-                  snapshot.data ?? "No translation",
-                  style: TextStyle(fontSize: 18, color: txt),
-                );
-              },
-            ),
-          ],
         ),
       ),
     );

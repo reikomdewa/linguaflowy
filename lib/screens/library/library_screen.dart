@@ -158,7 +158,7 @@ class LibraryScreen extends StatelessWidget {
                   ],
 
                   // --- 2. PLAYLISTS (Horizontal Stream) ---
-                  _buildPlaylistsSection(context, user.id, isDark, textColor),
+                  _buildPlaylistsSection(context, user.id, isDark, textColor, user.currentLanguage),
 
                   // --- 3. FAVORITES (Vertical) ---
                   if (favoriteLessons.isNotEmpty) ...[
@@ -206,7 +206,7 @@ class LibraryScreen extends StatelessWidget {
 
                   // Empty State Fallback if absolutely nothing exists
                   if (importedLessons.isEmpty && favoriteLessons.isEmpty)
-                    _buildEmptyStateCheck(user.id),
+                    _buildEmptyStateCheck(user.id, user.currentLanguage),
                 ],
               ),
             );
@@ -265,23 +265,25 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
-  // --- PLAYLIST SECTION WIDGET ---
+ // --- PLAYLIST SECTION WIDGET ---
   Widget _buildPlaylistsSection(
     BuildContext context,
     String userId,
     bool isDark,
     Color? textColor,
+    String currentLanguage, // <--- 1. Add this parameter
   ) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .collection('playlists')
+          .where('language', isEqualTo: currentLanguage) // <--- 2. Add this filter
           .orderBy('updatedAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const SizedBox.shrink(); // Hide if empty
+          return const SizedBox.shrink(); 
         }
 
         final docs = snapshot.data!.docs;
@@ -293,7 +295,7 @@ class LibraryScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
               child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.playlist_play_rounded,
                     color: Colors.blueAccent,
                     size: 22,
@@ -313,7 +315,7 @@ class LibraryScreen extends StatelessWidget {
 
             // Horizontal Scroll View for Playlists
             SizedBox(
-              height: 120, // Compact height for the pill buttons
+              height: 120, 
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 scrollDirection: Axis.horizontal,
@@ -325,12 +327,9 @@ class LibraryScreen extends StatelessWidget {
                   final id = docs[index].id;
                   final lessonIds = data['lessonIds'] as List<dynamic>? ?? [];
 
-                  // Using the Widget we created earlier.
-                  // Wrapped in a constrained box to fit horizontally if needed,
-                  // but PlaylistOpenButton is flexible.
                   return Center(
                     child: SizedBox(
-                      width: 280, // Make them wide enough to read
+                      width: 280, 
                       child: PlaylistOpenButton(
                         playlistName: name,
                         playlistId: id,
@@ -350,25 +349,21 @@ class LibraryScreen extends StatelessWidget {
   }
 
   // --- EMPTY STATE CHECKER (Async) ---
-  // Since playlists are async (Stream), and lessons are Sync (Bloc),
-  // we need a tiny stream builder to check if playlists are ALSO empty
-  // before showing the big "Library Empty" icon.
-  Widget _buildEmptyStateCheck(String userId) {
+  Widget _buildEmptyStateCheck(String userId, String currentLanguage) { // <--- Update params
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .collection('playlists')
+          .where('language', isEqualTo: currentLanguage) // <--- Filter here too
           .limit(1)
           .snapshots(),
       builder: (context, snapshot) {
-        // If loading or we have playlists, show nothing (UI is handling it)
+        // If loading or we have playlists in this language, show nothing
         if (!snapshot.hasData) return const SizedBox.shrink();
-
-        // If playlists exist, we are not truly empty.
         if (snapshot.data!.docs.isNotEmpty) return const SizedBox.shrink();
 
-        // If NO playlists AND no lessons (parent check), show empty state.
+        // If NO playlists in this language AND no lessons (parent check), show empty state.
         return Padding(
           padding: const EdgeInsets.only(top: 100),
           child: Center(
