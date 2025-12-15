@@ -93,7 +93,13 @@ class LessonRepository {
       return [];
     }
   }
+Future<List<LessonModel>> getCachedGenreLessons(String userId, String languageCode, String genreKey) async {
+    return await _cacheService.loadGenreFeed(userId, languageCode, genreKey);
+  }
 
+  Future<void> cacheGenreLessons(String userId, String languageCode, String genreKey, List<LessonModel> lessons) async {
+    await _cacheService.saveGenreFeed(userId, languageCode, genreKey, lessons);
+  }
   // ==========================================================
   // 2. PAGINATION LOGIC (INFINITE SCROLL)
   // ==========================================================

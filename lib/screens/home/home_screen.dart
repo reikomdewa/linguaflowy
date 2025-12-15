@@ -360,7 +360,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     );
                                   }).toList(),
                                   // Removed HomeVideoFeeds() as requested
-                                  const SizedBox(height: 40),
+                                  const SizedBox(height: 30),
                                 ],
                               ),
                             ),

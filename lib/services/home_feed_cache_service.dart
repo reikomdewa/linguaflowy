@@ -4,21 +4,26 @@ import 'package:path_provider/path_provider.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 
 class HomeFeedCacheService {
-  static const String _fileName = 'home_feed_cache.json';
-  
-  // PRO TIP: Increment this number if you change data structure or filtering logic.
-  // This prevents users from seeing "poisoned" or broken data after an update.
+  static const String _homeFileName = 'home_feed_cache.json';
   static const int _currentCacheVersion = 1;
 
-  Future<File> get _cacheFile async {
+  Future<File> _getFile(String filename) async {
     final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/$_fileName');
+    return File('${directory.path}/$filename');
   }
 
-  /// 1. READ CACHE
-  Future<List<LessonModel>> loadCachedFeed(String userId, String languageCode) async {
+  // ===========================================================================
+  // NEW: HELPER TO PREVENT INVALID FILENAMES
+  // ===========================================================================
+
+
+  // ===========================================================================
+  // PRIVATE GENERIC HELPERS (Unchanged)
+  // ===========================================================================
+
+  Future<List<LessonModel>> _loadFromFile(String filename, String userId, String languageCode) async {
     try {
-      final file = await _cacheFile;
+      final file = await _getFile(filename);
       if (!await file.exists()) return [];
 
       final content = await file.readAsString();
@@ -26,19 +31,8 @@ class HomeFeedCacheService {
 
       final Map<String, dynamic> data = jsonDecode(content);
 
-      // --- CHECK 1: VERSIONING (The Pro Tip) ---
-      // If the saved version doesn't match the code version, ignore the cache.
-      final int savedVersion = data['version'] ?? 0;
-      if (savedVersion != _currentCacheVersion) {
-        // print("⚠️ Old cache version detected ($savedVersion). Ignoring.");
-        return [];
-      }
-
-      // --- CHECK 2: USER & LANGUAGE ---
-      // Prevent showing French cache when user switched to Spanish or logged out
-      if (data['userId'] != userId || data['language'] != languageCode) {
-        return [];
-      }
+      if ((data['version'] ?? 0) != _currentCacheVersion) return [];
+      if (data['userId'] != userId || data['language'] != languageCode) return [];
 
       final List<dynamic> jsonList = data['lessons'] ?? [];
       
@@ -46,67 +40,98 @@ class HomeFeedCacheService {
           .map((json) => LessonModel.fromMap(json, json['id'] ?? ''))
           .toList();
     } catch (e) {
-      // debugPrint("⚠️ Cache read error: $e");
+      // debugPrint("Read Error: $e");
       return [];
     }
   }
 
-  /// 2. WRITE CACHE
-  Future<void> saveFeedToCache(String userId, String languageCode, List<LessonModel> lessons) async {
+  Future<void> _saveToFile(String filename, String userId, String languageCode, List<LessonModel> lessons) async {
     try {
-      final file = await _cacheFile;
-      
-      // --- FIX: INTELLIGENT CACHING ---
-      // Instead of just taking the top 30 (which might be all videos),
-      // we explicitly grab a mix of categories to ensure the UI looks full immediately.
-      
-      List<LessonModel> itemsToCache = [];
-
-      // 1. Grab top 10 System/Guided lessons (Priority)
-      itemsToCache.addAll(
-        lessons.where((l) => l.userId == 'system').take(10)
-      );
-
-      // 2. Grab top 10 Immersion/Native videos
-      itemsToCache.addAll(
-        lessons.where((l) => l.userId == 'system_native').take(10)
-      );
-      
-      // 3. Grab top 5 User Imported lessons (Most important for user)
-      itemsToCache.addAll(
-        lessons.where((l) => !l.userId.startsWith('system')).take(5)
-      );
-
-      // 4. Fill the rest with whatever is newest until we hit 50 items
-      final existingIds = itemsToCache.map((e) => e.id).toSet();
-      final remaining = lessons
-          .where((l) => !existingIds.contains(l.id))
-          .take(50 - itemsToCache.length);
-          
-      itemsToCache.addAll(remaining);
-
-      // 5. Re-sort them by date so they display correctly in the UI
-      itemsToCache.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final file = await _getFile(filename);
 
       final Map<String, dynamic> data = {
-        'version': _currentCacheVersion, // <--- Saving Version
+        'version': _currentCacheVersion,
         'timestamp': DateTime.now().toIso8601String(),
         'userId': userId,
         'language': languageCode,
-        'lessons': itemsToCache.map((l) => l.toMap()).toList(),
+        'lessons': lessons.map((l) => l.toMap()).toList(),
       };
 
       await file.writeAsString(jsonEncode(data));
     } catch (e) {
-      // debugPrint("⚠️ Cache write error: $e");
+      // debugPrint("Write Error: $e");
     }
   }
-  
-  /// 3. CLEAR CACHE (Optional, e.g. on Logout)
+
+  // ===========================================================================
+  // HOME FEED METHODS
+  // ===========================================================================
+
+  Future<List<LessonModel>> loadCachedFeed(String userId, String languageCode) {
+    return _loadFromFile(_homeFileName, userId, languageCode);
+  }
+
+  Future<void> saveFeedToCache(String userId, String languageCode, List<LessonModel> lessons) async {
+    List<LessonModel> itemsToCache = [];
+
+    itemsToCache.addAll(lessons.where((l) => l.userId == 'system').take(10));
+    itemsToCache.addAll(lessons.where((l) => l.userId == 'system_native').take(10));
+    itemsToCache.addAll(lessons.where((l) => !l.userId.startsWith('system')).take(5));
+
+    final existingIds = itemsToCache.map((e) => e.id).toSet();
+    final remaining = lessons
+        .where((l) => !existingIds.contains(l.id))
+        .take(50 - itemsToCache.length);
+        
+    itemsToCache.addAll(remaining);
+    itemsToCache.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    await _saveToFile(_homeFileName, userId, languageCode, itemsToCache);
+  }
+ Future<List<LessonModel>> loadGenreFeed(String userId, String languageCode, String genreKey) {
+    // Ensure we are using a safe filename, regardless of what key is passed
+    final filename = _generateSafeGenreFilename(genreKey);
+    return _loadFromFile(filename, userId, languageCode);
+  }
+
+  Future<void> saveGenreFeed(String userId, String languageCode, String genreKey, List<LessonModel> lessons) async {
+    final filename = _generateSafeGenreFilename(genreKey);
+    
+    // Cache top 20
+    final itemsToCache = lessons.take(20).toList();
+    await _saveToFile(filename, userId, languageCode, itemsToCache);
+  }
+
+  /// Converts keys into safe filenames
+  /// Input: "literature" -> "genre_literature_cache.json" (Perfect)
+  /// Input: "Books & Literature" -> "genre_books___literature_cache.json" (Safe fallback)
+  String _generateSafeGenreFilename(String genreKey) {
+    final safeKey = genreKey
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]'), '_'); // Replace non-alphanumeric with _
+        
+    return 'genre_${safeKey}_cache.json';
+  }
+
   Future<void> clearCache() async {
-    final file = await _cacheFile;
-    if (await file.exists()) {
-      await file.delete();
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      
+      // Using listSync() without recursive true. 
+      // Safe filenames ensure we don't accidentally create subdirectories.
+      final files = directory.listSync().where((entity) {
+        return entity is File && 
+               (entity.path.endsWith('home_feed_cache.json') || 
+                // Checks for our new safe format (and matches old format if simple)
+                (entity.path.contains('genre_') && entity.path.endsWith('_cache.json')));
+      });
+
+      for (var entity in files) {
+        await entity.delete();
+      }
+    } catch (e) {
+      // Ignore cleanup errors
     }
   }
 }
