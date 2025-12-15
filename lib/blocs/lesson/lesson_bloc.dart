@@ -33,29 +33,51 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
   }
 
   // 1. INITIAL LOAD (Resets everything)
+ // Inside LessonBloc
+
   Future<void> _onLessonLoadRequested(
     LessonLoadRequested event,
     Emitter<LessonState> emit,
   ) async {
-    emit(LessonLoading());
+    // 1. Show Loading initially (only if we have no data)
+    // OR: Emit Cached Data immediately if available
     
-    // Save these for later use in pagination
     _currentUserId = event.userId;
     _currentLanguageCode = event.languageCode;
 
+    // STEP A: Try to load Cache fast
+    final cachedLessons = await _lessonRepository.getCachedLessons(event.userId, event.languageCode);
+    
+    if (cachedLessons.isNotEmpty) {
+      // 🚀 INSTANTLY SHOW CACHED CONTENT
+      emit(LessonLoaded(
+        cachedLessons,
+        hasReachedMax: false,
+      ));
+    } else {
+      // Only show spinner if cache is empty
+      emit(LessonLoading());
+    }
+
     try {
-      // Fetch only the first 20 (defined by Repository default)
-      final allLessons = await _lessonRepository.getAndSyncLessons(
+      // STEP B: Fetch Fresh Data (Network + System)
+      final freshLessons = await _lessonRepository.getAndSyncLessons(
         event.userId, 
         event.languageCode
       );
       
+      // STEP C: Replace Cache with Fresh Data
       emit(LessonLoaded(
-        allLessons,
-        hasReachedMax: false, // We assume there might be more
+        freshLessons,
+        hasReachedMax: false,
       ));
     } catch (e) {
-      emit(LessonError(e.toString()));
+      // If network fails, we rely on the cached data we already emitted.
+      // If cache was empty, then we show error.
+      if (cachedLessons.isEmpty) {
+        emit(LessonError(e.toString()));
+      }
+      // If cache exists, we fail silently (or show a snackbar via a side effect listener) keeping the old data visible.
     }
   }
 

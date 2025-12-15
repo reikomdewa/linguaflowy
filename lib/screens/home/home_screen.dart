@@ -263,29 +263,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
                           // --- DASHBOARD MODE (Horizontal Sections) ---
                           final nativeLessons = processedLessons
-                              .where((l) => l.type == 'video_native')
+                              .where((l) => l.userId == 'system_native')
                               .toList();
+
+                          // 2. GUIDED: Only the standard curriculum from the 'system' user
+                          // (This allows both Text and Video formats if they belong to the main course)
                           final guidedLessons = processedLessons
-                              .where((l) => l.type == 'video')
+                              .where((l) => l.userId == 'system')
                               .toList();
+
+                          // 3. AUDIO: Explicitly audio types (system_librivox, system_audiobook)
+                          // Note: You might want to include 'system' audio here too if you have it
                           final audioLessons = processedLessons
                               .where((l) => l.type == 'audio')
                               .toList();
+
+                          // 4. LIBRARY/BOOKS: Gutenberg, Beginner, Storybooks
                           final libraryLessons = processedLessons
                               .where(
                                 (l) =>
                                     l.type == 'text' &&
-                                    l.userId.startsWith('system'),
+                                    (l.userId == 'system_gutenberg' ||
+                                        l.userId == 'system_beginner' ||
+                                        l.userId == 'system_storybooks'),
                               )
                               .toList();
+
+                          // 5. IMPORTED: Anything NOT created by the system
                           final importedLessons = processedLessons
-                              .where(
-                                (l) =>
-                                    (l.type == 'text' ||
-                                        l.type == 'video' ||
-                                        (l.type == 'audio' && l.isLocal)) &&
-                                    !l.userId.startsWith('system'),
-                              )
+                              .where((l) => !l.userId.startsWith('system'))
                               .toList();
 
                           return RefreshIndicator(
@@ -341,15 +347,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                     vocabMap: vocabMap,
                                     isDark: isDark,
                                   ),
-                                  ...GenreConstants.categoryMap.entries.map((entry) {
-  return GenreFeedSection(
-    title: entry.key,      // e.g., "Science & Tech"
-    genreKey: entry.value, // e.g., "science"
-    languageCode: currentLangCode,
-    vocabMap: vocabMap,
-    isDark: isDark,
-  );
-}).toList(),
+                                  ...GenreConstants.categoryMap.entries.map((
+                                    entry,
+                                  ) {
+                                    return GenreFeedSection(
+                                      title:
+                                          entry.key, // e.g., "Science & Tech"
+                                      genreKey: entry.value, // e.g., "science"
+                                      languageCode: currentLangCode,
+                                      vocabMap: vocabMap,
+                                      isDark: isDark,
+                                    );
+                                  }).toList(),
                                   // Removed HomeVideoFeeds() as requested
                                   const SizedBox(height: 40),
                                 ],
@@ -652,15 +661,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     if (isPremium) ...[
                       const SizedBox(width: 4),
-                      Text(
-                        "PRO",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          color: const Color(0xFFFFA000),
-                          fontSize: 12,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
+                      // Text(
+                      //   "PRO",
+                      //   style: TextStyle(
+                      //     fontWeight: FontWeight.w900,
+                      //     color: const Color(0xFFFFA000),
+                      //     fontSize: 12,
+                      //     letterSpacing: 0.5,
+                      //   ),
+                      // ),
                     ],
                   ],
                 ),

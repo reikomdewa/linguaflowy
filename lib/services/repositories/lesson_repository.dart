@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:linguaflow/services/home_feed_cache_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/lesson_service.dart';
@@ -10,6 +11,7 @@ import 'package:linguaflow/services/hybrid_lesson_service.dart';
 class LessonRepository {
   final LessonService _firestoreService;
   final HybridLessonService _localService;
+    final HomeFeedCacheService _cacheService = HomeFeedCacheService();
 
   LessonRepository({
     required LessonService firestoreService,
@@ -20,7 +22,9 @@ class LessonRepository {
   // ==========================================================
   // 1. INITIAL LOAD (CRASH PREVENTION APPLIED)
   // ==========================================================
-  
+    Future<List<LessonModel>> getCachedLessons(String userId, String languageCode) async {
+    return await _cacheService.loadCachedFeed(userId, languageCode);
+  }
   Future<List<LessonModel>> getAndSyncLessons(
     String userId,
     String languageCode, {
@@ -82,7 +86,7 @@ class LessonRepository {
       
       // Sort by Newest First
       allLessons.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
+ _cacheService.saveFeedToCache(userId, languageCode, allLessons);
       return allLessons;
     } catch (e) {
       print("Error in LessonRepository sync: $e");
