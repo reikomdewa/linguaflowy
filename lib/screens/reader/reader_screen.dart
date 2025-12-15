@@ -130,6 +130,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   late AuthBloc _authBloc;
 
    String? _selectedBaseForm; 
+   StreamSubscription? _vocabSubscription;
   @override
   void initState() {
     super.initState();
@@ -1068,6 +1069,7 @@ void _activateCard(
 
     final DocumentReference usageRef = FirebaseFirestore.instance
         .collection('users')
+
         .doc(uid)
         .collection('usage')
         .doc('dictionary_limit');

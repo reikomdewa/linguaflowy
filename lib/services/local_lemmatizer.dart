@@ -1,50 +1,61 @@
 import 'package:flutter/services.dart';
-import 'package:linguaflow/utils/logger.dart';
+import 'package:flutter/foundation.dart'; // Required for 'compute'
+
+// 1. Top-Level Function (Must be outside the class)
+// This runs in a separate thread to avoid freezing the UI.
+Map<String, String> _parseDictionaryInIsolate(String content) {
+  final Map<String, String> map = {};
+  
+  // Splitting a massive string is heavy CPU work
+  final List<String> lines = content.split('\n');
+  
+  for (var line in lines) {
+    if (line.trim().isEmpty) continue;
+    
+    // Format: lemma <tab> token
+    var parts = line.split('\t');
+    if (parts.length >= 2) {
+      final lemma = parts[0].trim();
+      final token = parts[1].trim();
+      map[token.toLowerCase()] = lemma; 
+    }
+  }
+  return map;
+}
 
 class LocalLemmatizer {
   static final LocalLemmatizer _instance = LocalLemmatizer._internal();
   factory LocalLemmatizer() => _instance;
   LocalLemmatizer._internal();
 
-  // Map: "mangeons" -> "manger"
   Map<String, String> _dictionary = {};
   String? _currentLanguage;
+  bool _isLoading = false;
 
   Future<void> load(String languageCode) async {
-    // Avoid reloading if we already have this language loaded
+    // Prevent double loading
     if (_currentLanguage == languageCode && _dictionary.isNotEmpty) return;
+    if (_isLoading) return;
 
+    _isLoading = true;
     _dictionary.clear();
     _currentLanguage = languageCode;
 
     try {
-      // 1. Construct filename (e.g., "lemmatization-fr.txt")
-      // Ensure your asset filenames match this pattern!
       final path = 'assets/dictionaries/lemmatization-$languageCode.txt';
       
+      // 1. Load string from assets (Async I/O - Fast)
       final String content = await rootBundle.loadString(path);
       
-      // 2. Parse Line by Line
-      final List<String> lines = content.split('\n');
+      // 2. Parse the massive text in a BACKGROUND thread (Compute)
+      // This is the fix: It stops the UI from freezing/lagging
+      _dictionary = await compute(_parseDictionaryInIsolate, content);
       
-      for (var line in lines) {
-        if (line.trim().isEmpty) continue;
-        
-        // Format is: lemma <tab> token
-        // Example: manger    mangeons
-        var parts = line.split('\t');
-        
-        if (parts.length >= 2) {
-          final lemma = parts[0].trim();
-          final token = parts[1].trim();
-          
-          // Store it as: _dictionary['mangeons'] = 'manger'
-          _dictionary[token.toLowerCase()] = lemma; 
-        }
-      }
-      printLog("✅ Loaded ${_dictionary.length} lemmas for $languageCode");
+      debugPrint("✅ Loaded ${_dictionary.length} lemmas for $languageCode (Background)");
     } catch (e) {
-      printLog("⚠️ Could not load dictionary for $languageCode (Path: assets/dictionaries/lemmatization-$languageCode.txt). Using raw words.");
+      debugPrint("⚠️ Could not load dictionary for $languageCode: $e");
+    } finally {
+      _isLoading = false;
     }
   }
 
@@ -52,13 +63,9 @@ class LocalLemmatizer {
     if (_dictionary.isEmpty) return word;
     
     final lowerWord = word.toLowerCase().trim();
-    
-    // 1. Direct lookup
     if (_dictionary.containsKey(lowerWord)) {
       return _dictionary[lowerWord]!;
     }
-    
-    // 2. Fallback: Return original word if not found
     return word; 
   }
 }
