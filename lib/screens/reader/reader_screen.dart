@@ -238,7 +238,13 @@ class _ReaderScreenState extends State<ReaderScreen>
     _initializeMedia();
   }
 
-  void _initializeMedia() {
+ void _initializeMedia() {
+    // --- FIX START: Always set TTS language immediately ---
+    // This ensures that even in Video/Audio mode, tapping a word 
+    // works correctly on the very first try.
+    _flutterTts.setLanguage(widget.lesson.language);
+    // --- FIX END ---
+
     if ((_isVideo || _isAudio || _isYoutubeAudio) &&
         widget.lesson.videoUrl != null) {
       _initPlayerController();
