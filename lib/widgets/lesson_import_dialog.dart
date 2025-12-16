@@ -308,7 +308,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
             .firstWhere((w) => w != null && w > 0)
             .timeout(const Duration(seconds: 2));
       } catch (_) {
-        debugPrint("Timeout waiting for video width");
+        printLog("Timeout waiting for video width");
         return null;
       }
 

@@ -67,7 +67,6 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
   // Translation / Dictionary
   bool _showCard = false;
   String _selectedText = "";
-  String _selectedCleanId = "";
   Future<String>? _cardTranslationFuture;
 
   // TTS Fallback
@@ -732,7 +731,6 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
     setState(() {
       _showCard = true;
       _selectedText = text;
-      _selectedCleanId = cleanId;
       _cardTranslationFuture = svc
           .translate(text, user.nativeLanguage, _currentLesson.language)
           .then((v) => v ?? "");
@@ -824,8 +822,7 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
                         width: 50,
                         height: 50,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) =>
-                            const Icon(Icons.audio_file),
+                        errorBuilder: (_, _, _) => const Icon(Icons.audio_file),
                       ),
                       title: Text(item.title, maxLines: 1),
                       subtitle: Text(item.language),

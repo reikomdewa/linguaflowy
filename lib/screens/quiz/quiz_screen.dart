@@ -43,8 +43,6 @@ class _QuizScreenState extends State<QuizScreen> {
   String _targetLangName = 'English';
   String _targetFlag = '🇬🇧';
   Timer? _cooldownTimer;
-  final int _secondsRemaining = 0;
-  int _retryCount = 0;
   bool _hasLoaded = false;
 
   @override
@@ -264,13 +262,7 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 
-  void _retryQuizLoad() {
-    setState(() {
-      _retryCount++;
-      _hasLoaded = false;
-    });
-    _initializeAppSequence();
-  }
+ 
 
   @override
   Widget build(BuildContext context) {
