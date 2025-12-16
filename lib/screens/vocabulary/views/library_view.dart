@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
-import 'package:linguaflow/utils/srs_algorithm.dart';
 // Import the player widget
 import '../widgets/video_srs_player.dart';
 

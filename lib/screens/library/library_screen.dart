@@ -158,7 +158,13 @@ class LibraryScreen extends StatelessWidget {
                   ],
 
                   // --- 2. PLAYLISTS (Horizontal Stream) ---
-                  _buildPlaylistsSection(context, user.id, isDark, textColor, user.currentLanguage),
+                  _buildPlaylistsSection(
+                    context,
+                    user.id,
+                    isDark,
+                    textColor,
+                    user.currentLanguage,
+                  ),
 
                   // --- 3. FAVORITES (Vertical) ---
                   if (favoriteLessons.isNotEmpty) ...[
@@ -265,25 +271,25 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
- // --- PLAYLIST SECTION WIDGET ---
+  // --- PLAYLIST SECTION WIDGET ---
   Widget _buildPlaylistsSection(
     BuildContext context,
     String userId,
     bool isDark,
     Color? textColor,
-    String currentLanguage, // <--- 1. Add this parameter
+    String currentLanguage,
   ) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .collection('playlists')
-          .where('language', isEqualTo: currentLanguage) // <--- 2. Add this filter
+          .where('language', isEqualTo: currentLanguage)
           .orderBy('updatedAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const SizedBox.shrink(); 
+          return const SizedBox.shrink();
         }
 
         final docs = snapshot.data!.docs;
@@ -315,7 +321,7 @@ class LibraryScreen extends StatelessWidget {
 
             // Horizontal Scroll View for Playlists
             SizedBox(
-              height: 120, 
+              height: 120,
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 scrollDirection: Axis.horizontal,
@@ -327,15 +333,135 @@ class LibraryScreen extends StatelessWidget {
                   final id = docs[index].id;
                   final lessonIds = data['lessonIds'] as List<dynamic>? ?? [];
 
+                  // --- ACTION: Functions to handle Edit and Delete ---
+                  void handleEdit() {
+                    _showEditPlaylistDialog(context, userId, id, name);
+                  }
+
+                  void handleDelete() {
+                    _showDeletePlaylistDialog(context, userId, id);
+                  }
+
                   return Center(
                     child: SizedBox(
-                      width: 280, 
-                      child: PlaylistOpenButton(
-                        playlistName: name,
-                        playlistId: id,
-                        lessonIds: lessonIds,
-                        currentUserId: userId,
-                        isDark: isDark,
+                      width: 280,
+                      // Use a Stack to overlay the Menu Icon on top of the button
+                      child: Stack(
+                        children: [
+                          // 1. The Main Content + Long Press Handler
+                          GestureDetector(
+                            onLongPress: () {
+                              showModalBottomSheet(
+                                context: context,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(16),
+                                  ),
+                                ),
+                                builder: (ctx) => SafeArea(
+                                  // <--- WRAP IN SAFEAREA
+                                  child: Wrap(
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: 8.0,
+                                        ),
+                                        child: ListTile(
+                                          leading: const Icon(Icons.edit),
+                                          title: const Text('Rename Playlist'),
+                                          onTap: () {
+                                            Navigator.pop(ctx);
+                                            handleEdit();
+                                          },
+                                        ),
+                                      ),
+                                      ListTile(
+                                        leading: const Icon(
+                                          Icons.delete,
+                                          color: Colors.red,
+                                        ),
+                                        title: const Text(
+                                          'Delete Playlist',
+                                          style: TextStyle(color: Colors.red),
+                                        ),
+                                        onTap: () {
+                                          Navigator.pop(ctx);
+                                          handleDelete();
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                            child: PlaylistOpenButton(
+                              playlistName: name,
+                              playlistId: id,
+                              lessonIds: lessonIds,
+                              currentUserId: userId,
+                              isDark: isDark,
+                            ),
+                          ),
+
+                          // 2. The Menu Icon (Top Right)
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: PopupMenuButton<String>(
+                                icon: Icon(
+                                  Icons.more_vert_rounded,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : Colors.black54,
+                                  size: 20,
+                                ),
+                                padding: EdgeInsets.zero,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                onSelected: (value) {
+                                  if (value == 'edit') handleEdit();
+                                  if (value == 'delete') handleDelete();
+                                },
+                                itemBuilder: (BuildContext context) => [
+                                  const PopupMenuItem(
+                                    value: 'edit',
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.edit,
+                                          size: 18,
+                                          color: Colors.blue,
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text('Rename'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                          color: Colors.red,
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Delete',
+                                          style: TextStyle(color: Colors.red),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -348,8 +474,87 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
+  // --- HELPER 1: Edit Dialog ---
+  void _showEditPlaylistDialog(
+    BuildContext context,
+    String userId,
+    String playlistId,
+    String currentName,
+  ) {
+    final controller = TextEditingController(text: currentName);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Rename Playlist"),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: "Enter new name"),
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              final newName = controller.text.trim();
+              if (newName.isNotEmpty) {
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(userId)
+                    .collection('playlists')
+                    .doc(playlistId)
+                    .update({'name': newName});
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- HELPER 2: Delete Dialog ---
+  void _showDeletePlaylistDialog(
+    BuildContext context,
+    String userId,
+    String playlistId,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Playlist?"),
+        content: const Text(
+          "Are you sure you want to delete this playlist? The lessons inside will not be deleted.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(userId)
+                  .collection('playlists')
+                  .doc(playlistId)
+                  .delete();
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- EMPTY STATE CHECKER (Async) ---
-  Widget _buildEmptyStateCheck(String userId, String currentLanguage) { // <--- Update params
+  Widget _buildEmptyStateCheck(String userId, String currentLanguage) {
+    // <--- Update params
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')

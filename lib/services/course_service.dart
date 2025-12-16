@@ -30,10 +30,12 @@ class CourseService {
 
       // 2. DETERMINE DIFFICULTY
       String userDifficulty = 'beginner';
-      if (userLevel.toLowerCase().contains('intermediate'))
+      if (userLevel.toLowerCase().contains('intermediate')) {
         userDifficulty = 'intermediate';
-      if (userLevel.toLowerCase().contains('advanced'))
+      }
+      if (userLevel.toLowerCase().contains('advanced')) {
         userDifficulty = 'advanced';
+      }
 
       // 3. FILTERING
       var filtered = allLessons.where((l) {

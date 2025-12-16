@@ -81,13 +81,19 @@ class LessonRepository {
       final Map<String, LessonModel> combinedMap = {};
 
       // Priority 1: System Content (Base)
-      for (var lesson in systemLessons) combinedMap[lesson.id] = lesson;
+      for (var lesson in systemLessons) {
+        combinedMap[lesson.id] = lesson;
+      }
 
       // Priority 2: User Cloud Content (Overwrites System if IDs match)
-      for (var lesson in userLessons) combinedMap[lesson.id] = lesson;
+      for (var lesson in userLessons) {
+        combinedMap[lesson.id] = lesson;
+      }
 
       // Priority 3: Local Imports (Highest Priority - for offline edits)
-      for (var lesson in localImports) combinedMap[lesson.id] = lesson;
+      for (var lesson in localImports) {
+        combinedMap[lesson.id] = lesson;
+      }
 
       final allLessons = combinedMap.values.toList();
 

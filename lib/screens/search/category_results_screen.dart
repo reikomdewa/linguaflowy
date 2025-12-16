@@ -194,8 +194,9 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
                 // Spinner / End Logic
                 if (index >= _lessons.length) {
                   // If we reached max, show nothing (or a "No more items" text)
-                  if (_hasReachedMax || !_isDynamicMode)
+                  if (_hasReachedMax || !_isDynamicMode) {
                     return const SizedBox(height: 20);
+                  }
 
                   // Show Spinner only if we are actively loading
                   return const Center(

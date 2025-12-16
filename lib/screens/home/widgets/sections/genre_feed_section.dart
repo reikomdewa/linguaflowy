@@ -7,7 +7,6 @@ import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
-import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
 import 'package:linguaflow/utils/utils.dart';
 
 // Make sure GenreConstants is imported or defined. 

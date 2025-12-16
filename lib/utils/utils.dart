@@ -8,7 +8,6 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/constants/constants.dart';
-import 'package:linguaflow/services/lesson_cache_service.dart';
 import 'package:linguaflow/utils/logger.dart';
 import 'package:linguaflow/utils/playlist_helper_functions.dart';
 import 'package:path_provider/path_provider.dart';
@@ -18,13 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 // import 'package:package_info_plus/package_info_plus.dart'; // Optional
 
 // --- 3. LESSON OPTIONS DIALOG ---
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 // Keep your existing imports...
-import 'package:linguaflow/blocs/auth/auth_bloc.dart';
-import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
-import 'package:linguaflow/models/lesson_model.dart';
 
 export 'logger.dart';
 

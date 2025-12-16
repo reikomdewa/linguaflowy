@@ -149,7 +149,9 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
   void _generateSmartChunks() {
     _smartChunks = [];
     if (_activeTranscript.isNotEmpty) {
-      for (var t in _activeTranscript) _smartChunks.add(t.text);
+      for (var t in _activeTranscript) {
+        _smartChunks.add(t.text);
+      }
       return;
     }
     List<String> raw = _currentLesson.sentences;
@@ -363,16 +365,22 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
 
   void _togglePlayback() {
     if (_isYoutube && _youtubeController != null) {
-      if (_isPlaying) _youtubeController!.pause();
-      else _youtubeController!.play();
+      if (_isPlaying) {
+        _youtubeController!.pause();
+      } else {
+        _youtubeController!.play();
+      }
     } else {
       // FIX: Handle Replay if finished
       if (_audioPlayer.processingState == ProcessingState.completed) {
         _audioPlayer.seek(Duration.zero);
         _audioPlayer.play();
       } else {
-        if (_isPlaying) _audioPlayer.pause();
-        else _audioPlayer.play();
+        if (_isPlaying) {
+          _audioPlayer.pause();
+        } else {
+          _audioPlayer.play();
+        }
       }
     }
   }
