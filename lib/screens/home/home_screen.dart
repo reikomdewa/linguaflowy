@@ -121,9 +121,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (isUrl) {
       final host = uri.host.toLowerCase();
-      if (host.contains('youtube.com') || host.contains('youtu.be')) {
+      if (host.contains('youtube.com') || host.contains('youtu.be'))
         isYoutube = true;
-      }
     }
 
     String initialTitle = "";
@@ -246,7 +245,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         if (lessonState is LessonLoading) {
                           return const Center(
-                            child: CircularProgressIndicator(),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(height: 16),
+                                Text("Loading all lessons..."),
+                                Text(
+                                  "This may take a moment for the first time.",
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
                           );
                         }
 
@@ -359,7 +369,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       vocabMap: vocabMap,
                                       isDark: isDark,
                                     );
-                                  }),
+                                  }).toList(),
                                   // Removed HomeVideoFeeds() as requested
                                   const SizedBox(height: 30),
                                 ],
@@ -794,9 +804,8 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isDark,
   ) {
     final filtered = lessons.where((l) {
-      if (_selectedGlobalFilter == 'Videos') {
+      if (_selectedGlobalFilter == 'Videos')
         return l.type == 'video' || l.type == 'video_native';
-      }
       if (_selectedGlobalFilter == 'Audio') return l.type == 'audio';
       if (_selectedGlobalFilter == 'Text') return l.type == 'text';
       return true;
