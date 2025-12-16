@@ -4,9 +4,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import '../reader_utils.dart';
+import 'package:linguaflow/utils/language_helper.dart';
 
 class InteractiveTextDisplay extends StatefulWidget {
   final String text;
+  final String language;
   final int sentenceIndex;
   final Map<String, VocabularyItem> vocabulary;
   final Function(String word, String cleanId, Offset pos) onWordTap;
@@ -19,6 +21,7 @@ class InteractiveTextDisplay extends StatefulWidget {
   const InteractiveTextDisplay({
     super.key,
     required this.text,
+    required this.language,
     required this.sentenceIndex,
     required this.vocabulary,
     required this.onWordTap,
@@ -50,7 +53,8 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
   @override
   void didUpdateWidget(covariant InteractiveTextDisplay oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text) {
+    if (oldWidget.text != widget.text ||
+        oldWidget.language != widget.language) {
       _processText();
       _cancelSelection();
       _isRevealed = false;
@@ -61,9 +65,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
   }
 
   void _processText() {
-    // Splits by whitespace but keeps the delimiters to preserve spacing logic
-    _tokens = widget.text.split(RegExp(r'(\s+)'));
-
+    _tokens = LanguageHelper.tokenizeText(widget.text, widget.language);
     _tokenKeys.clear();
     for (int i = 0; i < _tokens.length; i++) {
       _tokenKeys.add(GlobalKey());
@@ -89,7 +91,6 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
         if (renderBox != null) {
           final localPosition = renderBox.globalToLocal(globalPosition);
           final size = renderBox.size;
-          // Generous hit test area
           if (localPosition.dx >= -5 &&
               localPosition.dx <= size.width + 5 &&
               localPosition.dy >= -5 &&
@@ -102,39 +103,20 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     return -1;
   }
 
-  void _onPanStart(DragStartDetails details) {
-    int index = _getTokenIndexFromPosition(details.globalPosition);
-    if (index != -1) {
-      setState(() {
-        _isDragging = true;
-        _startIndex = index;
-        _endIndex = index;
-        _lastDragPos = details.globalPosition;
-      });
-    }
-  }
-
-  void _onPanUpdate(DragUpdateDetails details) {
-    int index = _getTokenIndexFromPosition(details.globalPosition);
-    if (index != -1) {
-      setState(() {
-        _endIndex = index;
-        _lastDragPos = details.globalPosition;
-      });
-    }
-  }
-
-  void _onPanEnd(DragEndDetails details) {
-    if (_startIndex != -1 && _endIndex != -1) {
-      final start = _startIndex < _endIndex ? _startIndex : _endIndex;
-      final end = _startIndex < _endIndex ? _endIndex : _startIndex;
-      final phrase = _tokens.sublist(start, end + 1).join("").trim();
-      if (phrase.isNotEmpty) {
-        widget.onPhraseSelected(phrase, _lastDragPos, _cancelSelection);
-        return;
-      }
-    }
-    _cancelSelection();
+  // Helper Mock Item for consistent coloring logic
+  VocabularyItem _mockItem(int status) {
+    return VocabularyItem(
+      id: 'mock',
+      userId: 'mock',
+      word: 'mock',
+      baseForm: 'mock',
+      language: 'en',
+      translation: '',
+      status: status,
+      timesEncountered: 0,
+      lastReviewed: DateTime.now(),
+      createdAt: DateTime.now(),
+    );
   }
 
   @override
@@ -149,22 +131,34 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     final lineHeight = settings.lineHeight;
     final bool isObscured = widget.isListeningMode && !_isRevealed;
 
-    // Standard subtitle background color (Semi-transparent black)
     final Color overlayBlack = Colors.black.withOpacity(0.6);
+    final bool isScriptioContinua = LanguageHelper.usesNoSpaces(
+      widget.text,
+      widget.language,
+    );
 
     Widget textContent = Wrap(
       spacing: 0,
-      runSpacing: widget.isBigMode ? 12 : 6,
+      runSpacing: widget.isBigMode ? 12 : 8,
       alignment: (widget.isBigMode || widget.isOverlay)
           ? WrapAlignment.center
           : WrapAlignment.start,
+      textDirection: LanguageHelper.isRTL(widget.language)
+          ? TextDirection.rtl
+          : TextDirection.ltr,
+
       children: List.generate(_tokens.length, (index) {
         final token = _tokens[index];
-        if (token.isEmpty) return const SizedBox.shrink();
 
-        final cleanWord = ReaderUtils.generateCleanId(token);
-        final bool isSpace = token.trim().isEmpty;
+        // 1. HIDE ACTUAL SPACE TOKENS
+        // We let the word padding create the visual space.
+        if (token.trim().isEmpty) return const SizedBox.shrink();
 
+        // 2. Identification
+        final String cleanWord = ReaderUtils.generateCleanId(token);
+        final bool isInteractable = cleanWord.isNotEmpty;
+
+        // 3. Selection Logic
         bool isSelected = false;
         if (_isDragging && _startIndex != -1 && _endIndex != -1) {
           final start = _startIndex < _endIndex ? _startIndex : _endIndex;
@@ -172,49 +166,50 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
           if (index >= start && index <= end) isSelected = true;
         }
 
-        // --- COLOR & STYLE LOGIC ---
+        // --- COLOR LOGIC ---
         Color containerColor = Colors.transparent;
         Color textColor = isDark ? Colors.white : Colors.black;
 
         if (widget.isOverlay) {
-          // --- OVERLAY MODE (Video) ---
-          if (isSpace) {
+          if (!isInteractable) {
             containerColor = overlayBlack;
+            textColor = Colors.white;
           } else {
             final vocabItem = widget.vocabulary[cleanWord];
-            // Treat null (not in DB) as status 0
             final int status = vocabItem?.status ?? 0;
 
             if (status == 0) {
-              // 1. UNKNOWN / NEW WORD -> BLUE
               containerColor = Colors.blue.withOpacity(0.8);
               textColor = Colors.white;
             } else if (status < 5) {
-              // 2. LEARNING (Status 1-4) -> PROGRESSIVE COLORS
-              // Use the standard status colors (Red/Orange/Yellow/Green)
-              Color rawColor = ReaderUtils.getWordColor(vocabItem!, true);
-
-              // Ensure color is visible on video (high opacity)
+              Color rawColor = ReaderUtils.getWordColor(
+                _mockItem(status),
+                true,
+              );
               containerColor = rawColor.withOpacity(0.9);
-
-              // Smart text color: Dark text for bright backgrounds (Yellow/Orange)
-              if (status <= 3) {
-                textColor = Colors.black;
-              } else {
-                textColor = Colors.white;
-              }
+              textColor = (status <= 3) ? Colors.black : Colors.white;
             } else {
-              // 3. KNOWN (Status 5+) -> BLACK STRIP
-              // Removes the "ugly" highlight for mastered words
               containerColor = overlayBlack;
               textColor = Colors.white;
             }
           }
         } else {
-          // --- NORMAL MODE (Portrait / Text Reader) ---
-          if (!isSpace) {
+          // Normal Mode
+          if (!isInteractable) {
+            containerColor = Colors.transparent;
+            textColor = isDark ? Colors.white : Colors.black87;
+          } else {
             final vocabItem = widget.vocabulary[cleanWord];
-            containerColor = ReaderUtils.getWordColor(vocabItem, isDark);
+            final int status = vocabItem?.status ?? 0;
+
+            if (status < 5) {
+              containerColor = ReaderUtils.getWordColor(
+                _mockItem(status),
+                isDark,
+              );
+            } else {
+              containerColor = Colors.transparent;
+            }
             textColor = ReaderUtils.getTextColorForStatus(
               vocabItem,
               isSelected,
@@ -223,34 +218,58 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
           }
         }
 
-        // Selection Override (Dragging)
         if (isSelected) {
           containerColor = Colors.purple.withOpacity(0.8);
           textColor = Colors.white;
         }
 
-        // --- PADDING LOGIC ---
+        // --- PADDING (This acts as the Space) ---
+        // Since we removed margins, we increase padding slightly to keep words readable.
         EdgeInsetsGeometry padding;
-        if (isSpace) {
-          padding = widget.isOverlay
-              ? const EdgeInsets.symmetric(vertical: 2.0)
-              : EdgeInsets.zero;
+        if (isScriptioContinua) {
+          // CJK: Tiny padding
+          padding = const EdgeInsets.symmetric(horizontal: 1.0, vertical: 2.0);
         } else {
-          padding = const EdgeInsets.symmetric(horizontal: 2.5, vertical: 2.0);
+          if (isInteractable) {
+            // Words: 4.0 padding on both sides = 8.0 visual gap between words.
+            padding = const EdgeInsets.symmetric(
+              horizontal: 4.0,
+              vertical: 2.0,
+            );
+          } else {
+            // Punctuation: Tighter padding so it sticks closer to words
+            padding = const EdgeInsets.symmetric(
+              horizontal: 1.5,
+              vertical: 2.0,
+            );
+          }
         }
 
         return GestureDetector(
           key: _tokenKeys[index],
           onTapUp: (details) {
-            if (!isSpace && !isObscured && !_isDragging) {
-              widget.onWordTap(token, cleanWord, details.globalPosition);
+            if (isInteractable && !isObscured && !_isDragging) {
+              final String wordForDict = token.replaceAll(
+                RegExp(r'^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$', unicode: true),
+                '',
+              );
+              if (wordForDict.isNotEmpty) {
+                widget.onWordTap(
+                  wordForDict,
+                  cleanWord,
+                  details.globalPosition,
+                );
+              }
             }
           },
+          behavior: HitTestBehavior.translucent,
           child: Container(
+            // FIX: Removed Margin completely to allow colors to touch/join
+            margin: EdgeInsets.zero,
             padding: padding,
             decoration: BoxDecoration(
               color: containerColor,
-              // Square corners for overlay to look like captions, rounded for normal
+              // Rounded corners (4.0 for Normal, 0 for Overlay if you want seamless block)
               borderRadius: BorderRadius.circular(widget.isOverlay ? 0 : 4),
               border: isSelected
                   ? Border.all(color: Colors.white, width: 1)
@@ -263,6 +282,9 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
                 height: lineHeight,
                 color: textColor,
                 fontWeight: FontWeight.normal,
+                fontFamily: ['am', 'ti'].contains(widget.language)
+                    ? 'Kefa'
+                    : null,
                 shadows: (widget.isOverlay && containerColor == overlayBlack)
                     ? [
                         const Shadow(
@@ -316,10 +338,46 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     }
 
     return GestureDetector(
-      onPanStart: _onPanStart,
-      onPanUpdate: _onPanUpdate,
-      onPanEnd: _onPanEnd,
+      onPanStart: (details) => _onPanStart(details),
+      onPanUpdate: (details) => _onPanUpdate(details),
+      onPanEnd: (details) => _onPanEnd(details),
       child: textContent,
     );
+  }
+
+  // ... (Keep existing _onPan methods) ...
+  void _onPanStart(DragStartDetails details) {
+    int index = _getTokenIndexFromPosition(details.globalPosition);
+    if (index != -1) {
+      setState(() {
+        _isDragging = true;
+        _startIndex = index;
+        _endIndex = index;
+        _lastDragPos = details.globalPosition;
+      });
+    }
+  }
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    int index = _getTokenIndexFromPosition(details.globalPosition);
+    if (index != -1) {
+      setState(() {
+        _endIndex = index;
+        _lastDragPos = details.globalPosition;
+      });
+    }
+  }
+
+  void _onPanEnd(DragEndDetails details) {
+    if (_startIndex != -1 && _endIndex != -1) {
+      final start = _startIndex < _endIndex ? _startIndex : _endIndex;
+      final end = _startIndex < _endIndex ? _endIndex : _startIndex;
+      final phrase = _tokens.sublist(start, end + 1).join("").trim();
+      if (phrase.isNotEmpty) {
+        widget.onPhraseSelected(phrase, _lastDragPos, _cancelSelection);
+        return;
+      }
+    }
+    _cancelSelection();
   }
 }

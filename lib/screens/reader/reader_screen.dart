@@ -9,6 +9,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/screens/completion/completion_screen.dart';
 import 'package:linguaflow/services/local_lemmatizer.dart';
+import 'package:linguaflow/utils/language_helper.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -430,28 +431,36 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
     List<String> rawSentences = widget.lesson.sentences;
     if (rawSentences.isEmpty) {
-      rawSentences = widget.lesson.content.split(RegExp(r'(?<=[.!?])\s+'));
+      // USE HELPER: Gets the correct Regex for the language
+      final splitter = LanguageHelper.getSentenceSplitter(widget.lesson.language);
+      rawSentences = widget.lesson.content.split(splitter);
     }
     for (String sentence in rawSentences) {
       if (sentence.trim().isNotEmpty) _smartChunks.add(sentence.trim());
     }
   }
 
-  void _prepareBookPages() {
+ void _prepareBookPages() {
     _bookPages = [];
     List<int> currentPageIndices = [];
-    int currentWordCount = 0;
+    int currentCount = 0;
+    
+    // USE HELPER: Different page limits for CJK vs Latin
+    final int limit = LanguageHelper.getItemsPerPage(widget.lesson.language);
+
     for (int i = 0; i < _smartChunks.length; i++) {
       String s = _smartChunks[i];
-      int wordCount = s.split(' ').length;
-      if (currentWordCount + wordCount > _wordsPerPage &&
-          currentPageIndices.isNotEmpty) {
+      
+      // USE HELPER: Count chars for CJK, words for others
+      int count = LanguageHelper.measureTextLength(s, widget.lesson.language);
+      
+      if (currentCount + count > limit && currentPageIndices.isNotEmpty) {
         _bookPages.add(currentPageIndices);
         currentPageIndices = [];
-        currentWordCount = 0;
+        currentCount = 0;
       }
       currentPageIndices.add(i);
-      currentWordCount += wordCount;
+      currentCount += count;
     }
     if (currentPageIndices.isNotEmpty) _bookPages.add(currentPageIndices);
   }
@@ -863,6 +872,10 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _handleWordTap(String word, String cleanId, Offset pos) async {
+     if (cleanId.trim().isEmpty) return; 
+
+
+
     _activeSelectionClearer?.call();
     _activeSelectionClearer = null;
     if (_isCheckingLimit) return;
@@ -1141,6 +1154,7 @@ void _activateCard(
     int status, {
     bool showDialog = true,
   }) async {
+      if (clean.trim().isEmpty) return;
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
  String detectedBaseForm = LocalLemmatizer().getLemma(orig);
     // 1. Get Video Context (Existing logic)
@@ -1282,10 +1296,16 @@ void _activateCard(
     }
   }
 
-  void _handleSwipeMarking(int index) {
+void _handleSwipeMarking(int index) {
     if (!_autoMarkOnSwipe || index < 0 || index >= _smartChunks.length) return;
-    for (var w in _smartChunks[index].split(RegExp(r'(\s+)'))) {
+    
+    // USE HELPER: Tokenize correctly (chars for CJK, words for others)
+    final tokens = LanguageHelper.tokenizeText(_smartChunks[index], widget.lesson.language);
+
+    for (var w in tokens) {
+      if (w.trim().isEmpty) continue;
       final c = ReaderUtils.generateCleanId(w);
+      // Ensure we don't accidentally mark a single punctuation mark as a "word"
       if (c.isNotEmpty && (_vocabulary[c]?.status ?? 0) == 0) {
         _updateWordStatus(c, w.trim(), "", 5, showDialog: false);
       }
@@ -1484,280 +1504,286 @@ void _activateCard(
 
     return Theme(
       data: themeData,
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        appBar: AppBar(
-          title: Text(widget.lesson.title),
-          actions: [
-            IconButton(
-              icon: Icon(
-                _isListeningMode ? Icons.hearing : Icons.hearing_disabled,
-              ),
-              onPressed: () =>
-                  setState(() => _isListeningMode = !_isListeningMode),
-            ),
-            if (!(_isVideo || _isAudio || _isYoutubeAudio) && !_isSentenceMode)
+      child: Directionality(
+        textDirection: LanguageHelper.isRTL(widget.lesson.language) 
+            ? TextDirection.rtl 
+            : TextDirection.ltr,
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          appBar: AppBar(
+            title: Text(widget.lesson.title),
+            actions: [
               IconButton(
                 icon: Icon(
-                  _isPlaying || _isTtsPlaying ? Icons.pause : Icons.play_arrow,
+                  _isListeningMode ? Icons.hearing : Icons.hearing_disabled,
                 ),
-                onPressed: _toggleTtsFullLesson,
+                onPressed: () =>
+                    setState(() => _isListeningMode = !_isListeningMode),
               ),
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'toggle_swipe') {
-                  setState(() => _autoMarkOnSwipe = !_autoMarkOnSwipe);
-                  final user =
-                      (context.read<AuthBloc>().state as AuthAuthenticated)
-                          .user;
-                  FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(user.id)
-                      .collection('preferences')
-                      .doc('reader')
-                      .set({
-                        'autoMarkOnSwipe': _autoMarkOnSwipe,
-                      }, SetOptions(merge: true));
-                } else if (value == 'toggle_cc') {
-                  _toggleSubtitles();
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'toggle_swipe',
-                  child: Row(
-                    children: [
-                      Icon(
-                        _autoMarkOnSwipe
-                            ? Icons.check_box
-                            : Icons.check_box_outline_blank,
-                        color: Theme.of(context).iconTheme.color,
-                      ),
-                      const SizedBox(width: 8),
-                      const Text('Auto-mark on swipe'),
-                    ],
+              if (!(_isVideo || _isAudio || _isYoutubeAudio) && !_isSentenceMode)
+                IconButton(
+                  icon: Icon(
+                    _isPlaying || _isTtsPlaying ? Icons.pause : Icons.play_arrow,
                   ),
+                  onPressed: _toggleTtsFullLesson,
                 ),
-                if (_isVideo || _isAudio || _isYoutubeAudio)
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'toggle_swipe') {
+                    setState(() => _autoMarkOnSwipe = !_autoMarkOnSwipe);
+                    final user =
+                        (context.read<AuthBloc>().state as AuthAuthenticated)
+                            .user;
+                    FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user.id)
+                        .collection('preferences')
+                        .doc('reader')
+                        .set({
+                          'autoMarkOnSwipe': _autoMarkOnSwipe,
+                        }, SetOptions(merge: true));
+                  } else if (value == 'toggle_cc') {
+                    _toggleSubtitles();
+                  }
+                },
+                itemBuilder: (context) => [
                   PopupMenuItem(
-                    value: 'toggle_cc',
+                    value: 'toggle_swipe',
                     child: Row(
                       children: [
                         Icon(
-                          _showSubtitles
-                              ? Icons.closed_caption
-                              : Icons.closed_caption_off,
+                          _autoMarkOnSwipe
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
                           color: Theme.of(context).iconTheme.color,
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          _showSubtitles ? 'Hide Captions' : 'Show Captions',
-                        ),
+                        const Text('Auto-mark on swipe'),
                       ],
                     ),
                   ),
-              ],
-            ),
-          ],
-        ),
-        body: SafeArea(
-          child: Stack(
-            children: [
-              Column(
-                children: [
                   if (_isVideo || _isAudio || _isYoutubeAudio)
-                    Container(
-                      width: double.infinity,
-                      color: Colors.black,
-                      child: _isYoutubeAudio
-                          ? Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  height: 1,
-                                  child: IndexedStack(
-                                    index: 0,
+                    PopupMenuItem(
+                      value: 'toggle_cc',
+                      child: Row(
+                        children: [
+                          Icon(
+                            _showSubtitles
+                                ? Icons.closed_caption
+                                : Icons.closed_caption_off,
+                            color: Theme.of(context).iconTheme.color,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _showSubtitles ? 'Hide Captions' : 'Show Captions',
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          body: SafeArea(
+            child: Stack(
+              children: [
+                Column(
+                  children: [
+                    if (_isVideo || _isAudio || _isYoutubeAudio)
+                      Container(
+                        width: double.infinity,
+                        color: Colors.black,
+                        child: _isYoutubeAudio
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    height: 1,
+                                    child: IndexedStack(
+                                      index: 0,
+                                      children: [
+                                        _buildSharedPlayer(),
+                                        Container(color: Colors.black),
+                                      ],
+                                    ),
+                                  ),
+                                  _buildYoutubeAudioControls(),
+                                ],
+                              )
+                            : _isAudio
+                            ? ReaderMediaHeader(
+                                isInitializing: _isInitializingMedia,
+                                isAudio: true,
+                                isLocalMedia: _isLocalMedia,
+                                localVideoController: null,
+                                localPlayer: _localPlayer,
+                                youtubeController: _youtubeController,
+                                onToggleFullscreen: _toggleCustomFullScreen,
+                              )
+                            : AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: GestureDetector(
+                                  onTap: _toggleControls,
+                                  onVerticalDragEnd: (details) {
+                                    if (details.primaryVelocity != null &&
+                                        details.primaryVelocity! < -400) {
+                                      _toggleCustomFullScreen();
+                                    }
+                                  },
+                                  child: Stack(
                                     children: [
                                       _buildSharedPlayer(),
-                                      Container(color: Colors.black),
+                                      VideoControlsOverlay(
+                                        isPlaying: _isPlaying,
+                                        position:
+                                            (_isSeeking &&
+                                                _optimisticPosition != null)
+                                            ? _optimisticPosition!
+                                            : (_isLocalMedia &&
+                                                      _localPlayer != null
+                                                  ? _localPlayer!.state.position
+                                                  : (_youtubeController
+                                                            ?.value
+                                                            .position ??
+                                                        Duration.zero)),
+                                        duration:
+                                            _isLocalMedia && _localPlayer != null
+                                            ? _localPlayer!.state.duration
+                                            : (_youtubeController
+                                                      ?.metadata
+                                                      .duration ??
+                                                  Duration.zero),
+                                        showControls: _showControls,
+                                        onPlayPause: _isPlaying
+                                            ? _pauseMedia
+                                            : _playMedia,
+                                        onSeekRelative: _seekRelative,
+                                        onSeekTo: (d) => _seekToTime(
+                                          d.inMilliseconds / 1000.0,
+                                        ),
+                                        onToggleFullscreen:
+                                            _toggleCustomFullScreen,
+                                      ),
                                     ],
                                   ),
                                 ),
-                                _buildYoutubeAudioControls(),
-                              ],
-                            )
-                          : _isAudio
-                          ? ReaderMediaHeader(
-                              isInitializing: _isInitializingMedia,
-                              isAudio: true,
-                              isLocalMedia: _isLocalMedia,
-                              localVideoController: null,
-                              localPlayer: _localPlayer,
-                              youtubeController: _youtubeController,
-                              onToggleFullscreen: _toggleCustomFullScreen,
-                            )
-                          : AspectRatio(
-                              aspectRatio: 16 / 9,
-                              child: GestureDetector(
-                                onTap: _toggleControls,
-                                onVerticalDragEnd: (details) {
-                                  if (details.primaryVelocity != null &&
-                                      details.primaryVelocity! < -400) {
-                                    _toggleCustomFullScreen();
-                                  }
-                                },
-                                child: Stack(
-                                  children: [
-                                    _buildSharedPlayer(),
-                                    VideoControlsOverlay(
-                                      isPlaying: _isPlaying,
-                                      position:
-                                          (_isSeeking &&
-                                              _optimisticPosition != null)
-                                          ? _optimisticPosition!
-                                          : (_isLocalMedia &&
-                                                    _localPlayer != null
-                                                ? _localPlayer!.state.position
-                                                : (_youtubeController
-                                                          ?.value
-                                                          .position ??
-                                                      Duration.zero)),
-                                      duration:
-                                          _isLocalMedia && _localPlayer != null
-                                          ? _localPlayer!.state.duration
-                                          : (_youtubeController
-                                                    ?.metadata
-                                                    .duration ??
-                                                Duration.zero),
-                                      showControls: _showControls,
-                                      onPlayPause: _isPlaying
-                                          ? _pauseMedia
-                                          : _playMedia,
-                                      onSeekRelative: _seekRelative,
-                                      onSeekTo: (d) => _seekToTime(
-                                        d.inMilliseconds / 1000.0,
-                                      ),
-                                      onToggleFullscreen:
-                                          _toggleCustomFullScreen,
-                                    ),
-                                  ],
-                                ),
                               ),
-                            ),
-                    ),
-                  if (_isCheckingLimit || _isParsingSubtitles)
-                    const LinearProgressIndicator(minHeight: 2),
-                  Expanded(
-                    child: _isParsingSubtitles
-                        ? const Center(child: Text("Loading content..."))
-                        : NotificationListener<ScrollNotification>(
-                            onNotification: (scrollInfo) {
-                              if (_hasMarkedLessonComplete) return false;
-
-                              if (!_isSentenceMode) {
-                                // 1. Paragraph Mode (Swipe Pages)
-                                // Detect if user swipes "past" the last page (Overscroll)
-                                if (scrollInfo is OverscrollNotification &&
-                                    scrollInfo.overscroll > 0) {
-                                  if (_currentPage == _bookPages.length - 1) {
+                      ),
+                    if (_isCheckingLimit || _isParsingSubtitles)
+                      const LinearProgressIndicator(minHeight: 2),
+                    Expanded(
+                      child: _isParsingSubtitles
+                          ? const Center(child: Text("Loading content..."))
+                          : NotificationListener<ScrollNotification>(
+                              onNotification: (scrollInfo) {
+                                if (_hasMarkedLessonComplete) return false;
+        
+                                if (!_isSentenceMode) {
+                                  // 1. Paragraph Mode (Swipe Pages)
+                                  // Detect if user swipes "past" the last page (Overscroll)
+                                  if (scrollInfo is OverscrollNotification &&
+                                      scrollInfo.overscroll > 0) {
+                                    if (_currentPage == _bookPages.length - 1) {
+                                      _markLessonAsComplete();
+                                    }
+                                  }
+                                } else {
+                                  // 2. Sentence Mode (Scroll List)
+                                  // Detect if user scrolls to bottom
+                                  if (scrollInfo.metrics.pixels >=
+                                      scrollInfo.metrics.maxScrollExtent - 50) {
                                     _markLessonAsComplete();
                                   }
                                 }
-                              } else {
-                                // 2. Sentence Mode (Scroll List)
-                                // Detect if user scrolls to bottom
-                                if (scrollInfo.metrics.pixels >=
-                                    scrollInfo.metrics.maxScrollExtent - 50) {
-                                  _markLessonAsComplete();
-                                }
-                              }
-                              return false;
-                            },
-                            child: _isSentenceMode
-                                ? SentenceModeView(
-                                    chunks: _smartChunks,
-                                    activeIndex: _activeSentenceIndex,
-                                    vocabulary: _vocabulary,
-                                    isVideo:
-                                        _isVideo || _isAudio || _isYoutubeAudio,
-                                    isPlaying:
-                                        _isPlaying || _isPlayingSingleSentence,
-                                    isTtsPlaying: _isTtsPlaying,
-                                    onTogglePlayback: _togglePlayback,
-                                    onPlayFromStartContinuous:
-                                        _playFromStartContinuous,
-                                    onPlayContinuous: _playNextContinuous,
-                                    onNext: _goToNextSentence,
-                                    onPrev: _goToPrevSentence,
-                                    onWordTap: _handleWordTap,
-                                    onPhraseSelected: _handlePhraseSelected,
-                                    isLoadingTranslation: _isLoadingTranslation,
-                                    googleTranslation: _googleTranslation,
-                                    myMemoryTranslation: _myMemoryTranslation,
-                                    showError: _showError,
-                                    onRetryTranslation:
-                                        _handleTranslationToggle,
-                                    onTranslateRequest:
-                                        _handleTranslationToggle,
-                                    isListeningMode: _isListeningMode,
-                                  )
-                                : ParagraphModeView(
-                                    lesson: displayLesson,
-                                    bookPages: _bookPages,
-                                    activeSentenceIndex: _activeSentenceIndex,
-                                    currentPage: _currentPage,
-                                    vocabulary: _vocabulary,
-                                    isVideo:
-                                        _isVideo || _isAudio || _isYoutubeAudio,
-                                    listScrollController: _listScrollController,
-                                    pageController: _pageController,
-                                    onPageChanged: (i) =>
-                                        setState(() => _currentPage = i),
-                                    onSentenceTap: (i) {
-                                      if ((_isVideo ||
-                                              _isAudio ||
-                                              _isYoutubeAudio) &&
-                                          i < _activeTranscript.length) {
-                                        _seekToTime(_activeTranscript[i].start);
-                                        _playMedia();
-                                      } else {
-                                        _speakSentence(_smartChunks[i], i);
-                                      }
-                                    },
-                                    onVideoSeek: (t) => _seekToTime(t),
-                                    onWordTap: _handleWordTap,
-                                    onPhraseSelected: _handlePhraseSelected,
-                                    isListeningMode: _isListeningMode,
-                                    itemKeys: _itemKeys,
-                                  ),
-                          ),
-                  ),
-                ],
-              ),
-              Positioned(
-                bottom: 24,
-                right: 24,
-                child: FloatingActionButton(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  onPressed: () =>
-                      setState(() => _isSentenceMode = !_isSentenceMode),
-                  child: Icon(
-                    _isSentenceMode ? Icons.menu_book : Icons.short_text,
-                    color: Colors.white,
+                                return false;
+                              },
+                              child: _isSentenceMode
+                                  ? SentenceModeView(
+                                      chunks: _smartChunks,
+                                      activeIndex: _activeSentenceIndex,
+                                      vocabulary: _vocabulary,
+                                      language: widget.lesson.language,
+                                      isVideo:
+                                          _isVideo || _isAudio || _isYoutubeAudio,
+                                      isPlaying:
+                                          _isPlaying || _isPlayingSingleSentence,
+                                      isTtsPlaying: _isTtsPlaying,
+                                      onTogglePlayback: _togglePlayback,
+                                      onPlayFromStartContinuous:
+                                          _playFromStartContinuous,
+                                      onPlayContinuous: _playNextContinuous,
+                                      onNext: _goToNextSentence,
+                                      onPrev: _goToPrevSentence,
+                                      onWordTap: _handleWordTap,
+                                      onPhraseSelected: _handlePhraseSelected,
+                                      isLoadingTranslation: _isLoadingTranslation,
+                                      googleTranslation: _googleTranslation,
+                                      myMemoryTranslation: _myMemoryTranslation,
+                                      showError: _showError,
+                                      onRetryTranslation:
+                                          _handleTranslationToggle,
+                                      onTranslateRequest:
+                                          _handleTranslationToggle,
+                                      isListeningMode: _isListeningMode,
+                                    )
+                                  : ParagraphModeView(
+                                      lesson: displayLesson,
+                                      bookPages: _bookPages,
+                                      activeSentenceIndex: _activeSentenceIndex,
+                                      currentPage: _currentPage,
+                                      vocabulary: _vocabulary,
+                                      isVideo:
+                                          _isVideo || _isAudio || _isYoutubeAudio,
+                                      listScrollController: _listScrollController,
+                                      pageController: _pageController,
+                                      onPageChanged: (i) =>
+                                          setState(() => _currentPage = i),
+                                      onSentenceTap: (i) {
+                                        if ((_isVideo ||
+                                                _isAudio ||
+                                                _isYoutubeAudio) &&
+                                            i < _activeTranscript.length) {
+                                          _seekToTime(_activeTranscript[i].start);
+                                          _playMedia();
+                                        } else {
+                                          _speakSentence(_smartChunks[i], i);
+                                        }
+                                      },
+                                      onVideoSeek: (t) => _seekToTime(t),
+                                      onWordTap: _handleWordTap,
+                                      onPhraseSelected: _handlePhraseSelected,
+                                      isListeningMode: _isListeningMode,
+                                      itemKeys: _itemKeys,
+                                    ),
+                            ),
+                    ),
+                  ],
+                ),
+                Positioned(
+                  bottom: 24,
+                  right: 24,
+                  child: FloatingActionButton(
+                    backgroundColor: Theme.of(context).primaryColor,
+                    onPressed: () =>
+                        setState(() => _isSentenceMode = !_isSentenceMode),
+                    child: Icon(
+                      _isSentenceMode ? Icons.menu_book : Icons.short_text,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
-              ),
-              if (_showCard && !_isFullScreen)
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _closeTranslationCard,
-                    child: Container(color: Colors.transparent),
+                if (_showCard && !_isFullScreen)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _closeTranslationCard,
+                      child: Container(color: Colors.transparent),
+                    ),
                   ),
-                ),
-              if (_showCard && _cardTranslationFuture != null && !_isFullScreen)
-                _buildTranslationOverlay(),
-            ],
+                if (_showCard && _cardTranslationFuture != null && !_isFullScreen)
+                  _buildTranslationOverlay(),
+              ],
+            ),
           ),
         ),
       ),
@@ -1911,6 +1937,7 @@ void _activateCard(
           text: _smartChunks[_activeSentenceIndex],
           sentenceIndex: _activeSentenceIndex,
           vocabulary: _vocabulary,
+          language: widget.lesson.language, 
           onWordTap: _handleWordTap,
           onPhraseSelected: _handlePhraseSelected,
           isBigMode: true,

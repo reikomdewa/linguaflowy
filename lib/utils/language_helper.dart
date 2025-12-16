@@ -1,10 +1,10 @@
+import 'package:flutter/material.dart';
+
 class LanguageHelper {
   // =========================================================
   // 1. Map of Supported Languages
-  //    (Popular first, then A-Z)
   // =========================================================
   static const Map<String, String> availableLanguages = {
-    // --- 🌟 POPULAR / MOST COMMON ---
     'en': 'English',
     'es': 'Spanish',
     'fr': 'French',
@@ -17,9 +17,7 @@ class LanguageHelper {
     'ru': 'Russian',
     'ko': 'Korean',
     'hi': 'Hindi',
-    'sw': 'Swahili', // Included in top list as it's a major lingua franca
-
-    // --- 🔤 A-Z LIST (All Others) ---
+    'sw': 'Swahili',
     'ach': 'Acholi',
     'ada': 'Adangme',
     'adh': 'Adhola',
@@ -121,44 +119,26 @@ class LanguageHelper {
 
   // =========================================================
   // 2. Resolve Language Code
-  // Handles inputs like "Bemba", "bem ", "es" -> returns "bem", "es"
   // =========================================================
   static String getLangCode(String input) {
     if (input.isEmpty) return 'en';
-
     final clean = input.toLowerCase().trim();
-
-    // 1. Check if the input is already a valid KEY (code)
-    if (availableLanguages.containsKey(clean)) {
-      return clean;
-    }
-
-    // 2. Check if the input matches a VALUE (name)
-    // We iterate through the map to find the key associated with the name.
+    if (availableLanguages.containsKey(clean)) return clean;
     for (var entry in availableLanguages.entries) {
-      if (entry.value.toLowerCase() == clean) {
-        return entry.key;
-      }
+      if (entry.value.toLowerCase() == clean) return entry.key;
     }
-
-    // 3. Fallback / Fuzzy search
     for (var entry in availableLanguages.entries) {
-      if (entry.value.toLowerCase().contains(clean)) {
-        return entry.key;
-      }
+      if (entry.value.toLowerCase().contains(clean)) return entry.key;
     }
-
-    return 'en'; // Default to English if not found
+    return 'en';
   }
 
   // =========================================================
-  // 3. Get Flag Emoji from Code
+  // 3. Get Flag Emoji
   // =========================================================
   static String getFlagEmoji(String langCode) {
     final code = getLangCode(langCode);
-
     switch (code) {
-      // --- Europe / Americas / Asia ---
       case 'en': return '🇬🇧';
       case 'es': return '🇪🇸';
       case 'fr': return '🇫🇷';
@@ -186,136 +166,115 @@ class LanguageHelper {
       case 'uk': return '🇺🇦';
       case 'vi': return '🇻🇳';
       case 'th': return '🇹🇭';
-
-      // --- ZAMBIA 🇿🇲 ---
-      case 'bem': // Bemba
-      case 'loz': // Lozi
-      case 'toi': // Tonga (Zambia)
-        return '🇿🇲';
-
-      // --- UGANDA 🇺🇬 ---
-      case 'ach': // Acholi
-      case 'adh': // Adhola
-      case 'alz': // Alur
-      case 'kdj': // Karamojong
-      case 'koo': // Konjo
-      case 'laj': // Lango
-      case 'lg':  // Luganda
-      case 'lgg': // Lugbara
-      case 'lgg-official':
-      case 'lko': // Olukhayo
-      case 'lsm': // Saamia
-      case 'luc': // Aringa
-      case 'lwg': // Wanga
-      case 'mhi': // Ma'di
-      case 'myx': // Masaba
-      case 'nle': // Lunyole
-      case 'nuj': // Nyole
-      case 'nyn': // Runyankore
-      case 'nyu': // Runyoro
-      case 'te':  // Teso
-      case 'teo': // Teso
-      case 'ttj': // Rutooro
-      case 'cce': // Rukiga
-      case 'xog': // Soga
-        return '🇺🇬';
-
-      // --- GHANA 🇬🇭 ---
-      case 'ada': // Adangme
-      case 'dag': // Dagbani
-      case 'dga': // Dagaare
-      case 'ee':  // Ewe
-      case 'fat': // Fanti
-      case 'gaa': // Ga
-      case 'gjn': // Gonja
-      case 'gur': // Frafra
-      case 'nzi': // Nzema
-      case 'tw-akua': // Twi
-      case 'tw-asan': // Twi
-      case 'xsm': // Kasem
-        return '🇬🇭';
-
-      // --- SOUTH AFRICA 🇿🇦 ---
-      case 'af':  // Afrikaans
-      case 'nr':  // Ndebele
-      case 'nso': // Northern Sotho
-      case 'ss':  // Swati
-      case 'st':  // Southern Sotho
-      case 'tn':  // Tswana
-      case 'ts':  // Tsonga
-      case 've':  // Venda
-      case 'xh':  // Xhosa
-      case 'zu':  // Zulu
-        return '🇿🇦';
-
-      // --- KENYA 🇰🇪 ---
-      case 'bxk': // Bukusu
-      case 'guz': // Gusii
-      case 'kam': // Kamba
-      case 'keo': // Kakwa
-      case 'ki':  // Kikuyu
-      case 'kln': // Kalenjin
-      case 'kpz': // Kupsabiny
-      case 'luo': // Luo
-      case 'mas': // Maasai
-      case 'mer': // Meru
-      case 'saq': // Samburu
-      case 'tuv': // Turkana
+      case 'bem': case 'loz': case 'toi': return '🇿🇲';
+      case 'ach': case 'adh': case 'alz': case 'kdj': case 'koo': case 'laj': 
+      case 'lg': case 'lgg': case 'lgg-official': case 'lko': case 'lsm': 
+      case 'luc': case 'lwg': case 'mhi': case 'myx': case 'nle': case 'nuj': 
+      case 'nyn': case 'nyu': case 'te': case 'teo': case 'ttj': case 'cce': 
+      case 'xog': return '🇺🇬';
+      case 'ada': case 'dag': case 'dga': case 'ee': case 'fat': case 'gaa': 
+      case 'gjn': case 'gur': case 'nzi': case 'tw-akua': case 'tw-asan': 
+      case 'xsm': return '🇬🇭';
+      case 'af': case 'nr': case 'nso': case 'ss': case 'st': case 'tn': 
+      case 'ts': case 've': case 'xh': case 'zu': return '🇿🇦';
+      case 'bxk': case 'guz': case 'kam': case 'keo': case 'ki': case 'kln': 
+      case 'kpz': case 'luo': case 'mas': case 'mer': case 'saq': case 'tuv': 
         return '🇰🇪';
-
-      // --- NIGERIA 🇳🇬 ---
-      case 'ha': // Hausa
-      case 'yo': // Yoruba
-      case 'kr': // Kanuri
-        return '🇳🇬';
-
-      // --- NAMIBIA 🇳🇦 ---
-      case 'hz':  // Herero
-      case 'kj':  // Kuanyama
-      case 'kwn': // Kwangali
-      case 'mhw': // Mbukushu
-      case 'naq': // Nama
-      case 'ng':  // Ndonga
+      case 'ha': case 'yo': case 'kr': return '🇳🇬';
+      case 'hz': case 'kj': case 'kwn': case 'mhw': case 'naq': case 'ng': 
         return '🇳🇦';
-
-      // --- ETHIOPIA 🇪🇹 ---
-      case 'am':  // Amharic
-      case 'om':  // Oromo
-      case 'ti':  // Tigrinya
-      case 'anu': // Anuak
-        return '🇪🇹';
-
-      // --- NIGER 🇳🇪 ---
-      case 'dje':   // Zarma
-      case 'ha-ne': // Hausa (Niger dialect)
-        return '🇳🇪';
-
-      // --- MOZAMBIQUE 🇲🇿 ---
-      case 'toh': // Gitonga
-      case 'tsc': // Tswa
-        return '🇲🇿';
-
-      // --- TANZANIA 🇹🇿 ---
-      case 'sw': // Swahili
-        return '🇹🇿';
-
-      // --- OTHERS ---
-      case 'rw': return '🇷🇼'; // Kinyarwanda
-      case 'so': return '🇸🇴'; // Somali
-      case 'ny': return '🇲🇼'; // Chichewa
-      case 'ff': return '🇸🇳'; // Fula
-      case 'zne': return '🇸🇸'; // Zande
-
-      default:
-        return '🌍';
+      case 'am': case 'om': case 'ti': case 'anu': return '🇪🇹';
+      case 'dje': case 'ha-ne': return '🇳🇪';
+      case 'toh': case 'tsc': return '🇲🇿';
+      case 'sw': return '🇹🇿';
+      case 'rw': return '🇷🇼';
+      case 'so': return '🇸🇴';
+      case 'ny': return '🇲🇼';
+      case 'ff': return '🇸🇳';
+      case 'zne': return '🇸🇸';
+      default: return '🌍';
     }
   }
 
-  // =========================================================
-  // 4. Get Language Name from Code
-  // =========================================================
   static String getLanguageName(String code) {
     final clean = getLangCode(code);
     return availableLanguages[clean] ?? 'English';
+  }
+
+  // Checks if text contains CJK (Chinese, Japanese, Korean) characters
+  static bool hasCJK(String text) {
+    return RegExp(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]').hasMatch(text);
+  }
+
+  /// Checks if text contains Thai characters
+  static bool hasThai(String text) {
+    return RegExp(r'[\u0E00-\u0E7F]').hasMatch(text);
+  }
+
+  /// Checks if we should split by character instead of space.
+  /// 1. Checks the Language Code.
+  /// 2. Checks the ACTUAL TEXT content for CJK/Thai characters.
+  static bool usesNoSpaces(String text, String langCode) {
+    // 1. Check Config
+    final code = getLangCode(langCode);
+    if (['zh', 'ja', 'th', 'lo', 'km', 'my'].contains(code)) return true;
+
+    // 2. Check Content (Auto-detect)
+    // This fixes issues where langCode might be wrong (e.g. 'en' but text is Chinese)
+    if (hasCJK(text)) return true;
+    if (hasThai(text)) return true;
+
+    return false;
+  }
+
+  static bool isRTL(String langCode) {
+    final code = getLangCode(langCode);
+    return ['ar', 'he', 'fa', 'ur', 'ps'].contains(code);
+  }
+
+  /// THE FIX: Tokenizes text into tappable chunks.
+static List<String> tokenizeText(String text, String langCode) {
+    if (usesNoSpaces(text, langCode)) {
+      // CJK/Thai: Split by character
+      return text.split('');
+    } else {
+      // Space-based languages (English, Arabic, Russian, etc.):
+      // We use a Regex to find all distinct parts:
+      // 1. Words (Letters/Numbers, potentially with internal apostrophes/hyphens like "l'eau" or "don't")
+      // 2. Whitespace
+      // 3. Punctuation/Symbols (Anything else)
+      
+      // Explanation of Regex:
+      // [\p{L}\p{N}]+  -> Starts with letters or numbers
+      // (?:['’_-][\p{L}\p{N}]+)* -> Optionally followed by ' or - or _ and more letters (keeps "don't" together)
+      // | (\s+) -> OR Whitespace
+      // | ([^\p{L}\p{N}\s]+) -> OR Punctuation (anything not letter, number, or space)
+      
+      final RegExp tokenizer = RegExp(
+        r"([\p{L}\p{N}]+(?:['’_-][\p{L}\p{N}]+)*)|(\s+)|([^\p{L}\p{N}\s]+)", 
+        unicode: true,
+      );
+
+      return tokenizer.allMatches(text).map((m) => m.group(0)!).toList();
+    }
+  }
+
+  /// Returns the regex used to split sentences.
+  static RegExp getSentenceSplitter(String langCode) {
+    final code = getLangCode(langCode);
+    if (['zh', 'ja'].contains(code)) return RegExp(r'(?<=[.!?。！？])\s*');
+    if (['am', 'ti'].contains(code)) return RegExp(r'(?<=[.!?።])\s*');
+    if (['ar', 'fa', 'ur'].contains(code)) return RegExp(r'(?<=[.!?؟])\s+');
+    return RegExp(r'(?<=[.!?])\s+');
+  }
+
+  static int getItemsPerPage(String langCode) {
+    // We assume 'zh' here just for page size, or default to 100
+    final code = getLangCode(langCode);
+    return ['zh', 'ja', 'th'].contains(code) ? 300 : 100;
+  }
+  
+  static int measureTextLength(String text, String langCode) {
+    return usesNoSpaces(text, langCode) ? text.length : text.split(' ').length;
   }
 }

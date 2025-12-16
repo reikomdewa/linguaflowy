@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/models/lesson_model.dart';
@@ -12,20 +14,21 @@ class SentenceModeView extends StatelessWidget {
   final bool isVideo;
   final bool isPlaying;
   final bool isTtsPlaying;
-  final Function() onTogglePlayback; 
-  final Function() onPlayFromStartContinuous; 
-  final Function() onPlayContinuous; 
-  final Function() onNext;
-  final Function() onPrev;
+  final VoidCallback onTogglePlayback; 
+  final VoidCallback onPlayFromStartContinuous; 
+  final VoidCallback onPlayContinuous; 
+  final VoidCallback onNext;
+  final VoidCallback onPrev;
   final Function(String, String, Offset) onWordTap;
   final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
   final bool isLoadingTranslation;
   final String? googleTranslation;
   final String? myMemoryTranslation;
   final bool showError;
-  final Function() onRetryTranslation;
-  final Function() onTranslateRequest;
+  final VoidCallback onRetryTranslation;
+  final VoidCallback onTranslateRequest;
   final bool isListeningMode;
+  final String language; // <--- REQUIRED: Passed from Parent
 
   const SentenceModeView({
     super.key,
@@ -48,6 +51,7 @@ class SentenceModeView extends StatelessWidget {
     required this.showError,
     required this.onRetryTranslation,
     required this.onTranslateRequest,
+    required this.language, // <--- Ensure this is passed!
     this.isListeningMode = false,
   });
 
@@ -136,6 +140,7 @@ class SentenceModeView extends StatelessWidget {
                       text: currentText,
                       sentenceIndex: safeIndex,
                       vocabulary: vocabulary,
+                      language: language, // <--- CORRECTLY PASSED
                       isBigMode: true,
                       onWordTap: onWordTap,
                       onPhraseSelected: onPhraseSelected,
@@ -196,9 +201,9 @@ class ParagraphModeView extends StatelessWidget {
   final bool isVideo;
   final ScrollController listScrollController;
   final PageController pageController;
-  final Function(int) onPageChanged;
-  final Function(int) onSentenceTap;
-  final Function(double) onVideoSeek;
+  final ValueChanged<int> onPageChanged;
+  final ValueChanged<int> onSentenceTap;
+  final ValueChanged<double> onVideoSeek;
   final Function(String, String, Offset) onWordTap;
   final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
   final bool isListeningMode;
@@ -311,6 +316,7 @@ class ParagraphModeView extends StatelessWidget {
           
           Expanded(
             child: InteractiveTextDisplay(
+              language: lesson.language, // <--- CORRECTLY PASSED
               text: text,
               sentenceIndex: index,
               vocabulary: vocabulary,
@@ -339,6 +345,7 @@ class ParagraphModeView extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         child: InteractiveTextDisplay(
+          language: lesson.language, // <--- CORRECTLY PASSED
           text: text,
           sentenceIndex: index,
           vocabulary: vocabulary,

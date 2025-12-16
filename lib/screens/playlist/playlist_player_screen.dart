@@ -531,6 +531,7 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
                                       text: _smartChunks[index],
                                       sentenceIndex: index,
                                       vocabulary: const {}, 
+                                      language: _currentLesson.language,
                                       onWordTap: (w, c, p) => _showDictionary(w, c),
                                       onPhraseSelected: (p, pos, c) => _showDictionary(p, ReaderUtils.generateCleanId(p)),
                                       isBigMode: isActive,

@@ -6,9 +6,18 @@ class ReaderUtils {
   static const int kFreeLookupLimit = 50;
   static const int kResetMinutes = 10;
 
-  /// Clean text ID for vocabulary lookups (removes punctuation, lowercase)
+  /// Clean text ID for vocabulary lookups
+  /// FIXED: Now supports Unicode (Arabic, Chinese, etc.) using unicode: true
   static String generateCleanId(String text) {
-    return text.toLowerCase().trim().replaceAll(RegExp(r'[^\w\s]'), '');
+    if (text.isEmpty) return "";
+    
+    return text.toLowerCase().trim().replaceAll(
+      // Match anything that is NOT a Letter, NOT a Number, and NOT a Space/Underscore
+      // \p{L} = Any Unicode Letter
+      // \p{N} = Any Unicode Number
+      RegExp(r'[^\p{L}\p{N}\s_]', unicode: true), 
+      ''
+    );
   }
 
   /// Safe parsing for Firestore Timestamps or Strings
@@ -23,17 +32,17 @@ class ReaderUtils {
   static Color getWordColor(VocabularyItem? item, bool isDark) {
     if (item == null || item.status == 0) {
       // New word / unknown: Slight blue highlight
-      return Colors.blue.withOpacity(0.15);
+      return Colors.blue.withOpacity(isDark ? 0.3 : 0.15);
     }
     switch (item.status) {
       case 1:
-        return const Color(0xFFFFF9C4); // Light Yellow
+        return const Color(0xFFFFF9C4).withOpacity(isDark ? 0.8 : 1.0); // Light Yellow
       case 2:
-        return const Color(0xFFFFF59D); // Yellow
+        return const Color(0xFFFFF59D).withOpacity(isDark ? 0.8 : 1.0); // Yellow
       case 3:
-        return const Color(0xFFFFCC80); // Orange-ish
+        return const Color(0xFFFFCC80).withOpacity(isDark ? 0.8 : 1.0); // Orange-ish
       case 4:
-        return const Color(0xFFFFB74D); // Orange
+        return const Color(0xFFFFB74D).withOpacity(isDark ? 0.8 : 1.0); // Orange
       case 5:
         return Colors.transparent; // Learned (No highlight)
       default:
@@ -44,11 +53,19 @@ class ReaderUtils {
   /// Determines text color to ensure readability against highlights
   static Color getTextColorForStatus(VocabularyItem? item, bool isSelected, bool isDark) {
     if (isSelected) return Colors.white;
-    if (item?.status == 5 || item == null) {
-      // For learned or unknown words without highlights, use theme text color
+    
+    // Status 0 (New/Blue) needs white text in Dark Mode, Black in Light Mode
+    if (item == null || item.status == 0) {
       return isDark ? Colors.white : Colors.black87;
     }
-    // For highlighted words (status 1-4), black text usually reads best on yellow/orange
+
+    // Status 5 (Known) -> Standard text color
+    if (item.status == 5) {
+      return isDark ? Colors.white : Colors.black87;
+    }
+
+    // For highlighted words (status 1-4, Yellow/Orange), 
+    // Black text is almost always more readable than White, even in Dark Mode.
     return Colors.black87;
   }
 
