@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -14,13 +13,14 @@ class SentenceModeView extends StatelessWidget {
   final bool isVideo;
   final bool isPlaying;
   final bool isTtsPlaying;
-  final VoidCallback onTogglePlayback; 
-  final VoidCallback onPlayFromStartContinuous; 
-  final VoidCallback onPlayContinuous; 
+  final VoidCallback onTogglePlayback;
+  final VoidCallback onPlayFromStartContinuous;
+  final VoidCallback onPlayContinuous;
   final VoidCallback onNext;
   final VoidCallback onPrev;
   final Function(String, String, Offset) onWordTap;
-  final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
+  final Function(String phrase, Offset pos, VoidCallback clearSelection)
+  onPhraseSelected;
   final bool isLoadingTranslation;
   final String? googleTranslation;
   final String? myMemoryTranslation;
@@ -58,18 +58,18 @@ class SentenceModeView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (chunks.isEmpty) return const Center(child: Text("No content"));
-    
+
     // Ensure index is valid to prevent crashes
     final safeIndex = activeIndex.clamp(0, chunks.length - 1);
     final currentText = chunks[safeIndex];
-    
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final iconColor = isDark ? Colors.white : Colors.black87;
 
     return Column(
       children: [
         const SizedBox(height: 20),
-        
+
         // --- CONTROLS ---
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -78,12 +78,12 @@ class SentenceModeView extends StatelessWidget {
             IconButton(
               icon: const Icon(FontAwesomeIcons.arrowRotateLeft),
               iconSize: 28,
-              color: iconColor.withOpacity(0.7),
+              color: iconColor.withValues(alpha: 0.7),
               onPressed: onPlayFromStartContinuous,
               tooltip: "Restart Sentence",
             ),
             const SizedBox(width: 24),
-            
+
             // Play / Pause
             GestureDetector(
               onTap: onTogglePlayback,
@@ -91,24 +91,27 @@ class SentenceModeView extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: iconColor.withOpacity(0.5), width: 2),
+                  border: Border.all(
+                    color: iconColor.withValues(alpha: 0.5),
+                    width: 2,
+                  ),
                 ),
                 child: Icon(
-                  isVideo 
-                    ? (isPlaying ? Icons.pause : Icons.play_arrow) 
-                    : (isTtsPlaying ? Icons.stop : Icons.play_arrow),
+                  isVideo
+                      ? (isPlaying ? Icons.pause : Icons.play_arrow)
+                      : (isTtsPlaying ? Icons.stop : Icons.play_arrow),
                   size: 40,
                   color: iconColor,
                 ),
               ),
             ),
             const SizedBox(width: 24),
-            
+
             // Next
             IconButton(
               icon: const Icon(FontAwesomeIcons.arrowRotateRight),
               iconSize: 28,
-              color: iconColor.withOpacity(0.7),
+              color: iconColor.withValues(alpha: 0.7),
               onPressed: onPlayContinuous,
               tooltip: "Next Sentence",
             ),
@@ -123,7 +126,7 @@ class SentenceModeView extends StatelessWidget {
               // Swipe LEFT to go NEXT
               if (details.primaryVelocity! < 0) {
                 onNext();
-              } 
+              }
               // Swipe RIGHT to go PREV
               else if (details.primaryVelocity! > 0) {
                 onPrev();
@@ -160,29 +163,60 @@ class SentenceModeView extends StatelessWidget {
   }
 
   Widget _buildTranslationSection(BuildContext context) {
-    final bool hasTranslation = googleTranslation != null || myMemoryTranslation != null;
+    final bool hasTranslation =
+        googleTranslation != null || myMemoryTranslation != null;
 
     if (isLoadingTranslation) {
-      return const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2));
+      return const SizedBox(
+        height: 20,
+        width: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
     } else if (!hasTranslation && showError) {
-      return TextButton(onPressed: onRetryTranslation, child: const Text("Retry Translation"));
+      return TextButton(
+        onPressed: onRetryTranslation,
+        child: const Text("Retry Translation"),
+      );
     } else {
       return Column(
         children: [
           if (myMemoryTranslation != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
-              child: Text(myMemoryTranslation!, style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic, fontSize: 16), textAlign: TextAlign.center),
+              child: Text(
+                myMemoryTranslation!,
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                  fontSize: 16,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
           if (googleTranslation != null)
             Padding(
               padding: const EdgeInsets.all(4.0),
-              child: Text("$googleTranslation", style: TextStyle(color: Colors.grey[400], fontStyle: FontStyle.italic, fontSize: 14), textAlign: TextAlign.center),
+              child: Text(
+                "$googleTranslation",
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontStyle: FontStyle.italic,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
           const SizedBox(height: 12),
           TextButton.icon(
-            icon: Icon(hasTranslation ? Icons.visibility_off : Icons.translate, size: 16, color: Colors.grey),
-            label: Text(hasTranslation ? "Hide Translation" : "Translate Sentence", style: const TextStyle(color: Colors.grey)),
+            icon: Icon(
+              hasTranslation ? Icons.visibility_off : Icons.translate,
+              size: 16,
+              color: Colors.grey,
+            ),
+            label: Text(
+              hasTranslation ? "Hide Translation" : "Translate Sentence",
+              style: const TextStyle(color: Colors.grey),
+            ),
             onPressed: onTranslateRequest,
           ),
         ],
@@ -205,9 +239,10 @@ class ParagraphModeView extends StatelessWidget {
   final ValueChanged<int> onSentenceTap;
   final ValueChanged<double> onVideoSeek;
   final Function(String, String, Offset) onWordTap;
-  final Function(String phrase, Offset pos, VoidCallback clearSelection) onPhraseSelected;
+  final Function(String phrase, Offset pos, VoidCallback clearSelection)
+  onPhraseSelected;
   final bool isListeningMode;
-  final List<GlobalKey> itemKeys; 
+  final List<GlobalKey> itemKeys;
 
   const ParagraphModeView({
     super.key,
@@ -239,8 +274,10 @@ class ParagraphModeView extends StatelessWidget {
         itemCount: lesson.transcript.length + 1, // +1 for bottom padding
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          if (index == lesson.transcript.length) return const SizedBox(height: 100);
-          
+          if (index == lesson.transcript.length) {
+            return const SizedBox(height: 100);
+          }
+
           final entry = lesson.transcript[index];
           final bool isActive = index == activeSentenceIndex;
 
@@ -257,7 +294,9 @@ class ParagraphModeView extends StatelessWidget {
 
     // 2. BOOK VIEW (Pages)
     // Fallback for text-only content
-    if (bookPages.isEmpty) return const Center(child: CircularProgressIndicator());
+    if (bookPages.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
     return PageView.builder(
       controller: pageController,
@@ -269,8 +308,14 @@ class ParagraphModeView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ...bookPages[pageIndex].map((idx) => _buildBookRow(
-                  context, idx, lesson.sentences[idx], idx == activeSentenceIndex)),
+              ...bookPages[pageIndex].map(
+                (idx) => _buildBookRow(
+                  context,
+                  idx,
+                  lesson.sentences[idx],
+                  idx == activeSentenceIndex,
+                ),
+              ),
               const SizedBox(height: 100),
             ],
           ),
@@ -279,22 +324,34 @@ class ParagraphModeView extends StatelessWidget {
     );
   }
 
-  Widget _buildTranscriptRow(BuildContext context, int index, String text, double start, bool isActive) {
+  Widget _buildTranscriptRow(
+    BuildContext context,
+    int index,
+    String text,
+    double start,
+    bool isActive,
+  ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     // Safety check for keys
     final Key? rowKey = (index < itemKeys.length) ? itemKeys[index] : null;
 
     return Container(
       key: rowKey, // Essential for Auto-Scroll
       margin: const EdgeInsets.only(bottom: 12),
-      padding: isActive ? const EdgeInsets.all(12) : const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      padding: isActive
+          ? const EdgeInsets.all(12)
+          : const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       decoration: BoxDecoration(
-        color: isActive 
-            ? (isDark ? Colors.blue.withOpacity(0.2) : Colors.blue.withOpacity(0.1)) 
+        color: isActive
+            ? (isDark
+                  ? Colors.blue.withValues(alpha: 0.2)
+                  : Colors.blue.withValues(alpha: 0.1))
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        border: isActive ? Border.all(color: Colors.blue.withOpacity(0.3)) : null,
+        border: isActive
+            ? Border.all(color: Colors.blue.withValues(alpha: 0.3))
+            : null,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,7 +370,7 @@ class ParagraphModeView extends StatelessWidget {
                 ),
               ),
             ),
-          
+
           Expanded(
             child: InteractiveTextDisplay(
               language: lesson.language, // <--- CORRECTLY PASSED
@@ -330,7 +387,12 @@ class ParagraphModeView extends StatelessWidget {
     );
   }
 
-  Widget _buildBookRow(BuildContext context, int index, String text, bool isActive) {
+  Widget _buildBookRow(
+    BuildContext context,
+    int index,
+    String text,
+    bool isActive,
+  ) {
     // Safety check for keys
     final Key? rowKey = (index < itemKeys.length) ? itemKeys[index] : null;
 
@@ -341,7 +403,9 @@ class ParagraphModeView extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 24),
         padding: isActive ? const EdgeInsets.all(12) : EdgeInsets.zero,
         decoration: BoxDecoration(
-          color: isActive ? Colors.yellow.withOpacity(0.3) : Colors.transparent,
+          color: isActive
+              ? Colors.yellow.withValues(alpha: 0.3)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: InteractiveTextDisplay(

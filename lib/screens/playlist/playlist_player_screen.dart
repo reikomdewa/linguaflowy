@@ -29,7 +29,7 @@ class PlaylistPlayerScreen extends StatefulWidget {
   });
 
   @override
-  _PlaylistPlayerScreenState createState() => _PlaylistPlayerScreenState();
+  State<PlaylistPlayerScreen> createState() => _PlaylistPlayerScreenState();
 }
 
 class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
@@ -573,7 +573,7 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
                                   controller: _listScrollController,
                                   padding: const EdgeInsets.all(20),
                                   itemCount: _smartChunks.length,
-                                  separatorBuilder: (_, __) =>
+                                  separatorBuilder: (_, _) =>
                                       const SizedBox(height: 12),
                                   itemBuilder: (context, index) {
                                     final isActive =
@@ -775,8 +775,9 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
             FutureBuilder<String>(
               future: _cardTranslationFuture,
               builder: (ctx, snap) {
-                if (snap.connectionState == ConnectionState.waiting)
+                if (snap.connectionState == ConnectionState.waiting) {
                   return const CircularProgressIndicator();
+                }
                 return Text(
                   snap.data ?? "No translation",
                   style: TextStyle(
@@ -823,7 +824,7 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
                         width: 50,
                         height: 50,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
+                        errorBuilder: (_, _, _) =>
                             const Icon(Icons.audio_file),
                       ),
                       title: Text(item.title, maxLines: 1),

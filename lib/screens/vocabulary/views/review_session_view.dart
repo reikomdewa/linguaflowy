@@ -17,7 +17,7 @@ class ReviewSessionView extends StatefulWidget {
       {super.key, required this.dueItems, required this.allItems});
 
   @override
-  _ReviewSessionViewState createState() => _ReviewSessionViewState();
+  State<ReviewSessionView> createState() => _ReviewSessionViewState();
 }
 
 class _ReviewSessionViewState extends State<ReviewSessionView> {

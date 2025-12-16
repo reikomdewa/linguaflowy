@@ -66,7 +66,7 @@ class _BugViewTabState extends State<BugViewTab> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   width: double.infinity,
-                  color: Colors.grey.withOpacity(0.1),
+                  color: Colors.grey.withValues(alpha: 0.1),
                   child: Text(
                     data['description'] ?? 'No description provided.',
                   ),
@@ -184,7 +184,7 @@ class _BugViewTabState extends State<BugViewTab> {
                       Icon(
                         Icons.check_circle_outline,
                         size: 60,
-                        color: Colors.green.withOpacity(0.5),
+                        color: Colors.green.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 10),
                       Text(

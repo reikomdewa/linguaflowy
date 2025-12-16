@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -10,14 +11,9 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/constants/constants.dart';
 import 'package:linguaflow/utils/logger.dart';
 import 'package:linguaflow/utils/playlist_helper_functions.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-// Place this inside your User App code
-// import 'package:device_info_plus/device_info_plus.dart'; // Optional
-// import 'package:package_info_plus/package_info_plus.dart'; // Optional
-
-// --- 3. LESSON OPTIONS DIALOG ---
-// Keep your existing imports...
 
 export 'logger.dart';
 
@@ -42,7 +38,7 @@ void showLessonOptions(
         isOwner &&
         (lesson.originalAuthorId == null ||
             lesson.originalAuthorId == lesson.userId);
-    final bool isAdmin = AppConstants.isAdmin(user.email ?? '');
+    final bool isAdmin = AppConstants.isAdmin(user.email);
     canDelete = isAdmin || isCreatedByMe || (isOwner && showDeleteAction);
   }
 
@@ -84,7 +80,7 @@ void showLessonOptions(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: lesson.isFavorite
-                    ? Colors.amber.withOpacity(0.1)
+                    ? Colors.amber.withValues(alpha: 0.1)
                     : (isDark ? Colors.white10 : Colors.grey[100]),
                 shape: BoxShape.circle,
               ),
@@ -147,7 +143,7 @@ void showLessonOptions(
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.blueAccent.withOpacity(0.1),
+                color: Colors.blueAccent.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.playlist_add, color: Colors.blueAccent),
@@ -181,7 +177,7 @@ void showLessonOptions(
               leading: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.delete_outline, color: Colors.red),
@@ -301,11 +297,9 @@ void showReportBugDialog(
             onPressed: () async {
               if (titleCtrl.text.isEmpty) return;
 
-              // 1. Gather Device Info (Optional but recommended)
               String deviceInfo = "Unknown Device";
               String appVersion = "1.0.0";
 
-              /* UNCOMMENT THIS IF YOU INSTALLED THE PACKAGES
               try {
                 final info = await DeviceInfoPlugin().deviceInfo;
                 if (info is AndroidDeviceInfo) deviceInfo = "${info.brand} ${info.model} (SDK ${info.version.sdkInt})";
@@ -313,7 +307,7 @@ void showReportBugDialog(
                 final pkg = await PackageInfo.fromPlatform();
                 appVersion = "${pkg.version} (${pkg.buildNumber})";
               } catch (_) {} 
-              */
+              
 
               // 2. Write to Firestore
               await FirebaseFirestore.instance.collection('bug_reports').add({
@@ -412,17 +406,22 @@ Widget buildMediaPlaceholder(
 }
 
 class Utils {
-  static Future openLink({required url}) async {
-    _launchURL(url);
-  }
+static Future<void> openLink({required String url}) async {
+    final Uri uri = Uri.parse(url);
+  await _launchURL(uri);
+}
 
-  static Future _launchURL(url) async {
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url));
-    } else {
-      throw 'Could not launch $url';
-    }
+
+ static Future<void> _launchURL(Uri url) async {
+
+
+  if (await canLaunchUrl(url)) {
+    await launchUrl(url);
+  } else {
+    throw Exception('Could not launch $url');
   }
+}
+
 
   static List<Widget> heightBetween(
     List<Widget> children, {
@@ -546,21 +545,6 @@ Future<void> printFirestoreSchema() async {
   JsonEncoder encoder = JsonEncoder.withIndent('  ');
   String prettyJson = encoder.convert(schemaJson);
 
-  // --- 1. FIND THE LOCAL PATH ---
-  // Gets the directory where the app can store files
-  final directory = await getApplicationDocumentsDirectory();
-  final path = directory.path;
-
-  // --- 2. CREATE A FILE REFERENCE ---
-  final file = File('$path/firestore_schema.txt');
-
-  // --- 3. WRITE THE STRING TO THE FILE ---
-  // try {
-  //   await file.writeAsString(prettyJson);
-  //   printLog("✅ Success! Schema saved to: ${file.path}");
-  // } catch (e) {
-  //   printLog("❌ Error saving schema file: $e");
-  // }
 
   // You can still print it to the console if you want
   printLog("--- Firestore Schema (from 1-document sample) ---");

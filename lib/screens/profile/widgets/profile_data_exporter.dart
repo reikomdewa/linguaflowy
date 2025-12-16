@@ -6,7 +6,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ProfileDataExporter {
-  static Future<void> exportUserData(BuildContext context, String userId) async {
+  static Future<void> exportUserData(
+    BuildContext context,
+    String userId,
+  ) async {
     // 1. Show Loading
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Generating export file... please wait.")),
@@ -46,10 +49,15 @@ class ProfileDataExporter {
       await file.writeAsString(jsonString);
 
       // 7. Share File
+
+      // inside async context
       if (context.mounted) {
-        await Share.shareXFiles([
-          XFile(file.path),
-        ], text: 'My LinguaFlow Data Export');
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path)],
+            text: 'My LinguaFlow Data Export',
+          ),
+        );
       }
     } catch (e) {
       if (context.mounted) {

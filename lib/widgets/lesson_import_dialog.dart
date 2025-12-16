@@ -552,7 +552,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: widget.isDark
-            ? Colors.white.withOpacity(0.05)
+            ? Colors.white.withValues(alpha: 0.05)
             : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(8),
       ),
@@ -675,7 +675,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.withOpacity(0.5)),
+            border: Border.all(color: Colors.grey.withValues(alpha: 0.5)),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Column(
@@ -730,7 +730,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.withOpacity(0.5)),
+            border: Border.all(color: Colors.grey.withValues(alpha: 0.5)),
             borderRadius: BorderRadius.circular(8),
             color: widget.isDark ? Colors.black12 : Colors.grey.shade50,
           ),
@@ -781,8 +781,8 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
             margin: const EdgeInsets.only(top: 15),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
-              border: Border.all(color: Colors.orange.withOpacity(0.5)),
+              color: Colors.orange.withValues(alpha: 0.1),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Row(

@@ -37,10 +37,12 @@ class _LibraryViewState extends State<LibraryView> {
       bool matchesStatus = true;
       if (_selectedFilter == 0) {
         matchesStatus = item.status == 0; // New
-      } else if (_selectedFilter == 1)
-        matchesStatus = item.status > 0 && item.status < 5; // Learning
-      else if (_selectedFilter == 2)
-        matchesStatus = item.status == 5; // Known
+      } else if (_selectedFilter == 1) {
+        matchesStatus = item.status > 0 && item.status < 5;
+      } // Learning
+      else if (_selectedFilter == 2) {
+        matchesStatus = item.status == 5;
+      } // Known
 
       return matchesSearch && matchesStatus;
     }).toList();
@@ -119,7 +121,7 @@ class _LibraryViewState extends State<LibraryView> {
       color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.withOpacity(0.1)),
+        side: BorderSide(color: Colors.grey.withValues(alpha: 0.1)),
       ),
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -129,9 +131,9 @@ class _LibraryViewState extends State<LibraryView> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             shape: BoxShape.circle,
-            border: Border.all(color: color.withOpacity(0.5), width: 1.5),
+            border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
           ),
           alignment: Alignment.center,
           child: Text(

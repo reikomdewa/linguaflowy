@@ -54,7 +54,7 @@ class LeaderboardTab extends StatelessWidget {
       case 0: return const Color(0xFFFFD700); // Gold
       case 1: return const Color(0xFFC0C0C0); // Silver
       case 2: return const Color(0xFFCD7F32); // Bronze
-      default: return Colors.grey.withOpacity(0.5);
+      default: return Colors.grey.withValues(alpha: 0.5);
     }
   }
 
@@ -134,9 +134,9 @@ class LeaderboardTab extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.blue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                       ),
                       child: Text(
                         "$xp XP", 

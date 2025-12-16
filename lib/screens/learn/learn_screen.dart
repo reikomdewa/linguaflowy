@@ -12,7 +12,7 @@ class LearnScreen extends StatefulWidget {
   const LearnScreen({super.key});
 
   @override
-  _LearnScreenState createState() => _LearnScreenState();
+  State<LearnScreen> createState() => _LearnScreenState();
 }
 
 class _LearnScreenState extends State<LearnScreen> {

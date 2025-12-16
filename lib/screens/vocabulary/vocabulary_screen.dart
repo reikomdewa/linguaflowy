@@ -11,7 +11,7 @@ import 'package:linguaflow/utils/srs_algorithm.dart';
 class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({super.key});
   @override
-  _VocabularyScreenState createState() => _VocabularyScreenState();
+  State<VocabularyScreen> createState() => _VocabularyScreenState();
 }
 
 class _VocabularyScreenState extends State<VocabularyScreen>

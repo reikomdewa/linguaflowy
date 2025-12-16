@@ -10,7 +10,7 @@ class PremiumPurchaseScreen extends StatefulWidget {
   const PremiumPurchaseScreen({super.key});
 
   @override
-  _PremiumPurchaseScreenState createState() => _PremiumPurchaseScreenState();
+  State<PremiumPurchaseScreen> createState() => _PremiumPurchaseScreenState();
 }
 
 class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
@@ -60,7 +60,7 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
           onSuccess: (Map params) async {
             printLog("onSuccess: $params");
             await _upgradeUserToPremium();
-            if (mounted) {
+            if (context.mounted) {
               Navigator.pop(context); // Close PayPal View
             }
           },
@@ -107,13 +107,15 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
       }
     } catch (e) {
       printLog("Upgrade Error: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Payment successful but update failed. Contact support.",
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Payment successful but update failed. Contact support.",
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
   }
 
@@ -164,7 +166,9 @@ class _PremiumPurchaseScreenState extends State<PremiumPurchaseScreen> {
                   decoration: BoxDecoration(
                     color: isDark ? Colors.white10 : Colors.grey[100],
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.amber.withOpacity(0.5)),
+                    border: Border.all(
+                      color: Colors.amber.withValues(alpha: 0.5),
+                    ),
                   ),
                   child: Column(
                     children: [

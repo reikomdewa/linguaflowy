@@ -29,7 +29,7 @@ class GenreFeedSection extends StatefulWidget {
   });
 
   @override
-  _GenreFeedSectionState createState() => _GenreFeedSectionState();
+  State<GenreFeedSection> createState() => _GenreFeedSectionState();
 }
 
 class _GenreFeedSectionState extends State<GenreFeedSection>

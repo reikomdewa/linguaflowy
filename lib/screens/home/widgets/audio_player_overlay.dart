@@ -201,7 +201,7 @@ class _AudioPlayerOverlayState extends State<AudioPlayerOverlay> {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   color: manager.isExpanded
-                      ? Colors.black.withOpacity(0.7)
+                      ? Colors.black.withValues(alpha: 0.7)
                       : Colors.transparent,
                 ),
               ),
@@ -261,7 +261,7 @@ class _MorphingPlayerCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(borderRadius),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2), // Softer shadow
+            color: Colors.black.withValues(alpha: 0.2), // Softer shadow
             blurRadius: 20,
             offset: const Offset(0, 5),
           ),
@@ -438,7 +438,7 @@ class _MorphingPlayerCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
+                        color: Colors.black.withValues(alpha: 0.2),
                         blurRadius: 15,
                       ),
                     ],
@@ -536,7 +536,7 @@ class _MorphingPlayerCard extends StatelessWidget {
                         color: playBtnBg,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),

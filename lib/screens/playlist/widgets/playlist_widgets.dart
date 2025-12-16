@@ -35,7 +35,7 @@ class PlaylistOpenButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -54,7 +54,7 @@ class PlaylistOpenButton extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: buttonColor.withOpacity(0.15),
+                    color: buttonColor.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -385,7 +385,7 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
                 ),
               ),
               const SizedBox(height: 20),
-              Divider(height: 1, color: Colors.grey.withOpacity(0.2)),
+              Divider(height: 1, color: Colors.grey.withValues(alpha: 0.2)),
 
               // --- CONTENT ---
               Expanded(
@@ -425,7 +425,7 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
                       controller: scrollController,
                       padding: const EdgeInsets.all(16),
                       itemCount: lessons.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final lesson = lessons[index];
                         return _buildLessonItem(
@@ -498,7 +498,7 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.2),
+                color: Colors.black.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(

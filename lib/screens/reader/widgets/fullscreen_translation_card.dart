@@ -256,7 +256,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
               border: Border.all(color: Colors.white10),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -345,7 +345,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
                    Container(
                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                      decoration: BoxDecoration(
-                       color: Colors.white.withOpacity(0.08),
+                       color: Colors.white.withValues(alpha: 0.08),
                        borderRadius: BorderRadius.circular(6),
                      ),
                      child: RichText(
@@ -363,7 +363,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
                            if (_rootTranslation != null)
                              TextSpan(
                                text: " ($_rootTranslation)",
-                               style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13, fontStyle: FontStyle.italic),
+                               style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13, fontStyle: FontStyle.italic),
                              ),
                          ]
                        ),
@@ -406,7 +406,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
             Container(
               height: 300,
               width: double.infinity,
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.05)),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05)),
               child: _buildExpandedContent(),
             ),
         ],
@@ -450,10 +450,10 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
         width: 40,
         height: 35,
         decoration: BoxDecoration(
-          color: isActive ? color : color.withOpacity(0.15),
+          color: isActive ? color : color.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isActive ? Colors.transparent : color.withOpacity(0.5),
+            color: isActive ? Colors.transparent : color.withValues(alpha: 0.5),
             width: 1.5,
           ),
         ),

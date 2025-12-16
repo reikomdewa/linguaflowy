@@ -131,7 +131,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
     final lineHeight = settings.lineHeight;
     final bool isObscured = widget.isListeningMode && !_isRevealed;
 
-    final Color overlayBlack = Colors.black.withOpacity(0.6);
+    final Color overlayBlack = Colors.black.withValues(alpha: 0.6);
     final bool isScriptioContinua = LanguageHelper.usesNoSpaces(
       widget.text,
       widget.language,
@@ -179,14 +179,14 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
             final int status = vocabItem?.status ?? 0;
 
             if (status == 0) {
-              containerColor = Colors.blue.withOpacity(0.8);
+              containerColor = Colors.blue.withValues(alpha: 0.8);
               textColor = Colors.white;
             } else if (status < 5) {
               Color rawColor = ReaderUtils.getWordColor(
                 _mockItem(status),
                 true,
               );
-              containerColor = rawColor.withOpacity(0.9);
+              containerColor = rawColor.withValues(alpha: 0.9);
               textColor = (status <= 3) ? Colors.black : Colors.white;
             } else {
               containerColor = overlayBlack;
@@ -219,7 +219,7 @@ class _InteractiveTextDisplayState extends State<InteractiveTextDisplay> {
         }
 
         if (isSelected) {
-          containerColor = Colors.purple.withOpacity(0.8);
+          containerColor = Colors.purple.withValues(alpha: 0.8);
           textColor = Colors.white;
         }
 

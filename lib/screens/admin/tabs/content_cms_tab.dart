@@ -468,8 +468,9 @@ class _LessonEditorDialogState extends State<_LessonEditorDialog> {
           String? videoId;
           if (_videoUrlCtrl.text.contains("v=")) {
             videoId = _videoUrlCtrl.text.split('v=')[1].split('&')[0];
-          } else if (_videoUrlCtrl.text.contains("youtu.be/"))
+          } else if (_videoUrlCtrl.text.contains("youtu.be/")) {
             videoId = _videoUrlCtrl.text.split('youtu.be/')[1];
+          }
           if (videoId != null) customId = "yt_$videoId";
         } catch (_) {}
       }

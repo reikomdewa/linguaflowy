@@ -22,7 +22,7 @@ class Flashcard extends StatefulWidget {
   });
 
   @override
-  _FlashcardState createState() => _FlashcardState();
+  State<Flashcard> createState() => _FlashcardState();
 }
 
 class _FlashcardState extends State<Flashcard>
@@ -107,12 +107,14 @@ class _FlashcardState extends State<Flashcard>
     } catch (_) {}
 
     try {
-      final service = context.read<TranslationService>();
-      googleResult = await service.translate(
-        widget.item.word,
-        user.nativeLanguage,
-        widget.item.language,
-      );
+      if (mounted) {
+        final service = context.read<TranslationService>();
+        googleResult = await service.translate(
+          widget.item.word,
+          user.nativeLanguage,
+          widget.item.language,
+        );
+      }
     } catch (_) {}
 
     if (mounted) {

@@ -40,7 +40,7 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
@@ -121,8 +121,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (isUrl) {
       final host = uri.host.toLowerCase();
-      if (host.contains('youtube.com') || host.contains('youtu.be'))
+      if (host.contains('youtube.com') || host.contains('youtu.be')) {
         isYoutube = true;
+      }
     }
 
     String initialTitle = "";
@@ -195,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Icon(
                 Icons.translate,
                 size: 64,
-                color: Colors.grey.withOpacity(0.5),
+                color: Colors.grey.withValues(alpha: 0.5),
               ),
               const SizedBox(height: 16),
               const Text(
@@ -253,7 +254,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Text("Loading all lessons..."),
                                 Text(
                                   "This may take a moment for the first time.",
-                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
                                 ),
                               ],
                             ),
@@ -369,8 +373,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       vocabMap: vocabMap,
                                       isDark: isDark,
                                     );
-                                  }).toList(),
-                                  // Removed HomeVideoFeeds() as requested
+                                  }),
                                   const SizedBox(height: 30),
                                 ],
                               ),
@@ -555,7 +558,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   height: 35,
                   decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withOpacity(0.1)
+                        ? Colors.white.withValues(alpha: 0.1)
                         : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -590,7 +593,7 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 35,
             decoration: BoxDecoration(
               color: isDark
-                  ? Colors.white.withOpacity(0.1)
+                  ? Colors.white.withValues(alpha: 0.1)
                   : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(14),
             ),
@@ -617,7 +620,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     context: context,
                     builder: (context) => const PremiumLockDialog(),
                   ).then((unlocked) {
-                    if (unlocked == true) {
+                    if (unlocked == true && context.mounted) {
                       context.read<AuthBloc>().add(AuthCheckRequested());
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -648,7 +651,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 decoration: BoxDecoration(
                   color: isPremium
-                      ? const Color(0xFFFFC107).withOpacity(0.15)
+                      ? const Color(0xFFFFC107).withValues(alpha: 0.15)
                       : (isDark ? Colors.white10 : Colors.grey.shade100),
                   border: Border.all(
                     color: isPremium
@@ -745,8 +748,8 @@ class _HomeScreenState extends State<HomeScreen> {
         : [const Color(0xFF2C3E50), const Color(0xFF000000)];
     final Color textColor = isDark ? Colors.black : Colors.white;
     final Color shadowColor = isDark
-        ? Colors.white.withOpacity(0.15)
-        : Colors.black.withOpacity(0.3);
+        ? Colors.white.withValues(alpha: 0.15)
+        : Colors.black.withValues(alpha: 0.3);
 
     return Padding(
       padding: const EdgeInsets.only(left: 16.0, right: 16),
@@ -804,8 +807,9 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isDark,
   ) {
     final filtered = lessons.where((l) {
-      if (_selectedGlobalFilter == 'Videos')
+      if (_selectedGlobalFilter == 'Videos') {
         return l.type == 'video' || l.type == 'video_native';
+      }
       if (_selectedGlobalFilter == 'Audio') return l.type == 'audio';
       if (_selectedGlobalFilter == 'Text') return l.type == 'text';
       return true;

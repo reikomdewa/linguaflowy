@@ -35,10 +35,12 @@ class TranslationSheet extends StatefulWidget {
   });
 
   @override
-  _TranslationSheetState createState() => _TranslationSheetState();
+  // _TranslationSheetState createState() => _TranslationSheetState();
+    State<TranslationSheet> createState() => TranslationSheetState();
+
 }
 
-class _TranslationSheetState extends State<TranslationSheet> {
+class TranslationSheetState extends State<TranslationSheet> {
   // 0 = Editor, 1 = MyMemory, 2 = Glosbe
   int _selectedTabIndex = 0;
   String _cachedTranslation = "Loading...";

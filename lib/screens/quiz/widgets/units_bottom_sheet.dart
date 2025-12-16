@@ -163,11 +163,11 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
             LessonStatus status;
             if (index < firstIncompleteIndex) {
               status = LessonStatus.completed;
-            } else if (index == firstIncompleteIndex)
+            } else if (index == firstIncompleteIndex) {
               status = LessonStatus.current;
-            else
+            } else {
               status = LessonStatus.locked;
-
+            }
             // UI Grouping
             bool isFirstInUnit = false;
             if (index == 0) {
@@ -390,7 +390,7 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
                 context: context,
                 builder: (context) => const PremiumLockDialog(),
               ).then((unlocked) {
-                if (unlocked == true) {
+                if (unlocked == true && context.mounted) {
                   context.read<AuthBloc>().add(AuthCheckRequested());
                 }
               });

@@ -67,6 +67,7 @@ dependencies:
   
   # Local Storage
   shared_preferences: ^2.2.2
+  path: ^1.9.1
   flutter_paypal_payment: ^1.0.8
   
   # UI

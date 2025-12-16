@@ -107,7 +107,6 @@ class _ReaderScreenState extends State<ReaderScreen>
   final PageController _pageController = PageController();
   List<List<int>> _bookPages = [];
   int _currentPage = 0;
-  final int _wordsPerPage = 100;
   List<GlobalKey> _itemKeys = [];
   List<String> _smartChunks = [];
   List<TranscriptLine> _activeTranscript = [];
@@ -130,18 +129,18 @@ class _ReaderScreenState extends State<ReaderScreen>
   VoidCallback? _activeSelectionClearer;
   late AuthBloc _authBloc;
 
-   String? _selectedBaseForm; 
-   StreamSubscription? _vocabSubscription;
+  String? _selectedBaseForm;
+  StreamSubscription? _vocabSubscription;
   @override
   void initState() {
     super.initState();
-   
+
     _authBloc = context.read<AuthBloc>();
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
- LocalLemmatizer().load(widget.lesson.language); 
+    LocalLemmatizer().load(widget.lesson.language);
     _initGemini();
-      _startVocabularyStream();
+    _startVocabularyStream();
     _loadUserPreferences();
     _determineMediaType();
 
@@ -239,9 +238,9 @@ class _ReaderScreenState extends State<ReaderScreen>
     _initializeMedia();
   }
 
- void _initializeMedia() {
+  void _initializeMedia() {
     // --- FIX START: Always set TTS language immediately ---
-    // This ensures that even in Video/Audio mode, tapping a word 
+    // This ensures that even in Video/Audio mode, tapping a word
     // works correctly on the very first try.
     _flutterTts.setLanguage(widget.lesson.language);
     // --- FIX END ---
@@ -366,7 +365,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
- // --- PRO FIX: Stream Vocabulary ---
+  // --- PRO FIX: Stream Vocabulary ---
   void _startVocabularyStream() {
     final state = context.read<AuthBloc>().state;
     if (state is! AuthAuthenticated) return;
@@ -376,31 +375,32 @@ class _ReaderScreenState extends State<ReaderScreen>
         .collection('users')
         .doc(user.id)
         .collection('vocabulary')
-        .snapshots(includeMetadataChanges: true) // This ensures cached data emits instantly
+        .snapshots(
+          includeMetadataChanges: true,
+        ) // This ensures cached data emits instantly
         .listen((snapshot) {
-      
-      final Map<String, VocabularyItem> loadedVocab = {};
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        loadedVocab[doc.id] = VocabularyItem(
-          id: doc.id,
-          userId: user.id,
-          word: data['word'] ?? doc.id,
-          baseForm: data['baseForm'] ?? doc.id,
-          language: data['language'] ?? '',
-          translation: data['translation'] ?? '',
-          status: data['status'] ?? 0,
-          timesEncountered: data['timesEncountered'] ?? 1,
-          lastReviewed: ReaderUtils.parseDateTime(data['lastReviewed']),
-          createdAt: ReaderUtils.parseDateTime(data['createdAt']),
-          learnedAt: ReaderUtils.parseDateTime(data['learnedAt']),
-          sourceVideoUrl: data['sourceVideoUrl'],
-          timestamp: data['timestamp'],
-          sentenceContext: data['sentenceContext'],
-        );
-      }
-      if (mounted) setState(() => _vocabulary = loadedVocab);
-    });
+          final Map<String, VocabularyItem> loadedVocab = {};
+          for (var doc in snapshot.docs) {
+            final data = doc.data();
+            loadedVocab[doc.id] = VocabularyItem(
+              id: doc.id,
+              userId: user.id,
+              word: data['word'] ?? doc.id,
+              baseForm: data['baseForm'] ?? doc.id,
+              language: data['language'] ?? '',
+              translation: data['translation'] ?? '',
+              status: data['status'] ?? 0,
+              timesEncountered: data['timesEncountered'] ?? 1,
+              lastReviewed: ReaderUtils.parseDateTime(data['lastReviewed']),
+              createdAt: ReaderUtils.parseDateTime(data['createdAt']),
+              learnedAt: ReaderUtils.parseDateTime(data['learnedAt']),
+              sourceVideoUrl: data['sourceVideoUrl'],
+              timestamp: data['timestamp'],
+              sentenceContext: data['sentenceContext'],
+            );
+          }
+          if (mounted) setState(() => _vocabulary = loadedVocab);
+        });
   }
 
   Future<void> _loadUserPreferences() async {
@@ -432,7 +432,9 @@ class _ReaderScreenState extends State<ReaderScreen>
     List<String> rawSentences = widget.lesson.sentences;
     if (rawSentences.isEmpty) {
       // USE HELPER: Gets the correct Regex for the language
-      final splitter = LanguageHelper.getSentenceSplitter(widget.lesson.language);
+      final splitter = LanguageHelper.getSentenceSplitter(
+        widget.lesson.language,
+      );
       rawSentences = widget.lesson.content.split(splitter);
     }
     for (String sentence in rawSentences) {
@@ -440,20 +442,20 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
- void _prepareBookPages() {
+  void _prepareBookPages() {
     _bookPages = [];
     List<int> currentPageIndices = [];
     int currentCount = 0;
-    
+
     // USE HELPER: Different page limits for CJK vs Latin
     final int limit = LanguageHelper.getItemsPerPage(widget.lesson.language);
 
     for (int i = 0; i < _smartChunks.length; i++) {
       String s = _smartChunks[i];
-      
+
       // USE HELPER: Count chars for CJK, words for others
       int count = LanguageHelper.measureTextLength(s, widget.lesson.language);
-      
+
       if (currentCount + count > limit && currentPageIndices.isNotEmpty) {
         _bookPages.add(currentPageIndices);
         currentPageIndices = [];
@@ -872,9 +874,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   void _handleWordTap(String word, String cleanId, Offset pos) async {
-     if (cleanId.trim().isEmpty) return; 
-
-
+    if (cleanId.trim().isEmpty) return;
 
     _activeSelectionClearer?.call();
     _activeSelectionClearer = null;
@@ -973,7 +973,8 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
     // --- NEW LOGIC END ---
   }
-void _activateCard(
+
+  void _activateCard(
     String text,
     String cleanId,
     Offset pos, {
@@ -990,16 +991,14 @@ void _activateCard(
       setState(() => _isTtsPlaying = false);
     }
     _flutterTts.speak(text);
-    
+
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final svc = context.read<TranslationService>();
 
     // --- NEW LOGIC: Get the Base Form ---
     // If it's a phrase, we usually don't lemmatize, so default to text.
     // If it's a word, look it up!
-    final String lemma = isPhrase 
-        ? text 
-        : LocalLemmatizer().getLemma(text);
+    final String lemma = isPhrase ? text : LocalLemmatizer().getLemma(text);
 
     setState(() {
       _showCard = true;
@@ -1008,7 +1007,7 @@ void _activateCard(
       _selectedBaseForm = lemma; // <--- Store it here
       _isSelectionPhrase = isPhrase;
       _cardAnchor = pos;
-      
+
       _cardTranslationFuture = svc
           .translate(text, user.nativeLanguage, widget.lesson.language)
           .then((v) => v ?? "");
@@ -1023,7 +1022,9 @@ void _activateCard(
       return FloatingTranslationCard(
         key: ValueKey(_selectedText),
         originalText: _selectedText,
-           baseForm: (_selectedBaseForm != _selectedText) ? _selectedBaseForm : null, 
+        baseForm: (_selectedBaseForm != _selectedText)
+            ? _selectedBaseForm
+            : null,
         translationFuture: _cardTranslationFuture!,
         onGetAiExplanation: () => Gemini.instance
             .prompt(
@@ -1050,7 +1051,7 @@ void _activateCard(
     return FullscreenTranslationCard(
       key: ValueKey("$_selectedText$_selectedCleanId"),
       originalText: _selectedText,
-        baseForm: (_selectedBaseForm != _selectedText) ? _selectedBaseForm : null,
+      baseForm: (_selectedBaseForm != _selectedText) ? _selectedBaseForm : null,
       translationFuture: _cardTranslationFuture!,
       onGetAiExplanation: () => Gemini.instance
           .prompt(
@@ -1098,7 +1099,6 @@ void _activateCard(
 
     final DocumentReference usageRef = FirebaseFirestore.instance
         .collection('users')
-
         .doc(uid)
         .collection('usage')
         .doc('dictionary_limit');
@@ -1154,9 +1154,8 @@ void _activateCard(
     int status, {
     bool showDialog = true,
   }) async {
-    
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
- String detectedBaseForm = LocalLemmatizer().getLemma(orig);
+    String detectedBaseForm = LocalLemmatizer().getLemma(orig);
     // 1. Get Video Context (Existing logic)
     String? videoUrl;
     double? timestamp;
@@ -1233,12 +1232,14 @@ void _activateCard(
 
     if (showDialog && !_hasSeenStatusHint) {
       setState(() => _hasSeenStatusHint = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Word status updated"),
-          duration: Duration(seconds: 1),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Word status updated"),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
     }
   }
 
@@ -1296,11 +1297,14 @@ void _activateCard(
     }
   }
 
-void _handleSwipeMarking(int index) {
+  void _handleSwipeMarking(int index) {
     if (!_autoMarkOnSwipe || index < 0 || index >= _smartChunks.length) return;
-    
+
     // USE HELPER: Tokenize correctly (chars for CJK, words for others)
-    final tokens = LanguageHelper.tokenizeText(_smartChunks[index], widget.lesson.language);
+    final tokens = LanguageHelper.tokenizeText(
+      _smartChunks[index],
+      widget.lesson.language,
+    );
 
     for (var w in tokens) {
       if (w.trim().isEmpty) continue;
@@ -1311,17 +1315,6 @@ void _handleSwipeMarking(int index) {
       }
     }
   }
-
-  void _showGeminiHint() => showDialog(
-    context: context,
-    builder: (c) => AlertDialog(
-      title: const Text("Use Gemini"),
-      content: const Text("Analyze this screen with Gemini!"),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text("OK")),
-      ],
-    ),
-  );
 
   void _resetTranslationState() {
     _googleTranslation = null;
@@ -1505,8 +1498,8 @@ void _handleSwipeMarking(int index) {
     return Theme(
       data: themeData,
       child: Directionality(
-        textDirection: LanguageHelper.isRTL(widget.lesson.language) 
-            ? TextDirection.rtl 
+        textDirection: LanguageHelper.isRTL(widget.lesson.language)
+            ? TextDirection.rtl
             : TextDirection.ltr,
         child: Scaffold(
           resizeToAvoidBottomInset: false,
@@ -1520,10 +1513,13 @@ void _handleSwipeMarking(int index) {
                 onPressed: () =>
                     setState(() => _isListeningMode = !_isListeningMode),
               ),
-              if (!(_isVideo || _isAudio || _isYoutubeAudio) && !_isSentenceMode)
+              if (!(_isVideo || _isAudio || _isYoutubeAudio) &&
+                  !_isSentenceMode)
                 IconButton(
                   icon: Icon(
-                    _isPlaying || _isTtsPlaying ? Icons.pause : Icons.play_arrow,
+                    _isPlaying || _isTtsPlaying
+                        ? Icons.pause
+                        : Icons.play_arrow,
                   ),
                   onPressed: _toggleTtsFullLesson,
                 ),
@@ -1647,7 +1643,8 @@ void _handleSwipeMarking(int index) {
                                                             .position ??
                                                         Duration.zero)),
                                         duration:
-                                            _isLocalMedia && _localPlayer != null
+                                            _isLocalMedia &&
+                                                _localPlayer != null
                                             ? _localPlayer!.state.duration
                                             : (_youtubeController
                                                       ?.metadata
@@ -1677,7 +1674,7 @@ void _handleSwipeMarking(int index) {
                           : NotificationListener<ScrollNotification>(
                               onNotification: (scrollInfo) {
                                 if (_hasMarkedLessonComplete) return false;
-        
+
                                 if (!_isSentenceMode) {
                                   // 1. Paragraph Mode (Swipe Pages)
                                   // Detect if user swipes "past" the last page (Overscroll)
@@ -1704,9 +1701,12 @@ void _handleSwipeMarking(int index) {
                                       vocabulary: _vocabulary,
                                       language: widget.lesson.language,
                                       isVideo:
-                                          _isVideo || _isAudio || _isYoutubeAudio,
+                                          _isVideo ||
+                                          _isAudio ||
+                                          _isYoutubeAudio,
                                       isPlaying:
-                                          _isPlaying || _isPlayingSingleSentence,
+                                          _isPlaying ||
+                                          _isPlayingSingleSentence,
                                       isTtsPlaying: _isTtsPlaying,
                                       onTogglePlayback: _togglePlayback,
                                       onPlayFromStartContinuous:
@@ -1716,7 +1716,8 @@ void _handleSwipeMarking(int index) {
                                       onPrev: _goToPrevSentence,
                                       onWordTap: _handleWordTap,
                                       onPhraseSelected: _handlePhraseSelected,
-                                      isLoadingTranslation: _isLoadingTranslation,
+                                      isLoadingTranslation:
+                                          _isLoadingTranslation,
                                       googleTranslation: _googleTranslation,
                                       myMemoryTranslation: _myMemoryTranslation,
                                       showError: _showError,
@@ -1733,8 +1734,11 @@ void _handleSwipeMarking(int index) {
                                       currentPage: _currentPage,
                                       vocabulary: _vocabulary,
                                       isVideo:
-                                          _isVideo || _isAudio || _isYoutubeAudio,
-                                      listScrollController: _listScrollController,
+                                          _isVideo ||
+                                          _isAudio ||
+                                          _isYoutubeAudio,
+                                      listScrollController:
+                                          _listScrollController,
                                       pageController: _pageController,
                                       onPageChanged: (i) =>
                                           setState(() => _currentPage = i),
@@ -1743,7 +1747,9 @@ void _handleSwipeMarking(int index) {
                                                 _isAudio ||
                                                 _isYoutubeAudio) &&
                                             i < _activeTranscript.length) {
-                                          _seekToTime(_activeTranscript[i].start);
+                                          _seekToTime(
+                                            _activeTranscript[i].start,
+                                          );
                                           _playMedia();
                                         } else {
                                           _speakSentence(_smartChunks[i], i);
@@ -1780,7 +1786,9 @@ void _handleSwipeMarking(int index) {
                       child: Container(color: Colors.transparent),
                     ),
                   ),
-                if (_showCard && _cardTranslationFuture != null && !_isFullScreen)
+                if (_showCard &&
+                    _cardTranslationFuture != null &&
+                    !_isFullScreen)
                   _buildTranslationOverlay(),
               ],
             ),
@@ -1791,10 +1799,11 @@ void _handleSwipeMarking(int index) {
   }
 
   Widget _buildFullscreenMedia() {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         _toggleCustomFullScreen();
-        return false;
       },
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -1830,7 +1839,7 @@ void _handleSwipeMarking(int index) {
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: _closeTranslationCard,
-                  child: Container(color: Colors.black.withOpacity(0.5)),
+                  child: Container(color: Colors.black.withValues(alpha: 0.5)),
                 ),
               if (_showSubtitles)
                 Positioned(
@@ -1937,7 +1946,7 @@ void _handleSwipeMarking(int index) {
           text: _smartChunks[_activeSentenceIndex],
           sentenceIndex: _activeSentenceIndex,
           vocabulary: _vocabulary,
-          language: widget.lesson.language, 
+          language: widget.lesson.language,
           onWordTap: _handleWordTap,
           onPhraseSelected: _handlePhraseSelected,
           isBigMode: true,

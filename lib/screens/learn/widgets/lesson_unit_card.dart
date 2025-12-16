@@ -142,7 +142,7 @@ class LessonUnitCard extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: baseColor.withOpacity(0.4),
+                          color: baseColor.withValues(alpha: 0.4),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),
@@ -160,7 +160,7 @@ class LessonUnitCard extends StatelessWidget {
                   Expanded(
                     child: Container(
                       width: 2,
-                      color: baseColor.withOpacity(0.3),
+                      color: baseColor.withValues(alpha: 0.3),
                     ),
                   ),
               ],
@@ -305,7 +305,7 @@ class LessonUnitCard extends StatelessWidget {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white.withOpacity(0.1),
+              backgroundColor: Colors.white.withValues(alpha: 0.1),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),

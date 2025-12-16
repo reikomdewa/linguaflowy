@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-
 class HomeDialogs {
   // --- 1. SHARED LEVEL CALCULATION LOGIC ---
   static Map<String, dynamic> getLevelDetails(int knownWords) {
@@ -99,14 +98,15 @@ class HomeDialogs {
     double comprehension = 0.0;
     if (knownWords < 1000) {
       comprehension = (knownWords / 1000) * 72;
-    } else if (knownWords < 2000)
+    } else if (knownWords < 2000) {
       comprehension = 72 + ((knownWords - 1000) / 1000) * 8;
-    else if (knownWords < 4000)
+    } else if (knownWords < 4000) {
       comprehension = 80 + ((knownWords - 2000) / 2000) * 10;
-    else if (knownWords < 8000)
+    } else if (knownWords < 8000) {
       comprehension = 90 + ((knownWords - 4000) / 4000) * 8;
-    else
+    } else {
       comprehension = 98.0;
+    }
 
     final int totalMinutes = (user.toMap().containsKey('totalListeningMinutes'))
         ? user.totalListeningMinutes
@@ -126,7 +126,7 @@ class HomeDialogs {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
     final cardBgColor = isDark
-        ? Colors.white.withOpacity(0.08)
+        ? Colors.white.withValues(alpha: 0.08)
         : Colors.grey[100];
 
     showModalBottomSheet(
@@ -173,7 +173,7 @@ class HomeDialogs {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.amber.withOpacity(0.15),
+                          color: Colors.amber.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -273,11 +273,11 @@ class HomeDialogs {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? Colors.amber.withOpacity(0.1)
+                          ? Colors.amber.withValues(alpha: 0.1)
                           : Colors.amber.shade50,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.amber.withOpacity(0.3),
+                        color: Colors.amber.withValues(alpha: 0.3),
                         width: 1,
                       ),
                     ),
@@ -457,7 +457,10 @@ class HomeDialogs {
           const SizedBox(height: 4),
           Text(
             label,
-            style: TextStyle(fontSize: 11, color: textColor?.withOpacity(0.6)),
+            style: TextStyle(
+              fontSize: 11,
+              color: textColor?.withValues(alpha: 0.6),
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -465,5 +468,4 @@ class HomeDialogs {
       ),
     );
   }
-
 }

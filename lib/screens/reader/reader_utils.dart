@@ -32,17 +32,17 @@ class ReaderUtils {
   static Color getWordColor(VocabularyItem? item, bool isDark) {
     if (item == null || item.status == 0) {
       // New word / unknown: Slight blue highlight
-      return Colors.blue.withOpacity(isDark ? 0.3 : 0.15);
+      return Colors.blue.withValues(alpha: isDark ? 0.3 : 0.15);
     }
     switch (item.status) {
       case 1:
-        return const Color(0xFFFFF9C4).withOpacity(isDark ? 0.8 : 1.0); // Light Yellow
+        return const Color(0xFFFFF9C4).withValues(alpha: isDark ? 0.8 : 1.0); // Light Yellow
       case 2:
-        return const Color(0xFFFFF59D).withOpacity(isDark ? 0.8 : 1.0); // Yellow
+        return const Color(0xFFFFF59D).withValues(alpha: isDark ? 0.8 : 1.0); // Yellow
       case 3:
-        return const Color(0xFFFFCC80).withOpacity(isDark ? 0.8 : 1.0); // Orange-ish
+        return const Color(0xFFFFCC80).withValues(alpha: isDark ? 0.8 : 1.0); // Orange-ish
       case 4:
-        return const Color(0xFFFFB74D).withOpacity(isDark ? 0.8 : 1.0); // Orange
+        return const Color(0xFFFFB74D).withValues(alpha: isDark ? 0.8 : 1.0); // Orange
       case 5:
         return Colors.transparent; // Learned (No highlight)
       default:

@@ -132,7 +132,7 @@ class LibraryScreen extends StatelessWidget {
                         ),
                         scrollDirection: Axis.horizontal,
                         itemCount: importedLessons.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        separatorBuilder: (_, _) => const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           final lesson = importedLessons[index];
                           const double cardWidth = 220;
@@ -190,7 +190,7 @@ class LibraryScreen extends StatelessWidget {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: favoriteLessons.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 16),
+                      separatorBuilder: (_, _) => const SizedBox(height: 16),
                       itemBuilder: (context, index) {
                         final lesson = favoriteLessons[index];
                         if (lesson.type == 'video' ||

@@ -29,7 +29,7 @@ class LessonCompletionScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.15),
+                  color: Colors.green.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -68,7 +68,7 @@ class LessonCompletionScreen extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[100],
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Column(
@@ -127,7 +127,7 @@ class LessonCompletionScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     elevation: 4,
-                    shadowColor: Theme.of(context).primaryColor.withOpacity(0.4),
+                    shadowColor: Theme.of(context).primaryColor.withValues(alpha: 0.4),
                   ),
                   child: const Text(
                     "Finish",
@@ -160,7 +160,7 @@ class LessonCompletionScreen extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
+            color: color.withValues(alpha: 0.15),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: color, size: 24),

@@ -101,7 +101,7 @@ class UnitPathCard extends StatelessWidget {
                           boxShadow: [
                             if (status == LessonStatus.current)
                               BoxShadow(
-                                color: const Color(0xFF6C63FF).withOpacity(0.3),
+                                color: const Color(0xFF6C63FF).withValues(alpha: 0.3),
                                 blurRadius: 12,
                                 offset: const Offset(0, 4),
                               ),
@@ -188,7 +188,7 @@ class UnitPathCard extends StatelessWidget {
         ),
         boxShadow: [
           if (status == LessonStatus.current)
-            BoxShadow(color: _getStatusColor().withOpacity(0.5), blurRadius: 10)
+            BoxShadow(color: _getStatusColor().withValues(alpha: 0.5), blurRadius: 10)
         ],
       ),
       child: isFirstInUnit 
@@ -201,7 +201,7 @@ class UnitPathCard extends StatelessWidget {
     // Logic: The line is colored if the path is completed "through" this node
     if (status == LessonStatus.completed) return const Color(0xFF4CAF50); // Green
     if (status == LessonStatus.current && isTop) return const Color(0xFF4CAF50); // Line coming into current is green
-    return Colors.grey.withOpacity(0.3);
+    return Colors.grey.withValues(alpha: 0.3);
   }
 
   Color _getCardColor(bool isDark) {

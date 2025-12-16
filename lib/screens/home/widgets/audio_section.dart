@@ -16,7 +16,7 @@ class AudioLibrarySection extends StatefulWidget {
   });
 
   @override
-  _AudioLibrarySectionState createState() => _AudioLibrarySectionState();
+  State<AudioLibrarySection> createState() => _AudioLibrarySectionState();
 }
 
 class _AudioLibrarySectionState extends State<AudioLibrarySection> {
@@ -191,7 +191,7 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -235,7 +235,7 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.4),
+                            color: Colors.black.withValues(alpha: 0.4),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(

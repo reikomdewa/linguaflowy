@@ -562,7 +562,9 @@ class _QuizScreenState extends State<QuizScreen> {
                                   margin: const EdgeInsets.only(right: 16),
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Colors.blueAccent.withOpacity(0.1),
+                                    color: Colors.blueAccent.withValues(
+                                      alpha: 0.1,
+                                    ),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
@@ -594,7 +596,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                               border: Border(
                                                 bottom: BorderSide(
                                                   color: Colors.grey
-                                                      .withOpacity(0.5),
+                                                      .withValues(alpha: 0.5),
                                                   width: 1.5,
                                                 ),
                                               ),

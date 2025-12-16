@@ -283,7 +283,7 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
                 constraints: const BoxConstraints(minHeight: 80),
                 decoration: BoxDecoration(
                   color: isDark
-                      ? Colors.white.withOpacity(0.05)
+                      ? Colors.white.withValues(alpha: 0.05)
                       : Colors.grey[100],
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
@@ -372,7 +372,7 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
         decoration: BoxDecoration(
           color: isDark
               ? (isSelectedArea
-                    ? Colors.blueAccent.withOpacity(0.2)
+                    ? Colors.blueAccent.withValues(alpha: 0.2)
                     : Colors.grey[800])
               : (isSelectedArea ? Colors.blue[50] : Colors.white),
           borderRadius: BorderRadius.circular(12),
@@ -412,8 +412,8 @@ class _PlacementTestViewState extends State<_PlacementTestView> {
         : Colors.red.shade900;
     if (isDark) {
       feedbackColor = isCorrect
-          ? Colors.green.withOpacity(0.2)
-          : Colors.red.withOpacity(0.2);
+          ? Colors.green.withValues(alpha: 0.2)
+          : Colors.red.withValues(alpha: 0.2);
       feedbackTextColor = isCorrect ? Colors.greenAccent : Colors.redAccent;
     }
 

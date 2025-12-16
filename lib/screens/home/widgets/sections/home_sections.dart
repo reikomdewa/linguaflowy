@@ -53,7 +53,7 @@ class GuidedCoursesSection extends StatefulWidget {
   });
 
   @override
-  _GuidedCoursesSectionState createState() => _GuidedCoursesSectionState();
+  State<GuidedCoursesSection> createState() => _GuidedCoursesSectionState();
 }
 
 class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
@@ -280,7 +280,7 @@ class ImmersionSection extends StatefulWidget {
   });
 
   @override
-  _ImmersionSectionState createState() => _ImmersionSectionState();
+  State<ImmersionSection> createState() => _ImmersionSectionState();
 }
 
 class _ImmersionSectionState extends State<ImmersionSection> {
@@ -474,7 +474,7 @@ class LibrarySection extends StatefulWidget {
   });
 
   @override
-  _LibrarySectionState createState() => _LibrarySectionState();
+  State<LibrarySection> createState() => _LibrarySectionState();
 }
 
 class _LibrarySectionState extends State<LibrarySection> {

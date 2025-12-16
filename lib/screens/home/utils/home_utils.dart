@@ -45,7 +45,7 @@ class HomeUtils {
     return Material(
       color: Colors.transparent,
       elevation: 10,
-      shadowColor: Colors.black.withOpacity(0.3),
+      shadowColor: Colors.black.withValues(alpha: 0.3),
       borderRadius: BorderRadius.circular(30),
       child: InkWell(
         onTap: onTap,
@@ -53,9 +53,12 @@ class HomeUtils {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E).withOpacity(0.90),
+            color: const Color(0xFF1E1E1E).withValues(alpha: 0.90),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.15),
+              width: 1,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

@@ -135,7 +135,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3),
+                color: Colors.grey.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -156,7 +156,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                   Text(
                     "Difficulty",
                     style: TextStyle(
-                      color: textColor.withOpacity(0.7),
+                      color: textColor.withValues(alpha: 0.7),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -202,11 +202,11 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                       scrollDirection: Axis.horizontal,
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        childAspectRatio: 0.3,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                      ),
+                            crossAxisCount: 3,
+                            childAspectRatio: 0.3,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                          ),
                       itemCount: _prompts.length,
                       itemBuilder: (context, index) {
                         final text = _prompts[index];
@@ -229,7 +229,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: textColor.withOpacity(0.9),
+                                color: textColor.withValues(alpha: 0.9),
                               ),
                             ),
                           ),
@@ -241,7 +241,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                   Text(
                     "What kind of story do you want?",
                     style: TextStyle(
-                      color: textColor.withOpacity(0.7),
+                      color: textColor.withValues(alpha: 0.7),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -254,7 +254,9 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                     decoration: InputDecoration(
                       hintText:
                           'e.g., A sci-fi story about a robot learning to paint...',
-                      hintStyle: TextStyle(color: Colors.grey.withOpacity(0.5)),
+                      hintStyle: TextStyle(
+                        color: Colors.grey.withValues(alpha: 0.5),
+                      ),
                       filled: true,
                       fillColor: cardColor,
                       border: OutlineInputBorder(
@@ -283,7 +285,7 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
               border: Border(top: BorderSide(color: borderColor!)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -5),
                 ),
@@ -377,13 +379,13 @@ class _LessonGenerationScreenState extends State<_LessonGenerationScreen> {
   void _retryGeneration() {
     setState(() => _retryCount++);
     context.read<LessonBloc>().add(
-          LessonGenerateRequested(
-            userId: widget.userId,
-            topic: widget.topic,
-            level: widget.level,
-            targetLanguage: widget.targetLanguage,
-          ),
-        );
+      LessonGenerateRequested(
+        userId: widget.userId,
+        topic: widget.topic,
+        level: widget.level,
+        targetLanguage: widget.targetLanguage,
+      ),
+    );
   }
 
   @override

@@ -36,7 +36,7 @@ class VideoControlsOverlay extends StatelessWidget {
       child: IgnorePointer(
         ignoring: !showControls,
         child: Container(
-          color: Colors.black.withOpacity(0.4), // Dim overlay
+          color: Colors.black.withValues(alpha: 0.4), // Dim overlay
           child: Stack(
             children: [
               // CENTER CONTROLS (Back 10, Play/Pause, Fwd 10)

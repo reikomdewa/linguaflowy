@@ -64,31 +64,34 @@ class ProfileDialogs {
         title: Text(title),
         content: SizedBox(
           width: double.maxFinite,
-          child: ListView(
-            shrinkWrap: true,
-            children: LanguageHelper.availableLanguages.entries.map((entry) {
-              final code = entry.key;
-              final name = entry.value;
-              final flag = LanguageHelper.getFlagEmoji(code);
+          child: RadioGroup<String>(
+            groupValue: current,
+            onChanged: (val) {
+              if (val != null) {
+                onSelected(val);
+                Navigator.pop(ctx);
+              }
+            },
+            child: ListView(
+              shrinkWrap: true,
+              children: LanguageHelper.availableLanguages.entries.map((entry) {
+                final code = entry.key;
+                final name = entry.value;
+                final flag = LanguageHelper.getFlagEmoji(code);
 
-              return RadioListTile<String>(
-                title: Row(
-                  children: [
-                    Text(flag, style: const TextStyle(fontSize: 20)),
-                    const SizedBox(width: 12),
-                    Text(name),
-                  ],
-                ),
-                value: code,
-                groupValue: current,
-                onChanged: (val) {
-                  if (val != null) {
-                    onSelected(val);
-                    Navigator.pop(ctx);
-                  }
-                },
-              );
-            }).toList(),
+                return RadioListTile<String>(
+                  title: Row(
+                    children: [
+                      Text(flag, style: const TextStyle(fontSize: 20)),
+                      const SizedBox(width: 12),
+                      Text(name),
+                    ],
+                  ),
+                  value: code,
+                  // groupValue and onChanged handled by RadioGroup
+                );
+              }).toList(),
+            ),
           ),
         ),
       ),
@@ -102,19 +105,28 @@ class ProfileDialogs {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Reader Theme"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildReaderThemeItem(ctx, context, ReaderTheme.light, "Light", Colors.white, Colors.black, current),
-            _buildReaderThemeItem(ctx, context, ReaderTheme.sepia, "Sepia", const Color(0xFFF4ECD8), const Color(0xFF5D4037), current),
-            _buildReaderThemeItem(ctx, context, ReaderTheme.dark, "Dark", const Color(0xFF1E1E1E), Colors.white, current),
-          ],
+        content: RadioGroup<ReaderTheme>(
+          groupValue: current,
+          onChanged: (v) {
+            if (v != null) {
+              context.read<SettingsBloc>().add(ChangeReaderTheme(v));
+              Navigator.pop(ctx);
+            }
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildReaderThemeItem(ReaderTheme.light, "Light", Colors.white, Colors.black),
+              _buildReaderThemeItem(ReaderTheme.sepia, "Sepia", const Color(0xFFF4ECD8), const Color(0xFF5D4037)),
+              _buildReaderThemeItem(ReaderTheme.dark, "Dark", const Color(0xFF1E1E1E), Colors.white),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  static Widget _buildReaderThemeItem(BuildContext ctx, BuildContext mainContext, ReaderTheme theme, String label, Color bg, Color text, ReaderTheme group) {
+  static Widget _buildReaderThemeItem(ReaderTheme theme, String label, Color bg, Color text) {
     return RadioListTile<ReaderTheme>(
       title: Row(
         children: [
@@ -132,11 +144,6 @@ class ProfileDialogs {
         ],
       ),
       value: theme,
-      groupValue: group,
-      onChanged: (v) {
-        mainContext.read<SettingsBloc>().add(ChangeReaderTheme(v!));
-        Navigator.pop(ctx);
-      },
     );
   }
 
@@ -145,27 +152,30 @@ class ProfileDialogs {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Font Family"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildFontFamilyRadio(ctx, context, 'Roboto', "Sans-Serif (Default)", current),
-            _buildFontFamilyRadio(ctx, context, 'Serif', "Serif (Book style)", current),
-            // Add 'Merriweather', 'Lato', etc. here if added to pubspec.yaml
-          ],
+        content: RadioGroup<String>(
+          groupValue: current,
+          onChanged: (v) {
+            if (v != null) {
+              context.read<SettingsBloc>().add(ChangeFontFamily(v));
+              Navigator.pop(ctx);
+            }
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildFontFamilyRadio('Roboto', "Sans-Serif (Default)"),
+              _buildFontFamilyRadio('Serif', "Serif (Book style)"),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  static Widget _buildFontFamilyRadio(BuildContext ctx, BuildContext mainContext, String val, String label, String group) {
+  static Widget _buildFontFamilyRadio(String val, String label) {
     return RadioListTile<String>(
       title: Text(label, style: TextStyle(fontFamily: val == 'Serif' ? null : val)), 
       value: val,
-      groupValue: group,
-      onChanged: (v) {
-        mainContext.read<SettingsBloc>().add(ChangeFontFamily(v!));
-        Navigator.pop(ctx);
-      },
     );
   }
 
@@ -174,28 +184,32 @@ class ProfileDialogs {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Line Spacing"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildLineHeightRadio(ctx, context, 1.2, "Compact", current),
-            _buildLineHeightRadio(ctx, context, 1.5, "Normal", current),
-            _buildLineHeightRadio(ctx, context, 1.8, "Loose", current),
-            _buildLineHeightRadio(ctx, context, 2.0, "Very Loose", current),
-          ],
+        content: RadioGroup<double>(
+          groupValue: current,
+          onChanged: (v) {
+            if (v != null) {
+              context.read<SettingsBloc>().add(ChangeLineHeight(v));
+              Navigator.pop(ctx);
+            }
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildLineHeightRadio(1.2, "Compact"),
+              _buildLineHeightRadio(1.5, "Normal"),
+              _buildLineHeightRadio(1.8, "Loose"),
+              _buildLineHeightRadio(2.0, "Very Loose"),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  static Widget _buildLineHeightRadio(BuildContext ctx, BuildContext mainContext, double val, String label, double group) {
+  static Widget _buildLineHeightRadio(double val, String label) {
     return RadioListTile<double>(
       title: Text(label),
       value: val,
-      groupValue: group,
-      onChanged: (v) {
-        mainContext.read<SettingsBloc>().add(ChangeLineHeight(v!));
-        Navigator.pop(ctx);
-      },
     );
   }
 
@@ -204,28 +218,33 @@ class ProfileDialogs {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Text Size"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildFontSizeRadio(ctx, context, 0.8, "Small", current),
-            _buildFontSizeRadio(ctx, context, 1.0, "Medium", current),
-            _buildFontSizeRadio(ctx, context, 1.2, "Large", current),
-            _buildFontSizeRadio(ctx, context, 1.4, "Extra Large", current),
-          ],
+        content: RadioGroup<double>(
+          groupValue: current,
+          onChanged: (v) {
+            if (v != null) {
+              context.read<SettingsBloc>().add(ChangeFontSize(v));
+              Navigator.pop(ctx);
+            }
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildFontSizeRadio(0.8, "Small"),
+              _buildFontSizeRadio(1.0, "Medium"),
+              _buildFontSizeRadio(1.2, "Large"),
+              _buildFontSizeRadio(1.4, "Extra Large"),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  static Widget _buildFontSizeRadio(BuildContext ctx, BuildContext mainContext, double val, String label, double group) {
+  static Widget _buildFontSizeRadio(double val, String label) {
     return RadioListTile<double>(
-      title: Text(label, textScaleFactor: val),
+      // Fixed: textScaleFactor replaced with textScaler
+      title: Text(label, textScaler: TextScaler.linear(val)),
       value: val,
-      groupValue: group,
-      onChanged: (v) {
-        mainContext.read<SettingsBloc>().add(ChangeFontSize(v!));
-        Navigator.pop(ctx);
-      },
     );
   }
 
@@ -236,27 +255,31 @@ class ProfileDialogs {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("App UI Theme"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildThemeRadio(ctx, context, ThemeMode.system, "System Default", current),
-            _buildThemeRadio(ctx, context, ThemeMode.light, "Light Mode", current),
-            _buildThemeRadio(ctx, context, ThemeMode.dark, "Dark Mode", current),
-          ],
+        content: RadioGroup<ThemeMode>(
+          groupValue: current,
+          onChanged: (v) {
+            if (v != null) {
+              context.read<SettingsBloc>().add(ToggleTheme(v));
+              Navigator.pop(ctx);
+            }
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildThemeRadio(ThemeMode.system, "System Default"),
+              _buildThemeRadio(ThemeMode.light, "Light Mode"),
+              _buildThemeRadio(ThemeMode.dark, "Dark Mode"),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  static Widget _buildThemeRadio(BuildContext ctx, BuildContext mainContext, ThemeMode val, String label, ThemeMode group) {
+  static Widget _buildThemeRadio(ThemeMode val, String label) {
     return RadioListTile<ThemeMode>(
       title: Text(label),
       value: val,
-      groupValue: group,
-      onChanged: (v) {
-        mainContext.read<SettingsBloc>().add(ToggleTheme(v!));
-        Navigator.pop(ctx);
-      },
     );
   }
 

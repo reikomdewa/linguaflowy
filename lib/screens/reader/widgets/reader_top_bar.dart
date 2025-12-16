@@ -89,7 +89,7 @@ class ReaderModeToggleButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       elevation: 10,
-      shadowColor: Colors.black.withOpacity(0.3),
+      shadowColor: Colors.black.withValues(alpha: 0.3),
       borderRadius: BorderRadius.circular(30),
       child: InkWell(
         onTap: onToggle,
@@ -97,9 +97,9 @@ class ReaderModeToggleButton extends StatelessWidget {
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
-            color: isDark ? Color(0xFF2C2C2C).withOpacity(0.9) : Colors.black.withOpacity(0.8),
+            color: isDark ? Color(0xFF2C2C2C).withValues(alpha: 0.9) : Colors.black.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
