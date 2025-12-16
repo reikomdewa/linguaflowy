@@ -82,8 +82,10 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("Realtime Overview",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text(
+                "Realtime Overview",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 16),
               _StatGrid(
                 totalUsers: data['total'],
@@ -92,8 +94,10 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
                 revenue: data['revenue'],
               ),
               const SizedBox(height: 30),
-              const Text("New Users (Last 7 Days)",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text(
+                "New Users (Last 7 Days)",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 20),
               Container(
                 height: 250,
@@ -136,17 +140,25 @@ class _StatGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       children: [
         _StatCard(
-            title: "Total Users", value: "$totalUsers", color: Colors.blue),
+          title: "Total Users",
+          value: "$totalUsers",
+          color: Colors.blue,
+        ),
         _StatCard(
-            title: "Premium", value: "$premiumCount", color: Colors.amber),
+          title: "Premium",
+          value: "$premiumCount",
+          color: Colors.amber,
+        ),
         _StatCard(
-            title: "Est. Revenue",
-            value: "\$${revenue.toStringAsFixed(0)}",
-            color: Colors.green),
+          title: "Est. Revenue",
+          value: "\$${revenue.toStringAsFixed(0)}",
+          color: Colors.green,
+        ),
         _StatCard(
-            title: "Active (24h)",
-            value: "$activeCount",
-            color: Colors.purple),
+          title: "Active (24h)",
+          value: "$activeCount",
+          color: Colors.purple,
+        ),
       ],
     );
   }
@@ -156,24 +168,32 @@ class _StatCard extends StatelessWidget {
   final String title;
   final String value;
   final Color color;
-  const _StatCard(
-      {required this.title, required this.value, required this.color});
-
+  const _StatCard({
+    required this.title,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3))),
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(value,
-              style: TextStyle(
-                  fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
           const SizedBox(height: 4),
           Text(title, style: TextStyle(color: color)),
         ],
@@ -237,8 +257,9 @@ class _UsersGrowthChart extends StatelessWidget {
               showTitles: true,
               getTitlesWidget: (value, meta) {
                 // Return simpler labels: "Mon", "Tue"
-                final date = DateTime.now()
-                    .subtract(Duration(days: 6 - value.toInt()));
+                final date = DateTime.now().subtract(
+                  Duration(days: 6 - value.toInt()),
+                );
                 return Padding(
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Text(
@@ -261,7 +282,7 @@ class _UsersGrowthChart extends StatelessWidget {
             dotData: FlDotData(show: true),
             belowBarData: BarAreaData(
               show: true,
-              color: Colors.amber.withOpacity(0.2),
+              color: Colors.amber.withValues(alpha: 0.2),
             ),
           ),
         ],

@@ -13,7 +13,7 @@ class ProfileSectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -34,7 +34,9 @@ class ProfileSectionCard extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: isDark ? Colors.transparent : Colors.grey.withOpacity(0.2),
+              color: isDark
+                  ? Colors.transparent
+                  : Colors.grey.withValues(alpha: 0.2),
             ),
           ),
           child: Column(children: children),

@@ -62,7 +62,7 @@ class CategoryVideoSection extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             // Show max 10 items in the preview carousel
             itemCount: lessons.length > 10 ? 10 : lessons.length, 
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
               return SizedBox(
                 width: 260,

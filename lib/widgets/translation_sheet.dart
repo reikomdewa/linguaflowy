@@ -1,12 +1,10 @@
-
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import 'package:linguaflow/models/vocabulary_item.dart';
 // Ensure this widget exists in your project, or replace with Text()
-import 'package:linguaflow/widgets/gemini_formatted_text.dart'; 
+import 'package:linguaflow/widgets/gemini_formatted_text.dart';
 
 class TranslationSheet extends StatefulWidget {
   final String originalText;
@@ -14,8 +12,8 @@ class TranslationSheet extends StatefulWidget {
   final Future<String?> geminiFuture;
   final bool isPhrase;
   final VocabularyItem? existingItem;
-  final String targetLanguage; 
-  final String nativeLanguage; 
+  final String targetLanguage;
+  final String nativeLanguage;
   final VoidCallback onSpeak;
   final Function(int, String) onUpdateStatus;
   final VoidCallback onSaveToFirebase;
@@ -44,7 +42,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
   // 0 = Editor, 1 = MyMemory, 2 = Glosbe
   int _selectedTabIndex = 0;
   String _cachedTranslation = "Loading...";
-  
+
   // Cache to store API results so we don't re-fetch on tab switch
   final Map<int, Future<String>> _externalDictFutures = {};
 
@@ -62,21 +60,30 @@ class _TranslationSheetState extends State<TranslationSheet> {
     // 1. MyMemory (Free API)
     if (tabIndex == 1) {
       try {
-        final src = widget.targetLanguage.isEmpty ? 'es' : widget.targetLanguage;
-        final tgt = widget.nativeLanguage.isEmpty ? 'en' : widget.nativeLanguage;
+        final src = widget.targetLanguage.isEmpty
+            ? 'es'
+            : widget.targetLanguage;
+        final tgt = widget.nativeLanguage.isEmpty
+            ? 'en'
+            : widget.nativeLanguage;
         final text = Uri.encodeComponent(widget.originalText);
-        
-        final url = Uri.parse('https://api.mymemory.translated.net/get?q=$text&langpair=$src|$tgt');
-        
-        final response = await http.get(url).timeout(const Duration(seconds: 5));
+
+        final url = Uri.parse(
+          'https://api.mymemory.translated.net/get?q=$text&langpair=$src|$tgt',
+        );
+
+        final response = await http
+            .get(url)
+            .timeout(const Duration(seconds: 5));
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
           if (data['responseData'] != null) {
             String result = data['responseData']['translatedText'] ?? "";
-            
+
             // Filter out exact matches if no translation found
-            if (result.trim().toLowerCase() == widget.originalText.trim().toLowerCase()) {
+            if (result.trim().toLowerCase() ==
+                widget.originalText.trim().toLowerCase()) {
               return "No direct translation match found in MyMemory database.";
             }
             return result;
@@ -89,8 +96,8 @@ class _TranslationSheetState extends State<TranslationSheet> {
         return "Error fetching translation: $e";
       }
     }
-    
-    // 2. Glosbe (Note: Glosbe API is strictly rate-limited/paid now. 
+
+    // 2. Glosbe (Note: Glosbe API is strictly rate-limited/paid now.
     // This is a placeholder as direct scraping is brittle without a WebView)
     if (tabIndex == 2) {
       return "Glosbe API integration requires a specific key or web scraping implementation.\n\nUse the 'Editor' tab for the most accurate AI explanation.";
@@ -111,7 +118,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Reader-style background color
-    final backgroundColor = isDark ? const Color(0xFF1C1C1E) : Colors.white; 
+    final backgroundColor = isDark ? const Color(0xFF1C1C1E) : Colors.white;
     final primaryTextColor = isDark ? Colors.white : Colors.black87;
 
     return DraggableScrollableSheet(
@@ -125,7 +132,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 15,
                 offset: const Offset(0, 5),
               ),
@@ -166,23 +173,29 @@ class _TranslationSheetState extends State<TranslationSheet> {
                         ],
                       ),
                     ),
-                    Divider(color: Colors.grey.withOpacity(0.2), height: 24),
+                    Divider(
+                      color: Colors.grey.withValues(alpha: 0.2),
+                      height: 24,
+                    ),
 
                     // --- TAB CONTENT ---
                     if (_selectedTabIndex == 0)
                       _buildEditorContent(isDark, primaryTextColor)
                     else
-                      _buildDictionaryResult(_selectedTabIndex, isDark, primaryTextColor),
-                      
+                      _buildDictionaryResult(
+                        _selectedTabIndex,
+                        isDark,
+                        primaryTextColor,
+                      ),
+
                     // Space for scrolling above bottom bar
-                    const SizedBox(height: 100), 
+                    const SizedBox(height: 100),
                   ],
                 ),
               ),
 
               // --- BOTTOM RANKING BAR (Sticky) ---
-              if (!widget.isPhrase)
-                _buildBottomRankingBar(isDark),
+              if (!widget.isPhrase) _buildBottomRankingBar(isDark),
             ],
           ),
         );
@@ -202,14 +215,18 @@ class _TranslationSheetState extends State<TranslationSheet> {
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.15),
+              color: Colors.blue.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.volume_up_rounded, color: Colors.blue, size: 26),
+            child: const Icon(
+              Icons.volume_up_rounded,
+              color: Colors.blue,
+              size: 26,
+            ),
           ),
         ),
         const SizedBox(width: 16),
-        
+
         // Word
         Expanded(
           child: Text(
@@ -221,7 +238,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
             ),
           ),
         ),
-        
+
         // Save Button (Icon style)
         IconButton(
           onPressed: () {
@@ -238,7 +255,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
     final isSelected = _selectedTabIndex == index;
     // Dark mode inactive tab color vs Light mode
     final inactiveBg = isDark ? const Color(0xFF2C2C2E) : Colors.grey[200];
-    
+
     return GestureDetector(
       onTap: () => setState(() => _selectedTabIndex = index),
       child: Container(
@@ -251,9 +268,11 @@ class _TranslationSheetState extends State<TranslationSheet> {
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : (isDark ? Colors.grey[400] : Colors.black87),
-            fontSize: 14, 
-            fontWeight: FontWeight.w600
+            color: isSelected
+                ? Colors.white
+                : (isDark ? Colors.grey[400] : Colors.black87),
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -264,15 +283,31 @@ class _TranslationSheetState extends State<TranslationSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("TRANSLATION", style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+        const Text(
+          "TRANSLATION",
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
+        ),
         const SizedBox(height: 8),
         Text(
           _cachedTranslation,
           style: TextStyle(color: textColor, fontSize: 18, height: 1.4),
         ),
         const SizedBox(height: 24),
-        
-        const Text("AI EXPLANATION", style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+
+        const Text(
+          "AI EXPLANATION",
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
+        ),
         const SizedBox(height: 12),
         FutureBuilder<String?>(
           future: widget.geminiFuture,
@@ -280,13 +315,19 @@ class _TranslationSheetState extends State<TranslationSheet> {
             if (gSnap.connectionState == ConnectionState.waiting) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
-                child: LinearProgressIndicator(color: Colors.blue.withOpacity(0.3), backgroundColor: Colors.transparent),
+                child: LinearProgressIndicator(
+                  color: Colors.blue.withValues(alpha: 0.3),
+                  backgroundColor: Colors.transparent,
+                ),
               );
             }
             if (gSnap.hasData && gSnap.data != null) {
               return GeminiFormattedText(text: gSnap.data!);
             }
-            return const Text("AI details unavailable for this word.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic));
+            return const Text(
+              "AI details unavailable for this word.",
+              style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+            );
           },
         ),
       ],
@@ -306,7 +347,10 @@ class _TranslationSheetState extends State<TranslationSheet> {
         if (snapshot.hasError) {
           return Padding(
             padding: const EdgeInsets.all(20),
-            child: Text("Error loading dictionary: ${snapshot.error}", style: const TextStyle(color: Colors.red)),
+            child: Text(
+              "Error loading dictionary: ${snapshot.error}",
+              style: const TextStyle(color: Colors.red),
+            ),
           );
         }
         // Dictionary Result Content
@@ -314,7 +358,9 @@ class _TranslationSheetState extends State<TranslationSheet> {
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.grey[100],
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
@@ -344,17 +390,42 @@ class _TranslationSheetState extends State<TranslationSheet> {
         children: [
           const Text(
             "RANK WORD KNOWLEDGE",
-            style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildRankButton("New", 0, Colors.blue, isDark),
-              _buildRankButton("1", 1, const Color(0xFFFBC02D), isDark), // Yellow 700
-              _buildRankButton("2", 2, const Color(0xFFFFA726), isDark), // Orange 400
-              _buildRankButton("3", 3, const Color(0xFFF57C00), isDark), // Orange 700
-              _buildRankButton("4", 4, const Color(0xFFEF5350), isDark), // Red 400
+              _buildRankButton(
+                "1",
+                1,
+                const Color(0xFFFBC02D),
+                isDark,
+              ), // Yellow 700
+              _buildRankButton(
+                "2",
+                2,
+                const Color(0xFFFFA726),
+                isDark,
+              ), // Orange 400
+              _buildRankButton(
+                "3",
+                3,
+                const Color(0xFFF57C00),
+                isDark,
+              ), // Orange 700
+              _buildRankButton(
+                "4",
+                4,
+                const Color(0xFFEF5350),
+                isDark,
+              ), // Red 400
               _buildRankButton("Known", 5, Colors.green, isDark),
             ],
           ),
@@ -367,7 +438,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
     // Determine active status (Default to 0 if null)
     final currentStatus = widget.existingItem?.status ?? 0;
     final isActive = currentStatus == status;
-    
+
     return InkWell(
       onTap: () {
         widget.onUpdateStatus(status, _cachedTranslation);
@@ -375,15 +446,17 @@ class _TranslationSheetState extends State<TranslationSheet> {
       },
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        width: 48, 
+        width: 48,
         height: 42,
         decoration: BoxDecoration(
           // Active = Full Color, Inactive = Subtle Opacity
-          color: isActive ? color : color.withOpacity(isDark ? 0.15 : 0.1),
+          color: isActive
+              ? color
+              : color.withValues(alpha: isDark ? 0.15 : 0.1),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isActive ? Colors.transparent : color.withOpacity(0.5),
-            width: 1.5
+            color: isActive ? Colors.transparent : color.withValues(alpha: 0.5),
+            width: 1.5,
           ),
         ),
         alignment: Alignment.center,
@@ -392,7 +465,7 @@ class _TranslationSheetState extends State<TranslationSheet> {
           style: TextStyle(
             color: isActive ? Colors.white : color,
             fontWeight: FontWeight.bold,
-            fontSize: 12
+            fontSize: 12,
           ),
         ),
       ),

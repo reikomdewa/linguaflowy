@@ -31,7 +31,7 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
   // YouTube State
   YoutubePlayerController? _ytController;
   bool _isYoutube = false;
-  
+
   // Hand-off State
   bool _isFullScreen = false;
 
@@ -52,7 +52,7 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    
+
     // If we are currently swapping to/from full screen, ignore auto-pause logic
     if (_isFullScreen) return;
 
@@ -95,12 +95,12 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
   // --- YOUTUBE INIT ---
   void _initYoutube({int? startAt}) {
     if (!mounted) return;
-    
+
     _ytController?.dispose();
-    
+
     setState(() {
       _isYoutube = true;
-      _isReady = false; 
+      _isReady = false;
     });
 
     final videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
@@ -122,7 +122,7 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
   // --- LOCAL MEDIA INIT ---
   Future<void> _initLocalMedia({int? startAt}) async {
     if (!mounted) return;
-    
+
     if (_localPlayer != null) {
       await _localPlayer!.dispose();
     }
@@ -143,7 +143,10 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
       );
 
       final startDuration = Duration(
-        milliseconds: ((startAt != null ? startAt.toDouble() : widget.startSeconds) * 1000).toInt(),
+        milliseconds:
+            ((startAt != null ? startAt.toDouble() : widget.startSeconds) *
+                    1000)
+                .toInt(),
       );
       await _localPlayer!.seek(startDuration);
 
@@ -174,13 +177,13 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
 
     if (videoId == null) return;
 
-    _ytController!.pause(); 
+    _ytController!.pause();
     _ytController!.dispose();
     _ytController = null;
 
     setState(() {
       _isFullScreen = true;
-      _isReady = false; 
+      _isReady = false;
     });
 
     // 2. Hide System UI (Immersive Mode) & Force Landscape
@@ -192,20 +195,17 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
     ]);
 
     // 3. Push Full Screen Page
+    if (!mounted) return;
     final resultPos = await Navigator.of(context).push<int>(
       MaterialPageRoute(
-        builder: (context) => _FullScreenYoutubePage(
-          videoId: videoId,
-          startAt: currentPos,
-        ),
+        builder: (context) =>
+            _FullScreenYoutubePage(videoId: videoId, startAt: currentPos),
       ),
     );
 
     // 4. Restore System UI & Portrait
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-    ]);
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
     // 5. Re-init Embedded Player
     if (mounted) {
@@ -276,11 +276,7 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
               ],
             ),
           ),
-          Positioned(
-            bottom: 50,
-            right: 8,
-            child: _buildReplayButton(),
-          ),
+          Positioned(bottom: 50, right: 8, child: _buildReplayButton()),
         ],
       );
     }
@@ -299,11 +295,7 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
               ),
             ),
           ),
-          Positioned(
-            bottom: 50,
-            right: 8,
-            child: _buildReplayButton(),
-          ),
+          Positioned(bottom: 50, right: 8, child: _buildReplayButton()),
         ],
       );
     }
@@ -331,7 +323,8 @@ class _VideoSRSPlayerState extends State<VideoSRSPlayer> {
   Widget _buildReplayButton() {
     if (!_isReady) return const SizedBox.shrink();
     return FloatingActionButton.small(
-      heroTag: "replay_srs_${widget.startSeconds}_${DateTime.now().millisecondsSinceEpoch}",
+      heroTag:
+          "replay_srs_${widget.startSeconds}_${DateTime.now().millisecondsSinceEpoch}",
       backgroundColor: Colors.black54,
       elevation: 0,
       onPressed: _seekToStart,
@@ -345,10 +338,7 @@ class _FullScreenYoutubePage extends StatefulWidget {
   final String videoId;
   final int startAt;
 
-  const _FullScreenYoutubePage({
-    required this.videoId,
-    required this.startAt,
-  });
+  const _FullScreenYoutubePage({required this.videoId, required this.startAt});
 
   @override
   State<_FullScreenYoutubePage> createState() => _FullScreenYoutubePageState();
@@ -403,7 +393,10 @@ class _FullScreenYoutubePageState extends State<_FullScreenYoutubePage> {
               IconButton(
                 icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
                 onPressed: () {
-                  Navigator.pop(context, _fsController.value.position.inSeconds);
+                  Navigator.pop(
+                    context,
+                    _fsController.value.position.inSeconds,
+                  );
                 },
               ),
             ],

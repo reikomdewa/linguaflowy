@@ -31,7 +31,9 @@ class QuizWordChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: isSelectedArea
-              ? (isDark ? Colors.blueAccent.withOpacity(0.2) : Colors.blue[50])
+              ? (isDark
+                    ? Colors.blueAccent.withValues(alpha: 0.2)
+                    : Colors.blue[50])
               : (isDark ? Colors.grey[800] : Colors.white),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
@@ -43,7 +45,7 @@ class QuizWordChip extends StatelessWidget {
               ? []
               : [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 2,
                     offset: const Offset(0, 2),
                   ),

@@ -44,7 +44,9 @@ class _FlashcardState extends State<Flashcard>
   void initState() {
     super.initState();
     _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 300));
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
     _animation = Tween<double>(begin: 0, end: 1).animate(_controller);
 
     // --- SMART LOGIC SETUP ---
@@ -53,11 +55,11 @@ class _FlashcardState extends State<Flashcard>
 
     if (videoUrl != null && videoUrl.isNotEmpty) {
       // Check if it is a remote URL (YouTube or HTTP)
-      if (videoUrl.toLowerCase().contains('http://') || 
-          videoUrl.toLowerCase().contains('https://') || 
+      if (videoUrl.toLowerCase().contains('http://') ||
+          videoUrl.toLowerCase().contains('https://') ||
           videoUrl.toLowerCase().contains('youtube')) {
-        _hasVideo = true; 
-      } 
+        _hasVideo = true;
+      }
       // It is a local file, check if it actually exists on disk
       else {
         final file = File(videoUrl);
@@ -137,10 +139,18 @@ class _FlashcardState extends State<Flashcard>
     return Dismissible(
       key: ValueKey(widget.item.id),
       direction: DismissDirection.horizontal,
-      background: _buildSwipeBg(Colors.green, Icons.thumb_up_alt_rounded,
-          "Good", Alignment.centerLeft),
-      secondaryBackground: _buildSwipeBg(Colors.orange, Icons.refresh_rounded,
-          "Again", Alignment.centerRight),
+      background: _buildSwipeBg(
+        Colors.green,
+        Icons.thumb_up_alt_rounded,
+        "Good",
+        Alignment.centerLeft,
+      ),
+      secondaryBackground: _buildSwipeBg(
+        Colors.orange,
+        Icons.refresh_rounded,
+        "Again",
+        Alignment.centerRight,
+      ),
       onDismissed: (direction) {
         if (direction == DismissDirection.startToEnd) {
           widget.onRated(3);
@@ -163,7 +173,7 @@ class _FlashcardState extends State<Flashcard>
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
+                          color: Colors.black.withValues(alpha: 0.08),
                           blurRadius: 15,
                           offset: const Offset(0, 8),
                         ),
@@ -186,7 +196,9 @@ class _FlashcardState extends State<Flashcard>
                                 child: Text(
                                   "(Tap to flip)",
                                   style: TextStyle(
-                                      color: Colors.grey[400], fontSize: 12),
+                                    color: Colors.grey[400],
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ),
 
@@ -202,11 +214,12 @@ class _FlashcardState extends State<Flashcard>
                               widget.item.word,
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                  fontSize: (_hasVideo && _showVideoOnFront)
-                                      ? 26
-                                      : 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: txtColor),
+                                fontSize: (_hasVideo && _showVideoOnFront)
+                                    ? 26
+                                    : 32,
+                                fontWeight: FontWeight.bold,
+                                color: txtColor,
+                              ),
                             ),
 
                             // --- SENTENCE CONTEXT ---
@@ -217,11 +230,12 @@ class _FlashcardState extends State<Flashcard>
                                   widget.item.sentenceContext!,
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                      fontSize: 16,
-                                      color: isDark
-                                          ? Colors.grey[300]
-                                          : Colors.grey[800],
-                                      fontStyle: FontStyle.italic),
+                                    fontSize: 16,
+                                    color: isDark
+                                        ? Colors.grey[300]
+                                        : Colors.grey[800],
+                                    fontStyle: FontStyle.italic,
+                                  ),
                                 ),
                               ),
 
@@ -232,13 +246,19 @@ class _FlashcardState extends State<Flashcard>
                               opacity: _animation,
                               child: Column(
                                 children: [
-                                  Divider(color: Colors.grey.withOpacity(0.3)),
-                                  
+                                  Divider(
+                                    color: Colors.grey.withValues(alpha: 0.3),
+                                  ),
+
                                   // Case B: Show on Back (If it was hidden on front - 30% chance)
                                   // This ensures the user EVENTUALLY gets the video context
-                                  if (_isRevealed && _hasVideo && !_showVideoOnFront)
+                                  if (_isRevealed &&
+                                      _hasVideo &&
+                                      !_showVideoOnFront)
                                     Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 16.0),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 16.0,
+                                      ),
                                       child: _buildVideoPlayer(),
                                     ),
 
@@ -247,9 +267,10 @@ class _FlashcardState extends State<Flashcard>
                                     widget.item.translation,
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(
-                                        fontSize: 24,
-                                        color: Colors.blueAccent,
-                                        fontWeight: FontWeight.w500),
+                                      fontSize: 24,
+                                      color: Colors.blueAccent,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                   if (widget.item.notes != null &&
                                       widget.item.notes!.isNotEmpty)
@@ -259,36 +280,41 @@ class _FlashcardState extends State<Flashcard>
                                         widget.item.notes!,
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(
-                                            color: Colors.grey,
-                                            fontStyle: FontStyle.italic),
+                                          color: Colors.grey,
+                                          fontStyle: FontStyle.italic,
+                                        ),
                                       ),
                                     ),
                                   if (_isRevealed) ...[
                                     const SizedBox(height: 20),
                                     if (_isLoadingExtra)
                                       const SizedBox(
-                                          height: 15,
-                                          width: 15,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2))
+                                        height: 15,
+                                        width: 15,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
                                     else
                                       Column(
                                         children: [
                                           if (_myMemoryTranslation != null &&
                                               _myMemoryTranslation!.isNotEmpty)
                                             _buildAltTranslationRow(
-                                                "MyMemory",
-                                                _myMemoryTranslation!,
-                                                isDark),
+                                              "MyMemory",
+                                              _myMemoryTranslation!,
+                                              isDark,
+                                            ),
                                           if (_googleTranslation != null &&
                                               _googleTranslation!.isNotEmpty)
                                             _buildAltTranslationRow(
-                                                "Google",
-                                                _googleTranslation!,
-                                                isDark),
+                                              "Google",
+                                              _googleTranslation!,
+                                              isDark,
+                                            ),
                                         ],
                                       ),
-                                  ]
+                                  ],
                                 ],
                               ),
                             ),
@@ -308,12 +334,16 @@ class _FlashcardState extends State<Flashcard>
                       itemBuilder: (context) => [
                         const PopupMenuItem(
                           value: 'delete',
-                          child: Row(children: [
-                            Icon(Icons.delete_outline, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text("Delete Card",
-                                style: TextStyle(color: Colors.red))
-                          ]),
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text(
+                                "Delete Card",
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -360,21 +390,35 @@ class _FlashcardState extends State<Flashcard>
   }
 
   Container _buildSwipeBg(
-      Color color, IconData icon, String label, Alignment alignment) {
+    Color color,
+    IconData icon,
+    String label,
+    Alignment alignment,
+  ) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
-      decoration:
-          BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
       alignment: alignment,
       padding: EdgeInsets.only(
-          left: alignment == Alignment.centerLeft ? 30 : 0,
-          right: alignment == Alignment.centerRight ? 30 : 0),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(icon, color: Colors.white, size: 40),
-        Text(label,
+        left: alignment == Alignment.centerLeft ? 30 : 0,
+        right: alignment == Alignment.centerRight ? 30 : 0,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.white, size: 40),
+          Text(
+            label,
             style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold))
-      ]),
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -382,22 +426,25 @@ class _FlashcardState extends State<Flashcard>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: _getStatusColor(widget.item.status).withOpacity(0.15),
+        color: _getStatusColor(widget.item.status).withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         _getStatusLabel(widget.item.status).toUpperCase(),
         style: TextStyle(
-            color: _getStatusColor(widget.item.status),
-            fontWeight: FontWeight.bold,
-            fontSize: 10),
+          color: _getStatusColor(widget.item.status),
+          fontWeight: FontWeight.bold,
+          fontSize: 10,
+        ),
       ),
     );
   }
 
   Widget _buildRatingBtn(String label, Color color, int rating) {
-    final timeStr =
-        SRSAlgorithm.getNextIntervalText(widget.item.status, rating);
+    final timeStr = SRSAlgorithm.getNextIntervalText(
+      widget.item.status,
+      rating,
+    );
     return InkWell(
       onTap: () => widget.onRated(rating),
       borderRadius: BorderRadius.circular(12),
@@ -405,18 +452,21 @@ class _FlashcardState extends State<Flashcard>
         width: 75,
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
         ),
         child: Column(
           children: [
-            Text(label,
-                style:
-                    TextStyle(fontWeight: FontWeight.bold, color: color)),
+            Text(
+              label,
+              style: TextStyle(fontWeight: FontWeight.bold, color: color),
+            ),
             const SizedBox(height: 4),
-            Text(timeStr,
-                style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            Text(
+              timeStr,
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            ),
           ],
         ),
       ),
@@ -430,21 +480,31 @@ class _FlashcardState extends State<Flashcard>
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(
-                  color: isDark ? Colors.white12 : Colors.grey[200],
-                  borderRadius: BorderRadius.circular(4)),
-              child: Text(source,
-                  style: TextStyle(fontSize: 9, color: Colors.grey[600]))),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : Colors.grey[200],
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              source,
+              style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+            ),
+          ),
           const SizedBox(width: 6),
           Flexible(
-              child: Text(text,
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontStyle: FontStyle.italic,
-                      color: isDark ? Colors.white70 : Colors.black87),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis)),
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 14,
+                fontStyle: FontStyle.italic,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
@@ -458,14 +518,16 @@ class _FlashcardState extends State<Flashcard>
         content: const Text("You will not see this card again."),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel")),
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
           TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                widget.onDelete();
-              },
-              child: const Text("Delete", style: TextStyle(color: Colors.red))),
+            onPressed: () {
+              Navigator.pop(context);
+              widget.onDelete();
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );

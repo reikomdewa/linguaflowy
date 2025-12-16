@@ -55,7 +55,7 @@ class LibraryScreen extends StatelessWidget {
                       height: 40,
                       decoration: BoxDecoration(
                         color: isDark
-                            ? Colors.white.withOpacity(0.1)
+                            ? Colors.white.withValues(alpha: 0.1)
                             : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -225,7 +225,7 @@ class LibraryScreen extends StatelessWidget {
       floatingActionButton: Material(
         color: Colors.transparent,
         elevation: 10,
-        shadowColor: Colors.black.withOpacity(0.3),
+        shadowColor: Colors.black.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(30),
         child: InkWell(
           onTap: () {
@@ -241,11 +241,11 @@ class LibraryScreen extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             decoration: BoxDecoration(
               color: isDark
-                  ? const Color(0xFF2C2C2C).withOpacity(0.9)
-                  : const Color(0xFF1E1E1E).withOpacity(0.9),
+                  ? const Color(0xFF2C2C2C).withValues(alpha: 0.9)
+                  : const Color(0xFF1E1E1E).withValues(alpha: 0.9),
               borderRadius: BorderRadius.circular(30),
               border: Border.all(
-                color: Colors.white.withOpacity(0.15),
+                color: Colors.white.withValues(alpha: 0.15),
                 width: 1,
               ),
             ),
@@ -326,7 +326,7 @@ class LibraryScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 scrollDirection: Axis.horizontal,
                 itemCount: docs.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (context, index) {
                   final data = docs[index].data() as Map<String, dynamic>;
                   final name = data['name'] ?? 'Untitled';

@@ -47,7 +47,8 @@ class VideoLessonCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onOptionTap;
 
-  const VideoLessonCard({super.key, 
+  const VideoLessonCard({
+    super.key,
     required this.lesson,
     required this.vocabMap,
     required this.isDark,
@@ -96,7 +97,7 @@ class VideoLessonCard extends StatelessWidget {
                   child: Container(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
+                      color: Colors.black.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -145,12 +146,6 @@ class VideoLessonCard extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  // Icon(Icons.circle, size: 8, color: Colors.blue),
-                  // SizedBox(width: 4),
-                  // Text("$newCount New", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  // SizedBox(width: 12),
-                  // Icon(Icons.circle, size: 8, color: Colors.green), // Changed to Green for 'Known' alignment
-                  // SizedBox(width: 4),
                   Text(
                     "$knownCount known",
                     style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -180,7 +175,8 @@ class TextLessonCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onOptionTap;
 
-  const TextLessonCard({super.key, 
+  const TextLessonCard({
+    super.key,
     required this.lesson,
     required this.vocabMap,
     required this.isDark,
@@ -222,7 +218,7 @@ class TextLessonCard extends StatelessWidget {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
+                      color: Colors.blue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(Icons.article, color: Colors.blue),

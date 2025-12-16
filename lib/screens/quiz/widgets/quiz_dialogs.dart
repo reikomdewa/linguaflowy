@@ -76,9 +76,10 @@ class QuizDialogs {
                 context: context,
                 builder: (context) => const PremiumLockDialog(),
               ).then((unlocked) {
-                if (unlocked == true) {
+                if (unlocked == true && context.mounted) {
                   context.read<AuthBloc>().add(AuthCheckRequested());
                   context.read<QuizBloc>().add(QuizReviveRequested());
+                
                   Navigator.pop(context);
                 }
               });

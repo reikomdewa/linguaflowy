@@ -1154,7 +1154,7 @@ void _activateCard(
     int status, {
     bool showDialog = true,
   }) async {
-      if (clean.trim().isEmpty) return;
+    
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
  String detectedBaseForm = LocalLemmatizer().getLemma(orig);
     // 1. Get Video Context (Existing logic)
