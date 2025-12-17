@@ -15,8 +15,8 @@ class HybridLessonService {
   /// Fetches standard text/video lessons (Guided)
   Future<List<LessonModel>> fetchStandardLessons(String languageCode) async {
     return _fetchHybrid(
-      localPath: 'assets/guided/lessons_$languageCode.json',
-      userId: 'system',
+       localPath: 'assets/guided_courses/lessons_$languageCode.json', 
+       userId: 'system', // or 'system_guided' to distinguish them
       languageCode: languageCode,
     );
   }

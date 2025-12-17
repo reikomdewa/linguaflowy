@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Learning the natural way',
+                      'Learning language the natural way',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
