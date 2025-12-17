@@ -191,7 +191,12 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
                   // Update this logic:
                   onTap: () {
                     if (isSeries) {
-                      showPlaylistBottomSheet(context, lesson, rawLessons, widget.isDark);
+                      showPlaylistBottomSheet(
+                        context,
+                        lesson,
+                        rawLessons,
+                        widget.isDark,
+                      );
                     } else {
                       Navigator.push(
                         context,
@@ -206,8 +211,13 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
                   },
                   onPlaylistTap: isSeries
                       ? () {
-                      showPlaylistBottomSheet(context, lesson, rawLessons, widget.isDark);
-                      }
+                          showPlaylistBottomSheet(
+                            context,
+                            lesson,
+                            rawLessons,
+                            widget.isDark,
+                          );
+                        }
                       : null,
                 );
               },
@@ -363,7 +373,12 @@ class _ImmersionSectionState extends State<ImmersionSection> {
                 isDark: widget.isDark,
                 onTap: () {
                   if (isSeries) {
-                   showPlaylistBottomSheet(context, lesson, rawlessons, widget.isDark);
+                    showPlaylistBottomSheet(
+                      context,
+                      lesson,
+                      rawlessons,
+                      widget.isDark,
+                    );
                   } else {
                     Navigator.push(
                       context,
@@ -378,8 +393,13 @@ class _ImmersionSectionState extends State<ImmersionSection> {
                 },
                 onPlaylistTap: isSeries
                     ? () {
-                     showPlaylistBottomSheet(context, lesson, rawlessons, widget.isDark);
-                    }
+                        showPlaylistBottomSheet(
+                          context,
+                          lesson,
+                          rawlessons,
+                          widget.isDark,
+                        );
+                      }
                     : null,
               );
             },
@@ -421,9 +441,6 @@ class _ImmersionSectionState extends State<ImmersionSection> {
   }
 }
 
-// ==============================================================================
-// 3. LIBRARY SECTION
-// ==============================================================================
 class LibrarySection extends StatefulWidget {
   final List<LessonModel> lessons;
   final Map<String, VocabularyItem> vocabMap;
@@ -462,7 +479,19 @@ class _LibrarySectionState extends State<LibrarySection> {
     });
   }
 
+  // CRITICAL FIX: Sync data when parent updates
+  @override
+  void didUpdateWidget(LibrarySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.lessons.length != oldWidget.lessons.length) {
+      setState(() {
+        _lessons = List.from(widget.lessons);
+      });
+    }
+  }
+
   Future<void> _loadMore() async {
+    if (_loading) return;
     setState(() => _loading = true);
     try {
       final newItems = await context
@@ -470,10 +499,12 @@ class _LibrarySectionState extends State<LibrarySection> {
           .fetchPagedCategory(
             widget.languageCode,
             'book',
-            lastLesson: _lessons.last,
+            lastLesson: _lessons.isNotEmpty ? _lessons.last : null,
             limit: 10,
           );
-      if (newItems.isNotEmpty) setState(() => _lessons.addAll(newItems));
+      if (newItems.isNotEmpty) {
+        setState(() => _lessons.addAll(newItems));
+      }
     } finally {
       setState(() => _loading = false);
     }
@@ -481,6 +512,7 @@ class _LibrarySectionState extends State<LibrarySection> {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Sort
     var sorted = List<LessonModel>.from(_lessons)
       ..sort((a, b) {
         if (a.difficulty == 'beginner' && b.difficulty != 'beginner') return -1;
@@ -488,11 +520,14 @@ class _LibrarySectionState extends State<LibrarySection> {
         return 0;
       });
 
+    // 2. Filter
     final rawLessons = _tab == 'All'
         ? sorted
         : sorted
               .where((l) => l.difficulty.toLowerCase() == _tab.toLowerCase())
               .toList();
+
+    // 3. Deduplicate
     final displayList = deduplicateSeries(rawLessons);
 
     return Column(
@@ -514,39 +549,87 @@ class _LibrarySectionState extends State<LibrarySection> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(children: _tabs.map((t) => _buildTab(t)).toList()),
         ),
-        SizedBox(
-          height: 260,
-          child: ListView.separated(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            scrollDirection: Axis.horizontal,
-            itemCount: displayList.length + (_loading ? 1 : 0),
-            separatorBuilder: (ctx, i) => const SizedBox(width: 16),
-            itemBuilder: (context, index) {
-              if (index >= displayList.length)
-                return const Center(child: CircularProgressIndicator());
-              final lesson = displayList[index];
-              final bool isSeries =
-                  lesson.seriesId != null && lesson.seriesId!.isNotEmpty;
-              if (lesson.type == 'text') {
-                return TextLessonCard(
+
+        // 4. Handle Empty State vs List
+        if (displayList.isEmpty && !_loading)
+          const SizedBox(
+            height: 260,
+            child: Center(
+              child: Text(
+                "No lessons found.",
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 260,
+            child: ListView.separated(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              scrollDirection: Axis.horizontal,
+              itemCount: displayList.length + (_loading ? 1 : 0),
+              separatorBuilder: (ctx, i) => const SizedBox(width: 16),
+              itemBuilder: (context, index) {
+                if (index >= displayList.length) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final lesson = displayList[index];
+                final bool isSeries =
+                    lesson.seriesId != null && lesson.seriesId!.isNotEmpty;
+
+                if (lesson.type == 'text') {
+                  return TextLessonCard(
+                    lesson: lesson,
+                    vocabMap: widget.vocabMap,
+                    isDark: widget.isDark,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ReaderScreen(lesson: lesson),
+                      ),
+                    ),
+                    onOptionTap: () =>
+                        showLessonOptions(context, lesson, widget.isDark),
+                  );
+                }
+
+                return VideoLessonCard(
                   lesson: lesson,
                   vocabMap: widget.vocabMap,
                   isDark: widget.isDark,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ReaderScreen(lesson: lesson),
-                    ),
-                  ),
+                  onTap: () {
+                    if (isSeries) {
+                      showPlaylistBottomSheet(
+                        context,
+                        lesson,
+                        rawLessons,
+                        widget.isDark,
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ReaderScreen(lesson: lesson),
+                        ),
+                      );
+                    }
+                  },
                   onOptionTap: () =>
                       showLessonOptions(context, lesson, widget.isDark),
+                  onPlaylistTap: isSeries
+                      ? () => showPlaylistBottomSheet(
+                          context,
+                          lesson,
+                          rawLessons,
+                          widget.isDark,
+                        )
+                      : null,
                 );
-              }
-            
-            },
+              },
+            ),
           ),
-        ),
       ],
     );
   }

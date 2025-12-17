@@ -55,7 +55,6 @@ SPECIFIC_SEARCH_CONFIG = {
 
 # --- LOGGER ---
 class QuietLogger:
-    """Silences the annoying SABR/Warning logs from yt-dlp"""
     def debug(self, msg): pass
     def warning(self, msg): pass
     def error(self, msg): print(msg)
@@ -68,7 +67,6 @@ def get_queries_for_language(code, name):
         (f"Learn {name} language conversation", 'education'),
         (f"{name} language news", 'news'),
         (f"{name} language cartoon", 'fairy_tale'),
-        (f"{name} gospel song lyrics", 'culture'),
     ]
 
 # --- HELPERS ---
@@ -90,7 +88,6 @@ def parse_vtt_to_transcript(vtt_content):
     transcript = []
     time_pattern = re.compile(r'((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})\s-->\s((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})')
     current_entry = None
-    
     for line in lines:
         line = line.strip()
         if not line or line == 'WEBVTT' or line.startswith('Kind:') or line.startswith('Language:'): continue
@@ -102,7 +99,6 @@ def parse_vtt_to_transcript(vtt_content):
         if current_entry:
             clean_line = re.sub(r'<[^>]+>', '', line).replace('&nbsp;', ' ').replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"')
             if clean_line: current_entry['text'] += clean_line + " "
-
     if current_entry and current_entry['text']: transcript.append(current_entry)
     for t in transcript: t['text'] = t['text'].strip()
     return transcript
@@ -124,11 +120,8 @@ def save_lesson_to_file(lang_code, lesson):
         if os.path.exists(filepath):
             with open(filepath, 'r', encoding='utf-8') as f:
                 existing_lessons = json.load(f)
-        
-        # Avoid duplicates
         if any(l['id'] == lesson['id'] for l in existing_lessons):
             return False
-
         existing_lessons.insert(0, lesson)
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(existing_lessons, f, ensure_ascii=False, indent=None)
@@ -137,297 +130,206 @@ def save_lesson_to_file(lang_code, lesson):
         print(f"Error saving file: {e}")
         return False
 
-# --- CORE LOGIC WITH IMPROVED SUBTITLE DETECTION ---
+# --- CORE LOGIC WITH RETRY ---
 
-def get_video_details(video_url, lang_code, genre, manual_level=None):
-    """
-    Two-phase process:
-    1. Inspect metadata to find exact subtitle dialect (e.g. 'fr-FR').
-    2. Download specifically that subtitle file.
-    3. If manual_level is provided, use it instead of analyze_difficulty.
-    """
-    
-    # --- PHASE 1: INSPECTION (No Download) ---
-    ydl_opts_check = {
+def get_video_details(video_url, lang_code, genre, manual_level=None, max_retries=3):
+    ydl_opts_base = {
         'skip_download': True,
         'quiet': True,
         'no_warnings': True,
-        'ignoreerrors': True,
-        'logger': QuietLogger(), # Silence warnings
+        'ignoreerrors': False, # Catching errors for retry loop
+        'logger': QuietLogger(),
+        'socket_timeout': 30,
+        'retries': 5,
+        'nocheckcertificate': True,
     }
 
-    found_sub_code = None
-    is_auto = False
-    info = None
+    info, found_sub_code, is_auto = None, None, False
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts_check) as ydl:
-            # Random sleep to avoid hammering
-            time.sleep(random.uniform(1, 2))
-            try:
+    # PHASE 1: INFO EXTRACTION
+    for attempt in range(max_retries):
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts_base) as ydl:
                 info = ydl.extract_info(video_url, download=False)
-            except DownloadError: return None
-            
-            if not info: return None
-
-            # Skip long videos
-            if info.get('duration', 0) > 3600: # 1 hour limit
-                print(f"    ⚠️ Skipping (Too long): {info.get('title')[:30]}...")
+                if info: break
+        except Exception as e:
+            if any(x in str(e).lower() for x in ["handshake", "timeout", "connection"]):
+                wait = (attempt + 1) * 5
+                print(f"    ⏳ SSL/Timeout during info check. Retrying in {wait}s... ({attempt+1}/{max_retries})")
+                time.sleep(wait)
+            else:
+                print(f"    ❌ Info check error: {str(e)[:50]}")
                 return None
+    
+    if not info: return None
 
-            # 1. Check Manual Subtitles (Preferred)
-            # Match 'fr', 'fr-FR', 'fr-CA' etc.
-            manual_subs = info.get('subtitles', {})
-            for code in manual_subs:
-                if code == lang_code or code.startswith(f"{lang_code}-"):
-                    found_sub_code = code
-                    break
-            
-            # 2. Check Auto Subtitles (Fallback)
-            if not found_sub_code:
-                auto_subs = info.get('automatic_captions', {})
-                for code in auto_subs:
-                    if code == lang_code or code.startswith(f"{lang_code}-"):
-                        found_sub_code = code
-                        is_auto = True
-                        break
-            
-            if not found_sub_code:
-                print(f"    ⚠️ No '{lang_code}' subtitles found (Manual or Auto).")
-                return None
-
-    except Exception as e:
-        print(f"    ❌ Info check error: {str(e)[:50]}")
+    # Filter rules
+    if info.get('duration', 0) > 3600:
+        print(f"    ⚠️ Skipping (Too long): {info.get('title')[:30]}...")
         return None
 
-    # --- PHASE 2: DOWNLOAD ---
+    # Find Subtitles
+    manual_subs = info.get('subtitles', {})
+    for code in manual_subs:
+        if code == lang_code or code.startswith(f"{lang_code}-"):
+            found_sub_code = code; break
+    
+    if not found_sub_code:
+        auto_subs = info.get('automatic_captions', {})
+        for code in auto_subs:
+            if code == lang_code or code.startswith(f"{lang_code}-"):
+                found_sub_code = code; is_auto = True; break
+    
+    if not found_sub_code:
+        print(f"    ⚠️ No '{lang_code}' subtitles found.")
+        return None
+
+    # PHASE 2: SUBTITLE DOWNLOAD
     video_id = info['id']
     temp_filename = f"temp_{lang_code}_{video_id}"
-    
     ydl_opts_download = {
-        'skip_download': True,
+        **ydl_opts_base,
         'writesubtitles': not is_auto,
         'writeautomaticsub': is_auto,
-        'subtitleslangs': [found_sub_code], # Use the EXACT code we found
+        'subtitleslangs': [found_sub_code],
         'outtmpl': temp_filename,
-        'quiet': True,
-        'no_warnings': True,
-        'ignoreerrors': True,
-        'logger': QuietLogger(),
         'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
     }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
-            ydl.extract_info(video_url, download=True)
-            
-            # Find the file
-            files = glob.glob(f"{temp_filename}*.vtt")
-            
-            if not files:
-                for f in glob.glob(f"{temp_filename}*"): os.remove(f)
-                return None
-            
-            # Pick largest file (best quality)
-            best_file = max(files, key=os.path.getsize)
-            
-            with open(best_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Clean up
-            for f in glob.glob(f"{temp_filename}*"): 
+    content = None
+    for attempt in range(max_retries):
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
+                ydl.extract_info(video_url, download=True)
+                files = glob.glob(f"{temp_filename}*.vtt")
+                if files:
+                    best_file = max(files, key=os.path.getsize)
+                    with open(best_file, 'r', encoding='utf-8') as f: content = f.read()
+                    break
+                else: raise Exception("No VTT file found")
+        except Exception as e:
+            print(f"    ⚠️ Download error (Attempt {attempt+1}): {str(e)[:50]}...")
+            for f in glob.glob(f"{temp_filename}*"):
                 try: os.remove(f)
                 except: pass
-            
-            transcript_data = parse_vtt_to_transcript(content)
-            
-            if not transcript_data or len(transcript_data) < 5: 
-                print("    ⚠️ Transcript too short/empty.")
-                return None
-            
-            full_text = " ".join([t['text'] for t in transcript_data])
+            if any(x in str(e).lower() for x in ["handshake", "timeout", "vtt"]):
+                time.sleep((attempt + 1) * 5); continue
+            return None # Fatal error
 
-            # Determine Difficulty
-            difficulty = manual_level if manual_level else analyze_difficulty(transcript_data)
+    # Final cleanup
+    for f in glob.glob(f"{temp_filename}*"):
+        try: os.remove(f)
+        except: pass
 
-            return {
-                "id": f"yt_{info.get('id')}",
-                "userId": "system",
-                "title": info.get('title', 'Unknown Title'),
-                "language": lang_code,
-                "content": full_text,
-                "sentences": split_sentences(full_text),
-                "transcript": transcript_data,
-                "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                "imageUrl": info.get('thumbnail') or f"https://img.youtube.com/vi/{info.get('id')}/mqdefault.jpg",
-                "type": "video",
-                "difficulty": difficulty,
-                "videoUrl": f"https://www.youtube.com/watch?v={info.get('id')}",
-                "isFavorite": False,
-                "progress": 0,
-                "genre": genre
-            }
-    except Exception as e:
-        print(f"    ⚠️ Download error: {str(e)[:50]}...")
-        for f in glob.glob(f"{temp_filename}*"):
-            try: os.remove(f)
-            except: pass
-        return None
+    if not content: return None
+    
+    transcript_data = parse_vtt_to_transcript(content)
+    if not transcript_data or len(transcript_data) < 5: return None
+    
+    full_text = " ".join([t['text'] for t in transcript_data])
+    difficulty = manual_level if manual_level else analyze_difficulty(transcript_data)
+
+    return {
+        "id": f"yt_{video_id}",
+        "userId": "system",
+        "title": info.get('title', 'Unknown Title'),
+        "language": lang_code,
+        "content": full_text,
+        "sentences": split_sentences(full_text),
+        "transcript": transcript_data,
+        "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+        "imageUrl": info.get('thumbnail') or "",
+        "type": "video",
+        "difficulty": difficulty,
+        "videoUrl": f"https://www.youtube.com/watch?v={video_id}",
+        "isFavorite": False,
+        "progress": 0,
+        "genre": genre
+    }
 
 # --- WORKFLOWS ---
 
 def process_manual_link(url, lang_code, genre="manual", manual_level=None):
     if lang_code not in LANGUAGES:
-        print(f"❌ Error: Language code '{lang_code}' not found.")
-        return
+        print(f"❌ Error: Language code '{lang_code}' not found."); return
 
     print(f"\n==========================================")
     print(f" 🖐️ MANUAL MODE: {lang_code} | Genre: {genre}")
-    if manual_level:
-        print(f" 🎯 Forced Level: {manual_level}")
     print(f" 🔗 Processing: {url}")
     print(f"==========================================")
 
-    # Use QuietLogger here too
     ydl_opts_check = {'extract_flat': True, 'quiet': True, 'logger': QuietLogger()}
-    
-    # Store tuples or dicts to handle playlist data
     videos_to_process = [] 
 
     with yt_dlp.YoutubeDL(ydl_opts_check) as ydl:
         try:
             info = ydl.extract_info(url, download=False)
             if 'entries' in info:
-                # PLAYLIST DETECTED
-                playlist_title = info.get('title', 'Unknown Playlist')
-                playlist_id = info.get('id')
+                playlist_title, playlist_id = info.get('title'), info.get('id')
                 print(f"   📂 Detected Playlist: {playlist_title}")
-                
-                # Iterate entries with index to track series order
                 for idx, entry in enumerate(info['entries'], start=1):
-                    if entry:
-                        videos_to_process.append({
-                            'id': entry['id'],
-                            'seriesId': playlist_id,
-                            'seriesTitle': playlist_title,
-                            'seriesIndex': idx
-                        })
+                    if entry: videos_to_process.append({'id': entry['id'], 'seriesId': playlist_id, 'seriesTitle': playlist_title, 'seriesIndex': idx})
             else:
-                # SINGLE VIDEO
                 print(f"   🎬 Detected Video: {info.get('title')}")
-                videos_to_process.append({
-                    'id': info.get('id'),
-                    'seriesId': None,
-                    'seriesTitle': None,
-                    'seriesIndex': None
-                })
+                videos_to_process.append({'id': info.get('id'), 'seriesId': None, 'seriesTitle': None, 'seriesIndex': None})
         except Exception as e:
-            print(f"❌ Could not retrieve info: {e}")
-            return
-
-    print(f"   ⬇️  Queue size: {len(videos_to_process)} videos")
+            print(f"❌ Error: {e}"); return
 
     success_count = 0
-    
     for video_data in videos_to_process:
-        vid_id = video_data['id']
-        vid_url = f"https://www.youtube.com/watch?v={vid_id}"
-        
+        vid_url = f"https://www.youtube.com/watch?v={video_data['id']}"
         print(f"   ⏳ Checking: {vid_url}")
         lesson = get_video_details(vid_url, lang_code, genre, manual_level)
-        
         if lesson:
-            # Inject Playlist Metadata if it exists
             if video_data['seriesId']:
-                lesson['seriesId'] = video_data['seriesId']
-                lesson['seriesTitle'] = video_data['seriesTitle']
-                lesson['seriesIndex'] = video_data['seriesIndex']
-
-            saved = save_lesson_to_file(lang_code, lesson)
-            if saved:
+                lesson.update({'seriesId': video_data['seriesId'], 'seriesTitle': video_data['seriesTitle'], 'seriesIndex': video_data['seriesIndex']})
+            if save_lesson_to_file(lang_code, lesson):
                 print(f"      ✅ Saved: {lesson['title'][:30]}...")
                 success_count += 1
-            else:
-                print(f"      ⏭️  Duplicate skipped.")
-        else:
-            print(f"      🚫 Skipped (No subs or error)")
-        
+            else: print(f"      ⏭️  Duplicate skipped.")
+        else: print(f"      🚫 Skipped (No subs or error)")
         time.sleep(1)
-
-    print(f"\n✅ Manual job done. {success_count} lessons added to lessons_{lang_code}.json")
+    print(f"\n✅ Done. {success_count} lessons added.")
 
 def run_automated_scraping():
-    sorted_langs = sorted(LANGUAGES.items())
-    print(f"🚀 STARTING AUTOMATED EXTRACTION FOR {len(sorted_langs)} LANGUAGES")
-
-    for lang_code, lang_name in sorted_langs:
+    for lang_code, lang_name in sorted(LANGUAGES.items()):
         filepath = os.path.join(OUTPUT_DIR, f"lessons_{lang_code}.json")
-        
-        existing_count = 0
         if os.path.exists(filepath):
-            try:
-                with open(filepath, 'r') as f: existing_count = len(json.load(f))
-            except: pass
-
-        if existing_count >= 20:
-             print(f"⏭️  Skipping {lang_name} ({lang_code}): Has {existing_count} videos.")
-             continue
+            with open(filepath, 'r') as f:
+                if len(json.load(f)) >= 20: continue
 
         print(f"\n--- PROCESSING: {lang_name} ({lang_code}) ---")
         queries = get_queries_for_language(lang_code, lang_name)
         total_new_for_lang = 0
-
         for query, genre in queries:
             if total_new_for_lang >= 5: break
-
             print(f"  🔎 '{query}'")
-            # QuietLogger injected here
-            ydl_opts_search = {'quiet': True, 'extract_flat': True, 'dump_single_json': True, 'logger': QuietLogger(), 'sleep_interval': random.uniform(1, 3)}
-            
-            with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
-                try:
-                    result = ydl.extract_info(f"ytsearch5:{query}", download=False)
+            with yt_dlp.YoutubeDL({'quiet': True, 'extract_flat': True, 'logger': QuietLogger()}) as ydl:
+                try: result = ydl.extract_info(f"ytsearch5:{query}", download=False)
                 except: continue
-                
-                if 'entries' in result:
-                    for entry in result['entries']:
-                        if not entry: continue
-                        # Automated scraping just uses None for manual_level, triggering auto-analysis
-                        lesson = get_video_details(f"https://www.youtube.com/watch?v={entry['id']}", lang_code, genre)
-                        if lesson:
-                            if save_lesson_to_file(lang_code, lesson):
-                                print(f"       ✅ Added: {lesson['title'][:30]}")
-                                total_new_for_lang += 1
-                                time.sleep(random.uniform(5, 12))
-                            else:
-                                print(f"       ⏭️  Exists")
-                        else:
-                            # Short sleep on failure
-                            time.sleep(1)
-
-        time.sleep(random.uniform(5, 10))
-
-# --- MAIN ---
+                for entry in result.get('entries', []):
+                    if not entry: continue
+                    lesson = get_video_details(f"https://www.youtube.com/watch?v={entry['id']}", lang_code, genre)
+                    if lesson and save_lesson_to_file(lang_code, lesson):
+                        print(f"       ✅ Added: {lesson['title'][:30]}")
+                        total_new_for_lang += 1
+                        time.sleep(random.uniform(5, 12))
+                        if total_new_for_lang >= 5: break
+        time.sleep(10)
 
 def main():
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-
-    parser = argparse.ArgumentParser(description="Scrape YouTube for Language Learning")
-    parser.add_argument("--link", type=str, help="YouTube Video or Playlist URL")
-    parser.add_argument("--lang", type=str, help="Language code (e.g., 'es', 'fr') - Required with --link")
-    parser.add_argument("--genre", type=str, default="manual", help="Genre tag for the manual download")
-    parser.add_argument("--level", type=str, help="Force difficulty level (e.g. 'beginner', 'intermediate', 'advanced')")
-    
+    if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--link", type=str)
+    parser.add_argument("--lang", type=str)
+    parser.add_argument("--genre", type=str, default="manual")
+    parser.add_argument("--level", type=str)
     args = parser.parse_args()
 
     if args.link:
-        if not args.lang:
-            print("❌ Error: When using --link, you MUST specify --lang (e.g., --lang es)")
-            sys.exit(1)
+        if not args.lang: sys.exit(print("❌ --lang required"))
         process_manual_link(args.link, args.lang, args.genre, args.level)
-    else:
-        run_automated_scraping()
+    else: run_automated_scraping()
 
 if __name__ == "__main__":
     main()

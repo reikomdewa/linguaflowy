@@ -139,117 +139,132 @@ def save_lesson_to_file(lang_code, lesson):
 
 # --- CORE LOGIC ---
 
-def get_video_details(video_url, lang_code, genre, manual_level=None):
-    ydl_opts_check = {
+def get_video_details(video_url, lang_code, genre, manual_level=None, max_retries=3):
+    # --- CONFIGURATION FOR RETRIES ---
+    ydl_opts_base = {
         'skip_download': True,
         'quiet': True,
         'no_warnings': True,
-        'ignoreerrors': True,
+        'ignoreerrors': False, # Changed to False to catch the error in our try/except
         'logger': QuietLogger(),
+        'socket_timeout': 30,  # Increase timeout to 30 seconds
+        'retries': 5,          # yt-dlp internal retries
+        'nocheckcertificate': True, # Can help with some SSL handshake issues
     }
 
+    info = None
     found_sub_code = None
     is_auto = False
-    info = None
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts_check) as ydl:
-            time.sleep(random.uniform(1, 2))
-            try:
+    # --- STEP 1: EXTRACT INFO WITH RETRY ---
+    for attempt in range(max_retries):
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts_base) as ydl:
                 info = ydl.extract_info(video_url, download=False)
-            except DownloadError: return None
-            
-            if not info: return None
-
-            # RULES: Manual (3h), Auto (30m)
-            duration = info.get('duration', 0)
-            max_dur = 10800 if genre == 'manual' else 1800
-            
-            if duration < 60 or duration > max_dur: 
-                print(f"    ⚠️ Skipping duration: {duration}s")
+                if info:
+                    break # Success!
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "handshake" in error_msg or "timed out" in error_msg:
+                wait_time = (attempt + 1) * 5 # Wait 5, 10, 15 seconds
+                print(f"    ⏳ SSL Timeout/Handshake error. Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                print(f"    ❌ Inspection error: {str(e)[:50]}")
                 return None
-
-            manual_subs = info.get('subtitles', {})
-            for code in manual_subs:
-                if code == lang_code or code.startswith(f"{lang_code}-"):
-                    found_sub_code = code
-                    break
-            
-            if not found_sub_code:
-                auto_subs = info.get('automatic_captions', {})
-                for code in auto_subs:
-                    if code == lang_code or code.startswith(f"{lang_code}-"):
-                        found_sub_code = code
-                        is_auto = True
-                        break
-            
-            if not found_sub_code:
-                print(f"    ⚠️ No '{lang_code}' subtitles found.")
-                return None
-
-    except Exception as e:
-        print(f"    ❌ Inspection error: {str(e)[:50]}")
+    
+    if not info:
+        print(f"    🚫 Failed to fetch info after {max_retries} attempts.")
         return None
 
+    # --- SUBTITLE CHECKING LOGIC ---
+    duration = info.get('duration', 0)
+    max_dur = 10800 if genre == 'manual' else 1800
+    if duration < 60 or duration > max_dur: 
+        print(f"    ⚠️ Skipping duration: {duration}s")
+        return None
+
+    manual_subs = info.get('subtitles', {})
+    for code in manual_subs:
+        if code == lang_code or code.startswith(f"{lang_code}-"):
+            found_sub_code = code
+            break
+    
+    if not found_sub_code:
+        auto_subs = info.get('automatic_captions', {})
+        for code in auto_subs:
+            if code == lang_code or code.startswith(f"{lang_code}-"):
+                found_sub_code = code
+                is_auto = True
+                break
+    
+    if not found_sub_code:
+        print(f"    ⚠️ No '{lang_code}' subtitles found.")
+        return None
+
+    # --- STEP 2: DOWNLOAD SUBTITLES WITH RETRY ---
     video_id = info['id']
     temp_filename = f"temp_nat_{lang_code}_{video_id}"
     
     ydl_opts_download = {
-        'skip_download': True,
+        **ydl_opts_base,
         'writesubtitles': not is_auto,
         'writeautomaticsub': is_auto,
         'subtitleslangs': [found_sub_code],
         'outtmpl': temp_filename,
-        'quiet': True,
-        'no_warnings': True,
-        'ignoreerrors': True,
-        'logger': QuietLogger(),
         'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
     }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
-            ydl.extract_info(video_url, download=True)
-            files = glob.glob(f"{temp_filename}*.vtt")
-            if not files:
-                for f in glob.glob(f"{temp_filename}*"): os.remove(f)
-                return None
-            
-            best_file = max(files, key=os.path.getsize)
-            with open(best_file, 'r', encoding='utf-8') as f: content = f.read()
-            for f in glob.glob(f"{temp_filename}*"): 
-                try: os.remove(f)
-                except: pass
-            
-            transcript_data = parse_vtt_to_transcript(content)
-            if not transcript_data or len(transcript_data) < 10: return None
-            
-            full_text = " ".join([t['text'] for t in transcript_data])
-            difficulty = manual_level if manual_level else analyze_difficulty(transcript_data)
+    content = None
+    for attempt in range(max_retries):
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
+                ydl.extract_info(video_url, download=True)
+                
+                files = glob.glob(f"{temp_filename}*.vtt")
+                if files:
+                    best_file = max(files, key=os.path.getsize)
+                    with open(best_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    break # Success!
+        except Exception as e:
+            if "handshake" in str(e) or "timeout" in str(e):
+                time.sleep((attempt + 1) * 5)
+                continue
+            break # Non-network error, don't bother retrying
 
-            return {
-                "id": f"yt_{video_id}",
-                "userId": "system_native",
-                "title": info.get('title', 'Unknown Title'),
-                "language": lang_code,
-                "content": full_text,
-                "sentences": split_sentences(full_text),
-                "transcript": transcript_data,
-                "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                "imageUrl": info.get('thumbnail') or f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
-                "type": "video",
-                "difficulty": difficulty,
-                "videoUrl": f"https://www.youtube.com/watch?v={video_id}",
-                "isFavorite": False,
-                "progress": 0,
-                "genre": genre
-            }
-    except Exception as e:
-        print(f"    ⚠️ Download error: {str(e)[:50]}...")
-        for f in glob.glob(f"{temp_filename}*"):
-            try: os.remove(f)
-            except: pass
+    # Cleanup files
+    for f in glob.glob(f"{temp_filename}*"): 
+        try: os.remove(f)
+        except: pass
+
+    if not content:
         return None
+    
+    # --- PARSING ---
+    transcript_data = parse_vtt_to_transcript(content)
+    if not transcript_data or len(transcript_data) < 10: return None
+    
+    full_text = " ".join([t['text'] for t in transcript_data])
+    difficulty = manual_level if manual_level else analyze_difficulty(transcript_data)
+
+    return {
+        "id": f"yt_{video_id}",
+        "userId": "system_native",
+        "title": info.get('title', 'Unknown Title'),
+        "language": lang_code,
+        "content": full_text,
+        "sentences": split_sentences(full_text),
+        "transcript": transcript_data,
+        "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+        "imageUrl": info.get('thumbnail') or "",
+        "type": "video",
+        "difficulty": difficulty,
+        "videoUrl": f"https://www.youtube.com/watch?v={video_id}",
+        "isFavorite": False,
+        "progress": 0,
+        "genre": genre
+    }
 
 # --- WORKFLOWS ---
 

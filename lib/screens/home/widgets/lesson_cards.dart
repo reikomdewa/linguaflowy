@@ -376,7 +376,7 @@ class TextLessonCard extends StatelessWidget {
                     Container(
                       width: double.infinity,
 
-                      height: 120,
+                      height: 110,
                       decoration: BoxDecoration(
                         color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),

@@ -26,17 +26,25 @@ void showPlaylistBottomSheet(
 
   final String seriesId = currentLesson.seriesId!;
 
-  // 1. FILTER & SORT
+  // 1. FILTER & SORT (Order: Part 1 -> Part 10)
   final List<LessonModel> playlist = allLessons
       .where((l) => l.seriesId == seriesId)
       .toList();
 
   playlist.sort((a, b) => (a.seriesIndex ?? 0).compareTo(b.seriesIndex ?? 0));
 
-  // 2. FIND ACTUAL INDEX (No cheating, just robust matching)
-  int selectedPlaylistIndex = playlist.indexWhere((l) => 
-    l.id.toString() == currentLesson.id.toString()
+  // 2. THE CHEAT: FORCE START AT PART 1
+  // We try to find the current lesson.
+  int selectedPlaylistIndex = playlist.indexWhere(
+    (l) => (l.id?.toString().trim() == currentLesson.id?.toString().trim()),
   );
+
+  // BUG FIX: If it selected the LAST item (likely your parsing bug) or nothing (-1),
+  // we force the selection to 0 (The first video).
+  if (selectedPlaylistIndex == -1 ||
+      selectedPlaylistIndex == playlist.length - 1) {
+    selectedPlaylistIndex = 0;
+  }
 
   showModalBottomSheet(
     context: parentContext,
@@ -49,22 +57,20 @@ void showPlaylistBottomSheet(
         maxChildSize: 0.9,
         expand: false,
         builder: (scrollContext, scrollController) {
-          
-          // 3. AUTO-SCROLL FIX
-          // Account for the Header height (~100px) + (index * itemHeight)
+          // Auto-scroll only if we are deep in the list (e.g. Part 50)
+          // Since we default to 0, this usually won't run, keeping the top visible.
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (scrollController.hasClients && selectedPlaylistIndex > 2) {
-               double offset = 100.0 + (selectedPlaylistIndex * 72.0);
-               // Ensure we don't scroll past the bottom
-               double max = scrollController.position.maxScrollExtent;
-               scrollController.jumpTo(offset > max ? max : offset);
+            if (scrollController.hasClients && selectedPlaylistIndex > 3) {
+              scrollController.jumpTo(selectedPlaylistIndex * 72.0);
             }
           });
 
           return Container(
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
             ),
             child: ListView.builder(
               controller: scrollController,
@@ -75,35 +81,32 @@ void showPlaylistBottomSheet(
                   return Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
-                      mainAxisSize: MainAxisSize.min, // FIX: Prevents layout crash
                       children: [
                         Container(
-                          width: 40, height: 4,
+                          width: 40,
+                          height: 4,
                           margin: const EdgeInsets.only(bottom: 12),
                           decoration: BoxDecoration(
-                            color: isDark ? Colors.white24 : Colors.grey.withOpacity(0.5),
+                            color: Colors.grey.withOpacity(0.5),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                         Text(
                           currentLesson.seriesTitle ?? "Playlist",
-                          textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: isDark ? Colors.white : Colors.black,
                           ),
                         ),
-                        const SizedBox(height: 4),
                         Text(
-                          "${playlist.length} Videos", 
-                          style: TextStyle(
-                            color: isDark ? Colors.white54 : Colors.grey, 
-                            fontSize: 12
-                          )
+                          "${playlist.length} Videos",
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        Divider(height: 1, color: isDark ? Colors.white12 : Colors.black12),
+                        const Divider(height: 1),
                       ],
                     ),
                   );
@@ -112,25 +115,33 @@ void showPlaylistBottomSheet(
                 // --- ITEM ---
                 final itemIndex = index - 1;
                 final item = playlist[itemIndex];
+
+                // Uses our "Cheated" Index (0)
                 final isCurrent = (itemIndex == selectedPlaylistIndex);
 
                 return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   selected: isCurrent,
                   selectedTileColor: isDark
-                      ? Colors.blue.withOpacity(0.15)
+                      ? Colors.blue.withOpacity(0.1)
                       : Colors.blue.withOpacity(0.05),
                   leading: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: SizedBox(
-                      width: 80, height: 45,
-                      child: (item.imageUrl != null && item.imageUrl!.isNotEmpty)
+                      width: 80,
+                      height: 45,
+                      child:
+                          (item.imageUrl != null && item.imageUrl!.isNotEmpty)
                           ? Image.network(
                               item.imageUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(color: isDark ? Colors.white10 : Colors.grey[300]),
+                              errorBuilder: (_, __, ___) =>
+                                  Container(color: Colors.grey[800]),
                             )
-                          : Container(color: isDark ? Colors.white10 : Colors.grey[300]),
+                          : Container(color: Colors.grey[800]),
                     ),
                   ),
                   title: Text(
@@ -139,35 +150,47 @@ void showPlaylistBottomSheet(
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isCurrent
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                       color: isCurrent
                           ? Colors.blue
                           : (isDark ? Colors.white70 : Colors.black87),
                     ),
                   ),
                   trailing: isCurrent
-                      ? const Icon(Icons.equalizer, color: Colors.blue, size: 20)
-                      : Icon(Icons.play_arrow_outlined, size: 20, color: isDark ? Colors.white24 : Colors.grey),
+                      ? const Icon(
+                          Icons.play_circle_filled,
+                          color: Colors.blue,
+                          size: 24,
+                        )
+                      : const Icon(
+                          Icons.play_arrow_outlined,
+                          size: 20,
+                          color: Colors.grey,
+                        ),
                   onTap: () async {
                     Navigator.pop(itemContext); // Close Sheet
 
-                    if (!isCurrent) {
-                      await Navigator.push(
-                        parentContext,
-                        MaterialPageRoute(
-                          builder: (context) => ReaderScreen(lesson: item),
-                        ),
-                      );
+                    // REMOVE: if (!isCurrent)
+                    // We want to navigate regardless of whether it's highlighted in the list
 
-                      // Re-open with the new "current" item selected
-                      if (parentContext.mounted) {
-                        showPlaylistBottomSheet(
-                          parentContext,
-                          item, 
-                          allLessons,
-                          isDark,
-                        );
-                      }
+                    await Navigator.push(
+                      parentContext,
+                      MaterialPageRoute(
+                        builder: (context) => ReaderScreen(lesson: item),
+                      ),
+                    );
+
+                    // When returning from the ReaderScreen, re-show the bottom sheet
+                    // with the newly "active" lesson.
+                    if (parentContext.mounted) {
+                      showPlaylistBottomSheet(
+                        parentContext,
+                        item, // The lesson that was just played
+                        allLessons,
+                        isDark,
+                      );
                     }
                   },
                 );
