@@ -12,6 +12,7 @@ class VideoLessonCard extends StatelessWidget {
   final bool isDark;
   final VoidCallback onTap;
   final VoidCallback onOptionTap;
+  final VoidCallback? onPlaylistTap;
 
   const VideoLessonCard({
     super.key,
@@ -20,6 +21,7 @@ class VideoLessonCard extends StatelessWidget {
     required this.isDark,
     required this.onTap,
     required this.onOptionTap,
+    this.onPlaylistTap,
   });
 
   @override
@@ -42,7 +44,8 @@ class VideoLessonCard extends StatelessWidget {
     if (lesson.progress == 0 && totalWords > 0) {
       progressBarValue = knownCount / totalWords;
     }
-
+    final bool isSeries =
+        lesson.seriesId != null && lesson.seriesId!.isNotEmpty;
     return Container(
       width: 280,
       margin: const EdgeInsets.only(bottom: 8),
@@ -138,7 +141,63 @@ class VideoLessonCard extends StatelessWidget {
                     ),
                   ),
                 ),
-
+                // 3. NEW: Playlist Tab (Bottom Right)
+                // 3. Playlist Tab
+                if (isSeries)
+                  Positioned(
+                    bottom: 12, // Moved up slightly to ensure no overlap
+                    right: 8,
+                    child: Material(
+                      color: Colors.transparent,
+                      // Add ClipRRect here to ensure the InkWell ripple respects the border
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: InkWell(
+                          onTap: onPlaylistTap,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(
+                                0.8,
+                              ), // Slightly more opaque
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: Colors.white30,
+                                width: 1,
+                              ), // Thicker border
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.playlist_play,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  // Protect against long text
+                                  child: Text(
+                                    "Part ${lesson.seriesIndex ?? '?'}",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // Imported Badge
                 if (lesson.isLocal)
                   Positioned(
@@ -285,153 +344,148 @@ class TextLessonCard extends StatelessWidget {
     final int newCount = stats['new']!;
     final int knownCount = stats['known']!;
 
-    // Calculate Percentage
     final int totalWords = newCount + knownCount;
     final double progressRatio = totalWords == 0
         ? 0.0
         : knownCount / totalWords;
     final int knownPercentage = (progressRatio * 100).toInt();
 
-    return Card(
-      elevation: 0,
-      color: isDark ? Colors.white10 : Colors.grey[50],
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isDark ? Colors.transparent : Colors.grey.shade200,
+    return SizedBox(
+      width: 280, // MATCHES VideoLessonCard width
+      child: Card(
+        elevation: 0,
+        color: isDark ? Colors.white10 : Colors.grey[50],
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: isDark ? Colors.transparent : Colors.grey.shade200,
+          ),
         ),
-      ),
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+        margin: const EdgeInsets.only(bottom: 12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Stack(
+                  children: [
+                    Container(
+                      width: double.infinity,
+
+                      height: 120,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.article, color: Colors.blue),
                     ),
-                    child: const Icon(Icons.article, color: Colors.blue),
-                  ),
-                  const SizedBox(width: 12),
-                  // Expanded(
-                  //   child: Column(
-                  //     crossAxisAlignment: CrossAxisAlignment.start,
-                  //     children: [
-                  //       Text(
-                  //         lesson.title,
-                  //         style: TextStyle(
-                  //           fontWeight: FontWeight.bold,
-                  //           color: isDark ? Colors.white70 : Colors.grey[800],
-                  //         ),
-                  //         maxLines: 1,
-                  //         overflow: TextOverflow.ellipsis,
-                  //       ),
-                  //       const SizedBox(height: 4),
-                  //       Text(
-                  //         lesson.content.replaceAll('\n', ' '),
-                  //         maxLines: 2,
-                  //         overflow: TextOverflow.ellipsis,
-                  //         style:
-                  //             const TextStyle(color: Colors.grey, fontSize: 13),
-                  //       ),
-                  //     ],
-                  //   ),
-                  // ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Add a small tag above the title
-                        if (lesson.genre == 'short_story')
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 4),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              "Short Story",
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.orange[800],
-                                fontWeight: FontWeight.bold,
-                              ),
+                    if (lesson.genre == 'short_story')
+                      Positioned(
+                        bottom: 8,
+                        left: 8,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: .2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            "Short Story",
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.orange[800],
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-
-                        Text(lesson.title),
-                      ],
+                        ),
+                      ),
+                  ],
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // FIXED: Replaced Expanded with a constrained Column
+                    Expanded(
+                      // Finite width for horizontal list safety
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            lesson.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              height: 1.2,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.more_vert,
-                      color: Colors.grey,
-                      size: 16,
+                    // Pushes the button to the end
+                    IconButton(
+                      icon: const Icon(
+                        Icons.more_vert,
+                        color: Colors.grey,
+                        size: 14,
+                      ),
+                      constraints: const BoxConstraints(),
+                      padding: EdgeInsets.zero,
+                      onPressed: onOptionTap,
                     ),
-                    constraints: const BoxConstraints(),
-                    padding: EdgeInsets.zero,
-                    onPressed: onOptionTap,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
+                  ],
+                ),
+                const SizedBox(height: 12),
 
-              // --- STATS ROW ---
-              Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progressRatio,
-                        minHeight: 6,
-                        backgroundColor: isDark
-                            ? Colors.black26
-                            : Colors.grey[300],
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Colors.green,
+                // --- STATS ROW (FIXED) ---
+                Row(
+                  children: [
+                    // Percentage Text
+                    Text(
+                      "$knownPercentage%",
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Use Flexible instead of Expanded here because width is now constrained by parent SizedBox
+                    Flexible(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progressRatio,
+                          minHeight: 6,
+                          backgroundColor: isDark
+                              ? Colors.black26
+                              : Colors.grey[300],
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Colors.green,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-
-                  // Percentage
-                  Text(
-                    "$knownPercentage%",
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-                  Container(width: 1, height: 12, color: Colors.grey),
-                  const SizedBox(width: 8),
-
-                  // New Words
-                  Text(
-                    "$newCount New",
-                    style: const TextStyle(fontSize: 11, color: Colors.blue),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+                Text(
+                  "$newCount New",
+                  style: const TextStyle(fontSize: 11, color: Colors.blue),
+                ),
+              ],
+            ),
           ),
         ),
       ),

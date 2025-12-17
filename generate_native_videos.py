@@ -1,6 +1,3 @@
-
-
-
 import json
 import os
 import re
@@ -8,21 +5,21 @@ import glob
 import yt_dlp
 import time
 import random
+import argparse
+import sys
+from yt_dlp.utils import DownloadError
 
 # --- CONFIGURATION ---
 OUTPUT_DIR = "assets/native_videos"
 
 # 1. FULL LANGUAGE LIST
 LANGUAGES = {
-    # --- Global / European / Asian ---
     'ar': 'Arabic', 'cs': 'Czech', 'da': 'Danish', 'de': 'German', 'el': 'Greek',
     'en': 'English', 'es': 'Spanish', 'fi': 'Finnish', 'fr': 'French', 'hi': 'Hindi',
     'hu': 'Hungarian', 'id': 'Indonesian', 'it': 'Italian', 'ja': 'Japanese',
     'ko': 'Korean', 'nl': 'Dutch', 'no': 'Norwegian', 'pl': 'Polish', 'pt': 'Portuguese',
     'ro': 'Romanian', 'ru': 'Russian', 'sv': 'Swedish', 'th': 'Thai', 'tr': 'Turkish',
     'uk': 'Ukrainian', 'vi': 'Vietnamese', 'zh': 'Chinese',
-
-    # --- African Languages ---
     'ach': 'Acholi', 'ada': 'Adangme', 'adh': 'Adhola', 'af': 'Afrikaans', 'alz': 'Alur',
     'am': 'Amharic', 'anu': 'Anuak', 'bem': 'Bemba', 'bxk': 'Bukusu', 'cce': 'Rukiga',
     'dag': 'Dagbani', 'dga': 'Dagaare', 'dje': 'Zarma', 'ee': 'Ewe', 'fat': 'Fanti',
@@ -45,7 +42,7 @@ LANGUAGES = {
     'xsm': 'Kasem', 'yo': 'Yoruba', 'zne': 'Zande', 'zu': 'Zulu',
 }
 
-# 2. SPECIFIC CURATED CHANNELS (High Quality for Major Langs)
+# 2. SPECIFIC CURATED CHANNELS
 CURATED_CHANNELS = {
     'es': [('VisualPolitik español', 'news'), ('BBC News Mundo', 'news'), ('Luisito Comunica', 'travel'), ('QuantumFracture', 'science')],
     'fr': [('HugoDécrypte', 'news'), ('Nota Bene histoire', 'history'), ('Dr Nozman', 'science'), ('Bruno Maltor', 'travel')],
@@ -56,21 +53,21 @@ CURATED_CHANNELS = {
     'en': [('Vox', 'society'), ('Veritasium', 'science'), ('Vice News', 'news'), ('TED-Ed', 'education')],
 }
 
+# --- LOGGER ---
+class QuietLogger:
+    def debug(self, msg): pass
+    def warning(self, msg): pass
+    def error(self, msg): print(msg)
+
 def get_native_queries(code, name):
-    """Generates search queries for native/authentic content."""
-    
-    # Use curated list if available
     if code in CURATED_CHANNELS:
         return CURATED_CHANNELS[code]
-    
-    # Generic "Native" Queries for other languages
-    # These prioritize authentic content over "learning" content
     return [
         (f"{name} language news", 'news'),
         (f"{name} language documentary", 'documentary'),
-        (f"{name} language interview", 'society'),     # Good for natural dialogue
-        (f"{name} language comedy", 'comedy'),         # Good for slang/culture
-        (f"{name} language music video", 'music'),     # Cultural immersion
+        (f"{name} language interview", 'society'),
+        (f"{name} language comedy", 'comedy'),
+        (f"{name} language music video", 'music'),
         (f"{name} language vlog", 'vlog'),
         (f"{name} language movie", 'cinema'),
         (f"{name} traditional culture", 'culture'),
@@ -81,14 +78,9 @@ def get_native_queries(code, name):
 def time_to_seconds(time_str):
     try:
         parts = time_str.split(':')
-        if len(parts) == 3:
-            h, m, s = parts
-            return int(h) * 3600 + int(m) * 60 + float(s)
-        elif len(parts) == 2:
-            m, s = parts
-            return int(m) * 60 + float(s)
-    except:
-        return 0.0
+        if len(parts) == 3: return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+        elif len(parts) == 2: return int(parts[0]) * 60 + float(parts[1])
+    except: return 0.0
     return 0.0
 
 def split_sentences(text):
@@ -98,99 +90,142 @@ def split_sentences(text):
 def parse_vtt_to_transcript(vtt_content):
     lines = vtt_content.splitlines()
     transcript = []
-    time_pattern = re.compile(r'(\d{2}:\d{2}:\d{2}\.\d{3})\s-->\s(\d{2}:\d{2}:\d{2}\.\d{3})')
+    time_pattern = re.compile(r'((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})\s-->\s((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})')
     current_entry = None
-    
     for line in lines:
         line = line.strip()
-        if not line or line == 'WEBVTT' or line.startswith('Kind:') or line.startswith('Language:'):
-            continue
+        if not line or line == 'WEBVTT' or line.startswith('Kind:') or line.startswith('Language:'): continue
         match = time_pattern.search(line)
         if match:
-            if current_entry and current_entry['text']:
-                transcript.append(current_entry)
-            current_entry = {
-                'start': time_to_seconds(match.group(1)),
-                'end': time_to_seconds(match.group(2)),
-                'text': ''
-            }
+            if current_entry and current_entry['text']: transcript.append(current_entry)
+            current_entry = {'start': time_to_seconds(match.group(1)), 'end': time_to_seconds(match.group(2)), 'text': ''}
             continue
         if current_entry:
-            clean_line = re.sub(r'<[^>]+>', '', line)
-            clean_line = clean_line.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"')
-            if clean_line:
-                current_entry['text'] += clean_line + " "
-
-    if current_entry and current_entry['text']:
-        transcript.append(current_entry)
+            clean_line = re.sub(r'<[^>]+>', '', line).replace('&nbsp;', ' ').replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"')
+            if clean_line: current_entry['text'] += clean_line + " "
+    if current_entry and current_entry['text']: transcript.append(current_entry)
     for t in transcript: t['text'] = t['text'].strip()
     return transcript
 
 def analyze_difficulty(transcript):
-    # Native content logic: Default to Advanced/Intermediate
     if not transcript: return 'advanced'
     all_text = " ".join([t['text'] for t in transcript])
     words = all_text.split()
     if not words: return 'advanced'
-    
     avg_len = sum(len(w) for w in words) / len(words)
-    
-    # Thresholds slightly higher for native content
-    if avg_len < 4.0: return 'beginner' # Rare for native content
+    if avg_len < 4.0: return 'beginner' 
     if avg_len < 5.0: return 'intermediate'
     return 'advanced'
 
-def get_video_details(video_url, lang_code, genre):
-    video_id = video_url.split('v=')[-1]
+def save_lesson_to_file(lang_code, lesson):
+    filepath = os.path.join(OUTPUT_DIR, f"trending_{lang_code}.json")
+    try:
+        existing_lessons = []
+        if os.path.exists(filepath):
+            with open(filepath, 'r', encoding='utf-8') as f:
+                existing_lessons = json.load(f)
+        
+        # Check duplicate ID
+        if any(l['id'] == lesson['id'] for l in existing_lessons):
+            return False
+
+        existing_lessons.insert(0, lesson)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(existing_lessons, f, ensure_ascii=False, indent=None)
+        return True
+    except Exception as e:
+        print(f"Error saving file: {e}")
+        return False
+
+# --- CORE LOGIC ---
+
+def get_video_details(video_url, lang_code, genre, manual_level=None):
+    ydl_opts_check = {
+        'skip_download': True,
+        'quiet': True,
+        'no_warnings': True,
+        'ignoreerrors': True,
+        'logger': QuietLogger(),
+    }
+
+    found_sub_code = None
+    is_auto = False
+    info = None
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts_check) as ydl:
+            time.sleep(random.uniform(1, 2))
+            try:
+                info = ydl.extract_info(video_url, download=False)
+            except DownloadError: return None
+            
+            if not info: return None
+
+            # RULES: Manual (3h), Auto (30m)
+            duration = info.get('duration', 0)
+            max_dur = 10800 if genre == 'manual' else 1800
+            
+            if duration < 60 or duration > max_dur: 
+                print(f"    ⚠️ Skipping duration: {duration}s")
+                return None
+
+            manual_subs = info.get('subtitles', {})
+            for code in manual_subs:
+                if code == lang_code or code.startswith(f"{lang_code}-"):
+                    found_sub_code = code
+                    break
+            
+            if not found_sub_code:
+                auto_subs = info.get('automatic_captions', {})
+                for code in auto_subs:
+                    if code == lang_code or code.startswith(f"{lang_code}-"):
+                        found_sub_code = code
+                        is_auto = True
+                        break
+            
+            if not found_sub_code:
+                print(f"    ⚠️ No '{lang_code}' subtitles found.")
+                return None
+
+    except Exception as e:
+        print(f"    ❌ Inspection error: {str(e)[:50]}")
+        return None
+
+    video_id = info['id']
     temp_filename = f"temp_nat_{lang_code}_{video_id}"
     
-    ydl_opts = {
+    ydl_opts_download = {
         'skip_download': True,
-        'writesubtitles': True,
-        'writeautomaticsub': True,
-        # Try specific lang, fallback to English (sometimes metadata helps), but logic filters below
-        'subtitleslangs': [lang_code], 
+        'writesubtitles': not is_auto,
+        'writeautomaticsub': is_auto,
+        'subtitleslangs': [found_sub_code],
         'outtmpl': temp_filename,
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': True,
-        'sleep_interval_requests': 2,
+        'logger': QuietLogger(),
         'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
     }
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            time.sleep(random.uniform(2, 4)) # Pre-request sleep
-            
-            info = ydl.extract_info(video_url, download=True)
-            if not info: return None
-            
-            # Native content: Allow longer videos (up to 45 mins), ignore Shorts
-            duration = info.get('duration', 0)
-            if duration < 60 or duration > 2700: 
-                return None
-
+        with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
+            ydl.extract_info(video_url, download=True)
             files = glob.glob(f"{temp_filename}*.vtt")
             if not files:
-                # Cleanup
                 for f in glob.glob(f"{temp_filename}*"): os.remove(f)
                 return None
             
-            # Use the first VTT found (yt-dlp usually handles the filtering based on opts)
-            with open(files[0], 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            for f in files: 
+            best_file = max(files, key=os.path.getsize)
+            with open(best_file, 'r', encoding='utf-8') as f: content = f.read()
+            for f in glob.glob(f"{temp_filename}*"): 
                 try: os.remove(f)
                 except: pass
             
             transcript_data = parse_vtt_to_transcript(content)
-            
-            # Strict filter: Must have substantial text
-            if not transcript_data or len(transcript_data) < 10: 
-                return None
+            if not transcript_data or len(transcript_data) < 10: return None
             
             full_text = " ".join([t['text'] for t in transcript_data])
+            difficulty = manual_level if manual_level else analyze_difficulty(transcript_data)
 
             return {
                 "id": f"yt_{video_id}",
@@ -201,118 +236,168 @@ def get_video_details(video_url, lang_code, genre):
                 "sentences": split_sentences(full_text),
                 "transcript": transcript_data,
                 "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                "imageUrl": f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                "imageUrl": info.get('thumbnail') or f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
                 "type": "video",
-                "difficulty": analyze_difficulty(transcript_data),
-                "videoUrl": f"https://youtube.com/watch?v={video_id}",
+                "difficulty": difficulty,
+                "videoUrl": f"https://www.youtube.com/watch?v={video_id}",
                 "isFavorite": False,
                 "progress": 0,
                 "genre": genre
             }
     except Exception as e:
-        print(f"    ⚠️ Error processing {video_id}: {str(e)[:50]}...")
+        print(f"    ⚠️ Download error: {str(e)[:50]}...")
         for f in glob.glob(f"{temp_filename}*"):
             try: os.remove(f)
             except: pass
         return None
 
-def main():
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+# --- WORKFLOWS ---
 
-    sorted_langs = sorted(LANGUAGES.items())
+def process_manual_link(url, lang_code, genre="manual", manual_level=None):
+    if lang_code not in LANGUAGES:
+        print(f"❌ Error: Language code '{lang_code}' not found.")
+        return
+
+    print(f"\n==========================================")
+    print(f" 🖐️ MANUAL MODE: {lang_code} | Genre: {genre}")
+    if manual_level: print(f" 🎯 Forced Level: {manual_level}")
+    print(f" 🔗 Processing: {url}")
+    print(f"==========================================")
+
+    ydl_opts_check = {'extract_flat': True, 'quiet': True, 'logger': QuietLogger()}
     
+    # Store objects: { 'id': '...', 'seriesId': '...', 'seriesTitle': '...', 'seriesIndex': int }
+    videos_to_process = []
+
+    with yt_dlp.YoutubeDL(ydl_opts_check) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+            if 'entries' in info:
+                # It's a Playlist
+                playlist_title = info.get('title', 'Unknown Playlist')
+                playlist_id = info.get('id')
+                print(f"   📂 Detected Playlist: {playlist_title}")
+                
+                # Iterate entries with index
+                for idx, entry in enumerate(info['entries'], start=1):
+                    if entry:
+                        videos_to_process.append({
+                            'id': entry['id'],
+                            'seriesId': playlist_id,
+                            'seriesTitle': playlist_title,
+                            'seriesIndex': idx
+                        })
+            else:
+                # Single Video
+                print(f"   🎬 Detected Video: {info.get('title')}")
+                videos_to_process.append({
+                    'id': info.get('id'),
+                    'seriesId': None,
+                    'seriesTitle': None,
+                    'seriesIndex': None
+                })
+        except Exception as e:
+            print(f"❌ Error extracting link: {e}")
+            return
+
+    print(f"   ⬇️  Queue size: {len(videos_to_process)} videos")
+
+    success_count = 0
+    for video_data in videos_to_process:
+        vid_id = video_data['id']
+        vid_url = f"https://www.youtube.com/watch?v={vid_id}"
+        
+        print(f"   ⏳ Checking: {vid_url}")
+        lesson = get_video_details(vid_url, lang_code, genre, manual_level)
+        
+        if lesson:
+            # Inject Series Metadata if present
+            if video_data['seriesId']:
+                lesson['seriesId'] = video_data['seriesId']
+                lesson['seriesTitle'] = video_data['seriesTitle']
+                lesson['seriesIndex'] = video_data['seriesIndex']
+            
+            if save_lesson_to_file(lang_code, lesson):
+                print(f"      ✅ Saved: {lesson['title'][:30]}...")
+                success_count += 1
+            else:
+                print(f"      ⏭️  Duplicate skipped.")
+        else:
+            print(f"      🚫 Skipped (No subs or error)")
+        
+        time.sleep(1)
+
+    print(f"\n✅ Manual job done. {success_count} lessons added to trending_{lang_code}.json")
+
+def run_automated_scraping():
+    sorted_langs = sorted(LANGUAGES.items())
     print(f"🚀 STARTING NATIVE CONTENT EXTRACTION FOR {len(sorted_langs)} LANGUAGES")
 
     for lang_code, lang_name in sorted_langs:
-        
         filepath = os.path.join(OUTPUT_DIR, f"trending_{lang_code}.json")
-        
-        existing_lessons = []
-        existing_ids = set()
-        
+        existing_count = 0
         if os.path.exists(filepath):
             try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    existing_lessons = json.load(f)
-                    existing_ids = {l['id'] for l in existing_lessons}
-            except:
-                existing_lessons = []
+                with open(filepath, 'r') as f: existing_count = len(json.load(f))
+            except: pass
 
-        # SKIP IF FILLED: If we have enough native content (e.g., 15 videos), skip to next lang
-        if len(existing_lessons) >= 15:
-             print(f"⏭️  Skipping {lang_name} ({lang_code}): Has {len(existing_lessons)} native videos.")
+        if existing_count >= 15:
+             print(f"⏭️  Skipping {lang_name} ({lang_code}): Has {existing_count} native videos.")
              continue
 
-        print(f"\n==========================================")
-        print(f" NATIVE FEED: {lang_name} ({lang_code})")
-        print(f"==========================================")
-
+        print(f"\n--- NATIVE FEED: {lang_name} ({lang_code}) ---")
         queries = get_native_queries(lang_code, lang_name)
-        # Randomize queries so we don't always get 'news' first if we crash
         random.shuffle(queries)
         
         total_new_for_lang = 0
 
         for query, genre in queries:
-            if total_new_for_lang >= 4: # Limit new videos per run per language
-                print(f"  🛑 Native limit reached for {lang_name}.")
-                break
+            if total_new_for_lang >= 4: break
 
-            print(f"\n  🔎 Searching: '{query}' ({genre})")
-            
-            ydl_opts_search = {
-                'quiet': True,
-                'extract_flat': True,
-                'dump_single_json': True,
-                'sleep_interval': random.uniform(1, 3)
-            }
+            print(f"  🔎 '{query}'")
+            ydl_opts_search = {'quiet': True, 'extract_flat': True, 'dump_single_json': True, 'logger': QuietLogger(), 'sleep_interval': random.uniform(1, 3)}
             
             with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
                 try:
-                    # Search for just 3 candidates per query to keep it fast/safe
                     result = ydl.extract_info(f"ytsearch3:{query}", download=False)
-                except Exception as e:
-                    print(f"    ❌ Search failed: {e}")
-                    time.sleep(5)
-                    continue
+                except: continue
                 
                 if 'entries' in result:
                     for entry in result['entries']:
                         if not entry: continue
-                        
-                        vid = entry.get('id')
-                        title = entry.get('title')
-                        lesson_id = f"yt_{vid}"
-
-                        if lesson_id in existing_ids:
-                            continue
-
-                        print(f"    ⬇️ Processing: {title[:40]}...")
-                        
-                        lesson = get_video_details(f"https://www.youtube.com/watch?v={vid}", lang_code, genre)
-                        
+                        lesson = get_video_details(f"https://www.youtube.com/watch?v={entry['id']}", lang_code, genre)
                         if lesson:
-                            existing_lessons.insert(0, lesson)
-                            existing_ids.add(lesson_id)
-                            total_new_for_lang += 1
-                            print(f"       ✅ Added!")
-                            
-                            # Save immediately
-                            try:
-                                with open(filepath, 'w', encoding='utf-8') as f:
-                                    json.dump(existing_lessons, f, ensure_ascii=False, indent=None)
-                            except: pass
-                            
-                            time.sleep(random.uniform(5, 10))
+                            if save_lesson_to_file(lang_code, lesson):
+                                print(f"       ✅ Added: {lesson['title'][:30]}")
+                                total_new_for_lang += 1
+                                time.sleep(random.uniform(5, 10))
+                            else:
+                                print(f"       ⏭️  Exists")
                         else:
-                            print(f"       🚫 Skipped")
-                            time.sleep(random.uniform(1, 3))
+                            time.sleep(1)
 
-        print(f"  🏁 Finished {lang_name}. Total: {len(existing_lessons)}")
-        
-        # Big sleep between languages
         time.sleep(random.uniform(4, 8))
+
+# --- MAIN ---
+
+def main():
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--link", type=str)
+    parser.add_argument("--lang", type=str)
+    parser.add_argument("--genre", type=str, default="manual")
+    parser.add_argument("--level", type=str, help="Force difficulty level (beginner, intermediate, advanced)")
+    args = parser.parse_args()
+
+    if args.link:
+        if not args.lang:
+            print("❌ --lang required with --link")
+            sys.exit(1)
+        process_manual_link(args.link, args.lang, args.genre, args.level)
+    else:
+        run_automated_scraping()
 
 if __name__ == "__main__":
     main()

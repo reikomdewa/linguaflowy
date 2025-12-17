@@ -29,14 +29,39 @@ class LessonRepository {
   ) async {
     return await _cacheService.loadCachedFeed(userId, languageCode);
   }
-
-  Future<List<LessonModel>> getAndSyncLessons(
+/// Fetches all lessons belonging to a specific series/playlist
+  Future<List<LessonModel>> fetchLessonsBySeries(String languageCode, String seriesId) async {
+    try {
+      // 1. Check Local Service (Native/Guided files)
+      // We essentially need to scan the JSONs. 
+      // Since we don't have a direct "search" query for local JSON in your setup, 
+      // the easiest way is to load the category and filter.
+      
+      // Load standard and native (likely places for playlists)
+      final standard = await _localService.fetchStandardLessons(languageCode);
+      final native = await _localService.fetchNativeVideos(languageCode);
+      final audio = await _localService.fetchAudioLessons(languageCode);
+      
+      final allSystem = [...standard, ...native, ...audio];
+      
+      final seriesLessons = allSystem.where((l) => l.seriesId == seriesId).toList();
+      
+      // Sort by index (1, 2, 3...)
+      seriesLessons.sort((a, b) => (a.seriesIndex ?? 0).compareTo(b.seriesIndex ?? 0));
+      
+      return seriesLessons;
+    } catch (e) {
+      printLog("Error fetching series: $e");
+      return [];
+    }
+  }
+ Future<List<LessonModel>> getAndSyncLessons(
     String userId,
     String languageCode, {
-    int limit = 20, // <--- SAFETY: Only load 20 at start
+    int limit = 20,
   }) async {
     try {
-      // Helper to handle Firestore failure gracefully (so app works offline)
+      // Helper to handle Firestore failure gracefully
       Future<List<LessonModel>> safeFirestoreFetch() async {
         try {
           return await _firestoreService.getLessons(
@@ -50,47 +75,52 @@ class LessonRepository {
         }
       }
 
-      // --- UPDATED: Added fetchStorybooks to the list ---
       final results = await Future.wait([
-        safeFirestoreFetch(), // 0: User Cloud (Limited)
+        safeFirestoreFetch(), // 0: User Cloud
         _fetchUserLocalImports(userId, languageCode), // 1: User Local
-        _localService.fetchStandardLessons(languageCode), // 2: System Standard
-        _localService.fetchNativeVideos(languageCode), // 3: System Videos
-        _localService.fetchTextBooks(languageCode), // 4: System Books
-        _localService.fetchBeginnerBooks(languageCode), // 5: System Beginner
-        _localService.fetchAudioLessons(languageCode), // 6: System Audio
-        _localService.fetchStorybooks(
-          languageCode,
-        ), // 7: System Short Stories (NEW)
+        _localService.fetchStandardLessons(languageCode), // 2
+        _localService.fetchNativeVideos(languageCode), // 3
+        _localService.fetchTextBooks(languageCode), // 4
+        _localService.fetchBeginnerBooks(languageCode), // 5
+        _localService.fetchAudioLessons(languageCode), // 6
+        _localService.fetchStorybooks(languageCode), // 7
       ]);
 
       final userLessons = results[0];
       final localImports = results[1];
 
-      // Flatten system lessons (Include Index 7 now)
+      // Flatten system lessons
       final systemLessons = [
         ...results[2],
         ...results[3],
         ...results[4],
         ...results[5],
         ...results[6],
-        ...results[7], // <--- ADDED Short Stories
+        ...results[7],
       ];
 
-      // Merge Strategy: Use a Map to handle duplicates
       final Map<String, LessonModel> combinedMap = {};
 
-      // Priority 1: System Content (Base)
+      // 1. Load System Content (Base - Contains fresh seriesId)
       for (var lesson in systemLessons) {
         combinedMap[lesson.id] = lesson;
       }
 
-      // Priority 2: User Cloud Content (Overwrites System if IDs match)
-      for (var lesson in userLessons) {
-        combinedMap[lesson.id] = lesson;
+      // 2. Merge User Cloud Content (INTELLIGENT MERGE)
+      for (var userLesson in userLessons) {
+        if (combinedMap.containsKey(userLesson.id)) {
+          // Found in system? Keep User Progress + System Metadata (SeriesID)
+          final systemVer = combinedMap[userLesson.id]!;
+          
+          // CRITICAL: You must have the mergeSystemData method in LessonModel
+          combinedMap[userLesson.id] = userLesson.mergeSystemData(systemVer);
+        } else {
+          // Not in system (Purely user lesson)
+          combinedMap[userLesson.id] = userLesson;
+        }
       }
 
-      // Priority 3: Local Imports (Highest Priority - for offline edits)
+      // 3. Priority 3: Local Imports (Highest Priority - offline edits)
       for (var lesson in localImports) {
         combinedMap[lesson.id] = lesson;
       }
@@ -99,7 +129,10 @@ class LessonRepository {
 
       // Sort by Newest First
       allLessons.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      
+      // Cache the merged result
       _cacheService.saveFeedToCache(userId, languageCode, allLessons);
+      
       return allLessons;
     } catch (e) {
       printLog("Error in LessonRepository sync: $e");

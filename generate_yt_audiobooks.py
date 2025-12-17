@@ -55,7 +55,6 @@ CURATED_AUDIOBOOKS = {
 
 # --- LOGGER ---
 class QuietLogger:
-    """Silences the annoying SABR/Warning logs from yt-dlp"""
     def debug(self, msg): pass
     def warning(self, msg): pass
     def error(self, msg): print(msg)
@@ -63,7 +62,6 @@ class QuietLogger:
 def get_audiobook_queries(code, name):
     if code in CURATED_AUDIOBOOKS:
         return CURATED_AUDIOBOOKS[code]
-    
     return [
         (f"{name} language bible audio with text", 'religion'), 
         (f"{name} language audio bible", 'religion'),
@@ -92,13 +90,11 @@ def split_sentences(text):
 def parse_vtt_to_transcript(vtt_content):
     lines = vtt_content.splitlines()
     transcript = []
-    time_pattern = re.compile(r'(\d{2}:\d{2}:\d{2}\.\d{3})\s-->\s(\d{2}:\d{2}:\d{2}\.\d{3})')
+    time_pattern = re.compile(r'((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})\s-->\s((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})')
     current_entry = None
-    
     for line in lines:
         line = line.strip()
-        if not line or line == 'WEBVTT' or line.startswith('Kind:') or line.startswith('Language:'):
-            continue
+        if not line or line == 'WEBVTT' or line.startswith('Kind:') or line.startswith('Language:'): continue
         match = time_pattern.search(line)
         if match:
             if current_entry and current_entry['text']: transcript.append(current_entry)
@@ -107,7 +103,6 @@ def parse_vtt_to_transcript(vtt_content):
         if current_entry:
             clean_line = re.sub(r'<[^>]+>', '', line).replace('&nbsp;', ' ').replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"')
             if clean_line: current_entry['text'] += clean_line + " "
-
     if current_entry and current_entry['text']: transcript.append(current_entry)
     for t in transcript: t['text'] = t['text'].strip()
     return transcript
@@ -116,11 +111,9 @@ def analyze_difficulty(text, title):
     lower_title = title.lower()
     if "graded reader" in lower_title or "beginner" in lower_title or "level 1" in lower_title:
         return "beginner"
-    
     words = text.split()
     if not words: return "intermediate"
     avg_len = sum(len(w) for w in words) / len(words)
-    
     if avg_len < 4.5: return "beginner"
     if avg_len > 6.0: return "advanced"
     return "intermediate"
@@ -144,16 +137,9 @@ def save_lesson_to_file(lang_code, lesson):
         print(f"Error saving file: {e}")
         return False
 
-# --- CORE LOGIC (SMART AUDIOBOOK FETCH) ---
+# --- CORE LOGIC ---
 
-def get_audiobook_details(video_url, lang_code, genre):
-    """
-    Two-Phase Download:
-    1. Inspect metadata to find exact subtitle code (e.g. 'fr-FR' or 'fr-orig').
-    2. Download specific subtitle.
-    """
-    
-    # --- PHASE 1: INSPECT ---
+def get_audiobook_details(video_url, lang_code, genre, manual_level=None):
     ydl_opts_check = {
         'skip_download': True,
         'quiet': True,
@@ -175,22 +161,22 @@ def get_audiobook_details(video_url, lang_code, genre):
             
             if not info: return None
 
-            # DURATION: Allow longer files for Audiobooks (up to 2 hours auto, 4 hours manual)
-            # But skip very short ones (< 2 mins)
+            # DURATION RULES
+            # Manual: Up to 4 hours (14400s)
+            # Auto: Up to 2 hours (7200s)
             duration = info.get('duration', 0)
-            max_dur = 14400 if genre == 'manual' else 7200 # 4h vs 2h
+            max_dur = 14400 if genre == 'manual' else 7200
             
             if duration < 120 or duration > max_dur: 
+                print(f"    ⚠️ Skipping duration: {duration}s")
                 return None
 
-            # 1. Manual Subtitles
             manual_subs = info.get('subtitles', {})
             for code in manual_subs:
                 if code == lang_code or code.startswith(f"{lang_code}-"):
                     found_sub_code = code
                     break
             
-            # 2. Auto Subtitles
             if not found_sub_code:
                 auto_subs = info.get('automatic_captions', {})
                 for code in auto_subs:
@@ -207,7 +193,6 @@ def get_audiobook_details(video_url, lang_code, genre):
         print(f"    ❌ Inspection error: {str(e)[:50]}")
         return None
 
-    # --- PHASE 2: DOWNLOAD ---
     video_id = info['id']
     temp_filename = f"temp_aud_{lang_code}_{video_id}"
     
@@ -227,29 +212,22 @@ def get_audiobook_details(video_url, lang_code, genre):
     try:
         with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
             ydl.extract_info(video_url, download=True)
-            
             files = glob.glob(f"{temp_filename}*.vtt")
             if not files:
                 for f in glob.glob(f"{temp_filename}*"): os.remove(f)
                 return None
             
-            # Prefer largest file
             best_file = max(files, key=os.path.getsize)
-            
-            with open(best_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
+            with open(best_file, 'r', encoding='utf-8') as f: content = f.read()
             for f in glob.glob(f"{temp_filename}*"): 
                 try: os.remove(f)
                 except: pass
             
             transcript_data = parse_vtt_to_transcript(content)
-            
-            # Strict Filter: Audiobooks must have good text density
-            if not transcript_data or len(transcript_data) < 15: 
-                return None
+            if not transcript_data or len(transcript_data) < 15: return None
             
             full_text = " ".join([t['text'] for t in transcript_data])
+            difficulty = manual_level if manual_level else analyze_difficulty(full_text, info.get('title', ''))
 
             return {
                 "id": f"yt_audio_{video_id}",
@@ -263,7 +241,7 @@ def get_audiobook_details(video_url, lang_code, genre):
                 "imageUrl": info.get('thumbnail') or f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
                 "type": "audio", 
                 "videoUrl": f"https://www.youtube.com/watch?v={video_id}",
-                "difficulty": analyze_difficulty(full_text, info.get('title', '')), 
+                "difficulty": difficulty,
                 "genre": genre,
                 "isFavorite": False,
                 "progress": 0
@@ -277,13 +255,14 @@ def get_audiobook_details(video_url, lang_code, genre):
 
 # --- WORKFLOWS ---
 
-def process_manual_link(url, lang_code, genre="manual"):
+def process_manual_link(url, lang_code, genre="manual", manual_level=None):
     if lang_code not in LANGUAGES:
         print(f"❌ Error: Language code '{lang_code}' not found.")
         return
 
     print(f"\n==========================================")
     print(f" 🎧 MANUAL AUDIO: {lang_code} | Genre: {genre}")
+    if manual_level: print(f" 🎯 Forced Level: {manual_level}")
     print(f" 🔗 Processing: {url}")
     print(f"==========================================")
 
@@ -294,12 +273,28 @@ def process_manual_link(url, lang_code, genre="manual"):
         try:
             info = ydl.extract_info(url, download=False)
             if 'entries' in info:
-                print(f"   📂 Playlist: {info.get('title')}")
-                for entry in info['entries']:
-                    if entry: videos_to_process.append(f"https://www.youtube.com/watch?v={entry['id']}")
+                # Playlist Detected
+                playlist_title = info.get('title', 'Unknown Playlist')
+                playlist_id = info.get('id')
+                print(f"   📂 Detected Playlist: {playlist_title}")
+                
+                for idx, entry in enumerate(info['entries'], start=1):
+                    if entry:
+                        videos_to_process.append({
+                            'id': entry['id'],
+                            'seriesId': playlist_id,
+                            'seriesTitle': playlist_title,
+                            'seriesIndex': idx
+                        })
             else:
+                # Single Video
                 print(f"   🎬 Video: {info.get('title')}")
-                videos_to_process.append(url)
+                videos_to_process.append({
+                    'id': info.get('id'),
+                    'seriesId': None,
+                    'seriesTitle': None,
+                    'seriesIndex': None
+                })
         except Exception as e:
             print(f"❌ Error extracting link: {e}")
             return
@@ -307,11 +302,20 @@ def process_manual_link(url, lang_code, genre="manual"):
     print(f"   ⬇️  Queue size: {len(videos_to_process)} items")
 
     count = 0
-    for vid_url in videos_to_process:
+    for video_data in videos_to_process:
+        vid_id = video_data['id']
+        vid_url = f"https://www.youtube.com/watch?v={vid_id}"
+        
         print(f"   ⏳ Checking: {vid_url}")
-        lesson = get_audiobook_details(vid_url, lang_code, genre)
+        lesson = get_audiobook_details(vid_url, lang_code, genre, manual_level)
         
         if lesson:
+            # Inject Playlist Metadata
+            if video_data['seriesId']:
+                lesson['seriesId'] = video_data['seriesId']
+                lesson['seriesTitle'] = video_data['seriesTitle']
+                lesson['seriesIndex'] = video_data['seriesIndex']
+
             if save_lesson_to_file(lang_code, lesson):
                 print(f"      ✅ Saved: {lesson['title'][:30]}...")
                 count += 1
@@ -330,7 +334,6 @@ def run_automated_scraping():
 
     for lang_code, lang_name in sorted_langs:
         filepath = os.path.join(OUTPUT_DIR, f"audiobooks_{lang_code}.json")
-        
         existing_count = 0
         if os.path.exists(filepath):
             try:
@@ -385,6 +388,7 @@ def main():
     parser.add_argument("--link", type=str, help="YouTube Video or Playlist URL")
     parser.add_argument("--lang", type=str, help="Language code (e.g., 'es', 'fr') - Required with --link")
     parser.add_argument("--genre", type=str, default="manual", help="Genre tag for the manual download")
+    parser.add_argument("--level", type=str, help="Force difficulty level (beginner, intermediate, advanced)")
     
     args = parser.parse_args()
 
@@ -392,7 +396,7 @@ def main():
         if not args.lang:
             print("❌ --lang required with --link")
             sys.exit(1)
-        process_manual_link(args.link, args.lang, args.genre)
+        process_manual_link(args.link, args.lang, args.genre, args.level)
     else:
         run_automated_scraping()
 

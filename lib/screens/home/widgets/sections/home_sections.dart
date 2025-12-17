@@ -1,46 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart'; // Needed for context.read
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
+import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
-import 'package:linguaflow/screens/quiz/widgets/practice_banner_button.dart';
-import 'package:linguaflow/utils/utils.dart';
-import 'package:linguaflow/services/repositories/lesson_repository.dart'; // Make sure this path is correct
-// Needed for options
-import '../lesson_cards.dart';
-
-// --- HELPER METHOD TO BUILD CARDS (DRY Principle) ---
-Widget _buildCard(
-  BuildContext context,
-  LessonModel lesson,
-  Map<String, VocabularyItem> vocabMap,
-  bool isDark,
-) {
-  return VideoLessonCard(
-    lesson: lesson,
-    vocabMap: vocabMap,
-    isDark: isDark,
-    onTap: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)),
-      );
-    },
-    onOptionTap: () {
-      showLessonOptions(context, lesson, isDark);
-    },
-  );
-}
+import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
+import 'package:linguaflow/services/repositories/lesson_repository.dart';
+import 'package:linguaflow/utils/utils.dart'; // For printLog
 
 // ==============================================================================
-// 1. GUIDED COURSES (Standard Pagination)
+// HELPER: Deduplicate Series (Group Playlist Videos)
+// ==============================================================================
+
+// ==============================================================================
+// HELPER: Show Playlist Bottom Sheet (FIXED LAYOUT)
+// ==============================================================================
+
+// ==============================================================================
+// 1. GUIDED COURSES SECTION
 // ==============================================================================
 class GuidedCoursesSection extends StatefulWidget {
   final List<LessonModel> guidedLessons;
   final List<LessonModel> importedLessons;
   final Map<String, VocabularyItem> vocabMap;
   final bool isDark;
-  // We need language code to fetch more
   final String languageCode;
 
   const GuidedCoursesSection({
@@ -49,7 +32,7 @@ class GuidedCoursesSection extends StatefulWidget {
     required this.importedLessons,
     required this.vocabMap,
     required this.isDark,
-    required this.languageCode, // Pass this from parent
+    required this.languageCode,
   });
 
   @override
@@ -66,7 +49,6 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
     'Imported',
   ];
 
-  // --- PAGINATION STATE ---
   late List<LessonModel> _allGuidedLessons;
   final ScrollController _scrollController = ScrollController();
   bool _isLoadingMore = false;
@@ -82,7 +64,6 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
   @override
   void didUpdateWidget(GuidedCoursesSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Sync if parent updates
     if (widget.guidedLessons.length > oldWidget.guidedLessons.length) {
       _allGuidedLessons = List.from(widget.guidedLessons);
     }
@@ -95,44 +76,35 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
   }
 
   void _onScroll() {
-    if (_isImportedTab) return; // Don't paginate imported tab
+    if (_guidedTab == 'Imported') return;
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
       _loadMore();
     }
   }
 
-  bool get _isImportedTab => _guidedTab == 'Imported';
-
   Future<void> _loadMore() async {
     if (_isLoadingMore || _hasReachedMax) return;
-
     setState(() => _isLoadingMore = true);
-
     try {
-      // Fetch 'guided' type from repo
       final repo = context.read<LessonRepository>();
       final lastLesson = _allGuidedLessons.lastWhere(
         (l) => !l.isLocal,
         orElse: () => _allGuidedLessons.last,
       );
-
       final newLessons = await repo.fetchPagedCategory(
         widget.languageCode,
-        'standard', // This maps to Guided/Standard in your Repo
+        'standard',
         lastLesson: lastLesson,
         limit: 10,
       );
-
       if (newLessons.isEmpty) {
         setState(() => _hasReachedMax = true);
       } else {
-        setState(() {
-          _allGuidedLessons.addAll(newLessons);
-        });
+        setState(() => _allGuidedLessons.addAll(newLessons));
       }
     } catch (e) {
-      printLog("Error loading more guided: $e");
+      printLog("Error loading guided: $e");
     } finally {
       setState(() => _isLoadingMore = false);
     }
@@ -140,20 +112,17 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
 
   @override
   Widget build(BuildContext context) {
-    List<LessonModel> displayLessons = [];
-
-    if (_isImportedTab) {
-      displayLessons = widget.importedLessons;
+    List<LessonModel> rawLessons = [];
+    if (_guidedTab == 'Imported') {
+      rawLessons = widget.importedLessons;
     } else {
-      // Filter the _allGuidedLessons list which grows as we scroll
-      final nonImportedLessons = _allGuidedLessons.where(
+      final nonImported = _allGuidedLessons.where(
         (l) => !widget.importedLessons.contains(l),
       );
-
       if (_guidedTab == 'All') {
-        displayLessons = nonImportedLessons.toList();
+        rawLessons = nonImported.toList();
       } else {
-        displayLessons = nonImportedLessons
+        rawLessons = nonImported
             .where(
               (l) => l.difficulty.toLowerCase() == _guidedTab.toLowerCase(),
             )
@@ -161,23 +130,20 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
       }
     }
 
+    final displayLessons = deduplicateSeries(rawLessons);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 0, 8),
-          child: Row(
-            children: [
-              Text(
-                "Guided Courses",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: widget.isDark ? Colors.white70 : Colors.black45,
-                ),
-              ),
-              const Expanded(child: PracticeBannerButton()),
-            ],
+          child: Text(
+            "Guided Courses",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: widget.isDark ? Colors.white70 : Colors.black45,
+            ),
           ),
         ),
         SingleChildScrollView(
@@ -191,7 +157,7 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
           Container(
             height: 240,
             alignment: Alignment.center,
-            child: Text(
+            child: const Text(
               "No courses found.",
               style: TextStyle(color: Colors.grey),
             ),
@@ -200,12 +166,9 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
           SizedBox(
             height: 240,
             child: ListView.separated(
-              controller: _isImportedTab
-                  ? null
-                  : _scrollController, // Only attach scroll listener if fetching from server
+              controller: _guidedTab == 'Imported' ? null : _scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               scrollDirection: Axis.horizontal,
-              // +1 for Spinner if loading
               itemCount: displayLessons.length + (_isLoadingMore ? 1 : 0),
               separatorBuilder: (ctx, i) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
@@ -217,11 +180,35 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
                     ),
                   );
                 }
-                return _buildCard(
-                  context,
-                  displayLessons[index],
-                  widget.vocabMap,
-                  widget.isDark,
+                final lesson = displayLessons[index];
+                final bool isSeries =
+                    lesson.seriesId != null && lesson.seriesId!.isNotEmpty;
+
+                return VideoLessonCard(
+                  lesson: lesson,
+                  vocabMap: widget.vocabMap,
+                  isDark: widget.isDark,
+                  // Update this logic:
+                  onTap: () {
+                    if (isSeries) {
+                      showPlaylistBottomSheet(context, lesson, rawLessons, widget.isDark);
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ReaderScreen(lesson: lesson),
+                        ),
+                      );
+                    }
+                  },
+                  onOptionTap: () {
+                    showLessonOptions(context, lesson, widget.isDark);
+                  },
+                  onPlaylistTap: isSeries
+                      ? () {
+                      showPlaylistBottomSheet(context, lesson, rawLessons, widget.isDark);
+                      }
+                      : null,
                 );
               },
             ),
@@ -263,13 +250,13 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
 }
 
 // ==============================================================================
-// 2. IMMERSION SECTION (Infinite Video Scroll)
+// 2. IMMERSION SECTION
 // ==============================================================================
 class ImmersionSection extends StatefulWidget {
   final List<LessonModel> lessons;
   final Map<String, VocabularyItem> vocabMap;
   final bool isDark;
-  final String languageCode; // Needed for repo call
+  final String languageCode;
 
   const ImmersionSection({
     super.key,
@@ -284,83 +271,50 @@ class ImmersionSection extends StatefulWidget {
 }
 
 class _ImmersionSectionState extends State<ImmersionSection> {
-  String _nativeDifficultyTab = 'All';
-  final List<String> _difficultyTabs = [
-    'All',
-    'Beginner',
-    'Intermediate',
-    'Advanced',
-  ];
-
-  // --- PAGINATION STATE ---
-  late List<LessonModel> _immersionLessons;
+  String _tab = 'All';
+  final List<String> _tabs = ['All', 'Beginner', 'Intermediate', 'Advanced'];
+  late List<LessonModel> _lessons;
   final ScrollController _scrollController = ScrollController();
-  bool _isLoadingMore = false;
-  bool _hasReachedMax = false;
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _immersionLessons = List.from(widget.lessons);
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      _loadMore();
-    }
+    _lessons = List.from(widget.lessons);
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent - 200 &&
+          !_loading) {
+        _loadMore();
+      }
+    });
   }
 
   Future<void> _loadMore() async {
-    if (_isLoadingMore || _hasReachedMax) return;
-
-    setState(() => _isLoadingMore = true);
-
+    setState(() => _loading = true);
     try {
-      final repo = context.read<LessonRepository>();
-      final lastLesson = _immersionLessons.last;
-
-      // Call the pagination method specifically for VIDEOS
-      final newLessons = await repo.fetchPagedCategory(
-        widget.languageCode,
-        'video',
-        lastLesson: lastLesson,
-        limit: 10,
-      );
-
-      if (newLessons.isEmpty) {
-        setState(() => _hasReachedMax = true);
-      } else {
-        setState(() {
-          _immersionLessons.addAll(newLessons);
-        });
-      }
-    } catch (e) {
-      printLog("Error loading videos: $e");
+      final newItems = await context
+          .read<LessonRepository>()
+          .fetchPagedCategory(
+            widget.languageCode,
+            'video',
+            lastLesson: _lessons.last,
+            limit: 10,
+          );
+      if (newItems.isNotEmpty) setState(() => _lessons.addAll(newItems));
     } finally {
-      setState(() => _isLoadingMore = false);
+      setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Filter the dynamically growing list
-    final displayVideos = _nativeDifficultyTab == 'All'
-        ? _immersionLessons
-        : _immersionLessons
-              .where(
-                (l) =>
-                    l.difficulty.toLowerCase() ==
-                    _nativeDifficultyTab.toLowerCase(),
-              )
+    final rawlessons = _tab == 'All'
+        ? _lessons
+        : _lessons
+              .where((l) => l.difficulty.toLowerCase() == _tab.toLowerCase())
               .toList();
+    final displayList = deduplicateSeries(rawlessons);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -379,57 +333,68 @@ class _ImmersionSectionState extends State<ImmersionSection> {
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: _difficultyTabs.map((tab) => _buildTab(tab)).toList(),
+          child: Row(children: _tabs.map((t) => _buildTab(t)).toList()),
+        ),
+        SizedBox(
+          height: 260,
+          child: ListView.separated(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: displayList.length + (_loading ? 1 : 0),
+            separatorBuilder: (ctx, i) => const SizedBox(width: 16),
+            itemBuilder: (context, index) {
+              if (index >= displayList.length) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+              final lesson = displayList[index];
+
+              final bool isSeries =
+                  lesson.seriesId != null && lesson.seriesId!.isNotEmpty;
+
+              return VideoLessonCard(
+                lesson: lesson,
+                vocabMap: widget.vocabMap,
+                isDark: widget.isDark,
+                onTap: () {
+                  if (isSeries) {
+                   showPlaylistBottomSheet(context, lesson, rawlessons, widget.isDark);
+                  } else {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ReaderScreen(lesson: lesson),
+                      ),
+                    );
+                  }
+                },
+                onOptionTap: () {
+                  showLessonOptions(context, lesson, widget.isDark);
+                },
+                onPlaylistTap: isSeries
+                    ? () {
+                     showPlaylistBottomSheet(context, lesson, rawlessons, widget.isDark);
+                    }
+                    : null,
+              );
+            },
           ),
         ),
-        if (displayVideos.isEmpty && !_isLoadingMore)
-          Container(
-            height: 150,
-            alignment: Alignment.center,
-            child: const Text(
-              "No videos found",
-              style: TextStyle(color: Colors.grey),
-            ),
-          )
-        else
-          SizedBox(
-            height: 260,
-            child: ListView.separated(
-              controller: _scrollController, // Attached listener
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              // Add +1 for spinner
-              itemCount: displayVideos.length + (_isLoadingMore ? 1 : 0),
-              separatorBuilder: (ctx, i) => const SizedBox(width: 16),
-              itemBuilder: (context, index) {
-                if (index >= displayVideos.length) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  );
-                }
-                return _buildCard(
-                  context,
-                  displayVideos[index],
-                  widget.vocabMap,
-                  widget.isDark,
-                );
-              },
-            ),
-          ),
       ],
     );
   }
 
   Widget _buildTab(String tab) {
-    final isSelected = _nativeDifficultyTab == tab;
+    final isSelected = _tab == tab;
     return Padding(
       padding: const EdgeInsets.only(right: 24.0, bottom: 12),
       child: InkWell(
-        onTap: () => setState(() => _nativeDifficultyTab = tab),
+        onTap: () => setState(() => _tab = tab),
         child: Column(
           children: [
             Text(
@@ -457,13 +422,13 @@ class _ImmersionSectionState extends State<ImmersionSection> {
 }
 
 // ==============================================================================
-// 3. LIBRARY SECTION (Infinite Book Scroll)
+// 3. LIBRARY SECTION
 // ==============================================================================
 class LibrarySection extends StatefulWidget {
   final List<LessonModel> lessons;
   final Map<String, VocabularyItem> vocabMap;
   final bool isDark;
-  final String languageCode; // Needed for repo
+  final String languageCode;
 
   const LibrarySection({
     super.key,
@@ -478,89 +443,57 @@ class LibrarySection extends StatefulWidget {
 }
 
 class _LibrarySectionState extends State<LibrarySection> {
-  String _libraryDifficultyTab = 'All';
-  final List<String> _difficultyTabs = [
-    'All',
-    'Beginner',
-    'Intermediate',
-    'Advanced',
-  ];
-
-  // --- PAGINATION STATE ---
-  late List<LessonModel> _libraryLessons;
+  String _tab = 'All';
+  final List<String> _tabs = ['All', 'Beginner', 'Intermediate', 'Advanced'];
+  late List<LessonModel> _lessons;
   final ScrollController _scrollController = ScrollController();
-  bool _isLoadingMore = false;
-  bool _hasReachedMax = false;
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _libraryLessons = List.from(widget.lessons);
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      _loadMore();
-    }
+    _lessons = List.from(widget.lessons);
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent - 200 &&
+          !_loading) {
+        _loadMore();
+      }
+    });
   }
 
   Future<void> _loadMore() async {
-    if (_isLoadingMore || _hasReachedMax) return;
-
-    setState(() => _isLoadingMore = true);
-
+    setState(() => _loading = true);
     try {
-      final repo = context.read<LessonRepository>();
-      final lastLesson = _libraryLessons.last;
-
-      final newLessons = await repo.fetchPagedCategory(
-        widget.languageCode,
-        'book',
-        lastLesson: lastLesson,
-        limit: 10,
-      );
-
-      if (newLessons.isEmpty) {
-        setState(() => _hasReachedMax = true);
-      } else {
-        setState(() {
-          _libraryLessons.addAll(newLessons);
-        });
-      }
-    } catch (e) {
-      printLog("Error loading books: $e");
+      final newItems = await context
+          .read<LessonRepository>()
+          .fetchPagedCategory(
+            widget.languageCode,
+            'book',
+            lastLesson: _lessons.last,
+            limit: 10,
+          );
+      if (newItems.isNotEmpty) setState(() => _lessons.addAll(newItems));
     } finally {
-      setState(() => _isLoadingMore = false);
+      setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Sort logic from original code
-    var sortedLessons = List<LessonModel>.from(_libraryLessons);
-    sortedLessons.sort((a, b) {
-      if (a.difficulty == 'beginner' && b.difficulty != 'beginner') return -1;
-      if (a.difficulty != 'beginner' && b.difficulty == 'beginner') return 1;
-      return 0;
-    });
+    var sorted = List<LessonModel>.from(_lessons)
+      ..sort((a, b) {
+        if (a.difficulty == 'beginner' && b.difficulty != 'beginner') return -1;
+        if (a.difficulty != 'beginner' && b.difficulty == 'beginner') return 1;
+        return 0;
+      });
 
-    final displayBooks = _libraryDifficultyTab == 'All'
-        ? sortedLessons
-        : sortedLessons
-              .where(
-                (l) =>
-                    l.difficulty.toLowerCase() ==
-                    _libraryDifficultyTab.toLowerCase(),
-              )
+    final rawLessons = _tab == 'All'
+        ? sorted
+        : sorted
+              .where((l) => l.difficulty.toLowerCase() == _tab.toLowerCase())
               .toList();
+    final displayList = deduplicateSeries(rawLessons);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -579,57 +512,51 @@ class _LibrarySectionState extends State<LibrarySection> {
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: _difficultyTabs.map((tab) => _buildTab(tab)).toList(),
+          child: Row(children: _tabs.map((t) => _buildTab(t)).toList()),
+        ),
+        SizedBox(
+          height: 260,
+          child: ListView.separated(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: displayList.length + (_loading ? 1 : 0),
+            separatorBuilder: (ctx, i) => const SizedBox(width: 16),
+            itemBuilder: (context, index) {
+              if (index >= displayList.length)
+                return const Center(child: CircularProgressIndicator());
+              final lesson = displayList[index];
+              final bool isSeries =
+                  lesson.seriesId != null && lesson.seriesId!.isNotEmpty;
+              if (lesson.type == 'text') {
+                return TextLessonCard(
+                  lesson: lesson,
+                  vocabMap: widget.vocabMap,
+                  isDark: widget.isDark,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ReaderScreen(lesson: lesson),
+                    ),
+                  ),
+                  onOptionTap: () =>
+                      showLessonOptions(context, lesson, widget.isDark),
+                );
+              }
+            
+            },
           ),
         ),
-        if (displayBooks.isEmpty && !_isLoadingMore)
-          Container(
-            height: 150,
-            alignment: Alignment.center,
-            child: const Text(
-              "No books found",
-              style: TextStyle(color: Colors.grey),
-            ),
-          )
-        else
-          SizedBox(
-            height: 260,
-            child: ListView.separated(
-              controller: _scrollController, // Attached
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              // +1 for spinner
-              itemCount: displayBooks.length + (_isLoadingMore ? 1 : 0),
-              separatorBuilder: (ctx, i) => const SizedBox(width: 16),
-              itemBuilder: (context, index) {
-                if (index >= displayBooks.length) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  );
-                }
-                return _buildCard(
-                  context,
-                  displayBooks[index],
-                  widget.vocabMap,
-                  widget.isDark,
-                );
-              },
-            ),
-          ),
       ],
     );
   }
 
   Widget _buildTab(String tab) {
-    final isSelected = _libraryDifficultyTab == tab;
+    final isSelected = _tab == tab;
     return Padding(
       padding: const EdgeInsets.only(right: 24.0, bottom: 12),
       child: InkWell(
-        onTap: () => setState(() => _libraryDifficultyTab = tab),
+        onTap: () => setState(() => _tab = tab),
         child: Column(
           children: [
             Text(

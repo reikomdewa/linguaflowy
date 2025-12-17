@@ -1,4 +1,3 @@
-
 import json
 import os
 import re
@@ -140,11 +139,12 @@ def save_lesson_to_file(lang_code, lesson):
 
 # --- CORE LOGIC WITH IMPROVED SUBTITLE DETECTION ---
 
-def get_video_details(video_url, lang_code, genre):
+def get_video_details(video_url, lang_code, genre, manual_level=None):
     """
     Two-phase process:
     1. Inspect metadata to find exact subtitle dialect (e.g. 'fr-FR').
     2. Download specifically that subtitle file.
+    3. If manual_level is provided, use it instead of analyze_difficulty.
     """
     
     # --- PHASE 1: INSPECTION (No Download) ---
@@ -247,6 +247,9 @@ def get_video_details(video_url, lang_code, genre):
             
             full_text = " ".join([t['text'] for t in transcript_data])
 
+            # Determine Difficulty
+            difficulty = manual_level if manual_level else analyze_difficulty(transcript_data)
+
             return {
                 "id": f"yt_{info.get('id')}",
                 "userId": "system",
@@ -258,7 +261,7 @@ def get_video_details(video_url, lang_code, genre):
                 "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
                 "imageUrl": info.get('thumbnail') or f"https://img.youtube.com/vi/{info.get('id')}/mqdefault.jpg",
                 "type": "video",
-                "difficulty": analyze_difficulty(transcript_data),
+                "difficulty": difficulty,
                 "videoUrl": f"https://www.youtube.com/watch?v={info.get('id')}",
                 "isFavorite": False,
                 "progress": 0,
@@ -273,30 +276,51 @@ def get_video_details(video_url, lang_code, genre):
 
 # --- WORKFLOWS ---
 
-def process_manual_link(url, lang_code, genre="manual"):
+def process_manual_link(url, lang_code, genre="manual", manual_level=None):
     if lang_code not in LANGUAGES:
         print(f"❌ Error: Language code '{lang_code}' not found.")
         return
 
     print(f"\n==========================================")
     print(f" 🖐️ MANUAL MODE: {lang_code} | Genre: {genre}")
+    if manual_level:
+        print(f" 🎯 Forced Level: {manual_level}")
     print(f" 🔗 Processing: {url}")
     print(f"==========================================")
 
     # Use QuietLogger here too
     ydl_opts_check = {'extract_flat': True, 'quiet': True, 'logger': QuietLogger()}
-    videos_to_process = []
+    
+    # Store tuples or dicts to handle playlist data
+    videos_to_process = [] 
 
     with yt_dlp.YoutubeDL(ydl_opts_check) as ydl:
         try:
             info = ydl.extract_info(url, download=False)
             if 'entries' in info:
-                print(f"   📂 Detected Playlist: {info.get('title')}")
-                for entry in info['entries']:
-                    if entry: videos_to_process.append(f"https://www.youtube.com/watch?v={entry['id']}")
+                # PLAYLIST DETECTED
+                playlist_title = info.get('title', 'Unknown Playlist')
+                playlist_id = info.get('id')
+                print(f"   📂 Detected Playlist: {playlist_title}")
+                
+                # Iterate entries with index to track series order
+                for idx, entry in enumerate(info['entries'], start=1):
+                    if entry:
+                        videos_to_process.append({
+                            'id': entry['id'],
+                            'seriesId': playlist_id,
+                            'seriesTitle': playlist_title,
+                            'seriesIndex': idx
+                        })
             else:
+                # SINGLE VIDEO
                 print(f"   🎬 Detected Video: {info.get('title')}")
-                videos_to_process.append(url)
+                videos_to_process.append({
+                    'id': info.get('id'),
+                    'seriesId': None,
+                    'seriesTitle': None,
+                    'seriesIndex': None
+                })
         except Exception as e:
             print(f"❌ Could not retrieve info: {e}")
             return
@@ -304,11 +328,21 @@ def process_manual_link(url, lang_code, genre="manual"):
     print(f"   ⬇️  Queue size: {len(videos_to_process)} videos")
 
     success_count = 0
-    for vid_url in videos_to_process:
+    
+    for video_data in videos_to_process:
+        vid_id = video_data['id']
+        vid_url = f"https://www.youtube.com/watch?v={vid_id}"
+        
         print(f"   ⏳ Checking: {vid_url}")
-        lesson = get_video_details(vid_url, lang_code, genre)
+        lesson = get_video_details(vid_url, lang_code, genre, manual_level)
         
         if lesson:
+            # Inject Playlist Metadata if it exists
+            if video_data['seriesId']:
+                lesson['seriesId'] = video_data['seriesId']
+                lesson['seriesTitle'] = video_data['seriesTitle']
+                lesson['seriesIndex'] = video_data['seriesIndex']
+
             saved = save_lesson_to_file(lang_code, lesson)
             if saved:
                 print(f"      ✅ Saved: {lesson['title'][:30]}...")
@@ -358,6 +392,7 @@ def run_automated_scraping():
                 if 'entries' in result:
                     for entry in result['entries']:
                         if not entry: continue
+                        # Automated scraping just uses None for manual_level, triggering auto-analysis
                         lesson = get_video_details(f"https://www.youtube.com/watch?v={entry['id']}", lang_code, genre)
                         if lesson:
                             if save_lesson_to_file(lang_code, lesson):
@@ -382,6 +417,7 @@ def main():
     parser.add_argument("--link", type=str, help="YouTube Video or Playlist URL")
     parser.add_argument("--lang", type=str, help="Language code (e.g., 'es', 'fr') - Required with --link")
     parser.add_argument("--genre", type=str, default="manual", help="Genre tag for the manual download")
+    parser.add_argument("--level", type=str, help="Force difficulty level (e.g. 'beginner', 'intermediate', 'advanced')")
     
     args = parser.parse_args()
 
@@ -389,7 +425,7 @@ def main():
         if not args.lang:
             print("❌ Error: When using --link, you MUST specify --lang (e.g., --lang es)")
             sys.exit(1)
-        process_manual_link(args.link, args.lang, args.genre)
+        process_manual_link(args.link, args.lang, args.genre, args.level)
     else:
         run_automated_scraping()
 
