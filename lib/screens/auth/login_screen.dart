@@ -1,6 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+// 1. IMPORT FLUTTER MARKDOWN PLUS
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/constants/terms_and_policies.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,13 +21,15 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLogin = true;
 
+  // State to track if user agreed to terms
+  bool _acceptedTerms = false;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: BlocListener<AuthBloc, AuthState>(
           listener: (context, state) {
-            // --- HANDLE SUCCESS ---
             if (state is AuthMessage) {
               if (!_isLogin) setState(() => _isLogin = true);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -35,7 +41,6 @@ class _LoginScreenState extends State<LoginScreen> {
               );
             }
 
-            // --- HANDLE ERRORS ---
             if (state is AuthError) {
               final bool isVerificationError = state.isVerificationError;
 
@@ -79,8 +84,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       'assets/images/linguaflow_logo_transparent.png',
                       height: 100.0,
                       width: 100.0,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(Icons.language, size: 100),
                     ),
-                    const SizedBox(height: 24),
+
                     const Text(
                       'LinguaFlow',
                       style: TextStyle(
@@ -89,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     const Text(
                       'Learning the natural way',
                       style: TextStyle(
@@ -98,9 +105,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 6),
 
-                    if (!_isLogin)
+                    if (!_isLogin) ...[
                       TextFormField(
                         controller: _nameController,
                         decoration: const InputDecoration(
@@ -111,7 +118,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         validator: (value) =>
                             value?.isEmpty ?? true ? 'Enter your name' : null,
                       ),
-                    if (!_isLogin) const SizedBox(height: 16),
+                      const SizedBox(height: 16),
+                    ],
 
                     TextFormField(
                       controller: _emailController,
@@ -146,6 +154,79 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: const Text("Forgot Password?"),
                         ),
                       ),
+
+                    const SizedBox(height: 16),
+
+                    // ============================================
+                    // TERMS AND CONDITIONS CHECKBOX
+                    // ============================================
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: Checkbox(
+                            value: _acceptedTerms,
+                            onChanged: (val) {
+                              setState(() {
+                                _acceptedTerms = val ?? false;
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodyMedium?.color,
+                                fontSize: 13,
+                              ),
+                              children: [
+                                const TextSpan(text: "I agree to the "),
+                                TextSpan(
+                                  text: "Terms & Conditions",
+                                  style: const TextStyle(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.bold,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () {
+                                      _showLegalDialog(
+                                        context,
+                                        "Terms & Conditions",
+                                        TermsAndPolicies.termsOfService,
+                                      );
+                                    },
+                                ),
+                                const TextSpan(text: " and "),
+                                TextSpan(
+                                  text: "Privacy Policy",
+                                  style: const TextStyle(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.bold,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () {
+                                      _showLegalDialog(
+                                        context,
+                                        "Privacy Policy",
+                                        TermsAndPolicies.privacyPolicy,
+                                      );
+                                    },
+                                ),
+                                const TextSpan(text: "."),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
 
                     const SizedBox(height: 24),
 
@@ -184,8 +265,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     // GOOGLE SIGN IN SECTION
                     // ===============================================
                     const SizedBox(height: 20),
-                    Row(
-                      children: const [
+                    const Row(
+                      children: [
                         Expanded(child: Divider()),
                         Padding(
                           padding: EdgeInsets.symmetric(horizontal: 16),
@@ -198,6 +279,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     OutlinedButton.icon(
                       onPressed: () {
+                        if (!_acceptedTerms) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                "Please accept the Terms & Privacy Policy to continue.",
+                              ),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                          return;
+                        }
+
                         context.read<AuthBloc>().add(
                           AuthGoogleLoginRequested(),
                         );
@@ -206,11 +299,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         side: const BorderSide(color: Colors.grey),
                       ),
-                      // If you don't have a Google asset, use an icon
                       icon: SizedBox(
                         width: 24,
                         height: 24,
-                        // Ensure you have this asset or replace with Icon(Icons.login)
                         child: Image.network(
                           'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
                           errorBuilder: (context, error, stackTrace) =>
@@ -221,6 +312,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         "Sign in with Google",
                         style: TextStyle(fontSize: 16),
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      "By using Google Sign-In, you also agree to Google's Terms of Service and Privacy Policy.",
+                      style: TextStyle(fontSize: 10, color: Colors.grey),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -234,6 +331,20 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _submitForm() {
+    // Check if Terms are accepted
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Please accept the Terms & Privacy Policy to continue.",
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Validate Form
     if (_formKey.currentState!.validate()) {
       if (_isLogin) {
         context.read<AuthBloc>().add(
@@ -252,6 +363,35 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     }
+  }
+
+  // --- 2. UPDATED TO USE FLUTTER MARKDOWN PLUS ---
+  void _showLegalDialog(BuildContext context, String title, String content) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: double.maxFinite,
+          // Limit height so content scrolls
+          height: MediaQuery.of(context).size.height * 0.6,
+          // Use Markdown Widget from flutter_markdown_plus
+          child: Markdown(
+            data: content,
+            styleSheet: MarkdownStyleSheet(
+              h1: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              p: const TextStyle(fontSize: 14),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Close"),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showForgotPasswordDialog() {
