@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/constants/genre_constants.dart';
 import 'package:linguaflow/screens/home/widgets/build_appbar.dart';
 import 'package:linguaflow/screens/home/widgets/sections/genre_feed_section.dart';
@@ -23,14 +22,11 @@ import 'package:linguaflow/screens/home/widgets/sections/home_sections.dart';
 import 'package:linguaflow/screens/home/widgets/audio_section.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
 import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
-import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
 import 'package:linguaflow/widgets/lesson_import_dialog.dart';
-import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 // SCREENS
 import 'package:linguaflow/screens/reader/reader_screen.dart';
-import 'package:linguaflow/screens/search/library_search_delegate.dart';
 
 // UTILS
 import 'package:linguaflow/screens/home/utils/home_utils.dart';
