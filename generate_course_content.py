@@ -8,6 +8,7 @@ import random
 import argparse
 import sys
 from yt_dlp.utils import DownloadError
+from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
 OUTPUT_DIR = "assets/course_videos"
@@ -56,6 +57,20 @@ CURATED_CONFIG = {
     'fr': [('French comprehensible input', 'Stories'), ('HugoDécrypte actus', 'News'), ('French slang shorts', 'Bites'), ('Passé Composé vs Imparfait', 'Grammar tips')],
     'en': [('English short stories for learning', 'Stories'), ('VOA Learning English', 'News'), ('English idioms shorts', 'Bites'), ('English phrasal verbs explained', 'Grammar tips')],
 }
+
+# --- DATE CHEATING LOGIC ---
+
+def get_automated_date(is_pinned=False):
+    """
+    If pinned: Year 2030 (Top)
+    If not pinned: Year 2024 (Bottom)
+    """
+    year = 2030 if is_pinned else 2024
+    base_date = datetime(year, 1, 1)
+    # Add random offset (up to 30 days) to keep items in a batch unique
+    random_offset = random.randint(0, 2592000) 
+    final_date = base_date + timedelta(seconds=random_offset)
+    return final_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
 
 # --- LOGGER ---
 class QuietLogger:
@@ -117,7 +132,7 @@ def save_lesson_to_file(lang_code, lesson):
                 existing_lessons = json.load(f)
         if any(l['id'] == lesson['id'] for l in existing_lessons):
             return False
-        existing_lessons.append(lesson) 
+        existing_lessons.insert(0, lesson) # Insert at top of JSON
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(existing_lessons, f, ensure_ascii=False, indent=None)
         return True
@@ -127,7 +142,7 @@ def save_lesson_to_file(lang_code, lesson):
 
 # --- CORE LOGIC WITH RETRY ---
 
-def get_video_details(video_url, lang_code, category, manual_level=None, max_retries=3):
+def get_video_details(video_url, lang_code, category, manual_level=None, max_retries=3, is_pinned=False):
     ydl_opts_base = {
         'skip_download': True,
         'quiet': True,
@@ -229,7 +244,9 @@ def get_video_details(video_url, lang_code, category, manual_level=None, max_ret
         "id": f"yt_{video_id}", "userId": "system_course",
         "title": info.get('title', 'Unknown Title'), "language": lang_code,
         "content": full_text, "sentences": split_sentences(full_text),
-        "transcript": transcript_data, "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+        "transcript": transcript_data, 
+        # 🔥 PINNING LOGIC APPLIED HERE
+        "createdAt": get_automated_date(is_pinned=is_pinned),
         "imageUrl": info.get('thumbnail') or "", "type": type_map.get(category, 'video'), 
         "difficulty": manual_level or analyze_difficulty(transcript_data),
         "videoUrl": f"https://www.youtube.com/watch?v={video_id}",
@@ -238,9 +255,9 @@ def get_video_details(video_url, lang_code, category, manual_level=None, max_ret
 
 # --- WORKFLOWS ---
 
-def process_manual_link(url, lang_code, category="Manual", manual_level=None):
+def process_manual_link(url, lang_code, category="Manual", manual_level=None, is_pinned=False):
     if lang_code not in LANGUAGES: return print(f"❌ Error: Lang '{lang_code}' not found.")
-    print(f"\n🖐️ MANUAL MODE: {lang_code} | Cat: {category} | URL: {url}")
+    print(f"\n🖐️ MANUAL MODE: {lang_code} | Cat: {category} | Pinned: {is_pinned}")
 
     ydl_opts = {'extract_flat': True, 'quiet': True, 'logger': QuietLogger()}
     videos = []
@@ -258,7 +275,7 @@ def process_manual_link(url, lang_code, category="Manual", manual_level=None):
     for v_data in videos:
         v_url = f"https://www.youtube.com/watch?v={v_data['id']}"
         print(f"   ⏳ Checking: {v_url}")
-        lesson = get_video_details(v_url, lang_code, category, manual_level)
+        lesson = get_video_details(v_url, lang_code, category, manual_level, is_pinned=is_pinned)
         if lesson:
             if v_data['seriesId']:
                 lesson.update({'seriesId': v_data['seriesId'], 'seriesTitle': v_data['seriesTitle'], 'seriesIndex': v_data['seriesIndex']})
@@ -269,7 +286,7 @@ def process_manual_link(url, lang_code, category="Manual", manual_level=None):
         time.sleep(1)
     print(f"\n🎉 Finished. Added {count} lessons.")
 
-def run_automated_scraping():
+def run_automated_scraping(is_pinned=False):
     for lang_code, lang_name in sorted(LANGUAGES.items()):
         filepath = os.path.join(OUTPUT_DIR, f"{lang_code}.json")
         if os.path.exists(filepath):
@@ -287,7 +304,7 @@ def run_automated_scraping():
                 except: continue
                 for entry in result.get('entries', []):
                     if not entry: continue
-                    l = get_video_details(f"https://www.youtube.com/watch?v={entry['id']}", lang_code, category)
+                    l = get_video_details(f"https://www.youtube.com/watch?v={entry['id']}", lang_code, category, is_pinned=is_pinned)
                     if l and save_lesson_to_file(lang_code, l):
                         print("       ✅ Added."); added += 1; time.sleep(6)
                         if added >= 4: break
@@ -300,11 +317,14 @@ def main():
     parser.add_argument("--lang", type=str)
     parser.add_argument("--category", type=str, default="Manual")
     parser.add_argument("--level", type=str)
+    parser.add_argument("--pinned", action="store_true", help="Set date to 2030 to pin to top")
+    
     args = parser.parse_args()
     if args.link:
         if not args.lang: sys.exit(print("❌ --lang required"))
-        process_manual_link(args.link, args.lang, args.category, args.level)
-    else: run_automated_scraping()
+        process_manual_link(args.link, args.lang, args.category, args.level, is_pinned=args.pinned)
+    else: 
+        run_automated_scraping(is_pinned=args.pinned)
 
 if __name__ == "__main__":
     main()

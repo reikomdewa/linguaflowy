@@ -8,6 +8,7 @@ import random
 import argparse
 import sys
 from yt_dlp.utils import DownloadError
+from datetime import datetime, timedelta
 
 # --- FIREBASE INTEGRATION ---
 import firebase_admin
@@ -67,6 +68,20 @@ CURATED_AUDIOBOOKS = {
     'en': [('English audiobook with text', 'audiobook'), ('Sherlock Holmes audiobook', 'classic')],
 }
 
+# --- DATE CHEATING LOGIC ---
+
+def get_automated_date(is_pinned=False):
+    """
+    Pinned: Year 2030 (Top of list)
+    Normal: Year 2024 (Bottom of list)
+    """
+    year = 2030 if is_pinned else 2024
+    base_date = datetime(year, 1, 1)
+    # Add random offset (up to 30 days) to keep multiple uploads in a batch unique
+    random_offset = random.randint(0, 2592000) 
+    final_date = base_date + timedelta(seconds=random_offset)
+    return final_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+
 # --- LOGGER ---
 class QuietLogger:
     def debug(self, msg): pass
@@ -77,15 +92,12 @@ class QuietLogger:
 
 def is_duplicate(lesson_id):
     """Checks Firebase and then local files to see if document exists."""
-    # 1. Check Firebase (Unified 'lessons' collection)
     try:
         doc = db.collection(FIRESTORE_COLLECTION).document(lesson_id).get()
         if doc.exists:
             return True
-    except Exception as e:
-        print(f"      ⚠️ Firebase check error: {e}")
+    except Exception: pass
 
-    # 2. Check Local Files (Read only from assets/youtube_audio_library)
     if os.path.exists(LOCAL_DATA_DIR):
         for file_path in glob.glob(os.path.join(LOCAL_DATA_DIR, "*.json")):
             try:
@@ -151,11 +163,10 @@ def analyze_difficulty(text, title):
 
 # --- CORE LOGIC ---
 
-def get_audiobook_details(video_url, lang_code, genre, manual_level=None, max_retries=3):
+def get_audiobook_details(video_url, lang_code, genre, manual_level=None, max_retries=3, is_pinned=False):
     ydl_opts_base = {
         'skip_download': True, 'quiet': True, 'no_warnings': True,
-        'ignoreerrors': False, 'logger': QuietLogger(),
-        'socket_timeout': 40, 'retries': 10, 'nocheckcertificate': True,
+        'logger': QuietLogger(), 'socket_timeout': 40, 'retries': 10, 'nocheckcertificate': True,
     }
 
     info, found_sub_code, is_auto = None, None, False
@@ -202,9 +213,10 @@ def get_audiobook_details(video_url, lang_code, genre, manual_level=None, max_re
             files = glob.glob(f"{temp_filename}*.vtt")
             if files:
                 with open(max(files, key=os.path.getsize), 'r', encoding='utf-8') as f: content = f.read()
-    except: pass
     finally:
-        for f in glob.glob(f"{temp_filename}*"): os.remove(f)
+        for f in glob.glob(f"{temp_filename}*"):
+            try: os.remove(f)
+            except: pass
     
     if not content: return None
     
@@ -216,7 +228,9 @@ def get_audiobook_details(video_url, lang_code, genre, manual_level=None, max_re
         "id": f"yt_audio_{video_id}", "userId": "system_audiobook",
         "title": info.get('title', 'Unknown Title'), "language": lang_code,
         "content": full_text, "sentences": split_sentences(full_text),
-        "transcript": transcript, "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+        "transcript": transcript, 
+        # 🔥 PINNING LOGIC APPLIED HERE
+        "createdAt": get_automated_date(is_pinned=is_pinned),
         "imageUrl": info.get('thumbnail') or "", "type": "audio", 
         "videoUrl": f"https://www.youtube.com/watch?v={video_id}",
         "difficulty": manual_level or analyze_difficulty(full_text, info.get('title', '')),
@@ -225,30 +239,29 @@ def get_audiobook_details(video_url, lang_code, genre, manual_level=None, max_re
 
 # --- WORKFLOWS ---
 
-def process_and_upload(vid_url, lang_code, genre, level=None, series_data=None):
-    # Standardize ID generation
+def process_and_upload(vid_url, lang_code, genre, level=None, series_data=None, is_pinned=False):
     video_id = vid_url.split("v=")[-1]
     lesson_id = f"yt_audio_{video_id}"
 
     if is_duplicate(lesson_id):
-        print(f"      ⏭️  Skipped: {lesson_id} already exists in Firebase/Local.")
+        print(f"      ⏭️  Skipped: {lesson_id} exists.")
         return False
 
-    lesson = get_audiobook_details(vid_url, lang_code, genre, level)
+    lesson = get_audiobook_details(vid_url, lang_code, genre, level, is_pinned=is_pinned)
     if lesson:
         if series_data:
             lesson.update(series_data)
         try:
             db.collection(FIRESTORE_COLLECTION).document(lesson['id']).set(lesson)
-            print(f"      ☁️  Uploaded to Firebase: {lesson['title'][:30]}...")
+            print(f"      ☁️  Uploaded to Firebase ({'PINNED' if is_pinned else 'NORMAL'}): {lesson['title'][:30]}...")
             return True
         except Exception as e:
             print(f"      ❌ Upload error: {e}")
     return False
 
-def process_manual_link(url, lang_code, genre="manual", manual_level=None):
+def process_manual_link(url, lang_code, genre="manual", manual_level=None, is_pinned=False):
     if lang_code not in LANGUAGES: return print(f"❌ Lang '{lang_code}' not found.")
-    print(f"\n🎧 MANUAL AUDIO: {lang_code} | Link: {url}")
+    print(f"\n🎧 MANUAL AUDIO: {lang_code} | Link: {url} | Pinned: {is_pinned}")
     
     ydl_opts = {'extract_flat': True, 'quiet': True}
     videos = []
@@ -266,10 +279,10 @@ def process_manual_link(url, lang_code, genre="manual", manual_level=None):
         except: return print("❌ URL Error")
 
     for v in videos:
-        process_and_upload(v['url'], lang_code, genre, manual_level, v['series'])
+        process_and_upload(v['url'], lang_code, genre, manual_level, v['series'], is_pinned)
         time.sleep(1)
 
-def run_automated_scraping():
+def run_automated_scraping(is_pinned=False):
     for lang_code, lang_name in sorted(LANGUAGES.items()):
         print(f"\n--- AUDIO FEED: {lang_name} ---")
         queries = get_audiobook_queries(lang_code, lang_name)
@@ -282,7 +295,7 @@ def run_automated_scraping():
                 for entry in res.get('entries', []):
                     if not entry: continue
                     v_url = f"https://www.youtube.com/watch?v={entry['id']}"
-                    if process_and_upload(v_url, lang_code, genre):
+                    if process_and_upload(v_url, lang_code, genre, is_pinned=is_pinned):
                         added += 1; time.sleep(random.uniform(5, 10))
                         if added >= 3: break
 
@@ -292,12 +305,14 @@ def main():
     parser.add_argument("--lang", type=str)
     parser.add_argument("--genre", type=str, default="manual")
     parser.add_argument("--level", type=str)
+    parser.add_argument("--pinned", action="store_true", help="Pin to top (Year 2030)")
     args = parser.parse_args()
 
     if args.link:
         if not args.lang: sys.exit(print("❌ --lang required"))
-        process_manual_link(args.link, args.lang, args.genre, args.level)
-    else: run_automated_scraping()
+        process_manual_link(args.link, args.lang, args.genre, args.level, args.pinned)
+    else:
+        run_automated_scraping(args.pinned)
 
 if __name__ == "__main__":
     main()

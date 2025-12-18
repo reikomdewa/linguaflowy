@@ -8,9 +8,25 @@ import random
 import argparse
 import sys
 from yt_dlp.utils import DownloadError
+from datetime import datetime, timedelta
+
+# --- FIREBASE INTEGRATION ---
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+# Initialize Firebase
+try:
+    cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred)
+    db = firestore.client()
+    print("✅ Firebase initialized. Target collection: 'lessons'")
+except Exception as e:
+    print(f"❌ Firebase initialization failed: {e}")
+    sys.exit(1)
 
 # --- CONFIGURATION ---
-OUTPUT_DIR = "assets/youtube_audio_library"
+LOCAL_DATA_DIR = "assets/youtube_audio_library" # Used for duplicate checking only
+FIRESTORE_COLLECTION = "lessons"                # Unified collection
 
 # 1. FULL LANGUAGE LIST
 LANGUAGES = {
@@ -42,7 +58,6 @@ LANGUAGES = {
     'xsm': 'Kasem', 'yo': 'Yoruba', 'zne': 'Zande', 'zu': 'Zulu',
 }
 
-# 2. CURATED QUERIES
 CURATED_AUDIOBOOKS = {
     'es': [('Audiolibro español con texto', 'audiobook'), ('Spanish graded reader', 'audiobook'), ('Cuentos para dormir español', 'story')],
     'fr': [('Livre audio français avec texte', 'audiobook'), ('French graded reader', 'audiobook'), ('Le Petit Prince audio', 'classic')],
@@ -53,16 +68,52 @@ CURATED_AUDIOBOOKS = {
     'en': [('English audiobook with text', 'audiobook'), ('Sherlock Holmes audiobook', 'classic')],
 }
 
+# --- DATE CHEATING LOGIC ---
+
+def get_automated_date(is_pinned=False):
+    """
+    Pinned: Year 2030 (Top of list)
+    Normal: Year 2024 (Bottom of list)
+    """
+    year = 2030 if is_pinned else 2024
+    base_date = datetime(year, 1, 1)
+    # Add random offset (up to 30 days) to keep multiple uploads in a unique order
+    random_offset = random.randint(0, 2592000) 
+    final_date = base_date + timedelta(seconds=random_offset)
+    return final_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+
 # --- LOGGER ---
 class QuietLogger:
     def debug(self, msg): pass
     def warning(self, msg): pass
     def error(self, msg): print(msg)
 
+# --- DUPLICATE CHECKING ---
+
+def is_duplicate(lesson_id):
+    """Checks Firebase and then local files to see if document exists."""
+    # 1. Check Firebase (Unified 'lessons' collection)
+    try:
+        doc = db.collection(FIRESTORE_COLLECTION).document(lesson_id).get()
+        if doc.exists:
+            return True
+    except Exception: pass
+
+    # 2. Check Local Files (Read only from assets/youtube_audio_library)
+    if os.path.exists(LOCAL_DATA_DIR):
+        for file_path in glob.glob(os.path.join(LOCAL_DATA_DIR, "*.json")):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    local_lessons = json.load(f)
+                    if any(l.get('id') == lesson_id for l in local_lessons):
+                        return True
+            except: continue
+    return False
+
 # --- HELPERS ---
+
 def get_audiobook_queries(code, name):
-    if code in CURATED_AUDIOBOOKS:
-        return CURATED_AUDIOBOOKS[code]
+    if code in CURATED_AUDIOBOOKS: return CURATED_AUDIOBOOKS[code]
     return [
         (f"{name} language stories", 'story'), 
         (f"{name} language folktales", 'story'),
@@ -112,69 +163,44 @@ def analyze_difficulty(text, title):
     if avg_len > 6.0: return "advanced"
     return "intermediate"
 
-def save_lesson_to_file(lang_code, lesson):
-    filepath = os.path.join(OUTPUT_DIR, f"audiobooks_{lang_code}.json")
-    try:
-        existing_lessons = []
-        if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                existing_lessons = json.load(f)
-        if any(l['id'] == lesson['id'] for l in existing_lessons): return False
-        existing_lessons.insert(0, lesson)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(existing_lessons, f, ensure_ascii=False, indent=None)
-        return True
-    except Exception as e:
-        print(f"Error saving file: {e}")
-        return False
+# --- CORE LOGIC ---
 
-# --- CORE LOGIC WITH RETRY SYSTEM ---
-
-def get_audiobook_details(video_url, lang_code, genre, manual_level=None, max_retries=3):
+def get_audiobook_details(video_url, lang_code, genre, manual_level=None, max_retries=3, is_pinned=False):
     ydl_opts_base = {
         'skip_download': True, 'quiet': True, 'no_warnings': True,
-        'ignoreerrors': False, 'logger': QuietLogger(),
-        'socket_timeout': 40, 'retries': 10, 'nocheckcertificate': True,
+        'logger': QuietLogger(), 'socket_timeout': 40, 'retries': 10, 'nocheckcertificate': True,
     }
 
     info, found_sub_code, is_auto = None, None, False
 
-    # PHASE 1: INFO EXTRACTION
     for attempt in range(max_retries):
         try:
             with yt_dlp.YoutubeDL(ydl_opts_base) as ydl:
                 info = ydl.extract_info(video_url, download=False)
                 if info: break
-        except Exception as e:
-            if any(x in str(e).lower() for x in ["handshake", "timeout", "connection"]):
-                wait = (attempt + 1) * 6
-                print(f"    ⏳ SSL/Timeout during info extraction. Retrying in {wait}s... ({attempt+1}/{max_retries})")
-                time.sleep(wait)
-            else:
-                print(f"    ❌ Extraction error: {str(e)[:50]}")
-                return None
+        except Exception: time.sleep(5)
+    
     if not info: return None
 
     # Filter by duration
     duration = info.get('duration', 0)
     if duration < 120 or duration > (14400 if genre == 'manual' else 7200):
-        print(f"    ⚠️ Skipping duration: {duration}s")
+        print(f"      ⚠️ Duration filter skip: {duration}s")
         return None
 
-    # Subtitle Matching
-    for code, subs in info.get('subtitles', {}).items():
+    # Find Subtitles
+    manual_subs = info.get('subtitles', {})
+    for code in manual_subs:
         if code == lang_code or code.startswith(f"{lang_code}-"):
             found_sub_code = code; break
     if not found_sub_code:
-        for code, subs in info.get('automatic_captions', {}).items():
+        auto_subs = info.get('automatic_captions', {})
+        for code in auto_subs:
             if code == lang_code or code.startswith(f"{lang_code}-"):
                 found_sub_code = code; is_auto = True; break
     
-    if not found_sub_code:
-        print(f"    ⚠️ No '{lang_code}' subtitles found.")
-        return None
+    if not found_sub_code: return None
 
-    # PHASE 2: SUBTITLE DOWNLOAD
     video_id = info['id']
     temp_filename = f"temp_aud_{lang_code}_{video_id}"
     ydl_opts_dl = {
@@ -183,24 +209,16 @@ def get_audiobook_details(video_url, lang_code, genre, manual_level=None, max_re
     }
 
     content = None
-    for attempt in range(max_retries):
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts_dl) as ydl:
-                ydl.extract_info(video_url, download=True)
-                files = glob.glob(f"{temp_filename}*.vtt")
-                if files:
-                    with open(max(files, key=os.path.getsize), 'r', encoding='utf-8') as f: content = f.read()
-                    break
-        except Exception as e:
-            print(f"    ⚠️ Download error (Attempt {attempt+1}): {str(e)[:50]}...")
-            for f in glob.glob(f"{temp_filename}*"): os.remove(f)
-            if any(x in str(e).lower() for x in ["handshake", "timeout", "vtt"]):
-                time.sleep((attempt + 1) * 6); continue
-            return None
-
-    for f in glob.glob(f"{temp_filename}*"):
-        try: os.remove(f)
-        except: pass
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts_dl) as ydl:
+            ydl.extract_info(video_url, download=True)
+            files = glob.glob(f"{temp_filename}*.vtt")
+            if files:
+                with open(max(files, key=os.path.getsize), 'r', encoding='utf-8') as f: content = f.read()
+    finally:
+        for f in glob.glob(f"{temp_filename}*"):
+            try: os.remove(f)
+            except: pass
     
     if not content: return None
     
@@ -212,7 +230,9 @@ def get_audiobook_details(video_url, lang_code, genre, manual_level=None, max_re
         "id": f"yt_audio_{video_id}", "userId": "system_audiobook",
         "title": info.get('title', 'Unknown Title'), "language": lang_code,
         "content": full_text, "sentences": split_sentences(full_text),
-        "transcript": transcript, "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+        "transcript": transcript, 
+        # 🔥 PINNING LOGIC APPLIED HERE
+        "createdAt": get_automated_date(is_pinned=is_pinned),
         "imageUrl": info.get('thumbnail') or "", "type": "audio", 
         "videoUrl": f"https://www.youtube.com/watch?v={video_id}",
         "difficulty": manual_level or analyze_difficulty(full_text, info.get('title', '')),
@@ -221,76 +241,81 @@ def get_audiobook_details(video_url, lang_code, genre, manual_level=None, max_re
 
 # --- WORKFLOWS ---
 
-def process_manual_link(url, lang_code, genre="manual", manual_level=None):
-    if lang_code not in LANGUAGES: return print(f"❌ Lang code '{lang_code}' not found.")
-    print(f"\n🎧 MANUAL AUDIO: {lang_code} | Link: {url}")
+def process_and_upload(vid_url, lang_code, genre, level=None, series_data=None, is_pinned=False):
+    # Standardize ID generation
+    video_id = vid_url.split("v=")[-1]
+    lesson_id = f"yt_audio_{video_id}"
+
+    if is_duplicate(lesson_id):
+        print(f"      ⏭️  Skipped: {lesson_id} exists.")
+        return False
+
+    lesson = get_audiobook_details(vid_url, lang_code, genre, level, is_pinned=is_pinned)
+    if lesson:
+        if series_data:
+            lesson.update(series_data)
+        try:
+            db.collection(FIRESTORE_COLLECTION).document(lesson['id']).set(lesson)
+            print(f"      ☁️  Uploaded to Firebase ({'PINNED' if is_pinned else 'NORMAL'}): {lesson['title'][:30]}...")
+            return True
+        except Exception as e:
+            print(f"      ❌ Upload error: {e}")
+    return False
+
+def process_manual_link(url, lang_code, genre="manual", manual_level=None, is_pinned=False):
+    if lang_code not in LANGUAGES: return print(f"❌ Lang '{lang_code}' not found.")
+    print(f"\n🎧 MANUAL AUDIO: {lang_code} | Link: {url} | Pinned: {is_pinned}")
     
-    ydl_opts = {'extract_flat': True, 'quiet': True, 'logger': QuietLogger()}
+    ydl_opts = {'extract_flat': True, 'quiet': True}
     videos = []
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(url, download=False)
             if 'entries' in info:
                 for idx, e in enumerate(info['entries'], 1):
-                    if e: videos.append({'id': e['id'], 'seriesId': info.get('id'), 'seriesTitle': info.get('title'), 'seriesIndex': idx})
+                    if e: videos.append({
+                        'url': f"https://www.youtube.com/watch?v={e['id']}",
+                        'series': {'seriesId': info.get('id'), 'seriesTitle': info.get('title'), 'seriesIndex': idx}
+                    })
             else:
-                videos.append({'id': info['id'], 'seriesId': None, 'seriesTitle': None, 'seriesIndex': None})
-        except Exception as e: return print(f"❌ Extraction error: {e}")
+                videos.append({'url': url, 'series': None})
+        except: return print("❌ URL Error")
 
-    count = 0
-    for v_data in videos:
-        v_url = f"https://www.youtube.com/watch?v={v_data['id']}"
-        print(f"   ⏳ Checking: {v_url}")
-        lesson = get_audiobook_details(v_url, lang_code, genre, manual_level)
-        if lesson:
-            if v_data['seriesId']:
-                lesson.update({'seriesId': v_data['seriesId'], 'seriesTitle': v_data['seriesTitle'], 'seriesIndex': v_data['seriesIndex']})
-            if save_lesson_to_file(lang_code, lesson):
-                print(f"      ✅ Saved: {lesson['title'][:30]}..."); count += 1
-            else: print(f"      ⏭️  Duplicate.")
-        else: print(f"      🚫 Skipped (No subs/error).")
+    for v in videos:
+        process_and_upload(v['url'], lang_code, genre, manual_level, v['series'], is_pinned)
         time.sleep(1)
-    print(f"\n✅ Done. Added {count} items.")
 
-def run_automated_scraping():
+def run_automated_scraping(is_pinned=False):
     for lang_code, lang_name in sorted(LANGUAGES.items()):
-        filepath = os.path.join(OUTPUT_DIR, f"audiobooks_{lang_code}.json")
-        if os.path.exists(filepath):
-            with open(filepath, 'r') as f:
-                if len(json.load(f)) >= 12: continue
-
         print(f"\n--- AUDIO FEED: {lang_name} ---")
         queries = get_audiobook_queries(lang_code, lang_name)
-        random.shuffle(queries)
         added = 0
         for query, genre in queries:
             if added >= 3: break
-            print(f"  🔎 '{query}'")
-            with yt_dlp.YoutubeDL({'quiet': True, 'extract_flat': True, 'logger': QuietLogger()}) as ydl:
+            with yt_dlp.YoutubeDL({'quiet': True, 'extract_flat': True}) as ydl:
                 try: res = ydl.extract_info(f"ytsearch4:{query}", download=False)
                 except: continue
                 for entry in res.get('entries', []):
                     if not entry: continue
-                    l = get_audiobook_details(f"https://www.youtube.com/watch?v={entry['id']}", lang_code, genre)
-                    if l and save_lesson_to_file(lang_code, l):
-                        print(f"       ✅ Added: {l['title'][:30]}"); added += 1
-                        time.sleep(random.uniform(5, 10))
+                    v_url = f"https://www.youtube.com/watch?v={entry['id']}"
+                    if process_and_upload(v_url, lang_code, genre, is_pinned=is_pinned):
+                        added += 1; time.sleep(random.uniform(5, 10))
                         if added >= 3: break
-        time.sleep(5)
 
 def main():
-    if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
     parser = argparse.ArgumentParser()
     parser.add_argument("--link", type=str)
     parser.add_argument("--lang", type=str)
     parser.add_argument("--genre", type=str, default="manual")
     parser.add_argument("--level", type=str)
+    parser.add_argument("--pinned", action="store_true", help="Pin to top (Year 2030)")
     args = parser.parse_args()
 
     if args.link:
         if not args.lang: sys.exit(print("❌ --lang required"))
-        process_manual_link(args.link, args.lang, args.genre, args.level)
-    else: run_automated_scraping()
+        process_manual_link(args.link, args.lang, args.genre, args.level, args.pinned)
+    else:
+        run_automated_scraping(args.pinned)
 
 if __name__ == "__main__":
     main()

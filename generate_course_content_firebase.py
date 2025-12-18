@@ -8,6 +8,7 @@ import random
 import argparse
 import sys
 from yt_dlp.utils import DownloadError
+from datetime import datetime, timedelta
 
 # --- FIREBASE INTEGRATION ---
 import firebase_admin
@@ -72,6 +73,20 @@ CURATED_CONFIG = {
     'en': [('English short stories for learning', 'Stories'), ('VOA Learning English', 'News'), ('English idioms shorts', 'Bites'), ('English phrasal verbs explained', 'Grammar tips')],
 }
 
+# --- DATE CHEATING LOGIC ---
+
+def get_automated_date(is_pinned=False):
+    """
+    Pinned: Year 2030 (Top of list)
+    Normal: Year 2024 (Bottom of list)
+    """
+    year = 2030 if is_pinned else 2024
+    base_date = datetime(year, 1, 1)
+    # Add random offset (up to 30 days) to keep items in a unique order
+    random_offset = random.randint(0, 2592000) 
+    final_date = base_date + timedelta(seconds=random_offset)
+    return final_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+
 # --- LOGGER ---
 class QuietLogger:
     def debug(self, msg): pass
@@ -82,15 +97,12 @@ class QuietLogger:
 
 def is_duplicate(lesson_id):
     """Checks Firebase and then local files to see if document exists."""
-    # 1. Check Firebase (Unified 'lessons' collection)
     try:
         doc = db.collection(FIRESTORE_COLLECTION).document(lesson_id).get()
         if doc.exists:
             return True
-    except Exception as e:
-        print(f"      ⚠️ Firebase check error: {e}")
+    except Exception: pass
 
-    # 2. Check Local Files (Read only from assets/course_videos)
     if os.path.exists(LOCAL_DATA_DIR):
         for file_path in glob.glob(os.path.join(LOCAL_DATA_DIR, "*.json")):
             try:
@@ -148,7 +160,7 @@ def analyze_difficulty(transcript):
 
 # --- CORE LOGIC ---
 
-def get_video_details(video_url, lang_code, category, manual_level=None, max_retries=3):
+def get_video_details(video_url, lang_code, category, manual_level=None, is_pinned=False):
     ydl_opts_base = {
         'skip_download': True, 'quiet': True, 'no_warnings': True,
         'logger': QuietLogger(), 'socket_timeout': 40, 'retries': 10, 'nocheckcertificate': True,
@@ -156,12 +168,10 @@ def get_video_details(video_url, lang_code, category, manual_level=None, max_ret
 
     info, found_sub_code, is_auto = None, None, False
 
-    for attempt in range(max_retries):
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts_base) as ydl:
-                info = ydl.extract_info(video_url, download=False)
-                if info: break
-        except Exception: time.sleep(5)
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts_base) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+    except Exception: return None
     
     if not info: return None
 
@@ -169,7 +179,6 @@ def get_video_details(video_url, lang_code, category, manual_level=None, max_ret
     duration = info.get('duration', 0)
     min_dur, max_dur = DURATION_RULES.get(category, DURATION_RULES['Manual'])
     if not (min_dur <= duration <= max_dur):
-        print(f"      ⚠️ Duration filter skip: {duration}s")
         return None
 
     # Find Subtitles
@@ -199,9 +208,10 @@ def get_video_details(video_url, lang_code, category, manual_level=None, max_ret
             files = glob.glob(f"{temp_filename}*.vtt")
             if files:
                 with open(files[0], 'r', encoding='utf-8') as f: content = f.read()
-    except: pass
     finally:
-        for f in glob.glob(f"{temp_filename}*"): os.remove(f)
+        for f in glob.glob(f"{temp_filename}*"): 
+            try: os.remove(f)
+            except: pass
 
     if not content: return None
     
@@ -215,7 +225,8 @@ def get_video_details(video_url, lang_code, category, manual_level=None, max_ret
         "id": f"yt_{video_id}", "userId": "system_course",
         "title": info.get('title', 'Unknown Title'), "language": lang_code,
         "content": full_text, "sentences": split_sentences(full_text),
-        "transcript": transcript_data, "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+        "transcript": transcript_data, 
+        "createdAt": get_automated_date(is_pinned=is_pinned), # 🔥 Respects the pinned flag
         "imageUrl": info.get('thumbnail') or "", "type": type_map.get(category, 'video'), 
         "difficulty": manual_level or analyze_difficulty(transcript_data),
         "videoUrl": f"https://www.youtube.com/watch?v={video_id}",
@@ -224,29 +235,29 @@ def get_video_details(video_url, lang_code, category, manual_level=None, max_ret
 
 # --- WORKFLOWS ---
 
-def process_and_upload(vid_url, lang_code, category, level=None, series_data=None):
+def process_and_upload(vid_url, lang_code, category, level=None, series_data=None, is_pinned=False):
     video_id = vid_url.split("v=")[-1]
     lesson_id = f"yt_{video_id}"
 
     if is_duplicate(lesson_id):
-        print(f"      ⏭️  Skipped: {lesson_id} already exists in Firebase/Local.")
+        print(f"      ⏭️  Skipped: {lesson_id} exists.")
         return False
 
-    lesson = get_video_details(vid_url, lang_code, category, level)
+    lesson = get_video_details(vid_url, lang_code, category, level, is_pinned)
     if lesson:
         if series_data:
             lesson.update(series_data)
         try:
             db.collection(FIRESTORE_COLLECTION).document(lesson['id']).set(lesson)
-            print(f"      ☁️  Uploaded to Firebase: {lesson['title'][:30]}...")
+            print(f"      ☁️  Uploaded to Firebase ({'PINNED' if is_pinned else 'NORMAL'}): {lesson['title'][:30]}...")
             return True
         except Exception as e:
             print(f"      ❌ Upload error: {e}")
     return False
 
-def process_manual_link(url, lang_code, category="Manual", manual_level=None):
+def process_manual_link(url, lang_code, category="Manual", manual_level=None, is_pinned=False):
     if lang_code not in LANGUAGES: return print(f"❌ Lang '{lang_code}' not found.")
-    print(f"\n🖐️ MANUAL MODE: {lang_code} | Category: {category}")
+    print(f"\n🖐️ MANUAL MODE: {lang_code} | Category: {category} | Pinned: {is_pinned}")
 
     ydl_opts = {'extract_flat': True, 'quiet': True}
     videos = []
@@ -264,10 +275,10 @@ def process_manual_link(url, lang_code, category="Manual", manual_level=None):
         except: return print("❌ Invalid URL.")
 
     for v in videos:
-        process_and_upload(v['url'], lang_code, category, manual_level, v['series'])
+        process_and_upload(v['url'], lang_code, category, manual_level, v['series'], is_pinned)
         time.sleep(1)
 
-def run_automated_scraping():
+def run_automated_scraping(is_pinned=False):
     for lang_code, lang_name in sorted(LANGUAGES.items()):
         print(f"\n=== {lang_name} ({lang_code}) ===")
         queries = CURATED_CONFIG.get(lang_code, [ (f"{lang_name} stories", 'Stories'), (f"{lang_name} news", 'News') ])
@@ -280,7 +291,7 @@ def run_automated_scraping():
                 for entry in result.get('entries', []):
                     if not entry: continue
                     v_url = f"https://www.youtube.com/watch?v={entry['id']}"
-                    if process_and_upload(v_url, lang_code, category):
+                    if process_and_upload(v_url, lang_code, category, is_pinned=is_pinned):
                         added += 1; time.sleep(5)
                         if added >= 4: break
 
@@ -290,13 +301,14 @@ def main():
     parser.add_argument("--lang", type=str)
     parser.add_argument("--category", type=str, default="Manual")
     parser.add_argument("--level", type=str)
+    parser.add_argument("--pinned", action="store_true", help="Pin to top (Year 2030)")
     args = parser.parse_args()
 
     if args.link:
         if not args.lang: sys.exit(print("❌ --lang required"))
-        process_manual_link(args.link, args.lang, args.category, args.level)
+        process_manual_link(args.link, args.lang, args.category, args.level, args.pinned)
     else:
-        run_automated_scraping()
+        run_automated_scraping(args.pinned)
 
 if __name__ == "__main__":
     main()
