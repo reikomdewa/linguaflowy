@@ -131,6 +131,11 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   String? _selectedBaseForm;
   StreamSubscription? _vocabSubscription;
+  // XP Reward Constants
+static const int xpPerWordLookup = 5;
+static const int xpPerWordLearned = 20; // When status moves from 0 to > 0
+static const int xpPerMinuteRead = 2;   // Passive engagement
+static const int xpPerLessonComplete = 100;
   @override
   void initState() {
     super.initState();
@@ -334,7 +339,14 @@ class _ReaderScreenState extends State<ReaderScreen>
     _listeningTrackingTimer?.cancel();
     _listeningTrackingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _secondsListenedInSession++;
+
+       // Every 5 minutes (300 seconds), give a "Focus Bonus"
+    if (_secondsListenedInSession % 300 == 0) {
+       context.read<AuthBloc>().add(AuthUpdateXP(xpPerMinuteRead * 5));
+       _logActivitySession(5, xpPerMinuteRead * 5); // Log increments
+    }
     });
+    
   }
 
   void _stopListeningTracker() {
@@ -352,7 +364,8 @@ class _ReaderScreenState extends State<ReaderScreen>
 
       // 2. Update Stats in Database
       context.read<AuthBloc>().add(AuthIncrementLessonsCompleted());
-
+       context.read<AuthBloc>().add(AuthUpdateXP(xpPerLessonComplete));
+ _logActivitySession(0, xpPerLessonComplete); 
       // 3. Show Completion Screen
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -364,7 +377,16 @@ class _ReaderScreenState extends State<ReaderScreen>
       );
     }
   }
-
+void _showXpPop(int amount) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text("+$amount XP! 🔥"),
+      duration: Duration(milliseconds: 500),
+      behavior: SnackBarBehavior.floating,
+      width: 100,
+    ),
+  );
+}
   // --- PRO FIX: Stream Vocabulary ---
   void _startVocabularyStream() {
     final state = context.read<AuthBloc>().state;
@@ -1146,7 +1168,24 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _showLimitDialog() =>
       showDialog(context: context, builder: (c) => const PremiumLockDialog());
+Future<void> _logActivitySession(int minutes, int xpGained) async {
+  final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+  final dateId = DateTime.now().toIso8601String().split('T').first; // YYYY-MM-DD
 
+  final activityRef = FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.id)
+      .collection('activity_log')
+      .doc(dateId);
+
+  await activityRef.set({
+    'date': Timestamp.now(),
+    'totalMinutes': FieldValue.increment(minutes),
+    'totalXP': FieldValue.increment(xpGained),
+    'lastActive': FieldValue.serverTimestamp(),
+    'lessonsInteracted': FieldValue.arrayUnion([widget.lesson.id]),
+  }, SetOptions(merge: true));
+}
   Future<void> _updateWordStatus(
     String clean,
     String orig,
@@ -1174,7 +1213,15 @@ class _ReaderScreenState extends State<ReaderScreen>
     // Check local cache for the old status
     final existingItem = _vocabulary[clean];
     final int oldStatus = existingItem?.status ?? 0;
-
+     int xpGained = 0;
+  if (oldStatus == 0 && status > 0) {
+    xpGained += xpPerWordLearned;
+  } else if (status > oldStatus) {
+    // Award small XP for progressing a word status (e.g., from 1 to 2)
+    xpGained += 10;
+  }
+  // Award small XP just for looking up/translating
+  xpGained += xpPerWordLookup;
     // Keep existing date if valid.
     // If null AND we are moving from New(0) to Known(>0), set it to Now.
     DateTime? learnedAt = existingItem?.learnedAt;
@@ -1220,6 +1267,7 @@ class _ReaderScreenState extends State<ReaderScreen>
         .doc(clean)
         .set({
           'status': status,
+          'xpGained': FieldValue.increment(xpGained),
           'translation': trans,
           'lastReviewed': FieldValue.serverTimestamp(),
           // Save the learnedAt field calculated above

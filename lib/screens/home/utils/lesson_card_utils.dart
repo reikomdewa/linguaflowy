@@ -1,6 +1,7 @@
 /// Filters the list so that only ONE video from a specific series/playlist appears.
 /// Takes the first occurrence (which is usually the newest if sorted by date).
 /// import 'dart:convert';
+library;
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -36,7 +37,7 @@ void showPlaylistBottomSheet(
   // 2. THE CHEAT: FORCE START AT PART 1
   // We try to find the current lesson.
   int selectedPlaylistIndex = playlist.indexWhere(
-    (l) => (l.id?.toString().trim() == currentLesson.id?.toString().trim()),
+    (l) => (l.id.toString().trim() == currentLesson.id.toString().trim()),
   );
 
   // BUG FIX: If it selected the LAST item (likely your parsing bug) or nothing (-1),
@@ -508,11 +509,13 @@ void showReportBugDialog(
 
               try {
                 final info = await DeviceInfoPlugin().deviceInfo;
-                if (info is AndroidDeviceInfo)
+                if (info is AndroidDeviceInfo) {
                   deviceInfo =
                       "${info.brand} ${info.model} (SDK ${info.version.sdkInt})";
-                if (info is IosDeviceInfo)
+                }
+                if (info is IosDeviceInfo) {
                   deviceInfo = "${info.name} (${info.systemVersion})";
+                }
                 final pkg = await PackageInfo.fromPlatform();
                 appVersion = "${pkg.version} (${pkg.buildNumber})";
               } catch (_) {}

@@ -2,16 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:linguaflow/blocs/auth/auth_bloc.dart';
-import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
-import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/constants/constants.dart';
 import 'package:linguaflow/utils/logger.dart';
-import 'package:linguaflow/utils/playlist_helper_functions.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 

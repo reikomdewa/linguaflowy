@@ -54,7 +54,7 @@ class LeaderboardTab extends StatelessWidget {
       case 0: return const Color(0xFFFFD700); // Gold
       case 1: return const Color(0xFFC0C0C0); // Silver
       case 2: return const Color(0xFFCD7F32); // Bronze
-      default: return Colors.grey.withValues(alpha: 0.5);
+      default: return Colors.blueGrey.withOpacity(0.2);
     }
   }
 
@@ -63,7 +63,6 @@ class LeaderboardTab extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: StreamBuilder<QuerySnapshot>(
-        // Only users with the 'xp' field will appear here due to Firestore indexing rules
         stream: FirebaseFirestore.instance
             .collection('users')
             .orderBy('xp', descending: true)
@@ -71,7 +70,7 @@ class LeaderboardTab extends StatelessWidget {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text("Error loading leaderboard: ${snapshot.error}"));
+            return Center(child: Text("Error: ${snapshot.error}"));
           }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -79,75 +78,96 @@ class LeaderboardTab extends StatelessWidget {
 
           final docs = snapshot.data!.docs;
           if (docs.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.leaderboard, size: 50, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text("No users with XP found yet."),
-                ],
-              ),
-            );
+            return const Center(child: Text("No users found."));
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
             itemCount: docs.length,
-            separatorBuilder: (ctx, i) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final doc = docs[index];
               final data = doc.data() as Map<String, dynamic>;
               
+              // --- DATA EXTRACTION ---
               final name = data['displayName'] ?? 'Unknown';
               final email = data['email'] ?? 'No Email';
               final xp = (data['xp'] as num?)?.toInt() ?? 0;
               final isPremium = data['isPremium'] == true;
+              
+              // New Stats
+              final streak = (data['streakDays'] as num?)?.toInt() ?? 0;
+              final mins = (data['totalListeningMinutes'] as num?)?.toInt() ?? 0;
+              final lessons = (data['lessonsCompleted'] as num?)?.toInt() ?? 0;
+              final curLang = (data['currentLanguage'] ?? '--').toString().toUpperCase();
+              
+              // Get current level for current language
+              final levels = data['languageLevels'] as Map<String, dynamic>? ?? {};
+              final levelName = levels[data['currentLanguage']] ?? 'A1';
 
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                // Rank Badge
-                leading: CircleAvatar(
-                  backgroundColor: _getRankColor(index),
-                  foregroundColor: index < 3 ? Colors.white : Colors.white,
-                  child: Text(
-                    "#${index + 1}", 
-                    style: const TextStyle(fontWeight: FontWeight.bold)
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                elevation: 0,
+                color: Colors.white.withOpacity(0.05),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: Colors.white10)),
+                child: ExpansionTile(
+                  shape: const RoundedRectangleBorder(side: BorderSide.none),
+                  collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
+                  leading: CircleAvatar(
+                    backgroundColor: _getRankColor(index),
+                    child: Text("#${index + 1}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
-                ),
-                // User Info
-                title: Row(
+                  title: Row(
+                    children: [
+                      Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                      if (isPremium) const Icon(Icons.verified, size: 16, color: Colors.amber),
+                    ],
+                  ),
+                  subtitle: Text("$xp XP", style: TextStyle(color: Colors.blueAccent.shade100, fontWeight: FontWeight.w600)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.edit_note, color: Colors.grey),
+                    onPressed: () => _adjustScore(context, doc.id, xp, name),
+                  ),
                   children: [
-                    Flexible(child: Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold))),
-                    if (isPremium) 
-                      const Padding(
-                        padding: EdgeInsets.only(left: 6.0),
-                        child: Icon(Icons.star, size: 14, color: Colors.amber),
-                      )
-                  ],
-                ),
-                subtitle: Text(email, maxLines: 1, overflow: TextOverflow.ellipsis),
-                // XP & Edit Button
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Column(
+                        children: [
+                          const Divider(color: Colors.white10),
+                          const SizedBox(height: 8),
+                          // Stats Grid
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildMiniStat(Icons.local_fire_department, "$streak Days", "Streak", Colors.orange),
+                              _buildMiniStat(Icons.headset, "${mins}m", "Listened", Colors.purpleAccent),
+                              _buildMiniStat(Icons.task_alt, "$lessons", "Lessons", Colors.green),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          // Language Info
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.black26,
+                              borderRadius: BorderRadius.circular(10)
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.translate, size: 18, color: Colors.grey),
+                                const SizedBox(width: 8),
+                                Text("Learning: $curLang", style: const TextStyle(color: Colors.white70)),
+                                const Spacer(),
+                                Text(levelName, style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text("Contact: $email", style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                          )
+                        ],
                       ),
-                      child: Text(
-                        "$xp XP", 
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 20),
-                      tooltip: "Moderate Score",
-                      onPressed: () => _adjustScore(context, doc.id, xp, name),
                     ),
                   ],
                 ),
@@ -156,6 +176,17 @@ class LeaderboardTab extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildMiniStat(IconData icon, String value, String label, Color color) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+      ],
     );
   }
 }

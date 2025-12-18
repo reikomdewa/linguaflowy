@@ -47,8 +47,9 @@ class HomeFeedCacheService {
       final Map<String, dynamic> data = jsonDecode(content);
 
       if ((data['version'] ?? 0) != _currentCacheVersion) return [];
-      if (data['userId'] != userId || data['language'] != languageCode)
+      if (data['userId'] != userId || data['language'] != languageCode) {
         return [];
+      }
 
       final List<dynamic> jsonList = data['lessons'] ?? [];
 

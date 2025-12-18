@@ -205,23 +205,23 @@ String? _encodeQueryParameters(Map<String, String> params) {
               ),
               const SizedBox(height: 20),
               
-              // 1. PAYPAL DIRECT
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.paypal, color: Colors.white),
-                  label: const Text("Instant Unlock (\$9.99)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF003087), // PayPal Blue
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const PremiumPurchaseScreen()));
-                  },
-                ),
-              ),
+              // // 1. PAYPAL DIRECT
+              // SizedBox(
+              //   width: double.infinity,
+              //   child: ElevatedButton.icon(
+              //     icon: const Icon(Icons.paypal, color: Colors.white),
+              //     label: const Text("Instant Unlock (\$9.99)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              //     style: ElevatedButton.styleFrom(
+              //       backgroundColor: const Color(0xFF003087), // PayPal Blue
+              //       padding: const EdgeInsets.symmetric(vertical: 12),
+              //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              //     ),
+              //     onPressed: () {
+              //       Navigator.pop(context);
+              //       Navigator.push(context, MaterialPageRoute(builder: (context) => const PremiumPurchaseScreen()));
+              //     },
+              //   ),
+              // ),
 
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16.0),
@@ -240,7 +240,7 @@ String? _encodeQueryParameters(Map<String, String> params) {
                 controller: _controller,
                 style: TextStyle(color: textColor),
                 decoration: InputDecoration(
-                  labelText: "Enter License Key / Promo Code",
+                  labelText: "Enter  Key / Promo Code",
                   labelStyle: const TextStyle(color: Colors.grey),
                   border: const OutlineInputBorder(),
                   errorText: _error,

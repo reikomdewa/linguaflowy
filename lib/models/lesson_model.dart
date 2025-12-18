@@ -187,9 +187,9 @@ class LessonModel {
   LessonModel mergeSystemData(LessonModel systemLesson) {
     return copyWith(
       // Keep User Progress/State
-      progress: this.progress,
-      isFavorite: this.isFavorite,
-      createdAt: this.createdAt, // Keep user's start date
+      progress: progress,
+      isFavorite: isFavorite,
+      createdAt: createdAt, // Keep user's start date
       
       // Update Content/Metadata from System (The fresh stuff)
       title: systemLesson.title,

@@ -5,99 +5,9 @@ import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/auth_service.dart';
 import 'package:linguaflow/utils/logger.dart';
 
-// ==========================================
-// EVENTS
-// ==========================================
-abstract class AuthEvent {}
+part 'auth_event.dart';
+part 'auth_state.dart';
 
-class AuthCheckRequested extends AuthEvent {}
-
-class AuthLoginRequested extends AuthEvent {
-  final String email;
-  final String password;
-  AuthLoginRequested(this.email, this.password);
-}
-
-class AuthGoogleLoginRequested extends AuthEvent {}
-
-class AuthRegisterRequested extends AuthEvent {
-  final String email;
-  final String password;
-  final String displayName;
-  AuthRegisterRequested(this.email, this.password, this.displayName);
-}
-
-class AuthResetPasswordRequested extends AuthEvent {
-  final String email;
-  AuthResetPasswordRequested(this.email);
-}
-
-class AuthResendVerificationEmail extends AuthEvent {
-  final String email;
-  final String password;
-  AuthResendVerificationEmail(this.email, this.password);
-}
-
-class AuthLogoutRequested extends AuthEvent {}
-
-class AuthTargetLanguageChanged extends AuthEvent {
-  final String languageCode;
-  AuthTargetLanguageChanged(this.languageCode);
-}
-
-class AuthLanguageLevelChanged extends AuthEvent {
-  final String level;
-  AuthLanguageLevelChanged(this.level);
-}
-
-class AuthUpdateUser extends AuthEvent {
-  final String? nativeLanguage;
-  final List<String>? targetLanguages;
-  final String? displayName;
-
-  AuthUpdateUser({this.nativeLanguage, this.targetLanguages, this.displayName});
-}
-
-class AuthDeleteAccount extends AuthEvent {}
-
-// --- NEW EVENTS FOR STATS ---
-class AuthUpdateListeningTime extends AuthEvent {
-  final int minutesToAdd;
-  AuthUpdateListeningTime(this.minutesToAdd);
-}
-
-class AuthIncrementLessonsCompleted extends AuthEvent {}
-
-// ==========================================
-// STATES
-// ==========================================
-abstract class AuthState {}
-
-class AuthInitial extends AuthState {}
-
-class AuthLoading extends AuthState {}
-
-class AuthAuthenticated extends AuthState {
-  final UserModel user;
-  AuthAuthenticated(this.user);
-}
-
-class AuthUnauthenticated extends AuthState {}
-
-class AuthError extends AuthState {
-  final String message;
-  final bool isVerificationError;
-  AuthError(this.message, {this.isVerificationError = false});
-}
-
-class AuthMessage extends AuthState {
-  final String message;
-  AuthMessage(this.message);
-}
-
-// ==========================================
-// BLOC
-// ==========================================
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthService authService;
   DateTime? _lastEmailSentTime;
@@ -118,6 +28,35 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     // New Handlers
     on<AuthUpdateListeningTime>(_onAuthUpdateListeningTime);
     on<AuthIncrementLessonsCompleted>(_onAuthIncrementLessonsCompleted);
+    on<AuthUpdateXP>(_onAuthUpdateXP);
+  }
+  Future<void> _onAuthUpdateXP(
+    AuthUpdateXP event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
+
+      // 1. Calculate new total locally
+      // (Assumes your UserModel has an 'xp' field as seen in your Firestore screenshot)
+      final int newXp = ((currentUser.xp) + event.xpToAdd).toInt();
+
+      // 2. Update local state immediately so the UI reflects the gain
+      final updatedUser = currentUser.copyWith(xp: newXp);
+      emit(AuthAuthenticated(updatedUser));
+
+      // 3. Persist to Firestore
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.id)
+            .update({'xp': FieldValue.increment(event.xpToAdd)});
+      } catch (e) {
+        printLog("Error updating XP in Firestore: $e");
+        // We don't necessarily want to emit an error state here because
+        // the user is still authenticated and the local state is updated.
+      }
+    }
   }
 
   // --- STREAK CALCULATION LOGIC ---
