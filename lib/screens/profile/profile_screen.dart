@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
 import 'package:linguaflow/screens/profile/widgets/profile_data_exporter.dart';
+import 'package:linguaflow/services/home_feed_cache_service.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 
 // Local Imports (Ensure these files exist in the same folder or adjust paths)
@@ -250,8 +251,10 @@ class ProfileScreen extends StatelessWidget {
 
           // --- 7. LOGOUT ---
           ElevatedButton.icon(
-            onPressed: () {
+            onPressed: () async {
               context.read<AuthBloc>().add(AuthLogoutRequested());
+               await HomeFeedCacheService().clearAllCache();
+    // await LessonCacheService().removeLesson(...);
             },
             icon: const Icon(Icons.logout),
             label: const Text('Logout'),

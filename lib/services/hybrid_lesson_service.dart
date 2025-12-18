@@ -92,14 +92,15 @@ class HybridLessonService {
     String languageCode,
     String categoryType, {
     LessonModel? lastLesson,
-    int limit = 10,
+    int limit = 20, // Increased default limit
   }) async {
     List<String> targetUserIds;
 
-    if (categoryType == 'immersion') {
+    // Mapping UI Category -> Database User IDs
+    if (categoryType == 'immersion' || categoryType == 'video') {
       targetUserIds = ['system_native'];
-    } else if (categoryType == 'guided') {
-      targetUserIds = ['system'];
+    } else if (categoryType == 'standard' || categoryType == 'guided') {
+      targetUserIds = ['system', 'system_course'];
     } else if (categoryType == 'audio') {
       targetUserIds = ['system_librivox', 'system_audiobook'];
     } else if (categoryType == 'book') {
@@ -108,8 +109,6 @@ class HybridLessonService {
         'system_beginner',
         'system_storybooks',
       ];
-    } else if (categoryType == 'story') {
-      targetUserIds = ['system_storybooks'];
     } else {
       targetUserIds = ['system'];
     }
@@ -120,16 +119,15 @@ class HybridLessonService {
           .where('language', isEqualTo: languageCode)
           .where('userId', whereIn: targetUserIds);
 
-      if (categoryType == 'immersion') {
-        query = query.where('type', isEqualTo: 'video');
-      } else if (categoryType == 'book' || categoryType == 'story') {
-        query = query.where('type', isEqualTo: 'text');
-      }
-
       query = query.orderBy('createdAt', descending: true);
 
       if (lastLesson != null) {
-        query = query.startAfter([Timestamp.fromDate(lastLesson.createdAt)]);
+        // 🔥 THE FIX: Python uses ISO Strings. We MUST use a String for the cursor.
+        // We also ensure we aren't passing a "local" ID that doesn't exist in DB
+        final String lastDateString = lastLesson.createdAt
+            .toUtc()
+            .toIso8601String();
+        query = query.startAfter([lastDateString]);
       }
 
       final snapshot = await query.limit(limit).get();
@@ -137,11 +135,14 @@ class HybridLessonService {
       return snapshot.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
-        String foundUserId = data['userId'] ?? targetUserIds.first;
-        return _mapJsonToLesson(data, languageCode, foundUserId);
+        return _mapJsonToLesson(
+          data,
+          languageCode,
+          data['userId'] ?? targetUserIds.first,
+        );
       }).toList();
     } catch (e) {
-      printLog("Pagination Error ($categoryType): $e");
+      print("🔥 Firestore Pagination Error: $e");
       return [];
     }
   }
@@ -201,13 +202,13 @@ class HybridLessonService {
       return [];
     }
   }
-Future<List<LessonModel>> _loadFromFirestore(
+
+  Future<List<LessonModel>> _loadFromFirestore(
     String languageCode,
     List<String> userIds, {
-    int limit = 20,
+    int limit = 100, // Increased limit to see 2030 lessons better
   }) async {
     try {
-      // 1. Ensure userIds isn't empty (Firestore throws if whereIn is empty)
       if (userIds.isEmpty) return [];
 
       final snapshot = await _firestore
@@ -219,28 +220,34 @@ Future<List<LessonModel>> _loadFromFirestore(
           .get();
 
       List<LessonModel> lessons = [];
-      
+
       for (var doc in snapshot.docs) {
         try {
           final data = doc.data();
-          data['id'] = doc.id;
-          lessons.add(_mapJsonToLesson(data, languageCode, data['userId'] ?? userIds.first));
+          // DO NOT print(data) or printLog(data) here!
+          // Printing the raw map is what causes the Stack Overflow.
+
+          final lesson = _mapJsonToLesson(
+            data,
+            languageCode,
+            data['userId'] ?? userIds.first,
+          );
+
+          lessons.add(lesson);
         } catch (e) {
-          // This tells you exactly which lesson is "dirty" and causing the crash
-          printLog("❌ CRASH parsing lesson ${doc.id}: $e");
-          continue; // Skip the bad lesson, show the rest
+          continue;
         }
       }
       return lessons;
     } catch (e) {
-      printLog("🔥 FIRESTORE QUERY ERROR: $e");
+      // Use a simple string for the error to avoid Stack Overflow
+      print("🔥 FIRESTORE ERROR: Query failed for $userIds");
       return [];
     }
   }
-
   // 2. UPDATE YOUR MERGE LOGIC
-  // In LessonRepository, your getAndSyncLessons currently trusts systemLessons (Local) 
-  // to be the "Base". If the local JSON is old and the Firebase is new, 
+  // In LessonRepository, your getAndSyncLessons currently trusts systemLessons (Local)
+  // to be the "Base". If the local JSON is old and the Firebase is new,
   // we should prioritize Firebase metadata if the IDs match.
 
   // ===========================================================================
@@ -251,48 +258,57 @@ Future<List<LessonModel>> _loadFromFirestore(
     String languageCode,
     String defaultUserId,
   ) {
+    // 1. Safe ID generation
     final id =
         jsonItem['id']?.toString() ??
         'unknown_${DateTime.now().millisecondsSinceEpoch}';
 
-    String? mediaUrl = jsonItem['videoUrl']?.toString();
-    if (mediaUrl == null || mediaUrl.isEmpty) {
-      mediaUrl = jsonItem['audioUrl']?.toString();
-    }
+    // 2. Safe Media URL Handling (Check both possible names)
+    String? mediaUrl =
+        jsonItem['videoUrl']?.toString() ?? jsonItem['audioUrl']?.toString();
+    if (mediaUrl != null && mediaUrl.isEmpty) mediaUrl = null;
 
     return LessonModel(
       id: id,
-      userId: jsonItem['userId'] ?? defaultUserId,
-      title: jsonItem['title'] ?? 'Untitled',
-      language: jsonItem['language'] ?? languageCode,
-      content: jsonItem['content'] ?? '',
+      userId: jsonItem['userId']?.toString() ?? defaultUserId,
+      title: jsonItem['title']?.toString() ?? 'Untitled Lesson',
+      language: jsonItem['language']?.toString() ?? languageCode,
+      content: jsonItem['content']?.toString() ?? '',
+
+      // 3. Safe List Handling (Prevents crash if sentences is null)
       sentences:
           (jsonItem['sentences'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
+
+      // 4. Safe Transcript Handling
       transcript:
           (jsonItem['transcript'] as List<dynamic>?)
-              ?.map((e) => TranscriptLine.fromMap(e))
+              ?.map((e) => TranscriptLine.fromMap(e as Map<String, dynamic>))
               .toList() ??
           [],
-      createdAt: _parseDate(jsonItem['createdAt']),
-      imageUrl: jsonItem['imageUrl'],
-      type: jsonItem['type'] ?? 'text',
-      difficulty: jsonItem['difficulty'] ?? 'intermediate',
-      videoUrl: mediaUrl,
-      isFavorite: jsonItem['isFavorite'] ?? false,
-      progress: jsonItem['progress'] ?? 0,
-      genre: jsonItem['genre'] ?? 'general',
 
-      // ✅ ADDED THESE LINES TO MAP PLAYLIST DATA ✅
+      createdAt: _parseDate(jsonItem['createdAt']),
+      imageUrl: jsonItem['imageUrl']?.toString() ?? "",
+      type: jsonItem['type']?.toString() ?? 'video',
+      difficulty: jsonItem['difficulty']?.toString() ?? 'intermediate',
+      videoUrl: mediaUrl,
+      isFavorite: jsonItem['isFavorite'] == true, // Explicit boolean check
+      progress: (jsonItem['progress'] is num)
+          ? (jsonItem['progress'] as num).toInt()
+          : 0,
+      // 5. Safe Playlist Data (The likely culprit "2")
+      // We use tryParse and nullable types to ensure no crash here
       seriesId: jsonItem['seriesId']?.toString(),
       seriesTitle: jsonItem['seriesTitle']?.toString(),
-      seriesIndex: int.tryParse(jsonItem['seriesIndex']?.toString() ?? ''),
+      seriesIndex: jsonItem['seriesIndex'] != null
+          ? int.tryParse(jsonItem['seriesIndex'].toString())
+          : null,
     );
   }
 
- DateTime _parseDate(dynamic date) {
+  DateTime _parseDate(dynamic date) {
     try {
       if (date == null) return DateTime.now();
       if (date is Timestamp) return date.toDate();

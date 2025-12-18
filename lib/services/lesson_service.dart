@@ -5,11 +5,11 @@ import 'package:linguaflow/utils/logger.dart';
 class LessonService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // --- 1. INITIAL FETCH (With Crash Protection) ---
+  // --- 1. INITIAL FETCH (Original method kept and fixed) ---
   Future<List<LessonModel>> getLessons(
     String userId,
     String languageCode, {
-    int limit = 20, // <--- ADDED: Defaults to 20 to prevent OOM Crash
+    int limit = 20,
   }) async {
     try {
       final snapshot = await _firestore
@@ -17,7 +17,7 @@ class LessonService {
           .where('userId', isEqualTo: userId)
           .where('language', isEqualTo: languageCode)
           .orderBy('createdAt', descending: true)
-          .limit(limit) // <--- CRITICAL: Limits download size
+          .limit(limit)
           .get();
 
       return snapshot.docs
@@ -29,21 +29,24 @@ class LessonService {
     }
   }
 
-  // --- 2. PAGINATION FETCH (Load More) ---
+  // --- 2. PAGINATION FETCH (Fixed for String-based dates from Python) ---
   Future<List<LessonModel>> getMoreLessons(
     String userId,
     String languageCode,
-    LessonModel lastLesson, { // The last lesson currently on screen
+    LessonModel lastLesson, {
     int limit = 20,
   }) async {
     try {
+      // Since Python saves 'createdAt' as a String, we must use the String 
+      // format in startAfter to match the Firestore index.
+      final String lastDateString = lastLesson.createdAt.toUtc().toIso8601String();
+
       final snapshot = await _firestore
           .collection('lessons')
           .where('userId', isEqualTo: userId)
           .where('language', isEqualTo: languageCode)
           .orderBy('createdAt', descending: true)
-          // Tell Firestore to start AFTER the date of the last lesson we have
-          .startAfter([Timestamp.fromDate(lastLesson.createdAt)])
+          .startAfter([lastDateString]) 
           .limit(limit)
           .get();
 
@@ -56,7 +59,37 @@ class LessonService {
     }
   }
 
-  // --- CRUD OPERATIONS (Unchanged) ---
+  // --- 3. UNIFIED FETCH (New: Loads User + System Content for 2024/2030 visibility) ---
+  Future<List<LessonModel>> getMoreUnifiedLessons(
+    List<String> userIds,
+    String languageCode,
+    LessonModel lastLesson, {
+    int limit = 20,
+  }) async {
+    try {
+      if (userIds.isEmpty) return [];
+
+      final String lastDateString = lastLesson.createdAt.toUtc().toIso8601String();
+
+      final snapshot = await _firestore
+          .collection('lessons')
+          .where('language', isEqualTo: languageCode)
+          .where('userId', whereIn: userIds)
+          .orderBy('createdAt', descending: true)
+          .startAfter([lastDateString])
+          .limit(limit)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => LessonModel.fromMap(doc.data(), doc.id))
+          .toList();
+    } catch (e) {
+      printLog("Firestore Error (Unified Pagination): $e");
+      return [];
+    }
+  }
+
+  // --- 4. CRUD OPERATIONS ---
 
   Future<void> createLesson(LessonModel lesson) async {
     try {
@@ -88,6 +121,8 @@ class LessonService {
     }
   }
 
+  // --- 5. HELPER METHODS (Restored splitIntoSentences) ---
+
   List<String> splitIntoSentences(String text) {
     return text
         .split(RegExp(r'(?<=[.!?])\s+'))
@@ -96,7 +131,7 @@ class LessonService {
         .toList();
   }
 
-  // --- PAGINATION FOR GENRES ---
+  // --- 6. PAGINATION FOR GENRES ---
   Future<List<LessonModel>> fetchPagedGenreLessons(
     String languageCode,
     String genreKey,
@@ -104,17 +139,17 @@ class LessonService {
     int limit = 10,
   }) async {
     try {
-      // Look for videos in this language with the specific genre
       var query = _firestore
           .collection('lessons')
           .where('language', isEqualTo: languageCode)
-          .where('genre', isEqualTo: genreKey) // Strict genre match
-          // We generally only want system/native videos in feeds, not user created ones
-          .where('userId', whereIn: ['system', 'system_native'])
+          .where('genre', isEqualTo: genreKey)
+          .where('userId', whereIn: ['system', 'system_native', 'system_course', 'system_audiobook'])
           .orderBy('createdAt', descending: true);
 
       if (lastLesson != null) {
-        query = query.startAfter([Timestamp.fromDate(lastLesson.createdAt)]);
+        // Use ISO String cursor for Python-generated data
+        final String lastDateString = lastLesson.createdAt.toUtc().toIso8601String();
+        query = query.startAfter([lastDateString]);
       }
 
       final snapshot = await query.limit(limit).get();
@@ -124,7 +159,6 @@ class LessonService {
       }).toList();
     } catch (e) {
       printLog("Genre Fetch Error ($genreKey): $e");
-      // You will likely need to create an Index link from the console for this to work
       return [];
     }
   }

@@ -161,26 +161,27 @@ class LessonRepository {
   // ==========================================================
 
   /// Call this when the user scrolls to the bottom of the main feed
-  Future<List<LessonModel>> fetchMoreUserLessons(
+ // Inside LessonRepository.dart
+Future<List<LessonModel>> fetchMoreUserLessons(
     String userId,
     String languageCode,
     LessonModel lastLesson, {
     int limit = 20,
   }) async {
-    // We only paginate Cloud lessons. Local lessons are assumed to be loaded.
-    if (lastLesson.isLocal) {
-      return [];
-    }
+    
+    // 🔥 CHANGE: Create a list of all IDs we want to paginate
+    final targetIds = [userId, 'system', 'system_course', 'system_native'];
 
     try {
-      return await _firestoreService.getMoreLessons(
-        userId,
+      // We call a new unified method instead of the user-only one
+      return await _firestoreService.getMoreUnifiedLessons(
+        targetIds,
         languageCode,
         lastLesson,
         limit: limit,
       );
     } catch (e) {
-      printLog("Error fetching more lessons: $e");
+      printLog("Error fetching more unified lessons: $e");
       return [];
     }
   }

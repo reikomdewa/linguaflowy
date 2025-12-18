@@ -9,8 +9,10 @@ abstract class LessonEvent extends Equatable {
 class LessonLoadRequested extends LessonEvent {
   final String userId;
   final String languageCode;
+    final bool forceRefresh; 
+
   
-  LessonLoadRequested(this.userId, this.languageCode);
+  LessonLoadRequested(this.userId, this.languageCode,  {this.forceRefresh = false} );
 
   @override
   List<Object?> get props => [userId, languageCode];

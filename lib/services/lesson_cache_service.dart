@@ -4,6 +4,8 @@ import 'package:linguaflow/models/lesson_model.dart';
 
 class LessonCacheService {
   static const String _prefix = 'lesson_cache_';
+  // Inside HomeFeedCacheService (or LessonCacheService)
+
 
   // Singleton instance
   static final LessonCacheService _instance = LessonCacheService._internal();

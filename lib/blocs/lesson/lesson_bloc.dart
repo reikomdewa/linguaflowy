@@ -1,6 +1,8 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
-import 'package:linguaflow/services/gemini_service.dart'; 
+import 'package:linguaflow/services/gemini_service.dart';
+import 'package:linguaflow/utils/logger.dart'; 
 import 'lesson_event.dart';
 import 'lesson_state.dart';
 
@@ -38,45 +40,59 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
     LessonLoadRequested event,
     Emitter<LessonState> emit,
   ) async {
-    // 1. Show Loading initially (only if we have no data)
-    // OR: Emit Cached Data immediately if available
-    
     _currentUserId = event.userId;
     _currentLanguageCode = event.languageCode;
 
-    // STEP A: Try to load Cache fast
-    final cachedLessons = await _lessonRepository.getCachedLessons(event.userId, event.languageCode);
-    
-    if (cachedLessons.isNotEmpty) {
-      // 🚀 INSTANTLY SHOW CACHED CONTENT
-      emit(LessonLoaded(
-        cachedLessons,
-        hasReachedMax: false,
-      ));
-    } else {
-      // Only show spinner if cache is empty
-      emit(LessonLoading());
-    }
+    List<LessonModel> cachedLessons = [];
 
-    try {
-      // STEP B: Fetch Fresh Data (Network + System)
-      final freshLessons = await _lessonRepository.getAndSyncLessons(
+    // --- 1. THE "FORCE REFRESH" CHECK ---
+    if (event.forceRefresh) {
+      // If we are forcing a refresh, skip cache and show loading spinner immediately
+      emit(LessonLoading());
+    } else {
+      // STEP A: Try to load Cache fast
+      cachedLessons = await _lessonRepository.getCachedLessons(
         event.userId, 
         event.languageCode
       );
       
-      // STEP C: Replace Cache with Fresh Data
+      if (cachedLessons.isNotEmpty) {
+        // 🚀 INSTANTLY SHOW CACHED CONTENT (Fast UX)
+        emit(LessonLoaded(
+          cachedLessons,
+          hasReachedMax: false,
+        ));
+      } else {
+        // Only show spinner if cache is empty
+        emit(LessonLoading());
+      }
+    }
+
+    try {
+      // --- 2. THE "SELF-HEALING" SYNC STEP ---
+      // This step fetches from Firestore, merges with system content, 
+      // and re-caches the result.
+      final freshLessons = await _lessonRepository.getAndSyncLessons(
+        event.userId, 
+        event.languageCode
+      );
+// PRINT THIS
+print("🔍 FIRST LESSON DATE: ${freshLessons.first.title} - ${freshLessons.first.createdAt}");
+      // STEP C: Replace Cache/State with Fresh Data
+      // This will automatically re-sort everything by your "cheated" dates (2024 vs 2025)
       emit(LessonLoaded(
         freshLessons,
         hasReachedMax: false,
       ));
+      
     } catch (e) {
-      // If network fails, we rely on the cached data we already emitted.
-      // If cache was empty, then we show error.
-      if (cachedLessons.isEmpty) {
-        emit(LessonError(e.toString()));
+      printLog("Sync failed: $e");
+      
+      // FALLBACK: If sync fails and we have no data on screen, show error.
+      // If we already emitted LessonLoaded from cache, we keep showing it.
+      if (state is! LessonLoaded) {
+        emit(LessonError("Could not refresh lessons. Check your connection."));
       }
-      // If cache exists, we fail silently (or show a snackbar via a side effect listener) keeping the old data visible.
     }
   }
 

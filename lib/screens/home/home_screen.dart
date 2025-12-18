@@ -311,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               context.read<LessonBloc>().add(
                                 LessonLoadRequested(
                                   user.id,
-                                  user.currentLanguage,
+                                  user.currentLanguage,  forceRefresh: true
                                 ),
                               );
                               context.read<VocabularyBloc>().add(
