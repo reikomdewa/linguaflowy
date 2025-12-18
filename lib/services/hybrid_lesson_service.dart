@@ -201,30 +201,47 @@ class HybridLessonService {
       return [];
     }
   }
-
-  Future<List<LessonModel>> _loadFromFirestore(
+Future<List<LessonModel>> _loadFromFirestore(
     String languageCode,
     List<String> userIds, {
     int limit = 20,
   }) async {
     try {
+      // 1. Ensure userIds isn't empty (Firestore throws if whereIn is empty)
+      if (userIds.isEmpty) return [];
+
       final snapshot = await _firestore
           .collection('lessons')
           .where('language', isEqualTo: languageCode)
           .where('userId', whereIn: userIds)
+          .orderBy('createdAt', descending: true)
           .limit(limit)
           .get();
 
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return _mapJsonToLesson(data, languageCode, userIds.first);
-      }).toList();
+      List<LessonModel> lessons = [];
+      
+      for (var doc in snapshot.docs) {
+        try {
+          final data = doc.data();
+          data['id'] = doc.id;
+          lessons.add(_mapJsonToLesson(data, languageCode, data['userId'] ?? userIds.first));
+        } catch (e) {
+          // This tells you exactly which lesson is "dirty" and causing the crash
+          printLog("❌ CRASH parsing lesson ${doc.id}: $e");
+          continue; // Skip the bad lesson, show the rest
+        }
+      }
+      return lessons;
     } catch (e) {
-      printLog("🔥 FIRESTORE ERROR (Language: $languageCode): $e");
+      printLog("🔥 FIRESTORE QUERY ERROR: $e");
       return [];
     }
   }
+
+  // 2. UPDATE YOUR MERGE LOGIC
+  // In LessonRepository, your getAndSyncLessons currently trusts systemLessons (Local) 
+  // to be the "Base". If the local JSON is old and the Firebase is new, 
+  // we should prioritize Firebase metadata if the IDs match.
 
   // ===========================================================================
   // 🔴 FIXED MAPPING METHOD
@@ -275,10 +292,17 @@ class HybridLessonService {
     );
   }
 
-  DateTime _parseDate(dynamic date) {
-    if (date == null) return DateTime.now();
-    if (date is Timestamp) return date.toDate();
-    if (date is String) return DateTime.tryParse(date) ?? DateTime.now();
-    return DateTime.now();
+ DateTime _parseDate(dynamic date) {
+    try {
+      if (date == null) return DateTime.now();
+      if (date is Timestamp) return date.toDate();
+      if (date is String) {
+        // Handle ISO format from Python or simple strings
+        return DateTime.tryParse(date) ?? DateTime.now();
+      }
+      return DateTime.now();
+    } catch (e) {
+      return DateTime.now();
+    }
   }
 }
