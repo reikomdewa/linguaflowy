@@ -276,4 +276,101 @@ static List<String> tokenizeText(String text, String langCode) {
   static int measureTextLength(String text, String langCode) {
     return usesNoSpaces(text, langCode) ? text.length : text.split(' ').length;
   }
+
+
+
+
+///smart brain stop words for various languages
+  static Set<String> getStopWords(String langCode) {
+    final code = getLangCode(langCode);
+    final Map<String, Set<String>> stopWordsMap = {
+      'en': {'the', 'and', 'for', 'that', 'with', 'this', 'have', 'from', 'was', 'not'},
+      'es': {'el', 'la', 'los', 'las', 'un', 'una', 'y', 'de', 'en', 'que', 'no', 'por'},
+      'fr': {'le', 'la', 'les', 'un', 'une', 'et', 'de', 'du', 'en', 'que', 'ne', 'pas'},
+      'de': {'der', 'die', 'das', 'ein', 'eine', 'und', 'in', 'zu', 'von', 'mit', 'nicht'},
+      'it': {'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una', 'e', 'di', 'in'},
+      'pt': {'o', 'a', 'os', 'as', 'um', 'uma', 'e', 'de', 'em', 'que', 'com', 'nao'},
+      'ar': {'في', 'من', 'على', 'و', 'ان', 'هذا', 'كان', 'إلى', 'مع'},
+      'zh': {'的', '了', '是', '我', '你', '他', '在', '有', '个', '这'},
+      'ja': {'の', 'に', 'は', 'を', 'た', 'て', 'です', 'ます', 'だ', 'が'},
+      'sw': {'na', 'ya', 'wa', 'kwa', 'ni', 'katika', 'la', 'vya', 'za', 'si'},
+      'lg': {'na', 'wa', 'mu', 'ku', 'era', 'nga', 'nti', 'ye', 'ba', 'za'},
+    };
+
+    return stopWordsMap[code] ?? {};
+  }
+
+   // NEW: Complexity Calculation
+  // =========================================================
+  static double getWordComplexityMultiplier(String word, String langCode) {
+    double multiplier = 1.0;
+    final code = getLangCode(langCode);
+
+    // 1. Length-based difficulty (for space-based languages)
+    if (!usesNoSpaces(word, code)) {
+      if (word.length > 8) multiplier += 0.4;
+      if (word.length > 12) multiplier += 0.6;
+    } else {
+      // 2. CJK / Thai: Longer character strings in a row usually indicate complex compounds
+      if (word.length > 2) multiplier += 0.5;
+      if (word.length > 4) multiplier += 1.0;
+    }
+
+    // 3. Rare Character Script Bonus
+    // Award slightly more for scripts that are generally harder for foreigners
+    if (['ar', 'hi', 'th', 'am', 'ti'].contains(code)) {
+      multiplier += 0.2;
+    }
+
+    return multiplier;
+  }
+
+  // =========================================================
+  // NEW: Master Smart XP Engine
+  // =========================================================
+  static int calculateSmartXP({
+    required String word,
+    required String langCode,
+    required int oldStatus,
+    required int newStatus,
+    required String userLevel, // e.g. "A1 - Newcomer"
+  }) {
+    final cleanWord = word.toLowerCase().trim();
+    if (cleanWord.isEmpty) return 0;
+
+    // A. Base Values
+    double totalMultiplier = getWordComplexityMultiplier(cleanWord, langCode);
+    int baseReward = 5;
+    int progressionBonus = 0;
+
+    // B. Stop Word Penalty (Basic words shouldn't give much XP)
+    final stopWords = getStopWords(langCode);
+    if (stopWords.contains(cleanWord)) {
+      return 1; // Return flat 1 XP for words like "the", "a", "na"
+    }
+
+    // C. Progression Logic
+    if (oldStatus == 0 && newStatus > 0) {
+      progressionBonus = 15; // Reward for "learning" a word for the first time
+    } else if (newStatus > oldStatus) {
+      progressionBonus = 5;  // Reward for moving a word up the status chain
+    }
+
+    // D. Stretch Goal Bonus (Hard word for a beginner)
+    bool isBeginner = userLevel.contains('A1') || userLevel.contains('A2');
+    if (isBeginner && totalMultiplier > 1.4) {
+      progressionBonus += 10; // Extra credit for tackling hard words early
+    }
+
+    // E. Mastered Word Penalty
+    // If user is just clicking a word they already know perfectly (Status 5)
+    if (oldStatus >= 5) {
+      baseReward = 1; 
+      progressionBonus = 0;
+      totalMultiplier = 1.0;
+    }
+
+    return ((baseReward * totalMultiplier) + progressionBonus).round();
+  }
+
 }

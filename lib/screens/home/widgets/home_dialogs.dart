@@ -85,6 +85,9 @@ class HomeDialogs {
         ? user.lessonsCompleted
         : 0;
 
+    // --- NEW: EXTRACT XP ---
+    final int totalXp = (user.toMap().containsKey('xp')) ? user.xp : 0;
+
     final DateTime oneWeekAgo = DateTime.now().subtract(
       const Duration(days: 7),
     );
@@ -133,8 +136,7 @@ class HomeDialogs {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      useSafeArea:
-          true, // <--- FIX: This ensures it respects the top notch/status bar
+      useSafeArea: true,
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -146,7 +148,6 @@ class HomeDialogs {
         child: Stack(
           alignment: Alignment.bottomCenter,
           children: [
-            // 1. SCROLLABLE CONTENT
             SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 100),
@@ -154,7 +155,6 @@ class HomeDialogs {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- DRAG HANDLE ---
                   Center(
                     child: Container(
                       width: 40,
@@ -167,7 +167,6 @@ class HomeDialogs {
                     ),
                   ),
 
-                  // --- HEADER ---
                   Row(
                     children: [
                       Container(
@@ -194,45 +193,21 @@ class HomeDialogs {
                               color: textColor,
                             ),
                           ),
-                          const Text(
-                            "Consistency is key!",
-                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                          Text(
+                            currentLevel,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.blue,
+                            ),
                           ),
                         ],
                       ),
                     ],
                   ),
-                  const Divider(height: 32),
+                  const Divider(height: 20),
 
-                  // --- MAIN LEVEL ---
-                  Center(
-                    child: Column(
-                      children: [
-                        const Text(
-                          "Current Level",
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          currentLevel,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.blue,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // --- PROGRESS BAR ---
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -267,7 +242,6 @@ class HomeDialogs {
 
                   const SizedBox(height: 24),
 
-                  // --- SMART FEEDBACK ---
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -356,13 +330,21 @@ class HomeDialogs {
                         bgColor: cardBgColor,
                         textColor: textColor,
                       ),
+                      // --- 6th INFO CARD: XP ---
+                      _buildStatCard(
+                        icon: Icons.bolt_rounded,
+                        iconColor: Colors.amber.shade700,
+                        value: "$totalXp",
+                        label: "Total Experience",
+                        bgColor: cardBgColor,
+                        textColor: textColor,
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
 
-            // 2. FLOATING BUTTON
             Positioned(
               left: 24,
               right: 24,
