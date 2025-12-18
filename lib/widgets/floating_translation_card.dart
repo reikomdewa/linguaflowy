@@ -131,7 +131,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
           combined = googleResult;
         } else if (combined.trim().toLowerCase() !=
             googleResult.trim().toLowerCase()) {
-          combined += "\n\n[Google]\n$googleResult";
+          combined += "\n$googleResult";
         }
       }
     }

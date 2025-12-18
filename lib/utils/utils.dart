@@ -10,75 +10,103 @@ import 'package:url_launcher/url_launcher.dart';
 export 'logger.dart';
 export '../screens/home/utils/lesson_card_utils.dart';
 
-Color getLevelShade(int level, MaterialColor color) {
-  if (level == 0) {
-    return color.shade300; // Lightest shade
-  } else if (level == 1) {
-    return color.shade500; // Moderate shade
-  } else if (level == 2) {
-    return color.shade700; // Darker shade
-  } else {
-    return color.shade800; // Darkest shade
-  }
-}
-
-Widget buildTextBadge(String text, Color bgColor, {double fontSize = 10}) {
-  return Container(
-    margin: const EdgeInsets.only(right: 3.0), // Spacing between badges
-    padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 1.5),
-    decoration: BoxDecoration(
-      color: bgColor,
-      borderRadius: BorderRadius.circular(4.0),
-    ),
-    child: Text(
-      text,
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: fontSize,
-        fontWeight: FontWeight.bold,
-        height: 1.1, // Adjust line height for small font
-      ),
-    ),
-  );
-}
-
-Widget buildMediaPlaceholder(
-  BuildContext context, {
-  bool isLoading = false,
-  dynamic error,
-  String? message,
-}) {
-  return Container(
-    height: 450, // Consistent height
-    width: MediaQuery.of(context).size.height * 0.35,
-    margin: const EdgeInsets.only(right: 8.0), // Match image padding
-    decoration: BoxDecoration(
-      color: Colors.grey[850], // Dark placeholder background
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Center(
-      child: isLoading
-          ? const CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.white54,
-            )
-          : Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                error != null
-                    ? 'Error loading video:\n${error.toString()}'
-                    : message ?? 'Cannot load media',
-                style: TextStyle(
-                  color: error != null ? Colors.redAccent : Colors.white60,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-    ),
-  );
-}
-
 class Utils {
+  Color getLevelShade(int level, MaterialColor color) {
+    if (level == 0) {
+      return color.shade300; // Lightest shade
+    } else if (level == 1) {
+      return color.shade500; // Moderate shade
+    } else if (level == 2) {
+      return color.shade700; // Darker shade
+    } else {
+      return color.shade800; // Darkest shade
+    }
+  }
+
+  Widget buildTextBadge(String text, Color bgColor, {double fontSize = 10}) {
+    return Container(
+      margin: const EdgeInsets.only(right: 3.0), // Spacing between badges
+      padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(4.0),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: fontSize,
+          fontWeight: FontWeight.bold,
+          height: 1.1, // Adjust line height for small font
+        ),
+      ),
+    );
+  }
+
+  Widget buildMediaPlaceholder(
+    BuildContext context, {
+    bool isLoading = false,
+    dynamic error,
+    String? message,
+  }) {
+    return Container(
+      height: 450, // Consistent height
+      width: MediaQuery.of(context).size.height * 0.35,
+      margin: const EdgeInsets.only(right: 8.0), // Match image padding
+      decoration: BoxDecoration(
+        color: Colors.grey[850], // Dark placeholder background
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: isLoading
+            ? const CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white54,
+              )
+            : Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  error != null
+                      ? 'Error loading video:\n${error.toString()}'
+                      : message ?? 'Cannot load media',
+                  style: TextStyle(
+                    color: error != null ? Colors.redAccent : Colors.white60,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+      ),
+    );
+  }
+
+  static void showXpPop(int amount, BuildContext context) {
+    // This clears any existing snackbar immediately so they don't stack up
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              "+$amount XP! ",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const Icon(Icons.bolt, color: Colors.amber, size: 18),
+          ],
+        ),
+        duration: const Duration(
+          milliseconds: 800,
+        ), // Slightly longer to be readable
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.blueAccent.withOpacity(0.9),
+        width: 120, // Keep it small and centered
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    );
+  }
+
   static Future<void> openLink({required String url}) async {
     final Uri uri = Uri.parse(url);
     await _launchURL(uri);

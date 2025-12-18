@@ -8,7 +8,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 class FullscreenTranslationCard extends StatefulWidget {
   final String originalText;
-  final String? baseForm; 
+  final String? baseForm;
   final Future<String> translationFuture;
   final Future<String?> Function() onGetAiExplanation;
   final String targetLanguage;
@@ -20,7 +20,7 @@ class FullscreenTranslationCard extends StatefulWidget {
   const FullscreenTranslationCard({
     super.key,
     required this.originalText,
-    this.baseForm, 
+    this.baseForm,
     required this.translationFuture,
     required this.onGetAiExplanation,
     required this.targetLanguage,
@@ -41,7 +41,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
   String? _aiText;
   bool _isAiLoading = false;
   final FlutterTts _cardTts = FlutterTts();
-  Offset _position = const Offset(100, 50); 
+  Offset _position = const Offset(100, 50);
   int _selectedTabIndex = 0;
   bool _isExpanded = false;
   WebViewController? _webViewController;
@@ -68,11 +68,14 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
 
   // --- ROOT TRANSLATION LOGIC ---
   Future<void> _loadRootTranslation() async {
-    if (widget.baseForm == null || widget.baseForm == widget.originalText) return;
-    
+    if (widget.baseForm == null || widget.baseForm == widget.originalText)
+      return;
+
     // Simple fetch for the root word
     final result = await _fetchTranslationApi(widget.baseForm!);
-    if (result.isNotEmpty && !result.startsWith("Error") && !result.startsWith("No results")) {
+    if (result.isNotEmpty &&
+        !result.startsWith("Error") &&
+        !result.startsWith("No results")) {
       if (mounted) {
         setState(() {
           _rootTranslation = result;
@@ -121,7 +124,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
           combined = googleResult;
         } else if (combined.trim().toLowerCase() !=
             googleResult.trim().toLowerCase()) {
-          combined += "\n\n[Google]\n$googleResult";
+          combined += "\n$googleResult";
         }
       }
     }
@@ -203,7 +206,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
     setState(() => _isLoadingWeb = true);
     final src = LanguageHelper.getLangCode(widget.targetLanguage);
     final tgt = LanguageHelper.getLangCode(widget.nativeLanguage);
-    
+
     // Use base form for better dictionary lookup
     final searchText = widget.baseForm ?? widget.originalText;
     final word = Uri.encodeComponent(searchText);
@@ -338,40 +341,55 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
                     Text(flag, style: const TextStyle(fontSize: 20)),
                   ],
                 ),
-                
+
                 // --- UPDATED: ROOT + MEANING DISPLAY ---
                 if (widget.baseForm != null) ...[
-                   const SizedBox(height: 8),
-                   Container(
-                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                     decoration: BoxDecoration(
-                       color: Colors.white.withValues(alpha: 0.08),
-                       borderRadius: BorderRadius.circular(6),
-                     ),
-                     child: RichText(
-                       text: TextSpan(
-                         children: [
-                           const TextSpan(
-                             text: "Root: ",
-                             style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic),
-                           ),
-                           TextSpan(
-                             text: widget.baseForm,
-                             style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                           ),
-                           // If we have fetched the meaning, show it
-                           if (_rootTranslation != null)
-                             TextSpan(
-                               text: " ($_rootTranslation)",
-                               style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13, fontStyle: FontStyle.italic),
-                             ),
-                         ]
-                       ),
-                     ),
-                   ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: RichText(
+                      text: TextSpan(
+                        children: [
+                          const TextSpan(
+                            text: "Root: ",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          TextSpan(
+                            text: widget.baseForm,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          // If we have fetched the meaning, show it
+                          if (_rootTranslation != null)
+                            TextSpan(
+                              text: " ($_rootTranslation)",
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 13,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
-                // ----------------------------------------
 
+                // ----------------------------------------
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -406,7 +424,9 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
             Container(
               height: 300,
               width: double.infinity,
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05)),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+              ),
               child: _buildExpandedContent(),
             ),
         ],

@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
+
 class LessonCompletionScreen extends StatelessWidget {
   final String lessonTitle;
   final int wordsLearnedCount;
+  final int xpEarned;
 
   const LessonCompletionScreen({
     super.key,
     required this.lessonTitle,
     required this.wordsLearnedCount,
+    required this.xpEarned,
   });
 
   @override
   Widget build(BuildContext context) {
     // Determine brightness for status bar and theme
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+   
+
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       body: SafeArea(
@@ -24,7 +28,7 @@ class LessonCompletionScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Spacer(),
-              
+
               // 1. Success Icon
               Container(
                 padding: const EdgeInsets.all(24),
@@ -39,14 +43,14 @@ class LessonCompletionScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 32),
-              
+
               // 2. Title & Message
               Text(
                 "Lesson Complete!",
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black,
-                    ),
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -60,15 +64,17 @@ class LessonCompletionScreen extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              
+
               const SizedBox(height: 48),
-              
+
               // 3. Stats Card
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[100],
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : Colors.grey[100],
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Column(
@@ -101,14 +107,22 @@ class LessonCompletionScreen extends StatelessWidget {
                           icon: Icons.trending_up_rounded,
                           color: Colors.orange,
                         ),
+                        _buildVerticalDivider(isDark),
+                        _buildStatItem(
+                          context,
+                          count: xpEarned.toString(),
+                          label: 'XP',
+                          icon: Icons.bolt,
+                          color: Colors.amber,
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
-              
+
               const Spacer(),
-              
+
               // 4. Finish Button (Safe Area)
               SizedBox(
                 width: double.infinity,
@@ -127,14 +141,13 @@ class LessonCompletionScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     elevation: 4,
-                    shadowColor: Theme.of(context).primaryColor.withValues(alpha: 0.4),
+                    shadowColor: Theme.of(
+                      context,
+                    ).primaryColor.withValues(alpha: 0.4),
                   ),
                   child: const Text(
                     "Finish",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -154,7 +167,7 @@ class LessonCompletionScreen extends StatelessWidget {
     required Color color,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Column(
       children: [
         Container(

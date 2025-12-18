@@ -10,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/screens/completion/completion_screen.dart';
 import 'package:linguaflow/services/local_lemmatizer.dart';
 import 'package:linguaflow/utils/language_helper.dart';
+import 'package:linguaflow/utils/utils.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -352,29 +353,39 @@ class _ReaderScreenState extends State<ReaderScreen>
     _listeningTrackingTimer?.cancel();
   }
 
-  // --- MARK AS COMPLETE & NAVIGATE ---
+// --- MARK AS COMPLETE & NAVIGATE ---
   void _markLessonAsComplete() {
     if (!_hasMarkedLessonComplete) {
       setState(() => _hasMarkedLessonComplete = true);
 
-      // 1. Pause Media to avoid background playing
+      // 1. Pause Media and TTS to avoid background noise
       _pauseMedia();
       if (_isTtsPlaying) _flutterTts.stop();
 
-      // 2. Update Stats in Database
-      context.read<AuthBloc>().add(AuthIncrementLessonsCompleted());
-      context.read<AuthBloc>().add(AuthUpdateXP(xpPerLessonComplete));
-      _logActivitySession(0, xpPerLessonComplete);
-      const int completionBonus = 100;
-      context.read<AuthBloc>().add(AuthUpdateXP(completionBonus));
+      // 2. SMART COMPLETION XP CALCULATION
+      // We reward the user based on how many words they interacted with in this session
+      const int baseXP = 50; 
+      const int bonusPerWord = 10;
+      
+      // Final XP = 50 + (words * 10), capped between 50 and 200
+      int calculatedXp = (baseXP + (_sessionWordsLearned.length * bonusPerWord))
+          .clamp(50, 200);
 
-      // Show the pop
-      _showXpPop(completionBonus);
-      // 3. Show Completion Screen
+      // 3. Update the User's stats in Bloc/Firestore
+      // We only call this ONCE with the final calculated value
+      context.read<AuthBloc>().add(AuthUpdateXP(calculatedXp));
+      context.read<AuthBloc>().add(AuthIncrementLessonsCompleted());
+
+      // 4. Log this session in your Activity History (Heatmap)
+      // Passing 0 minutes here because the duration is tracked separately in dispose
+      _logActivitySession(0, calculatedXp);
+
+      // 5. Navigate to the Completion Screen with the smart data
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => LessonCompletionScreen(
             lessonTitle: widget.lesson.title,
+            xpEarned: calculatedXp, // Pass the dynamic value
             wordsLearnedCount: _sessionWordsLearned.length,
           ),
         ),
@@ -382,33 +393,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  void _showXpPop(int amount) {
-    // This clears any existing snackbar immediately so they don't stack up
-    ScaffoldMessenger.of(context).removeCurrentSnackBar();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              "+$amount XP! ",
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const Icon(Icons.bolt, color: Colors.amber, size: 18),
-          ],
-        ),
-        duration: const Duration(
-          milliseconds: 800,
-        ), // Slightly longer to be readable
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.blueAccent.withOpacity(0.9),
-        width: 120, // Keep it small and centered
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-    );
-  }
 
   // --- PRO FIX: Stream Vocabulary ---
   void _startVocabularyStream() {
@@ -1212,50 +1197,66 @@ class _ReaderScreenState extends State<ReaderScreen>
       'lessonsInteracted': FieldValue.arrayUnion([widget.lesson.id]),
     }, SetOptions(merge: true));
   }
-int _calculateSmartXp({
-  required String word,
-  required int oldStatus,
-  required int newStatus,
-  required String userLevel, // e.g., "A1", "B2"
-}) {
-  double multiplier = 1.0;
-  int baseReward = 5;
 
-  // 1. COMPLEXITY CHECK (Length proxy)
-  // Short words (2-3 chars) are usually basic. Long words are usually harder.
-  if (word.length > 8) multiplier += 0.5; 
-  if (word.length > 12) multiplier += 0.5;
+  int _calculateSmartXp({
+    required String word,
+    required int oldStatus,
+    required int newStatus,
+    required String userLevel, // e.g., "A1", "B2"
+  }) {
+    double multiplier = 1.0;
+    int baseReward = 5;
 
-  // 2. STOP-WORD FILTER (Prevent "cheating" by clicking common words)
-  // You can expand this list or move it to a utility file
-  const commonWords = {'the', 'and', 'for', 'that', 'with', 'this', 'have', 'from', 'des', 'les', 'une', 'que'};
-  if (commonWords.contains(word.toLowerCase())) {
-    return 1; // Minimum possible XP for "the/a/an"
+    // 1. COMPLEXITY CHECK (Length proxy)
+    // Short words (2-3 chars) are usually basic. Long words are usually harder.
+    if (word.length > 8) multiplier += 0.5;
+    if (word.length > 12) multiplier += 0.5;
+
+    // 2. STOP-WORD FILTER (Prevent "cheating" by clicking common words)
+    // You can expand this list or move it to a utility file
+    const commonWords = {
+      'the',
+      'and',
+      'for',
+      'that',
+      'with',
+      'this',
+      'have',
+      'from',
+      'des',
+      'les',
+      'une',
+      'que',
+    };
+    if (commonWords.contains(word.toLowerCase())) {
+      return 1; // Minimum possible XP for "the/a/an"
+    }
+
+    // 3. LEVEL CHALLENGE
+    // If user is A1/A2 and tackles a long word, give a "Challenge Bonus"
+    if ((userLevel.contains('A1') || userLevel.contains('A2')) &&
+        word.length > 7) {
+      multiplier += 1.0;
+    }
+
+    // 4. PROGRESSION REWARD
+    int progressionBonus = 0;
+    if (oldStatus == 0 && newStatus > 0) {
+      progressionBonus = 15; // First time learning this word
+    } else if (newStatus > oldStatus) {
+      progressionBonus = 5; // Moving from "Learning" to "Mastered"
+    }
+
+    // 5. REPETITION PENALTY
+    // If looking up a word already at status 5, reduce the base reward
+    if (oldStatus >= 5) {
+      baseReward = 1;
+      progressionBonus = 0;
+    }
+
+    return ((baseReward * multiplier) + progressionBonus).round();
   }
 
-  // 3. LEVEL CHALLENGE
-  // If user is A1/A2 and tackles a long word, give a "Challenge Bonus"
-  if ((userLevel.contains('A1') || userLevel.contains('A2')) && word.length > 7) {
-    multiplier += 1.0;
-  }
-
-  // 4. PROGRESSION REWARD
-  int progressionBonus = 0;
-  if (oldStatus == 0 && newStatus > 0) {
-    progressionBonus = 15; // First time learning this word
-  } else if (newStatus > oldStatus) {
-    progressionBonus = 5; // Moving from "Learning" to "Mastered"
-  }
-
-  // 5. REPETITION PENALTY
-  // If looking up a word already at status 5, reduce the base reward
-  if (oldStatus >= 5) {
-    baseReward = 1; 
-    progressionBonus = 0;
-  }
-
-  return ((baseReward * multiplier) + progressionBonus).round();
-}
   Future<void> _updateWordStatus(
     String clean,
     String orig,
@@ -1284,24 +1285,23 @@ int _calculateSmartXp({
     final existingItem = _vocabulary[clean];
     final int oldStatus = existingItem?.status ?? 0;
 
-
-   int xpGained = LanguageHelper.calculateSmartXP(
-  word: orig,
-  langCode: widget.lesson.language,
-  oldStatus: existingItem?.status ?? 0,
-  newStatus: status,
-  userLevel: user.currentLevel, // This is your string like "A1 - Newcomer"
-);
+    int xpGained = LanguageHelper.calculateSmartXP(
+      word: orig,
+      langCode: widget.lesson.language,
+      oldStatus: existingItem?.status ?? 0,
+      newStatus: status,
+      userLevel: user.currentLevel, // This is your string like "A1 - Newcomer"
+    );
     // Keep existing date if valid.
     // If null AND we are moving from New(0) to Known(>0), set it to Now.
     DateTime? learnedAt = existingItem?.learnedAt;
     if (learnedAt == null && oldStatus == 0 && status > 0) {
       learnedAt = DateTime.now();
     }
-if (xpGained > 0) {
-  _showXpPop(xpGained);
-  context.read<AuthBloc>().add(AuthUpdateXP(xpGained));
-}
+    if (xpGained > 0) {
+      Utils.showXpPop(xpGained, context);
+      context.read<AuthBloc>().add(AuthUpdateXP(xpGained));
+    }
     // 3. Create Item with learnedAt
     final item = VocabularyItem(
       id: clean,
