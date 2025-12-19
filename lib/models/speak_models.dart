@@ -1,17 +1,22 @@
 import 'package:equatable/equatable.dart';
+import 'package:linguaflow/models/room_member.dart';
 
 // --- Free4Talk Style Room ---
 class ChatRoom extends Equatable {
   final String id;
-  final String hostId; // New: To link back to the user
+  final String hostId;
   final String title;
   final String language;
   final String level;
-  final int memberCount;
+  final int memberCount; // Total count (even if list is capped)
   final int maxMembers;
   final bool isPaid;
+  final bool isPrivate; // For future: rooms via invite link
   final String? hostName;
-  final String? hostAvatarUrl; // Optional: For the UI
+  final String? hostAvatarUrl;
+  final List<RoomMember> members; // The specific members for UI
+  final DateTime createdAt;
+  final String? liveKitRoomId; // Link to the media server session
 
   const ChatRoom({
     required this.id,
@@ -21,12 +26,25 @@ class ChatRoom extends Equatable {
     required this.level,
     required this.memberCount,
     required this.maxMembers,
+    required this.members,
+    required this.createdAt,
     this.isPaid = false,
+    this.isPrivate = false,
     this.hostName,
     this.hostAvatarUrl,
+    this.liveKitRoomId,
   });
 
-  // Convert to Map for Firestore
+  // Helper logic to get avatars for the UI row
+  List<RoomMember> get displayMembers {
+    // Return first 10 members to keep UI clean
+    return members.take(10).toList();
+  }
+
+  int get othersCount {
+    return memberCount > 10 ? memberCount - 10 : 0;
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -37,14 +55,24 @@ class ChatRoom extends Equatable {
       'memberCount': memberCount,
       'maxMembers': maxMembers,
       'isPaid': isPaid,
+      'isPrivate': isPrivate,
       'hostName': hostName,
       'hostAvatarUrl': hostAvatarUrl,
-      'createdAt': DateTime.now().millisecondsSinceEpoch,
+      'liveKitRoomId': liveKitRoomId ?? id,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+      'members': members.map((m) => m.toMap()).toList(),
     };
   }
 
-  // Create from Firestore
   factory ChatRoom.fromMap(Map<String, dynamic> map, String id) {
+    // Robust parsing of members list
+    var memberList = <RoomMember>[];
+    if (map['members'] != null) {
+      memberList = List<RoomMember>.from(
+        (map['members'] as List).map((m) => RoomMember.fromMap(m)),
+      );
+    }
+
     return ChatRoom(
       id: id,
       hostId: map['hostId'] ?? '',
@@ -54,13 +82,41 @@ class ChatRoom extends Equatable {
       memberCount: map['memberCount']?.toInt() ?? 0,
       maxMembers: map['maxMembers']?.toInt() ?? 5,
       isPaid: map['isPaid'] ?? false,
+      isPrivate: map['isPrivate'] ?? false,
       hostName: map['hostName'],
       hostAvatarUrl: map['hostAvatarUrl'],
+      liveKitRoomId: map['liveKitRoomId'],
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] ?? 0),
+      members: memberList,
+    );
+  }
+
+  // Robust CopyWith for state management updates
+  ChatRoom copyWith({
+    int? memberCount,
+    List<RoomMember>? members,
+    String? title,
+  }) {
+    return ChatRoom(
+      id: id,
+      hostId: hostId,
+      title: title ?? this.title,
+      language: language,
+      level: level,
+      memberCount: memberCount ?? this.memberCount,
+      maxMembers: maxMembers,
+      members: members ?? this.members,
+      createdAt: createdAt,
+      isPaid: isPaid,
+      isPrivate: isPrivate,
+      hostName: hostName,
+      hostAvatarUrl: hostAvatarUrl,
+      liveKitRoomId: liveKitRoomId,
     );
   }
 
   @override
-  List<Object?> get props => [id, title, memberCount, hostId];
+  List<Object?> get props => [id, title, memberCount, members, hostId];
 }
 
 // ... Tutor model remains the same ...

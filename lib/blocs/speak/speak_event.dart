@@ -71,3 +71,10 @@ class CreateTutorProfileEvent extends SpeakEvent {
   @override
   List<Object?> get props => [name, language, pricePerHour, imageUrl];
 }
+class JoinRoomEvent extends SpeakEvent {
+  final ChatRoom room;
+  const JoinRoomEvent(this.room);
+
+  @override
+  List<Object> get props => [room];
+}

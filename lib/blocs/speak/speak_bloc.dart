@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/models/room_member.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -20,9 +22,35 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
     on<RoomLeft>(_onRoomLeft);
     on<CreateRoomEvent>(_onCreateRoom);
     on<CreateTutorProfileEvent>(_onCreateTutorProfile);
+
+    // Add this handler if you want the UI to update immediately when joining
+    on<JoinRoomEvent>(_onJoinRoom);
   }
 
   /// 1. Load Data: Fetches REAL rooms from Firestore
+  // Future<void> _onLoadSpeakData(
+  //   LoadSpeakData event,
+  //   Emitter<SpeakState> emit,
+  // ) async {
+  //   emit(state.copyWith(status: SpeakStatus.loading));
+
+  //   try {
+  //     // Fetch public rooms from Firestore
+  //     final List<ChatRoom> realRooms = await _speakService.getPublicRooms();
+  //     final List<Tutor> realTutors = []; // Fetch from service when ready
+
+  //     emit(
+  //       state.copyWith(
+  //         status: SpeakStatus.success,
+  //         rooms: realRooms,
+  //         tutors: realTutors,
+  //       ),
+  //     );
+  //   } catch (e) {
+  //     emit(state.copyWith(status: SpeakStatus.failure));
+  //   }
+  // }
+
   Future<void> _onLoadSpeakData(
     LoadSpeakData event,
     Emitter<SpeakState> emit,
@@ -30,18 +58,31 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
     emit(state.copyWith(status: SpeakStatus.loading));
 
     try {
-      // Fetch public rooms from Firestore
-      final List<ChatRoom> realRooms = await _speakService.getPublicRooms();
+      final List<ChatRoom> fetchedRooms = await _speakService.getPublicRooms();
 
-      // Initialize with empty tutors list (No dummy data)
-      // Once you implement TutorService, you would fetch real tutors here.
-      final List<Tutor> realTutors = []; 
+      // --- TEST DATA INJECTION START ---
+      final List<ChatRoom> roomsWithDummyData = fetchedRooms.map((room) {
+        // Let's test with 12 members to trigger the "+2 others" logic
+        int testMemberCount = 20;
 
-      emit(state.copyWith(
-        status: SpeakStatus.success,
-        rooms: realRooms,
-        tutors: realTutors,
-      ));
+        return room.copyWith(
+          memberCount: testMemberCount,
+          members: _generateDummyMembers(
+            testMemberCount,
+            room.hostId,
+            room.hostName ?? "Host",
+          ),
+        );
+      }).toList();
+      // --- TEST DATA INJECTION END ---
+
+      emit(
+        state.copyWith(
+          status: SpeakStatus.success,
+          rooms: roomsWithDummyData, // Use the modified list
+          tutors: [],
+        ),
+      );
     } catch (e) {
       print("Error loading speak data: $e");
       emit(state.copyWith(status: SpeakStatus.failure));
@@ -54,57 +95,99 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
     Emitter<SpeakState> emit,
   ) async {
     final user = _auth.currentUser;
-
-    if (user == null) {
-      // In a real app, you might want to emit an error state here
-      print("Error: User must be logged in to create a room.");
-      return;
-    }
+    if (user == null) return;
 
     final String roomId = _uuid.v4();
     final String hostName = user.displayName ?? "Anonymous";
     final String? photoUrl = user.photoURL;
 
-    // Create the Model with Real User Data
+    // Create the Member object for the Host
+    final hostMember = RoomMember(
+      uid: user.uid,
+      displayName: hostName,
+      avatarUrl: photoUrl,
+      joinedAt: DateTime.now(),
+      isHost: true, // Mark as host
+    );
+
+    // Create the ChatRoom Model
     final newRoom = ChatRoom(
       id: roomId,
       hostId: user.uid,
       title: event.topic,
       language: event.language,
       level: event.level,
-      memberCount: 1, // Starts with the host
+      memberCount: 1,
       maxMembers: event.maxMembers,
       isPaid: event.isPaid,
       hostName: hostName,
       hostAvatarUrl: photoUrl,
+      members: [hostMember], // Initialize with host
+      createdAt: DateTime.now(),
     );
 
-    // Save to Firestore
     try {
       await _speakService.createRoom(newRoom);
 
-      // Optimistic Update: Add to local list immediately so UI feels instant
+      // Optimistic Update: Add to local list
       final updatedRooms = List<ChatRoom>.from(state.rooms)..insert(0, newRoom);
       emit(state.copyWith(rooms: updatedRooms));
-      
     } catch (e) {
-      print("Failed to save room to Firestore: $e");
-      // Handle error (e.g., show snackbar via listener)
+      print("Failed to save room: $e");
     }
   }
 
-  /// 3. Create Tutor: Local Logic (Update when you have a backend for Tutors)
+  /// 3. Join Room: Updates member list so avatars appear in the row
+  Future<void> _onJoinRoom(
+    JoinRoomEvent event,
+    Emitter<SpeakState> emit,
+  ) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    // 1. Create the current user as a RoomMember
+    final newMember = RoomMember(
+      uid: user.uid,
+      displayName: user.displayName ?? "User",
+      avatarUrl: user.photoURL,
+      joinedAt: DateTime.now(),
+      isHost: false,
+    );
+
+    // 2. Find the room in the current state and update it
+    final updatedRooms = state.rooms.map((room) {
+      if (room.id == event.room.id) {
+        // Check if already a member to prevent duplicates
+        final alreadyMember = room.members.any((m) => m.uid == user.uid);
+        if (alreadyMember) return room;
+
+        // Add new member and increment count
+        final updatedMemberList = List<RoomMember>.from(room.members)
+          ..add(newMember);
+        return room.copyWith(
+          members: updatedMemberList,
+          memberCount: room.memberCount + 1,
+        );
+      }
+      return room;
+    }).toList();
+
+    emit(state.copyWith(rooms: updatedRooms));
+
+    // 3. Inform service/backend (Firestore update)
+    // await _speakService.addUserToRoom(event.room.id, newMember);
+  }
+
+  /// 4. Create Tutor: Local Logic
   void _onCreateTutorProfile(
     CreateTutorProfileEvent event,
     Emitter<SpeakState> emit,
   ) {
-    // Currently creates a local object. 
-    // To make this permanent, you would need a 'createTutor' method in SpeakService.
     final newTutor = Tutor(
       id: _uuid.v4(),
       name: event.name,
       language: event.language,
-      rating: 0.0, 
+      rating: 0.0,
       reviews: 0,
       pricePerHour: event.pricePerHour,
       imageUrl: event.imageUrl,
@@ -114,49 +197,54 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
     emit(state.copyWith(tutors: updatedTutors));
   }
 
-  /// 4. Tab Switching Logic
-  void _onChangeSpeakTab(
-    ChangeSpeakTab event,
-    Emitter<SpeakState> emit,
-  ) {
-    SpeakTab newTab;
-    switch (event.tabIndex) {
-      case 0:
-        newTab = SpeakTab.all;
-        break;
-      case 1:
-        newTab = SpeakTab.tutors;
-        break;
-      case 2:
-        newTab = SpeakTab.rooms;
-        break;
-      default:
-        newTab = SpeakTab.all;
-    }
+  /// 5. Tab Switching Logic
+  void _onChangeSpeakTab(ChangeSpeakTab event, Emitter<SpeakState> emit) {
+    final tabIndex = event.tabIndex;
+    final newTab = tabIndex == 0
+        ? SpeakTab.all
+        : (tabIndex == 1 ? SpeakTab.tutors : SpeakTab.rooms);
     emit(state.copyWith(currentTab: newTab));
   }
 
-  /// 5. Filter Logic
-  void _onFilterSpeakList(
-    FilterSpeakList event,
-    Emitter<SpeakState> emit,
-  ) {
+  /// 6. Filter Logic
+  void _onFilterSpeakList(FilterSpeakList event, Emitter<SpeakState> emit) {
     emit(state.copyWith(selectedLanguage: event.language));
   }
 
-  /// 6. LiveKit Room Joined
-  void _onRoomJoined(
-    RoomJoined event,
-    Emitter<SpeakState> emit,
-  ) {
+  /// 7. LiveKit Room Joined
+  void _onRoomJoined(RoomJoined event, Emitter<SpeakState> emit) {
     emit(state.copyWith(activeRoom: event.room));
   }
 
-  /// 7. LiveKit Room Left
-  void _onRoomLeft(
-    RoomLeft event,
-    Emitter<SpeakState> emit,
-  ) {
+  /// 8. LiveKit Room Left
+  void _onRoomLeft(RoomLeft event, Emitter<SpeakState> emit) {
     emit(state.copyWith(clearActiveRoom: true));
+  }
+
+  List<RoomMember> _generateDummyMembers(
+    int count,
+    String hostId,
+    String hostName,
+  ) {
+    return List.generate(count, (index) {
+      if (index == 0) {
+        // Always include the host as the first member for testing
+        return RoomMember(
+          uid: hostId,
+          displayName: hostName,
+          avatarUrl: 'https://i.pravatar.cc/150?u=$hostId',
+          joinedAt: DateTime.now(),
+          isHost: true,
+        );
+      }
+      return RoomMember(
+        uid: 'user_$index',
+        displayName: 'Member $index',
+        // Random avatar URL from pravatar
+        avatarUrl: 'https://i.pravatar.cc/150?u=user_$index',
+        joinedAt: DateTime.now(),
+        isHost: false,
+      );
+    });
   }
 }
