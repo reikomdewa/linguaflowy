@@ -73,10 +73,16 @@ class _SpeakViewState extends State<SpeakView> {
             Expanded(
               child: BlocBuilder<SpeakBloc, SpeakState>(
                 builder: (context, state) {
-                  if (state.status == SpeakStatus.loading) {
+                  // SMART LOADING: Only show the full-screen spinner if the lists are empty.
+                  // If we already have rooms or tutors, don't show the spinner.
+                  if (state.status == SpeakStatus.loading &&
+                      state.rooms.isEmpty &&
+                      state.tutors.isEmpty) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (state.status == SpeakStatus.failure) {
+
+                  if (state.status == SpeakStatus.failure &&
+                      state.rooms.isEmpty) {
                     return Center(
                       child: TextButton(
                         onPressed: () =>
@@ -86,6 +92,7 @@ class _SpeakViewState extends State<SpeakView> {
                     );
                   }
 
+                  // If we have data (or just finished creating), show the list immediately
                   switch (state.currentTab) {
                     case SpeakTab.all:
                       return _buildMixedList(context, state, authState.user);
@@ -205,22 +212,36 @@ class _SpeakViewState extends State<SpeakView> {
     );
   }
 
-  Widget _buildMixedList(BuildContext context, SpeakState state, dynamic user) {
+Widget _buildMixedList(BuildContext context, SpeakState state, dynamic user) {
+  // 1. Combine both lists into one dynamic list
   final List<dynamic> feedItems = [...state.rooms, ...state.tutors];
-  if (feedItems.isEmpty) return const Center(child: Text("No suggestions found."));
+
+  // 2. Sort them by createdAt (Latest first)
+  feedItems.sort((a, b) {
+    DateTime dateA = (a is ChatRoom) ? a.createdAt : (a as Tutor).createdAt;
+    DateTime dateB = (b is ChatRoom) ? b.createdAt : (b as Tutor).createdAt;
+    return dateB.compareTo(dateA); // Newest on top
+  });
+
+  if (feedItems.isEmpty) {
+    return const Center(child: Text("No suggestions found."));
+  }
 
   return ListView.builder(
     padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+    // +1 for the "Suggestions" header
     itemCount: feedItems.length + 1,
     itemBuilder: (context, index) {
       if (index == 0) return _buildSuggestedHeader(context, user);
-      
+
       final item = feedItems[index - 1];
-      
-      // FIX: Pass the item (tutor) to the card
-      return item is ChatRoom 
-          ? RoomCard(room: item) 
-          : TutorCard(tutor: item as Tutor); // Change this line
+
+      // 3. Render the correct card based on the object type
+      if (item is ChatRoom) {
+        return RoomCard(room: item);
+      } else {
+        return TutorCard(tutor: item as Tutor);
+      }
     },
   );
 }
@@ -247,14 +268,14 @@ class _SpeakViewState extends State<SpeakView> {
     );
   }
 
-Widget _buildTutorList(SpeakState state) => ListView.builder(
-  padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-  itemCount: state.tutors.length,
-  itemBuilder: (context, index) {
-    // FIX: Pass the specific tutor from the state list
-    return TutorCard(tutor: state.tutors[index]); 
-  },
-);
+  Widget _buildTutorList(SpeakState state) => ListView.builder(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+    itemCount: state.tutors.length,
+    itemBuilder: (context, index) {
+      // FIX: Pass the specific tutor from the state list
+      return TutorCard(tutor: state.tutors[index]);
+    },
+  );
 
   Widget _buildRoomList(SpeakState state) => ListView.builder(
     padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
@@ -280,8 +301,6 @@ Widget _buildTutorList(SpeakState state) => ListView.builder(
           const SizedBox(height: 16),
           FloatingActionButton(
             heroTag: 'msg',
-            backgroundColor: theme.primaryColor,
-            foregroundColor: Colors.white,
             onPressed: () => state.activeRoom != null
                 ? _showRoomChat(context, state.activeRoom!)
                 : Navigator.pushNamed(context, '/global_messages'),
@@ -340,21 +359,27 @@ Widget _buildTutorList(SpeakState state) => ListView.builder(
                 },
               ),
               ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.blue.withOpacity(0.1), 
-                child: const Icon(FontAwesomeIcons.chalkboardUser, color: Colors.blue, size: 20)
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue.withOpacity(0.1),
+                  child: const Icon(
+                    FontAwesomeIcons.chalkboardUser,
+                    color: Colors.blue,
+                    size: 20,
+                  ),
+                ),
+                title: const Text("Create Tutor Profile"),
+                subtitle: const Text("Offer paid lessons and coaching"),
+                onTap: () {
+                  Navigator.pop(ctx); // Close the bottom sheet
+                  // Navigate to the new screen
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const CreateTutorProfileScreen(),
+                    ),
+                  );
+                },
               ),
-              title: const Text("Create Tutor Profile"),
-              subtitle: const Text("Offer paid lessons and coaching"),
-              onTap: () {
-                Navigator.pop(ctx); // Close the bottom sheet
-                // Navigate to the new screen
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const CreateTutorProfileScreen()),
-                );
-              },
-            ),
             ],
           ),
         ),
