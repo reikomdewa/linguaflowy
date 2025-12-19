@@ -8,16 +8,23 @@ class SpeakService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
   // inside SpeakService class
-Future<void> createTutorProfile(Tutor tutor) async {
-  await _firestore
-      .collection('tutors')
-      .doc(tutor.id) // This will be the User UID
-      .set(tutor.toMap(), SetOptions(merge: true)); // Merge ensures we don't accidentally wipe metadata
-}
-Future<List<Tutor>> getTutors() async {
-  final snapshot = await _firestore.collection('tutors').get();
-  return snapshot.docs.map((doc) => Tutor.fromMap(doc.data(), doc.id)).toList();
-}
+  Future<void> createTutorProfile(Tutor tutor) async {
+    await _firestore
+        .collection('tutors')
+        .doc(tutor.id) // This will be the User UID
+        .set(
+          tutor.toMap(),
+          SetOptions(merge: true),
+        ); // Merge ensures we don't accidentally wipe metadata
+  }
+
+  Future<List<Tutor>> getTutors() async {
+    final snapshot = await _firestore.collection('tutors').get();
+    return snapshot.docs
+        .map((doc) => Tutor.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
   // UPDATED: Use Top-Level Collection
   Future<void> createRoom(ChatRoom room) async {
     final user = _auth.currentUser;
@@ -32,6 +39,15 @@ Future<List<Tutor>> getTutors() async {
   }
 
   // UPDATED: Fetch Public Feed (with optional filters)
+  // Add these to your SpeakService class
+  Future<void> deleteTutorProfile(String tutorId) async {
+    await _firestore.collection('tutors').doc(tutorId).delete();
+  }
+
+  Future<void> deleteRoom(String roomId) async {
+    await _firestore.collection('rooms').doc(roomId).delete();
+  }
+
   Future<List<ChatRoom>> getPublicRooms() async {
     // This is what populates your "All" or "Rooms" tab
     final snapshot = await _firestore

@@ -91,7 +91,7 @@ class TutorCard extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              // bloc.add(DeleteTutorProfileEvent(tutor.id));
+               bloc.add(DeleteTutorProfileEvent(tutor.id));
               Navigator.pop(ctx); // Close Dialog
               Navigator.pop(context); // Close BottomSheet
             },
@@ -259,7 +259,7 @@ class TutorCard extends StatelessWidget {
                     tutor.description,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium,
+                    style: theme.textTheme.bodyLarge,
                   ),
                 ],
               ),
@@ -310,7 +310,7 @@ class TutorCard extends StatelessWidget {
                     onPressed: () {},
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.primaryColor,
-                      foregroundColor: Colors.white,
+
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(24),

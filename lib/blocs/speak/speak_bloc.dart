@@ -27,7 +27,33 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
     on<CreateRoomEvent>(_onCreateRoom);
     on<CreateTutorProfileEvent>(_onCreateTutorProfile);
     on<JoinRoomEvent>(_onJoinRoom);
+    on<DeleteTutorProfileEvent>(_onDeleteTutorProfile);
+on<DeleteRoomEvent>(_onDeleteRoom);
   }
+
+  Future<void> _onDeleteTutorProfile(DeleteTutorProfileEvent event, Emitter<SpeakState> emit) async {
+  try {
+    await _speakService.deleteTutorProfile(event.tutorId);
+    // Remove from local master list
+    _masterTutors.removeWhere((t) => t.id == event.tutorId);
+    // Emit new state to trigger UI update
+    emit(state.copyWith(tutors: List.from(_masterTutors)));
+  } catch (e) {
+    print("Delete Tutor Error: $e");
+  }
+}
+
+Future<void> _onDeleteRoom(DeleteRoomEvent event, Emitter<SpeakState> emit) async {
+  try {
+    await _speakService.deleteRoom(event.roomId);
+    // Remove from local master list
+    _masterRooms.removeWhere((r) => r.id == event.roomId);
+    // Emit new state to trigger UI update
+    emit(state.copyWith(rooms: List.from(_masterRooms)));
+  } catch (e) {
+    print("Delete Room Error: $e");
+  }
+}
 
   Future<void> _onLoadSpeakData(LoadSpeakData event, Emitter<SpeakState> emit) async {
   // 1. SILENT LOADING: If we already have data, don't show the full-screen spinner.
@@ -172,7 +198,8 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
     _masterRooms.insert(0, newRoom);
     
     // Re-apply current filters to the new list
-    add(FilterSpeakList(state.searchQuery)); 
+  
+      add(FilterSpeakList(state.searchQuery)); 
   }
 
   // Inside SpeakBloc

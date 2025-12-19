@@ -78,7 +78,20 @@ class CreateRoomEvent extends SpeakEvent {
   @override
   List<Object?> get props => [topic, language, level, isPaid, isPrivate, tags];
 }
+// Add these to your speak_event.dart file
+class DeleteTutorProfileEvent extends SpeakEvent {
+  final String tutorId;
+  const DeleteTutorProfileEvent(this.tutorId);
+  @override
+  List<Object?> get props => [tutorId];
+}
 
+class DeleteRoomEvent extends SpeakEvent {
+  final String roomId;
+  const DeleteRoomEvent(this.roomId);
+  @override
+  List<Object?> get props => [roomId];
+}
 class JoinRoomEvent extends SpeakEvent {
   final ChatRoom room;
   const JoinRoomEvent(this.room);

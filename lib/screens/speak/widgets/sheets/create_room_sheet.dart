@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart'; // Required for context.read
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
@@ -14,17 +14,16 @@ class CreateRoomSheet extends StatefulWidget {
 }
 
 class _CreateRoomSheetState extends State<CreateRoomSheet> {
-  // Controllers to capture text input
-  late TextEditingController _topicController;
-  late TextEditingController _accessCodeController;
-
-  // State variables
+  // Logic Variables
+  String _selectedLanguageName = "English";
+  String _selectedLevel = 'Beginner';
   double _memberCount = 3.0;
   bool _isUnlimited = false;
   bool _isPaid = false;
-  String _selectedLevel = 'Beginner';
 
-  // Available levels for dropdown
+  late TextEditingController _topicController;
+  late TextEditingController _accessCodeController;
+
   final List<String> _levels = [
     'Beginner',
     'Intermediate',
@@ -37,6 +36,14 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
     super.initState();
     _topicController = TextEditingController();
     _accessCodeController = TextEditingController();
+
+    // Initialize with the user's current learning language
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      _selectedLanguageName = LanguageHelper.getLanguageName(
+        authState.user.currentLanguage,
+      );
+    }
   }
 
   @override
@@ -52,21 +59,13 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
     final authState = context.watch<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return const SizedBox();
 
-    final user = authState.user;
-    // Using SingleChildScrollView to handle smaller screens/keyboard
     return SafeArea(
       child: Container(
         decoration: BoxDecoration(
           color: theme.scaffoldBackgroundColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: const EdgeInsets.only(
-          right: 24,
-          left: 24,
-          top: 16,
-          bottom: 16,
-        ),
-        // Ensure the sheet pushes up with keyboard
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -90,40 +89,53 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 const SizedBox(height: 20),
                 Text(
                   "Create Conversation",
-                  style: theme.textTheme.headlineSmall,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 20),
 
                 // 1. Topic Input
+                _buildLabel("Topic", theme),
                 TextField(
-                  controller: _topicController, // Connected controller
-                  decoration: InputDecoration(
-                    hintText:
-                        "Topic (e.g., Business in ${LanguageHelper.getLanguageName(user.currentLanguage)}, Anime)",
-                    filled: true,
-                    fillColor: theme.cardColor,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    prefixIcon: const Icon(Icons.topic),
+                  controller: _topicController,
+                  decoration: _inputDecoration(
+                    "e.g., Daily life in ${_selectedLanguageName}",
+                    Icons.topic_outlined,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
-                // 2. Level Selector
+                // 2. Language Selection
+                _buildLabel("Room Language", theme),
+                DropdownButtonFormField<String>(
+                  value: LanguageHelper.getLangCode(_selectedLanguageName),
+                  dropdownColor: theme.cardColor,
+                  decoration: _inputDecoration("", Icons.language_rounded),
+                  items: LanguageHelper.availableLanguages.entries.map((entry) {
+                    return DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(
+                        "${LanguageHelper.getFlagEmoji(entry.key)} ${entry.value}",
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedLanguageName = LanguageHelper.getLanguageName(
+                        val!,
+                      );
+                    });
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // 3. Level Selector
+                _buildLabel("Target Proficiency", theme),
                 DropdownButtonFormField<String>(
                   value: _selectedLevel,
-                  decoration: InputDecoration(
-                    labelText: "Target Level",
-                    filled: true,
-                    fillColor: theme.cardColor,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    prefixIcon: const Icon(Icons.bar_chart),
-                  ),
+                  dropdownColor: theme.cardColor,
+                  decoration: _inputDecoration("", Icons.bar_chart_rounded),
                   items: _levels
                       .map(
                         (level) =>
@@ -134,17 +146,21 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 ),
                 const SizedBox(height: 20),
 
-                // 3. Members Slider
+                // 4. Members Slider
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text("Members limit", style: theme.textTheme.titleMedium),
+                    _buildLabel("Member Limit", theme),
                     Row(
                       children: [
                         Text(
                           _isUnlimited
                               ? "Unlimited"
                               : "${_memberCount.toInt()}",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: theme.primaryColor,
+                          ),
                         ),
                         Switch(
                           value: _isUnlimited,
@@ -159,7 +175,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 if (!_isUnlimited)
                   Slider(
                     value: _memberCount,
-                    min: 2, // 1on1
+                    min: 2,
                     max: 20,
                     divisions: 18,
                     label: _memberCount.toInt().toString(),
@@ -168,55 +184,50 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
 
                 const SizedBox(height: 10),
 
-                // 4. Paid vs Free
+                // 5. Paid vs Free
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text("Paid Session (Entrance Fee)"),
-                  subtitle: const Text("Users need an access code or GPay"),
+                  title: const Text(
+                    "Paid Session (Entrance Fee)",
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text("Require an access code to join"),
                   value: _isPaid,
                   onChanged: (val) => setState(() => _isPaid = val),
                   secondary: Icon(
                     FontAwesomeIcons.coins,
-                    color: _isPaid ? Colors.amber : Colors.grey,
+                    color: _isPaid ? Colors.amber : theme.hintColor,
                   ),
                 ),
 
                 if (_isPaid) ...[
                   const SizedBox(height: 10),
-                  // Access Code Input
                   TextField(
-                    controller: _accessCodeController, // Connected controller
-                    decoration: InputDecoration(
-                      hintText: "Set Access Code",
-                      filled: true,
-                      fillColor: theme.cardColor,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      prefixIcon: const Icon(Icons.lock_outline),
+                    controller: _accessCodeController,
+                    decoration: _inputDecoration(
+                      "Set 4-digit Access Code",
+                      Icons.lock_outline,
                     ),
+                    keyboardType: TextInputType.number,
                   ),
                 ],
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
 
-                // 5. Create Button
+                // 6. Create Button
                 SizedBox(
                   width: double.infinity,
+                  height: 54,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
+                      elevation: 0,
                     ),
                     onPressed: () {
-                      // 1. Get values
                       final String topic = _topicController.text.trim();
-
                       if (topic.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text("Please enter a topic")),
@@ -224,24 +235,23 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                         return;
                       }
 
-                      // 2. Add Event to Bloc
+                      // DISPATCH EVENT
                       context.read<SpeakBloc>().add(
                         CreateRoomEvent(
                           topic: topic,
-                          language:
-                              "English", // In future, add a Language Dropdown
-                          level: _selectedLevel,
+                          language: _selectedLanguageName,
+                          level:
+                              _selectedLevel, // Corrected from Language to Level
                           maxMembers: _isUnlimited ? 50 : _memberCount.toInt(),
                           isPaid: _isPaid,
                         ),
                       );
 
-                      // 3. Close Sheet
                       Navigator.pop(context);
 
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text("Room created successfully!"),
+                          content: Text("Room created! You are now the host."),
                         ),
                       );
                     },
@@ -254,11 +264,41 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 20),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  // --- HELPER UI METHODS ---
+
+  Widget _buildLabel(String text, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 4),
+      child: Text(
+        text,
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint, IconData icon) {
+    final theme = Theme.of(context);
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon, size: 20, color: theme.primaryColor),
+      filled: true,
+      fillColor: theme.cardColor,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
+        borderSide: BorderSide.none,
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
   }
 }
