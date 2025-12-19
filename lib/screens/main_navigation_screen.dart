@@ -9,6 +9,7 @@ import 'package:linguaflow/screens/home/home_screen.dart';
 import 'package:linguaflow/screens/search/search_screen.dart';
 import 'package:linguaflow/screens/library/library_screen.dart';
 import 'package:linguaflow/screens/profile/profile_screen.dart';
+import 'package:linguaflow/screens/speak/speak_screen.dart';
 import 'package:linguaflow/screens/vocabulary/vocabulary_screen.dart';
 import 'package:linguaflow/screens/admin/admin_dashboard_screen.dart';
 
@@ -55,10 +56,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final bool isAdmin = AppConstants.isAdmin(user.email);
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     // Modern Theme Colors
-    final navBarColor = isDark ? const Color(0xFF000000) : Colors.white; 
-    final selectedColor = isDark ? Colors.white : Colors.blueAccent; 
+    final navBarColor = isDark ? const Color(0xFF000000) : Colors.white;
+    final selectedColor = isDark ? Colors.white : Colors.blueAccent;
     final unselectedColor = isDark ? Colors.grey[600] : Colors.grey[500];
 
     // 1. Build the list of Screens
@@ -67,17 +68,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       HomeScreen(),
       const LibraryScreen(),
       const VocabularyScreen(),
-      const SearchScreen(), 
+      const SearchScreen(),
+      // const SizedBox.shrink(), // Placeholder
+const SpeakScreen(), // The new screen // Placeholder for Speak Screen
     ];
 
     // 2. Build the Navigation Items
     final List<BottomNavigationBarItem> navItems = [
       const BottomNavigationBarItem(
-        icon: Icon(Icons.home_filled), 
-        label: 'Home'
+        icon: Icon(Icons.home_filled),
+        label: 'Home',
       ),
       const BottomNavigationBarItem(
-        icon: Icon(Icons.library_books_rounded), 
+        icon: Icon(Icons.library_books_rounded),
         label: 'Library',
       ),
       const BottomNavigationBarItem(
@@ -85,14 +88,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         label: 'Vocabulary',
       ),
       // --- FIXED DISCOVER TAB ---
-      // I wrapped the icon in a Padding with `bottom: 4` 
+      // I wrapped the icon in a Padding with `bottom: 4`
       // This creates a gap that pushes the "Discover" text down to align with the others.
       const BottomNavigationBarItem(
         icon: Padding(
-          padding: EdgeInsets.only(bottom: 4.0), 
+          padding: EdgeInsets.only(bottom: 4.0),
           child: FaIcon(FontAwesomeIcons.magnifyingGlass, size: 20),
         ),
         label: 'Discover',
+      ),
+      const BottomNavigationBarItem(
+        icon: Padding(
+          padding: EdgeInsets.only(bottom: 4.0),
+          child: FaIcon(FontAwesomeIcons.microphone, size: 20),
+        ),
+        label: 'Speak',
       ),
     ];
 
@@ -111,8 +121,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     screens.add(ProfileScreen());
     navItems.add(
       const BottomNavigationBarItem(
-        icon: Icon(Icons.person_rounded), 
-        label: 'Profile'
+        icon: Icon(Icons.person_rounded),
+        label: 'Profile',
       ),
     );
 
@@ -120,7 +130,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       activeIndex: _currentIndex,
       child: Scaffold(
         body: IndexedStack(index: _currentIndex, children: screens),
-        
+
         bottomNavigationBar: Theme(
           data: Theme.of(context).copyWith(
             splashColor: Colors.transparent,
@@ -131,24 +141,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               color: navBarColor,
               border: Border(
                 top: BorderSide(
-                  color: isDark ? Colors.white10 : Colors.black12, 
-                  width: 0.5
+                  color: isDark ? Colors.white10 : Colors.black12,
+                  width: 0.5,
                 ),
               ),
             ),
             child: BottomNavigationBar(
               currentIndex: _currentIndex,
               onTap: (index) => setState(() => _currentIndex = index),
-              
+
               type: BottomNavigationBarType.fixed,
               backgroundColor: navBarColor,
               selectedItemColor: selectedColor,
               unselectedItemColor: unselectedColor,
-              
-              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
-              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
-              
-              elevation: 0, 
+
+              selectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 11,
+              ),
+
+              elevation: 0,
               showUnselectedLabels: true,
               items: navItems,
             ),

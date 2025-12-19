@@ -10,10 +10,12 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart'; // Crucial for Themes
+import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 
 // --- SERVICES & REPOSITORIES ---
 import 'package:linguaflow/services/auth_service.dart';
+import 'package:linguaflow/services/speak/chat_service.dart';
 import 'package:linguaflow/services/gemini_service.dart';
 import 'package:linguaflow/services/lesson_service.dart'; // Firestore Service
 import 'package:linguaflow/services/hybrid_lesson_service.dart'; // Local Service
@@ -72,6 +74,7 @@ class LinguaflowApp extends StatelessWidget {
         RepositoryProvider(create: (context) => VocabularyService()),
         RepositoryProvider(create: (context) => TranslationService()),
         RepositoryProvider(create: (context) => HybridLessonService()),
+        RepositoryProvider(create: (context) => ChatService()),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -94,6 +97,7 @@ class LinguaflowApp extends StatelessWidget {
           ),
           // 4. QUIZ BLOC
           BlocProvider<QuizBloc>(create: (context) => QuizBloc()),
+          BlocProvider<SpeakBloc>(create: (context) => SpeakBloc()),
           // 5. VOCABULARY BLOC
           BlocProvider(
             create: (context) =>
