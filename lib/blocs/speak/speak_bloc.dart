@@ -30,27 +30,40 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
   }
 
   Future<void> _onLoadSpeakData(LoadSpeakData event, Emitter<SpeakState> emit) async {
+  // 1. SILENT LOADING: If we already have data, don't show the full-screen spinner.
+  // Only show the spinner if the lists are currently empty.
+  if (_masterRooms.isEmpty && _masterTutors.isEmpty) {
     emit(state.copyWith(status: SpeakStatus.loading));
-    try {
-      // 1. Fetch Rooms from Firebase
-      final List<ChatRoom> fetchedRooms = await _speakService.getPublicRooms();
-      _masterRooms = fetchedRooms.map((room) => room.copyWith(
-        members: _generateDummyMembers(room.memberCount, room.hostId, room.hostName ?? "Host"),
-      )).toList();
+  }
 
-      // 2. Fetch Tutors (You can add _speakService.getTutors() later)
-    final List<Tutor> fetchedTutors = await _speakService.getTutors(); // You'll need to add this to SpeakService
-_masterTutors = fetchedTutors;
+  try {
+    // 2. PARALLEL FETCHING: Fetch both at the same time instead of one after another.
+    // This cut the wait time in half.
+    final results = await Future.wait([
+      _speakService.getPublicRooms(),
+      _speakService.getTutors(), // Ensure this method exists in your SpeakService
+    ]);
 
-      emit(state.copyWith(
-        status: SpeakStatus.success, 
-        rooms: _masterRooms, 
-        tutors: _masterTutors,
-      ));
-    } catch (e) {
+    final List<ChatRoom> fetchedRooms = results[0] as List<ChatRoom>;
+    final List<Tutor> fetchedTutors = results[1] as List<Tutor>;
+
+    _masterRooms = fetchedRooms;
+    _masterTutors = fetchedTutors;
+
+    emit(state.copyWith(
+      status: SpeakStatus.success,
+      rooms: _masterRooms,
+      tutors: _masterTutors,
+    ));
+  } catch (e) {
+    // If it fails but we have old data, stay in success but maybe show a snackbar
+    if (_masterRooms.isNotEmpty) {
+      emit(state.copyWith(status: SpeakStatus.success));
+    } else {
       emit(state.copyWith(status: SpeakStatus.failure));
     }
   }
+}
 
   void _onFilterSpeakList(FilterSpeakList event, Emitter<SpeakState> emit) {
     // 1. Update the filters map locally
@@ -176,7 +189,8 @@ Future<void> _onCreateTutorProfile(
 
   // 2. Construct the robust Tutor model using the Event data
   final newTutor = Tutor(
-    id: user.uid, // Using UID instead of random UUID for better indexing
+    id: user.uid, 
+    userId: user.uid, // Using UID instead of random UUID for better indexing
     name: event.name,
     imageUrl: event.imageUrl,
     description: event.description,

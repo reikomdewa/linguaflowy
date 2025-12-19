@@ -164,6 +164,7 @@ class TutorLesson extends Equatable {
 class Tutor extends Equatable {
   // Basic Info
   final String id;
+  final String userId; 
   final String name;
   final String imageUrl;
   final String description;
@@ -202,6 +203,7 @@ class Tutor extends Equatable {
 
   const Tutor({
     required this.id,
+    required this.userId,
     required this.name,
     required this.language,
     required this.rating,
@@ -232,6 +234,7 @@ class Tutor extends Equatable {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'userId': userId, 
       'name': name,
       'imageUrl': imageUrl,
       'description': description,
@@ -263,6 +266,8 @@ class Tutor extends Equatable {
   factory Tutor.fromMap(Map<String, dynamic> map, String id) {
     return Tutor(
       id: id,
+       userId: map['userId'] ?? '',
+       
       name: map['name'] ?? '',
       imageUrl: map['imageUrl'] ?? '',
       description: map['description'] ?? '',
@@ -309,6 +314,7 @@ class Tutor extends Equatable {
   }) {
     return Tutor(
       id: id,
+      userId: userId,
       name: name ?? this.name,
       language: language ?? this.language,
       rating: rating ?? this.rating,

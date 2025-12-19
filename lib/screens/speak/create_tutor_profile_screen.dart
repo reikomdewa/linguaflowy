@@ -4,13 +4,16 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_event.dart';
+import 'package:linguaflow/models/speak/speak_models.dart';
+import 'package:linguaflow/screens/speak/widgets/cards/tutor_card.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 
 class CreateTutorProfileScreen extends StatefulWidget {
   const CreateTutorProfileScreen({super.key});
 
   @override
-  State<CreateTutorProfileScreen> createState() => _CreateTutorProfileScreenState();
+  State<CreateTutorProfileScreen> createState() =>
+      _CreateTutorProfileScreenState();
 }
 
 class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
@@ -28,15 +31,29 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
   String _selectedLevel = 'Native';
   bool _isNative = false;
   final List<String> _selectedSpecialties = [];
-  final List<String> _otherLanguages = [];
-  
-  // Availability State (Simple Day-based selection)
+
   final Map<String, bool> _daysAvailable = {
-    'Mon': false, 'Tue': false, 'Wed': false, 'Thu': false, 'Fri': false, 'Sat': false, 'Sun': false
+    'Mon': false,
+    'Tue': false,
+    'Wed': false,
+    'Thu': false,
+    'Fri': false,
+    'Sat': false,
+    'Sun': false,
   };
 
-  final List<String> _levels = ['Beginner', 'Intermediate', 'Advanced', 'Native'];
-  final List<String> _specialties = ['IELTS', 'Business', 'Conversation', 'Grammar'];
+  final List<String> _levels = [
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+    'Native',
+  ];
+  final List<String> _specialties = [
+    'IELTS',
+    'Business',
+    'Conversation',
+    'Grammar',
+  ];
 
   @override
   void initState() {
@@ -58,7 +75,14 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
     _descriptionController = TextEditingController();
     _countryController = TextEditingController();
     _selectedLanguageCode = initialLang ?? 'en';
+
+    // ADD LISTENERS FOR LIVE PREVIEW
+    _nameController.addListener(_updatePreview);
+    _priceController.addListener(_updatePreview);
+    _imageUrlController.addListener(_updatePreview);
   }
+
+  void _updatePreview() => setState(() {});
 
   @override
   void dispose() {
@@ -70,16 +94,46 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
     super.dispose();
   }
 
+  // Generate a temporary Tutor object to feed the Preview Card
+  Tutor _generatePreviewTutor() {
+    final authState = context.read<AuthBloc>().state;
+    final uid = authState is AuthAuthenticated ? authState.user.id : "preview";
+
+    return Tutor(
+      id: uid,
+      userId: uid,
+      name: _nameController.text.isEmpty ? "Your Name" : _nameController.text,
+      language: LanguageHelper.getLanguageName(_selectedLanguageCode ?? 'en'),
+      rating: 5.0,
+      reviews: 0,
+      pricePerHour: double.tryParse(_priceController.text) ?? 0.0,
+      imageUrl: _imageUrlController.text.isEmpty
+          ? "https://i.pravatar.cc/150"
+          : _imageUrlController.text,
+      level: _selectedLevel,
+      specialties: _selectedSpecialties,
+      description: _descriptionController.text,
+      otherLanguages: const [],
+      countryOfBirth: _countryController.text,
+      isNative: _isNative,
+      availability: {},
+      createdAt: DateTime.now(),
+      isOnline: true,
+      isSuperTutor: true,
+    );
+  }
+
   void _submitProfile() {
     if (_formKey.currentState!.validate()) {
-      // Map availability
       final Map<String, String> availabilityMap = {};
       _daysAvailable.forEach((day, isSelected) {
         if (isSelected) availabilityMap[day] = "Available";
       });
 
       if (availabilityMap.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select at least one day of availability")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please select availability")),
+        );
         return;
       }
 
@@ -92,15 +146,17 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
           level: _selectedLevel,
           specialties: _selectedSpecialties,
           description: _descriptionController.text.trim(),
-          otherLanguages: _otherLanguages,
+          otherLanguages: const [],
           countryOfBirth: _countryController.text.trim(),
           isNative: _isNative,
           availability: availabilityMap,
-          lessons: []
+          lessons: const [],
         ),
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tutor profile created successfully!")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Tutor profile created!")));
       Navigator.pop(context);
     }
   }
@@ -108,29 +164,68 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(title: const Text("Become a Tutor"), elevation: 0, centerTitle: true),
+      appBar: AppBar(
+        title: const Text("Become a Tutor"),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        foregroundColor: isDark ? Colors.white : Colors.black,
+      ),
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             children: [
+              // --- LIVE PREVIEW SECTION ---
+              _buildSectionTitle("Card Preview", theme),
+              Text(
+                "This is how students will see you in the feed.",
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.hintColor,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TutorCard(tutor: _generatePreviewTutor()),
+
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Divider(),
+              ),
+
               _buildSectionTitle("Basic Information", theme),
               _buildLabel("Display Name", theme),
               TextFormField(
                 controller: _nameController,
-                decoration: _inputDecoration("Name", Icons.person_outline),
-                validator: (v) => v!.isEmpty ? "Enter your name" : null,
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                decoration: _inputDecoration("Full Name", Icons.person_outline),
+                validator: (v) => v!.isEmpty ? "Required" : null,
+              ),
+              const SizedBox(height: 20),
+
+              _buildLabel("Profile Image URL", theme),
+              TextFormField(
+                controller: _imageUrlController,
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                decoration: _inputDecoration(
+                  "Image link (https://...)",
+                  Icons.image_outlined,
+                ),
+                validator: (v) => v!.isEmpty ? "Required" : null,
               ),
               const SizedBox(height: 20),
 
               _buildLabel("Country of Birth", theme),
               TextFormField(
                 controller: _countryController,
-                decoration: _inputDecoration("e.g. United Kingdom", Icons.public),
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                decoration: _inputDecoration(
+                  "e.g. United Kingdom",
+                  Icons.public,
+                ),
                 validator: (v) => v!.isEmpty ? "Required" : null,
               ),
               const SizedBox(height: 20),
@@ -139,8 +234,12 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
               TextFormField(
                 controller: _descriptionController,
                 maxLines: 4,
-                decoration: _inputDecoration("Tell students about your teaching style and experience...", Icons.history_edu),
-                validator: (v) => v!.length < 20 ? "Please write at least 20 characters" : null,
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                decoration: _inputDecoration(
+                  "Teaching style...",
+                  Icons.history_edu,
+                ),
+                validator: (v) => v!.length < 20 ? "Too short" : null,
               ),
               const SizedBox(height: 32),
 
@@ -148,31 +247,56 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
               _buildLabel("Language to Teach", theme),
               DropdownButtonFormField<String>(
                 value: _selectedLanguageCode,
+                dropdownColor: theme.cardColor,
                 decoration: _inputDecoration("", Icons.language_rounded),
                 items: LanguageHelper.availableLanguages.entries.map((entry) {
-                  return DropdownMenuItem(value: entry.key, child: Text("${LanguageHelper.getFlagEmoji(entry.key)} ${entry.value}"));
+                  return DropdownMenuItem(
+                    value: entry.key,
+                    child: Text(
+                      "${LanguageHelper.getFlagEmoji(entry.key)} ${entry.value}",
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  );
                 }).toList(),
                 onChanged: (val) => setState(() => _selectedLanguageCode = val),
               ),
               CheckboxListTile(
-                title: const Text("I am a native speaker of this language"),
+                title: Text(
+                  "I am a native speaker",
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                ),
                 value: _isNative,
                 onChanged: (val) => setState(() => _isNative = val ?? false),
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero,
                 activeColor: theme.primaryColor,
               ),
-              const SizedBox(height: 10),
 
+              const SizedBox(height: 20),
               _buildLabel("Your Proficiency Level", theme),
               DropdownButtonFormField<String>(
                 value: _selectedLevel,
+                dropdownColor: theme.cardColor,
                 decoration: _inputDecoration("", Icons.bar_chart_rounded),
-                items: _levels.map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
+                items: _levels
+                    .map(
+                      (l) => DropdownMenuItem(
+                        value: l,
+                        child: Text(
+                          l,
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (val) => setState(() => _selectedLevel = val!),
               ),
-              const SizedBox(height: 20),
 
+              const SizedBox(height: 20),
               _buildLabel("Specialties", theme),
               Wrap(
                 spacing: 8,
@@ -181,23 +305,32 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                   return FilterChip(
                     label: Text(spec),
                     selected: isSelected,
+                    selectedColor: theme.primaryColor.withOpacity(0.3),
+                    labelStyle: TextStyle(
+                      color: isSelected ? theme.primaryColor : theme.hintColor,
+                    ),
                     onSelected: (selected) => setState(() {
-                      selected ? _selectedSpecialties.add(spec) : _selectedSpecialties.remove(spec);
+                      selected
+                          ? _selectedSpecialties.add(spec)
+                          : _selectedSpecialties.remove(spec);
                     }),
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 32),
 
+              const SizedBox(height: 32),
               _buildSectionTitle("Availability & Rates", theme),
-              _buildLabel("Select Available Days", theme),
+              _buildLabel("Available Days", theme),
               Wrap(
                 spacing: 8,
                 children: _daysAvailable.keys.map((day) {
+                  final isSelected = _daysAvailable[day]!;
                   return FilterChip(
                     label: Text(day),
-                    selected: _daysAvailable[day]!,
-                    onSelected: (val) => setState(() => _daysAvailable[day] = val),
+                    selected: isSelected,
+                    selectedColor: theme.primaryColor.withOpacity(0.3),
+                    onSelected: (val) =>
+                        setState(() => _daysAvailable[day] = val),
                   );
                 }).toList(),
               ),
@@ -206,8 +339,14 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
               _buildLabel("Hourly Rate (USD)", theme),
               TextFormField(
                 controller: _priceController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: _inputDecoration("20.00", FontAwesomeIcons.dollarSign),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                decoration: _inputDecoration(
+                  "20.00",
+                  FontAwesomeIcons.dollarSign,
+                ),
               ),
 
               const SizedBox(height: 40),
@@ -217,13 +356,18 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.primaryColor,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   onPressed: _submitProfile,
-                  child: const Text("Create Professional Profile", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  child: const Text(
+                    "Create Professional Profile",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
                 ),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 40),
             ],
           ),
         ),
@@ -232,21 +376,47 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
   }
 
   Widget _buildSectionTitle(String title, ThemeData theme) => Padding(
-    padding: const EdgeInsets.only(bottom: 16, top: 8),
-    child: Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: theme.primaryColor)),
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(
+      title,
+      style: theme.textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.bold,
+        color: theme.primaryColor,
+      ),
+    ),
   );
 
   Widget _buildLabel(String text, ThemeData theme) => Padding(
     padding: const EdgeInsets.only(left: 4, bottom: 8),
-    child: Text(text, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+    child: Text(
+      text,
+      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+    ),
   );
 
-  InputDecoration _inputDecoration(String hint, IconData icon) => InputDecoration(
-    hintText: hint,
-    prefixIcon: Icon(icon, size: 20, color: Theme.of(context).primaryColor),
-    filled: true,
-    fillColor: Theme.of(context).cardColor,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-  );
+  InputDecoration _inputDecoration(String hint, IconData icon) {
+    final theme = Theme.of(context);
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(
+        icon,
+        size: 20,
+        color: theme.colorScheme.secondary,
+      ), // Uses Hyper Blue
+      filled: true,
+      fillColor:
+          theme.cardColor, // Automatically switches between F9F9F9 and 181818
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: theme.dividerColor,
+          width: 1,
+        ), // Subtle "Threads" border
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: theme.dividerColor, width: 1),
+      ),
+    );
+  }
 }

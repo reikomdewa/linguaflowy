@@ -1,15 +1,117 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/speak/speak_bloc.dart';
+import 'package:linguaflow/blocs/speak/speak_event.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
+import 'package:path/path.dart';
 
 class TutorCard extends StatelessWidget {
-  final Tutor tutor; // Accept the tutor data
+  final Tutor tutor;
 
   const TutorCard({super.key, required this.tutor});
+
+  void _showOptionsMenu(BuildContext context, bool isMe) {
+    final speakBloc = context.read<SpeakBloc>();
+    final theme = Theme.of(context);
+
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true, // Ensures it doesn't overlap system bars
+      backgroundColor: theme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.favorite_rounded, color: Colors.red),
+                title: const Text("Add to Favorites"),
+                onTap: () {
+                  speakBloc.add(ToggleFavoriteTutor(tutor.id));
+                  Navigator.pop(ctx);
+                },
+              ),
+              if (isMe) ...[
+                const Divider(),
+                ListTile(
+                  leading: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.red,
+                  ),
+                  title: const Text(
+                    "Delete Tutor Profile",
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  subtitle: const Text("This action cannot be undone"),
+                  onTap: () {
+                    // Logic for deletion (You might need a DeleteTutorProfile event in your Bloc)
+                    _showDeleteConfirmation(context, speakBloc);
+                  },
+                ),
+              ],
+              ListTile(
+                leading: const Icon(Icons.report_problem_outlined),
+                title: const Text("Report Tutor"),
+                onTap: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context, SpeakBloc bloc) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Profile?"),
+        content: const Text(
+          "Are you sure you want to remove your tutor profile from the platform?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              // bloc.add(DeleteTutorProfileEvent(tutor.id));
+              Navigator.pop(ctx); // Close Dialog
+              Navigator.pop(context); // Close BottomSheet
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final authState = context.read<AuthBloc>().state;
+
+    // Check if this card belongs to the logged-in user
+    bool isMe = false;
+    if (authState is AuthAuthenticated) {
+      isMe = authState.user.id == tutor.userId;
+    }
 
     // Dynamic data from the model
     final String name = tutor.name;
@@ -21,9 +123,8 @@ class TutorCard extends StatelessWidget {
     final String level = tutor.level;
     final List<String> specialties = tutor.specialties;
 
-    // Placeholders for logic not yet in the model (you can add these to the model later)
-    final bool isOnline = true;
-    final bool isSuperTutor = rating >= 4.8;
+    final bool isOnline = tutor.isOnline;
+    final bool isSuperTutor = tutor.isSuperTutor;
 
     return Card(
       elevation: 2,
@@ -31,9 +132,7 @@ class TutorCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: theme.cardColor,
       child: InkWell(
-        onTap: () {
-          // Navigate to Tutor Profile Details
-        },
+        onTap: () {},
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -43,7 +142,7 @@ class TutorCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Profile Picture with Online Status
+                  // Profile Picture
                   Stack(
                     children: [
                       Container(
@@ -83,49 +182,37 @@ class TutorCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 16),
 
-                  // Name, Rating, and Badges
+                  // Info Section
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         Row(
                           children: [
-                            Flexible(
-                              child: Column(
-                                crossAxisAlignment: .start,
-                                children: [
-                                  Text(
-                                    name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.bold),
-                                  ),
-                                  Row(
-                                    children: [
-                                      if (isSuperTutor) ...[
-                                        _buildBadge("SUPER", Colors.amber),
-                                      ],
-                                      Text(
-                                        "Teaches $language",
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                            if (isSuperTutor)
+                              _buildBadge("SUPER", Colors.amber),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                "Teaches $language",
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 6),
                           ],
                         ),
-                        const SizedBox(height: 4),
-
-                        // Level Badge
+                        const SizedBox(height: 6),
                         _buildBadge(level, theme.primaryColor),
-
                         const SizedBox(height: 8),
                         Row(
                           children: [
@@ -154,22 +241,30 @@ class TutorCard extends StatelessWidget {
                     ),
                   ),
 
-                  // Favorite Button
+                  // OPTIONS ICON
                   IconButton(
-                    icon: const Icon(Icons.favorite_border),
+                    icon: const Icon(Icons.more_vert),
                     color: theme.hintColor,
-                    onPressed: () {},
+                    onPressed: () => _showOptionsMenu(context, isMe),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     visualDensity: VisualDensity.compact,
                   ),
                 ],
               ),
-
+              Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Text(
+                    tutor.description,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
-
               if (specialties.isNotEmpty) ...[
-                const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
                   children: specialties
@@ -187,12 +282,9 @@ class TutorCard extends StatelessWidget {
                       .toList(),
                 ),
               ],
-
               const SizedBox(height: 16),
               Divider(height: 1, color: Colors.grey.withOpacity(0.1)),
               const SizedBox(height: 12),
-
-              // Price and Booking
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -242,7 +334,6 @@ class TutorCard extends StatelessWidget {
     );
   }
 
-  // Helper to build small badges
   Widget _buildBadge(String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

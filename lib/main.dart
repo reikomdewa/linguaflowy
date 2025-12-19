@@ -27,7 +27,7 @@ import 'package:media_kit/media_kit.dart';
 // --- SCREENS ---
 import 'package:linguaflow/screens/auth/login_screen.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart'; 
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -107,51 +107,108 @@ class LinguaflowApp extends StatelessWidget {
         // Listen to SettingsBloc to change ThemeMode dynamically
         child: BlocBuilder<SettingsBloc, SettingsState>(
           builder: (context, settings) {
+            const Color hyperBlue = Color(0xFF007AFF);
+            const Color charcoal = Color(0xFF101010); // Threads dark background
+            const Color lightGreyBorder = Color(0xFFE5E5E5);
+            const Color darkGreyBorder = Color(0xFF262626);
             return MaterialApp(
               title: 'LinguaFlow',
               debugShowCheckedModeBanner: false,
-
-              // --- DYNAMIC THEME MODE ---
-              // This controls System vs Light vs Dark
               themeMode: settings.themeMode,
 
-              // --- LIGHT THEME ---
+              // --- THREADS LIGHT THEME ---
               theme: ThemeData(
                 useMaterial3: true,
                 brightness: Brightness.light,
-                colorScheme: ColorScheme.fromSeed(
-                  seedColor: Colors.blue,
-                  brightness: Brightness.light,
-                ),
+                primaryColor: Colors
+                    .black, // Threads uses black as the primary action color
                 scaffoldBackgroundColor: Colors.white,
+                cardColor: const Color(0xFFF9F9F9), // Slightly off-white cards
+                dividerColor: lightGreyBorder,
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: hyperBlue,
+                  brightness: Brightness.light,
+                  primary: Colors.black, // Primary actions like buttons
+                  secondary: hyperBlue,
+                  surface: Colors.white,
+                ),
                 appBarTheme: const AppBarTheme(
                   elevation: 0,
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.black,
-                  surfaceTintColor: Colors.transparent,
+                  centerTitle: true,
+                  titleTextStyle: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800, // Thick "Threads" style title
+                    color: Colors.black,
+                  ),
                 ),
-                fontFamily: 'Roboto', // Default app font
+                // Make chips and buttons more rounded
+                chipTheme: ChipThemeData(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  side: const BorderSide(color: lightGreyBorder),
+                  backgroundColor: Colors.white,
+                ),
+                elevatedButtonTheme: ElevatedButtonThemeData(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
               ),
 
-              // --- DARK THEME ---
+              // --- THREADS CHARCOAL DARK THEME ---
               darkTheme: ThemeData(
                 useMaterial3: true,
                 brightness: Brightness.dark,
+                primaryColor: Colors.white,
+                scaffoldBackgroundColor: charcoal, // Deep charcoal background
+                cardColor: const Color(
+                  0xFF181818,
+                ), // Slightly lighter charcoal for cards
+                dividerColor: darkGreyBorder,
                 colorScheme: ColorScheme.fromSeed(
-                  seedColor: Colors.blue,
+                  seedColor: hyperBlue,
                   brightness: Brightness.dark,
+                  primary: Colors.white,
+                  secondary: hyperBlue,
+                  surface: charcoal,
                 ),
-                scaffoldBackgroundColor: const Color(0xFF121212),
                 appBarTheme: const AppBarTheme(
                   elevation: 0,
-                  backgroundColor: Color(0xFF121212),
+                  backgroundColor: charcoal,
                   foregroundColor: Colors.white,
-                  surfaceTintColor: Colors.transparent,
+                  centerTitle: true,
+                  titleTextStyle: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
                 ),
-                fontFamily: 'Roboto',
+                chipTheme: ChipThemeData(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  side: const BorderSide(color: darkGreyBorder),
+                  backgroundColor: const Color(0xFF181818),
+                ),
+                elevatedButtonTheme: ElevatedButtonThemeData(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
               ),
-
-              // --- ROUTING ---
               home: const AuthGate(),
             );
           },
@@ -168,13 +225,12 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) {
-        
         // 1. User is Authenticated -> Remove Splash & Go Home
         if (state is AuthAuthenticated) {
-          FlutterNativeSplash.remove(); 
+          FlutterNativeSplash.remove();
           return MainNavigationScreen();
         }
-        
+
         // 2. User is Logged Out -> Remove Splash & Show Login
         if (state is AuthUnauthenticated) {
           FlutterNativeSplash.remove();
@@ -184,7 +240,7 @@ class AuthGate extends StatelessWidget {
         // 3. Still Loading (AuthInitial)
         // The Native Splash is still "Preserved" and covering the screen.
         // So we can just return an empty container behind it.
-        return const SizedBox.shrink(); 
+        return const SizedBox.shrink();
       },
     );
   }
