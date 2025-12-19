@@ -4,7 +4,6 @@ import '../../models/speak_models.dart';
 
 abstract class SpeakEvent extends Equatable {
   const SpeakEvent();
-
   @override
   List<Object?> get props => [];
 }
@@ -14,17 +13,22 @@ class LoadSpeakData extends SpeakEvent {}
 class ChangeSpeakTab extends SpeakEvent {
   final int tabIndex;
   const ChangeSpeakTab(this.tabIndex);
-
   @override
   List<Object?> get props => [tabIndex];
 }
 
 class FilterSpeakList extends SpeakEvent {
-  final String? language;
-  const FilterSpeakList({this.language});
+  final String? query;     // The search text
+  final String? category;  // 'Level', 'Specialty', 'Paid', etc.
+
+  const FilterSpeakList(this.query, {this.category});
+
+  @override
+  List<Object?> get props => [query, category];
 }
 
-// --- LiveKit Room Management ---
+class ClearAllFilters extends SpeakEvent {}
+
 class RoomJoined extends SpeakEvent {
   final Room room;
   const RoomJoined(this.room);
@@ -33,8 +37,6 @@ class RoomJoined extends SpeakEvent {
 }
 
 class RoomLeft extends SpeakEvent {}
-
-// --- CREATION EVENTS ---
 
 class CreateRoomEvent extends SpeakEvent {
   final String topic;
@@ -71,10 +73,10 @@ class CreateTutorProfileEvent extends SpeakEvent {
   @override
   List<Object?> get props => [name, language, pricePerHour, imageUrl];
 }
+
 class JoinRoomEvent extends SpeakEvent {
   final ChatRoom room;
   const JoinRoomEvent(this.room);
-
   @override
   List<Object> get props => [room];
 }
