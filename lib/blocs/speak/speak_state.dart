@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:livekit_client/livekit_client.dart';
-import '../../models/speak_models.dart';
+import '../../models/speak/speak_models.dart';
 
 enum SpeakStatus { initial, loading, success, failure }
 enum SpeakTab { all, tutors, rooms }
@@ -11,7 +11,7 @@ class SpeakState extends Equatable {
   final List<Tutor> tutors;
   final List<ChatRoom> rooms;
   final String? searchQuery;
-  final String? activeCategory;
+  final Map<String, String> filters; // <--- ADDED THIS
   final Room? activeRoom;
 
   const SpeakState({
@@ -20,7 +20,7 @@ class SpeakState extends Equatable {
     this.tutors = const [],
     this.rooms = const [],
     this.searchQuery,
-    this.activeCategory,
+    this.filters = const {}, // <--- INITIALIZED AS EMPTY
     this.activeRoom,
   });
 
@@ -30,22 +30,30 @@ class SpeakState extends Equatable {
     List<Tutor>? tutors,
     List<ChatRoom>? rooms,
     String? searchQuery,
-    String? activeCategory,
+    Map<String, String>? filters, // <--- ADDED THIS
     Room? activeRoom,
     bool clearActiveRoom = false,
-    bool clearFilters = false,
+    bool resetFilters = false,
   }) {
     return SpeakState(
       status: status ?? this.status,
       currentTab: currentTab ?? this.currentTab,
       tutors: tutors ?? this.tutors,
       rooms: rooms ?? this.rooms,
-      searchQuery: clearFilters ? null : (searchQuery ?? this.searchQuery),
-      activeCategory: clearFilters ? null : (activeCategory ?? this.activeCategory),
+      searchQuery: resetFilters ? null : (searchQuery ?? this.searchQuery),
+      filters: resetFilters ? const {} : (filters ?? this.filters), // <--- LOGIC ADDED
       activeRoom: clearActiveRoom ? null : (activeRoom ?? this.activeRoom),
     );
   }
 
   @override
-  List<Object?> get props => [status, currentTab, tutors, rooms, searchQuery, activeCategory, activeRoom];
+  List<Object?> get props => [
+        status,
+        currentTab,
+        tutors,
+        rooms,
+        searchQuery,
+        filters, // <--- ADDED THIS
+        activeRoom,
+      ];
 }

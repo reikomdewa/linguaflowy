@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_event.dart';
-import 'package:linguaflow/models/speak_models.dart';
+import 'package:linguaflow/models/speak/speak_models.dart';
 import 'package:linguaflow/screens/speak/widgets/participant_tile.dart';
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -184,7 +184,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     
     // 2. Notify Bloc
     if (mounted) {
-      context.read<SpeakBloc>().add(RoomLeft());
+      context.read<SpeakBloc>().add(LeaveRoomEvent());
       Navigator.of(context).pop();
     }
   }

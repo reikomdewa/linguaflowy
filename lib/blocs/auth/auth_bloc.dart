@@ -117,25 +117,31 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   Future<void> _onAuthCheckRequested(
-    AuthCheckRequested event,
-    Emitter<AuthState> emit,
-  ) async {
-    final firebaseUser = FirebaseAuth.instance.currentUser;
-    if (firebaseUser != null) {
-      await firebaseUser.reload();
+  AuthCheckRequested event,
+  Emitter<AuthState> emit,
+) async {
+  final firebaseUser = FirebaseAuth.instance.currentUser;
+  if (firebaseUser != null) {
+    await firebaseUser.reload();
 
-      if (firebaseUser.emailVerified) {
-        UserModel? user = await authService.getCurrentUser();
-        if (user != null) {
-          // CHECK STREAK HERE
-          user = await _checkAndUpateStreak(user);
-          emit(AuthAuthenticated(user));
-          return;
+    if (firebaseUser.emailVerified) {
+      UserModel? user = await authService.getCurrentUser();
+      if (user != null) {
+        // SYNC CHECK: If Firestore photo is empty but Firebase has one (Google login case)
+        if ((user.photoUrl == null || user.photoUrl!.isEmpty) && firebaseUser.photoURL != null) {
+          user = user.copyWith(photoUrl: firebaseUser.photoURL);
+          // Silently update Firestore
+          FirebaseFirestore.instance.collection('users').doc(user.id).update({'photoUrl': user.photoUrl});
         }
+
+        user = await _checkAndUpateStreak(user);
+        emit(AuthAuthenticated(user));
+        return;
       }
     }
-    emit(AuthUnauthenticated());
   }
+  emit(AuthUnauthenticated());
+}
 
   Future<void> _onAuthLoginRequested(
     AuthLoginRequested event,
@@ -382,45 +388,47 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  Future<void> _onAuthUpdateUser(
-    AuthUpdateUser event,
-    Emitter<AuthState> emit,
-  ) async {
-    if (state is AuthAuthenticated) {
-      final currentUser = (state as AuthAuthenticated).user;
-      final updatedUser = currentUser.copyWith(
-        nativeLanguage: event.nativeLanguage ?? currentUser.nativeLanguage,
-        targetLanguages: event.targetLanguages ?? currentUser.targetLanguages,
-        displayName: event.displayName ?? currentUser.displayName,
-      );
-      emit(AuthAuthenticated(updatedUser));
-      try {
-        final updates = <String, dynamic>{};
-        if (event.nativeLanguage != null) {
-          updates['nativeLanguage'] = event.nativeLanguage;
-        }
-        if (event.targetLanguages != null) {
-          updates['targetLanguages'] = event.targetLanguages;
-        }
-        if (event.displayName != null) {
-          updates['displayName'] = event.displayName;
-        }
+ Future<void> _onAuthUpdateUser(
+  AuthUpdateUser event,
+  Emitter<AuthState> emit,
+) async {
+  if (state is AuthAuthenticated) {
+    final currentUser = (state as AuthAuthenticated).user;
+    
+    // 1. Update local UI state
+    final updatedUser = currentUser.copyWith(
+      nativeLanguage: event.nativeLanguage ?? currentUser.nativeLanguage,
+      targetLanguages: event.targetLanguages ?? currentUser.targetLanguages,
+      displayName: event.displayName ?? currentUser.displayName,
+      photoUrl: event.photoUrl ?? currentUser.photoUrl, // ADD THIS
+    );
+    emit(AuthAuthenticated(updatedUser));
 
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.id)
-            .update(updates);
+    try {
+      final updates = <String, dynamic>{};
+      if (event.nativeLanguage != null) updates['nativeLanguage'] = event.nativeLanguage;
+      if (event.targetLanguages != null) updates['targetLanguages'] = event.targetLanguages;
+      if (event.displayName != null) updates['displayName'] = event.displayName;
+      if (event.photoUrl != null) updates['photoUrl'] = event.photoUrl; // ADD THIS
 
-        if (event.displayName != null) {
-          await FirebaseAuth.instance.currentUser?.updateDisplayName(
-            event.displayName,
-          );
+      // 2. Persist to Firestore
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.id)
+          .update(updates);
+
+      // 3. Update Firebase Auth Profile (Optional, but keeps them in sync)
+      if (event.displayName != null || event.photoUrl != null) {
+        await FirebaseAuth.instance.currentUser?.updateDisplayName(event.displayName);
+        if (event.photoUrl != null) {
+          await FirebaseAuth.instance.currentUser?.updatePhotoURL(event.photoUrl); // ADD THIS
         }
-      } catch (e) {
-        printLog("Error updating profile: $e");
       }
+    } catch (e) {
+      printLog("Error updating profile: $e");
     }
   }
+}
 
   Future<void> _onAuthDeleteAccount(
     AuthDeleteAccount event,

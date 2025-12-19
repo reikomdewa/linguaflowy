@@ -1,4 +1,3 @@
-
 part of 'auth_bloc.dart';
 
 // ==========================================
@@ -47,11 +46,17 @@ class AuthLanguageLevelChanged extends AuthEvent {
 }
 
 class AuthUpdateUser extends AuthEvent {
+  final String? displayName;
+  final String? photoUrl; // Add this
   final String? nativeLanguage;
   final List<String>? targetLanguages;
-  final String? displayName;
 
-  AuthUpdateUser({this.nativeLanguage, this.targetLanguages, this.displayName});
+  AuthUpdateUser({
+    this.displayName,
+    this.photoUrl, // Add this
+    this.nativeLanguage,
+    this.targetLanguages,
+  });
 }
 
 class AuthDeleteAccount extends AuthEvent {}

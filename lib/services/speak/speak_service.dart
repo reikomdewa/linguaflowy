@@ -1,12 +1,23 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/speak_models.dart';
+import '../../models/speak/speak_models.dart';
 
 class SpeakService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  // inside SpeakService class
+Future<void> createTutorProfile(Tutor tutor) async {
+  await _firestore
+      .collection('tutors')
+      .doc(tutor.id) // This will be the User UID
+      .set(tutor.toMap(), SetOptions(merge: true)); // Merge ensures we don't accidentally wipe metadata
+}
+Future<List<Tutor>> getTutors() async {
+  final snapshot = await _firestore.collection('tutors').get();
+  return snapshot.docs.map((doc) => Tutor.fromMap(doc.data(), doc.id)).toList();
+}
   // UPDATED: Use Top-Level Collection
   Future<void> createRoom(ChatRoom room) async {
     final user = _auth.currentUser;

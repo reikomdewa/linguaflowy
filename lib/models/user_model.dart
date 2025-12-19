@@ -4,6 +4,7 @@ class UserModel {
   final String id;
   final String email;
   final String displayName;
+  final String? photoUrl; // Added field
   final String nativeLanguage;
 
   // Tracks the ACTIVE language (e.g., 'fr')
@@ -32,6 +33,7 @@ class UserModel {
     required this.id,
     required this.email,
     required this.displayName,
+    this.photoUrl, // Added to constructor
     this.nativeLanguage = 'en',
     this.currentLanguage = '',
     this.targetLanguages = const [],
@@ -52,7 +54,6 @@ class UserModel {
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map, String id) {
-    // Helper to safely parse dates from either ISO Strings or Firestore Timestamps
     DateTime parseDate(dynamic value) {
       if (value is Timestamp) return value.toDate();
       if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
@@ -63,6 +64,7 @@ class UserModel {
       id: id,
       email: map['email']?.toString() ?? '',
       displayName: map['displayName']?.toString() ?? '',
+      photoUrl: map['photoUrl']?.toString(), // Added mapping
       nativeLanguage: map['nativeLanguage']?.toString() ?? 'en',
       currentLanguage: map['currentLanguage']?.toString() ?? '',
       
@@ -78,7 +80,6 @@ class UserModel {
       
       isPremium: map['isPremium'] == true,
       
-      // Map XP and Stats ensuring they are integers
       xp: (map['xp'] as num?)?.toInt() ?? 0,
       streakDays: (map['streakDays'] as num?)?.toInt() ?? 0,
       lessonsCompleted: (map['lessonsCompleted'] as num?)?.toInt() ?? 0,
@@ -96,6 +97,7 @@ class UserModel {
     return {
       'email': email,
       'displayName': displayName,
+      'photoUrl': photoUrl, // Added to map
       'nativeLanguage': nativeLanguage,
       'currentLanguage': currentLanguage,
       'targetLanguages': targetLanguages,
@@ -106,7 +108,6 @@ class UserModel {
       'lessonsCompleted': lessonsCompleted,
       'totalListeningMinutes': totalListeningMinutes,
       'languageLevels': languageLevels,
-      // Best practice: Store as Timestamps for better Firestore querying/filtering
       'createdAt': Timestamp.fromDate(createdAt),
       'lastLoginDate': lastLoginDate != null ? Timestamp.fromDate(lastLoginDate!) : null,
     };
@@ -116,6 +117,7 @@ class UserModel {
     String? id,
     String? email,
     String? displayName,
+    String? photoUrl, // Added to copyWith
     String? nativeLanguage,
     String? currentLanguage,
     List<String>? targetLanguages,
@@ -133,6 +135,7 @@ class UserModel {
       id: id ?? this.id,
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
+      photoUrl: photoUrl ?? this.photoUrl, // Logic to keep existing photo if not provided
       nativeLanguage: nativeLanguage ?? this.nativeLanguage,
       currentLanguage: currentLanguage ?? this.currentLanguage,
       targetLanguages: targetLanguages ?? this.targetLanguages,
