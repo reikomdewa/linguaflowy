@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_paypal_payment/flutter_paypal_payment.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_event.dart';
+import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/utils/logger.dart';
 
 class PremiumPurchaseScreen extends StatefulWidget {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/constants/constants.dart';
 
 // Screens
@@ -70,7 +71,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       const VocabularyScreen(),
       const SearchScreen(),
       // const SizedBox.shrink(), // Placeholder
-const SpeakScreen(), // The new screen // Placeholder for Speak Screen
+      // const SpeakScreen(),
     ];
 
     // 2. Build the Navigation Items
@@ -97,13 +98,13 @@ const SpeakScreen(), // The new screen // Placeholder for Speak Screen
         ),
         label: 'Discover',
       ),
-      const BottomNavigationBarItem(
-        icon: Padding(
-          padding: EdgeInsets.only(bottom: 4.0),
-          child: FaIcon(FontAwesomeIcons.microphone, size: 20),
-        ),
-        label: 'Speak',
-      ),
+      // const BottomNavigationBarItem(
+      //   icon: Padding(
+      //     padding: EdgeInsets.only(bottom: 4.0),
+      //     child: FaIcon(FontAwesomeIcons.microphone, size: 20),
+      //   ),
+      //   label: 'Speak',
+      // ),
     ];
 
     // --- IF ADMIN: Add Admin Tab ---

@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_event.dart';
+import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
+import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/screens/placement_test/placement_test_screen.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 
@@ -34,42 +38,42 @@ class HomeLanguageDialogs {
               title: const Text("What language do you speak?"),
               contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
               content: SizedBox(
-                width: double.maxFinite,
+                width: kIsWeb ? 100 : double.maxFinite,
                 height: 400,
                 child: Column(
                   children: [
-                   Expanded(
-  child: RadioGroup<String>(
-    groupValue: currentSelection,
-    onChanged: (val) {
-      if (val != null) {
-        setState(() => currentSelection = val);
-      }
-    },
-    child: ListView(
-      shrinkWrap: true,
-      children: LanguageHelper.availableLanguages.entries.map(
-        (entry) {
-          return RadioListTile<String>(
-            contentPadding: EdgeInsets.zero,
-            title: Row(
-              children: [
-                Text(
-                  LanguageHelper.getFlagEmoji(entry.key),
-                  style: const TextStyle(fontSize: 24),
-                ),
-                const SizedBox(width: 12),
-                Text(entry.value),
-              ],
-            ),
-            value: entry.key,
-            // groupValue and onChanged are now handled by the parent RadioGroup
-          );
-        },
-      ).toList(),
-    ),
-  ),
-),
+                    Expanded(
+                      child: RadioGroup<String>(
+                        groupValue: currentSelection,
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => currentSelection = val);
+                          }
+                        },
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: LanguageHelper.availableLanguages.entries.map((
+                            entry,
+                          ) {
+                            return RadioListTile<String>(
+                              contentPadding: EdgeInsets.zero,
+                              title: Row(
+                                children: [
+                                  Text(
+                                    LanguageHelper.getFlagEmoji(entry.key),
+                                    style: const TextStyle(fontSize: 24),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(entry.value),
+                                ],
+                              ),
+                              value: entry.key,
+                              // groupValue and onChanged are now handled by the parent RadioGroup
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -123,94 +127,10 @@ class HomeLanguageDialogs {
       isScrollControlled: true,
       builder: (ctx) => PopScope(
         canPop: !isMandatory,
-        child: Container(
-          height: MediaQuery.of(context).size.height * 0.75,
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-                Text(
-                  isMandatory
-                      ? "What do you want to learn? 🚀"
-                      : "Switch Language",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                    color: isDark ? Colors.white : Colors.black,
-                  ),
-                ),
-                if (isMandatory)
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      "We will translate content to ${LanguageHelper.getLanguageName(user.nativeLanguage)}",
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                  ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: LanguageHelper.availableLanguages.length,
-                    separatorBuilder: (ctx, i) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final entry = LanguageHelper.availableLanguages.entries
-                          .elementAt(index);
-
-                      // Don't show the language they already speak (native)
-                      if (entry.key == user.nativeLanguage) {
-                        return const SizedBox.shrink();
-                      }
-
-                      return ListTile(
-                        leading: Text(
-                          LanguageHelper.getFlagEmoji(entry.key),
-                          style: const TextStyle(fontSize: 32),
-                        ),
-                        title: Text(
-                          entry.value,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500,
-                            color: isDark ? Colors.white : Colors.black,
-                          ),
-                        ),
-                        trailing: const Icon(
-                          Icons.arrow_forward_ios,
-                          size: 16,
-                          color: Colors.grey,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 8,
-                        ),
-                        onTap: () {
-                          // Standard "Tap to select" works fine here for a list
-                          context.read<AuthBloc>().add(
-                            AuthTargetLanguageChanged(entry.key),
-                          );
-
-                          // Trigger Data Loads
-                          context.read<LessonBloc>().add(
-                            LessonLoadRequested(user.id, entry.key),
-                          );
-                          context.read<VocabularyBloc>().add(
-                            VocabularyLoadRequested(user.id),
-                          );
-
-                          Navigator.pop(ctx);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
+        child: ChooseNativeLanguangeWidget(
+          isDark: isDark,
+          user: user,
+          isMandatory: isMandatory,
         ),
       ),
     );
@@ -433,6 +353,110 @@ class HomeLanguageDialogs {
             child: const Text("Take Test"),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class ChooseNativeLanguangeWidget extends StatelessWidget {
+  const ChooseNativeLanguangeWidget({
+    super.key,
+    required this.isDark,
+    required this.user,
+    required this.isMandatory,
+  });
+
+  final bool isDark;
+  final UserModel user;
+  final bool isMandatory;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
+            Text(
+              isMandatory ? "What do you want to learn? 🚀" : "Switch Language",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+            ),
+            if (isMandatory)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  "We will translate content to ${LanguageHelper.getLanguageName(user.nativeLanguage)}",
+                  style: const TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+              ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: LanguageHelper.availableLanguages.length,
+                separatorBuilder: (ctx, i) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final entry = LanguageHelper.availableLanguages.entries
+                      .elementAt(index);
+
+                  // Don't show the language they already speak (native)
+                  if (entry.key == user.nativeLanguage) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return ListTile(
+                    leading: Text(
+                      LanguageHelper.getFlagEmoji(entry.key),
+                      style: const TextStyle(fontSize: 32),
+                    ),
+                    title: Text(
+                      entry.value,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 8,
+                    ),
+                    onTap: () {
+                      // Standard "Tap to select" works fine here for a list
+                      context.read<AuthBloc>().add(
+                        AuthTargetLanguageChanged(entry.key),
+                      );
+
+                      // Trigger Data Loads
+                      context.read<LessonBloc>().add(
+                        LessonLoadRequested(user.id, entry.key),
+                      );
+                      context.read<VocabularyBloc>().add(
+                        VocabularyLoadRequested(user.id),
+                      );
+
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

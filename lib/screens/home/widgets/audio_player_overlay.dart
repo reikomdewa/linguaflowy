@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart'; // 2. Needed for Bloc
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart'; // 3. Import AuthBloc
+import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/utils/logger.dart';
 

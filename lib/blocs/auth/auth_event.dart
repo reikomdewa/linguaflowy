@@ -1,75 +1,111 @@
-part of 'auth_bloc.dart';
+import 'package:equatable/equatable.dart';
 
-// ==========================================
-// EVENTS
-// ==========================================
-abstract class AuthEvent {}
+abstract class AuthEvent extends Equatable {
+  const AuthEvent();
+
+  @override
+  List<Object?> get props => [];
+}
 
 class AuthCheckRequested extends AuthEvent {}
+
+class AuthGoogleLoginRequested extends AuthEvent {}
+
+class AuthLogoutRequested extends AuthEvent {}
 
 class AuthLoginRequested extends AuthEvent {
   final String email;
   final String password;
-  AuthLoginRequested(this.email, this.password);
-}
 
-class AuthGoogleLoginRequested extends AuthEvent {}
+  const AuthLoginRequested(this.email, this.password);
+
+  @override
+  List<Object> get props => [email, password];
+}
 
 class AuthRegisterRequested extends AuthEvent {
   final String email;
   final String password;
   final String displayName;
-  AuthRegisterRequested(this.email, this.password, this.displayName);
+
+  const AuthRegisterRequested(this.email, this.password, this.displayName);
+
+  @override
+  List<Object> get props => [email, password, displayName];
 }
 
 class AuthResetPasswordRequested extends AuthEvent {
   final String email;
-  AuthResetPasswordRequested(this.email);
+
+  const AuthResetPasswordRequested(this.email);
+
+  @override
+  List<Object> get props => [email];
 }
 
 class AuthResendVerificationEmail extends AuthEvent {
   final String email;
   final String password;
-  AuthResendVerificationEmail(this.email, this.password);
+
+  const AuthResendVerificationEmail(this.email, this.password);
+
+  @override
+  List<Object> get props => [email, password];
 }
 
-class AuthLogoutRequested extends AuthEvent {}
+class AuthUpdateXP extends AuthEvent {
+  final int xpToAdd;
 
-class AuthTargetLanguageChanged extends AuthEvent {
-  final String languageCode;
-  AuthTargetLanguageChanged(this.languageCode);
+  const AuthUpdateXP(this.xpToAdd);
+
+  @override
+  List<Object> get props => [xpToAdd];
 }
 
-class AuthLanguageLevelChanged extends AuthEvent {
-  final String level;
-  AuthLanguageLevelChanged(this.level);
-}
-
-class AuthUpdateUser extends AuthEvent {
-  final String? displayName;
-  final String? photoUrl; // Add this
-  final String? nativeLanguage;
-  final List<String>? targetLanguages;
-
-  AuthUpdateUser({
-    this.displayName,
-    this.photoUrl, // Add this
-    this.nativeLanguage,
-    this.targetLanguages,
-  });
-}
-
-class AuthDeleteAccount extends AuthEvent {}
-
-// --- NEW EVENTS FOR STATS ---
 class AuthUpdateListeningTime extends AuthEvent {
   final int minutesToAdd;
-  AuthUpdateListeningTime(this.minutesToAdd);
+
+  const AuthUpdateListeningTime(this.minutesToAdd);
+
+  @override
+  List<Object> get props => [minutesToAdd];
 }
 
 class AuthIncrementLessonsCompleted extends AuthEvent {}
 
-class AuthUpdateXP extends AuthEvent {
-  final int xpToAdd;
-  AuthUpdateXP(this.xpToAdd);
+class AuthDeleteAccount extends AuthEvent {}
+
+class AuthTargetLanguageChanged extends AuthEvent {
+  final String languageCode;
+
+  const AuthTargetLanguageChanged(this.languageCode);
+
+  @override
+  List<Object> get props => [languageCode];
+}
+
+class AuthLanguageLevelChanged extends AuthEvent {
+  final String level;
+
+  const AuthLanguageLevelChanged(this.level);
+
+  @override
+  List<Object> get props => [level];
+}
+
+class AuthUpdateUser extends AuthEvent {
+  final String? displayName;
+  final String? photoUrl;
+  final String? nativeLanguage;
+  final List<String>? targetLanguages;
+
+  const AuthUpdateUser({
+    this.displayName,
+    this.photoUrl,
+    this.nativeLanguage,
+    this.targetLanguages,
+  });
+
+  @override
+  List<Object?> get props => [displayName, photoUrl, nativeLanguage, targetLanguages];
 }

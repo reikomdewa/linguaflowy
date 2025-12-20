@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';

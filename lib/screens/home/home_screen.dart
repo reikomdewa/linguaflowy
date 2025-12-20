@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/constants/genre_constants.dart';
 import 'package:linguaflow/screens/home/widgets/build_appbar.dart';
 import 'package:linguaflow/screens/home/widgets/sections/genre_feed_section.dart';

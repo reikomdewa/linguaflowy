@@ -44,6 +44,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+# Keystore files
+# **/upload-keystore.jks
+app/upload-keystore.jks
+key.properties
 
 
 # Firebase Service Account Key

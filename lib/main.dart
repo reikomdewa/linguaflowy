@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -7,11 +8,15 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // --- BLOCS ---
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_event.dart';
+import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart'; // Crucial for Themes
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
+import 'package:linguaflow/firebase_options.dart';
+import 'package:linguaflow/screens/login/web_login_layout.dart';
 
 // --- SERVICES & REPOSITORIES ---
 import 'package:linguaflow/services/auth_service.dart';
@@ -22,15 +27,19 @@ import 'package:linguaflow/services/hybrid_lesson_service.dart'; // Local Servic
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
+import 'package:linguaflow/utils/centered_views.dart';
 import 'package:media_kit/media_kit.dart';
 
 // --- SCREENS ---
-import 'package:linguaflow/screens/auth/login_screen.dart';
+import 'package:linguaflow/screens/login/login_screen.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform, // <--- Add this line
+  );
   MediaKit.ensureInitialized();
 
   // 1. Load Env & Init Gemini
@@ -217,7 +226,6 @@ class LinguaflowApp extends StatelessWidget {
     );
   }
 }
-
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -225,22 +233,38 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) {
-        // 1. User is Authenticated -> Remove Splash & Go Home
+        // 1. Authenticated -> Go to App
         if (state is AuthAuthenticated) {
           FlutterNativeSplash.remove();
           return MainNavigationScreen();
         }
 
-        // 2. User is Logged Out -> Remove Splash & Show Login
-        if (state is AuthUnauthenticated) {
-          FlutterNativeSplash.remove();
-          return LoginScreen();
+        // 2. Loading -> Show Spinner (Fixes blank screen on click)
+        if (state is AuthLoading) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
         }
 
-        // 3. Still Loading (AuthInitial)
-        // The Native Splash is still "Preserved" and covering the screen.
-        // So we can just return an empty container behind it.
-        return const SizedBox.shrink();
+        // 3. Unauthenticated OR Error -> Show Login
+        // We include AuthError here so the Login Screen stays visible
+        // and allows the SnackBar to show the specific error message.
+        if (state is AuthUnauthenticated || state is AuthError || state is AuthMessage) {
+          FlutterNativeSplash.remove();
+          if (kIsWeb) {
+            return const Scaffold(body: WebLoginLayout());
+          } else {
+            return const LoginScreen();
+          }
+        }
+
+        // 4. Initial State -> Show Spinner (Fixes blank screen on startup)
+        // If the app is just starting and hasn't checked auth yet.
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
       },
     );
   }

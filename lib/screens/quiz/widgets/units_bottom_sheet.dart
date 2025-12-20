@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/screens/quiz/quiz_screen.dart';
 import 'package:linguaflow/screens/learn/learn_screen.dart';
 import 'package:linguaflow/screens/quiz/widgets/unit_path_card.dart';

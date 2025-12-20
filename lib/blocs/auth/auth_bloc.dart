@@ -1,12 +1,15 @@
-import 'package:bloc/bloc.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart'; // 1. REQUIRED FOR kIsWeb
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/auth_service.dart';
 import 'package:linguaflow/utils/logger.dart';
 
-part 'auth_event.dart';
-part 'auth_state.dart';
+// Import the separate files
+import 'auth_event.dart';
+import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthService authService;
@@ -24,28 +27,24 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLanguageLevelChanged>(_onAuthLanguageLevelChanged);
     on<AuthUpdateUser>(_onAuthUpdateUser);
     on<AuthDeleteAccount>(_onAuthDeleteAccount);
-
-    // New Handlers
     on<AuthUpdateListeningTime>(_onAuthUpdateListeningTime);
     on<AuthIncrementLessonsCompleted>(_onAuthIncrementLessonsCompleted);
     on<AuthUpdateXP>(_onAuthUpdateXP);
   }
+
+  // --- HANDLERS ---
+
   Future<void> _onAuthUpdateXP(
     AuthUpdateXP event,
     Emitter<AuthState> emit,
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
-
-      // 1. Calculate new total locally
-      // (Assumes your UserModel has an 'xp' field as seen in your Firestore screenshot)
-      final int newXp = ((currentUser.xp) + event.xpToAdd).toInt();
-
-      // 2. Update local state immediately so the UI reflects the gain
+      final int newXp = (currentUser.xp + event.xpToAdd).toInt();
       final updatedUser = currentUser.copyWith(xp: newXp);
+      
       emit(AuthAuthenticated(updatedUser));
 
-      // 3. Persist to Firestore
       try {
         await FirebaseFirestore.instance
             .collection('users')
@@ -53,95 +52,54 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             .update({'xp': FieldValue.increment(event.xpToAdd)});
       } catch (e) {
         printLog("Error updating XP in Firestore: $e");
-        // We don't necessarily want to emit an error state here because
-        // the user is still authenticated and the local state is updated.
       }
     }
-  }
-
-  // --- STREAK CALCULATION LOGIC ---
-  Future<UserModel> _checkAndUpateStreak(UserModel user) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    DateTime? lastLoginDate = user.lastLoginDate;
-    DateTime? lastLoginDay;
-
-    if (lastLoginDate != null) {
-      lastLoginDay = DateTime(
-        lastLoginDate.year,
-        lastLoginDate.month,
-        lastLoginDate.day,
-      );
-    }
-
-    int newStreak = user.streakDays;
-    bool needsUpdate = false;
-
-    if (lastLoginDay == null) {
-      // First time
-      newStreak = 1;
-      needsUpdate = true;
-    } else if (today.difference(lastLoginDay).inDays == 0) {
-      // Same day, no streak change, but maybe update exact timestamp
-    } else if (today.difference(lastLoginDay).inDays == 1) {
-      // Consecutive day
-      newStreak += 1;
-      needsUpdate = true;
-    } else {
-      // Missed a day
-      newStreak = 1;
-      needsUpdate = true;
-    }
-
-    // Always update the lastLoginDate to now
-    final updatedUser = user.copyWith(
-      streakDays: newStreak,
-      lastLoginDate: now,
-    );
-
-    if (needsUpdate || lastLoginDay != today) {
-      try {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.id)
-            .update({
-              'streakDays': newStreak,
-              'lastLoginDate': Timestamp.fromDate(now),
-            });
-      } catch (e) {
-        printLog("Error updating streak: $e");
-      }
-    }
-    return updatedUser;
   }
 
   Future<void> _onAuthCheckRequested(
-  AuthCheckRequested event,
-  Emitter<AuthState> emit,
-) async {
-  final firebaseUser = FirebaseAuth.instance.currentUser;
-  if (firebaseUser != null) {
-    await firebaseUser.reload();
-
-    if (firebaseUser.emailVerified) {
-      UserModel? user = await authService.getCurrentUser();
-      if (user != null) {
-        // SYNC CHECK: If Firestore photo is empty but Firebase has one (Google login case)
-        if ((user.photoUrl == null || user.photoUrl!.isEmpty) && firebaseUser.photoURL != null) {
-          user = user.copyWith(photoUrl: firebaseUser.photoURL);
-          // Silently update Firestore
-          FirebaseFirestore.instance.collection('users').doc(user.id).update({'photoUrl': user.photoUrl});
-        }
-
-        user = await _checkAndUpateStreak(user);
-        emit(AuthAuthenticated(user));
-        return;
+    AuthCheckRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    // 2. WEB PERSISTENCE FIX
+    // On Web, ensure we look for Local Persistence so refresh doesn't logout
+    if (kIsWeb) {
+      try {
+        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      } catch (e) {
+        printLog("Error setting web persistence: $e");
       }
     }
+
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser != null) {
+      try {
+        await firebaseUser.reload();
+      } catch (e) {
+        // If reload fails (e.g. token expired), we might need to logout
+        printLog("Error reloading user: $e");
+      }
+
+      if (firebaseUser.emailVerified) {
+        UserModel? user = await authService.getCurrentUser();
+        if (user != null) {
+          // Sync Photo Logic
+          if ((user.photoUrl == null || user.photoUrl!.isEmpty) &&
+              firebaseUser.photoURL != null) {
+            user = user.copyWith(photoUrl: firebaseUser.photoURL);
+            FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.id)
+                .update({'photoUrl': user.photoUrl});
+          }
+
+          user = await _checkAndUpateStreak(user);
+          emit(AuthAuthenticated(user));
+          return;
+        }
+      }
+    }
+    emit(AuthUnauthenticated());
   }
-  emit(AuthUnauthenticated());
-}
 
   Future<void> _onAuthLoginRequested(
     AuthLoginRequested event,
@@ -155,7 +113,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (firebaseUser != null && !firebaseUser.emailVerified) {
         await authService.signOut();
         emit(
-          AuthError(
+          const AuthError(
             "Email not verified. Please check your inbox.",
             isVerificationError: true,
           ),
@@ -163,11 +121,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       } else {
         UserModel? user = await authService.getCurrentUser();
         if (user != null) {
-          // CHECK STREAK HERE TOO
           user = await _checkAndUpateStreak(user);
           emit(AuthAuthenticated(user));
         } else {
-          emit(AuthError("User data not found."));
+          emit(const AuthError("User data not found."));
         }
       }
     } catch (e) {
@@ -175,50 +132,49 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  Future<void> _onAuthGoogleLoginRequested(
+ Future<void> _onAuthGoogleLoginRequested(
     AuthGoogleLoginRequested event,
     Emitter<AuthState> emit,
   ) async {
+    print("🔹 BLOC: Received Google Login Request!"); // <--- ADD THIS
     emit(AuthLoading());
+    
     try {
+      print("🔹 BLOC: Calling AuthService..."); // <--- ADD THIS
       UserModel? user = await authService.signInWithGoogle();
+      
       if (user != null) {
-        // CHECK STREAK HERE TOO
-        user = await _checkAndUpateStreak(user);
+        print("🔹 BLOC: User found: ${user.email}"); // <--- ADD THIS
+        // ... rest of logic
         emit(AuthAuthenticated(user));
       } else {
+        print("🔹 BLOC: User cancelled or null"); // <--- ADD THIS
         emit(AuthUnauthenticated());
       }
     } catch (e) {
-      emit(AuthError("Google Sign In Failed: ${e.toString()}"));
+      print("🔴 BLOC ERROR: $e"); // <--- ADD THIS
+      emit(AuthError("Google Sign In Failed: $e"));
     }
   }
 
-  // --- NEW HANDLER: LISTENING TIME ---
   Future<void> _onAuthUpdateListeningTime(
     AuthUpdateListeningTime event,
     Emitter<AuthState> emit,
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
-
-      // Calculate new total
-      // If the field was null/0 locally, this handles the increment correctly
       final newTotal = currentUser.totalListeningMinutes + event.minutesToAdd;
-
       final updatedUser = currentUser.copyWith(totalListeningMinutes: newTotal);
 
-      // Emit immediately for UI
       emit(AuthAuthenticated(updatedUser));
 
-      // SAVE TO FIRESTORE ROBUSTLY
       try {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(currentUser.id)
             .set(
               {'totalListeningMinutes': newTotal},
-              SetOptions(merge: true), // <--- THIS CREATES THE FIELD IF MISSING
+              SetOptions(merge: true),
             );
       } catch (e) {
         rethrow;
@@ -226,7 +182,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  // --- NEW HANDLER: LESSON COMPLETED ---
   Future<void> _onAuthIncrementLessonsCompleted(
     AuthIncrementLessonsCompleted event,
     Emitter<AuthState> emit,
@@ -234,7 +189,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
       final newTotal = currentUser.lessonsCompleted + 1;
-
       final updatedUser = currentUser.copyWith(lessonsCompleted: newTotal);
 
       emit(AuthAuthenticated(updatedUser));
@@ -250,7 +204,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  // ... (Rest of existing methods: Register, ResetPass, etc. remain unchanged) ...
   Future<void> _onAuthRegisterRequested(
     AuthRegisterRequested event,
     Emitter<AuthState> emit,
@@ -300,7 +253,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         await user.sendEmailVerification();
         _lastEmailSentTime = DateTime.now();
         await authService.signOut();
-        emit(AuthMessage("Verification email resent! Check your spam folder."));
+        emit(const AuthMessage("Verification email resent! Check your spam folder."));
         emit(AuthUnauthenticated());
       } else if (user != null && user.emailVerified) {
         final userModel = await authService.getCurrentUser();
@@ -388,47 +341,44 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
- Future<void> _onAuthUpdateUser(
-  AuthUpdateUser event,
-  Emitter<AuthState> emit,
-) async {
-  if (state is AuthAuthenticated) {
-    final currentUser = (state as AuthAuthenticated).user;
-    
-    // 1. Update local UI state
-    final updatedUser = currentUser.copyWith(
-      nativeLanguage: event.nativeLanguage ?? currentUser.nativeLanguage,
-      targetLanguages: event.targetLanguages ?? currentUser.targetLanguages,
-      displayName: event.displayName ?? currentUser.displayName,
-      photoUrl: event.photoUrl ?? currentUser.photoUrl, // ADD THIS
-    );
-    emit(AuthAuthenticated(updatedUser));
+  Future<void> _onAuthUpdateUser(
+    AuthUpdateUser event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
 
-    try {
-      final updates = <String, dynamic>{};
-      if (event.nativeLanguage != null) updates['nativeLanguage'] = event.nativeLanguage;
-      if (event.targetLanguages != null) updates['targetLanguages'] = event.targetLanguages;
-      if (event.displayName != null) updates['displayName'] = event.displayName;
-      if (event.photoUrl != null) updates['photoUrl'] = event.photoUrl; // ADD THIS
+      final updatedUser = currentUser.copyWith(
+        nativeLanguage: event.nativeLanguage ?? currentUser.nativeLanguage,
+        targetLanguages: event.targetLanguages ?? currentUser.targetLanguages,
+        displayName: event.displayName ?? currentUser.displayName,
+        photoUrl: event.photoUrl ?? currentUser.photoUrl,
+      );
+      emit(AuthAuthenticated(updatedUser));
 
-      // 2. Persist to Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.id)
-          .update(updates);
+      try {
+        final updates = <String, dynamic>{};
+        if (event.nativeLanguage != null) updates['nativeLanguage'] = event.nativeLanguage;
+        if (event.targetLanguages != null) updates['targetLanguages'] = event.targetLanguages;
+        if (event.displayName != null) updates['displayName'] = event.displayName;
+        if (event.photoUrl != null) updates['photoUrl'] = event.photoUrl;
 
-      // 3. Update Firebase Auth Profile (Optional, but keeps them in sync)
-      if (event.displayName != null || event.photoUrl != null) {
-        await FirebaseAuth.instance.currentUser?.updateDisplayName(event.displayName);
-        if (event.photoUrl != null) {
-          await FirebaseAuth.instance.currentUser?.updatePhotoURL(event.photoUrl); // ADD THIS
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.id)
+            .update(updates);
+
+        if (event.displayName != null || event.photoUrl != null) {
+          await FirebaseAuth.instance.currentUser?.updateDisplayName(event.displayName);
+          if (event.photoUrl != null) {
+            await FirebaseAuth.instance.currentUser?.updatePhotoURL(event.photoUrl);
+          }
         }
+      } catch (e) {
+        printLog("Error updating profile: $e");
       }
-    } catch (e) {
-      printLog("Error updating profile: $e");
     }
   }
-}
 
   Future<void> _onAuthDeleteAccount(
     AuthDeleteAccount event,
@@ -446,7 +396,62 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(AuthUnauthenticated());
       }
     } catch (e) {
-      emit(AuthError("Failed to delete account. Please log in again and try."));
+      emit(const AuthError("Failed to delete account. Please log in again and try."));
     }
+  }
+
+  // --- INTERNAL UTILITIES ---
+  
+  // Ideally, move this to AuthService
+  Future<UserModel> _checkAndUpateStreak(UserModel user) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    DateTime? lastLoginDate = user.lastLoginDate;
+    DateTime? lastLoginDay;
+
+    if (lastLoginDate != null) {
+      lastLoginDay = DateTime(
+        lastLoginDate.year,
+        lastLoginDate.month,
+        lastLoginDate.day,
+      );
+    }
+
+    int newStreak = user.streakDays;
+    bool needsUpdate = false;
+
+    if (lastLoginDay == null) {
+      newStreak = 1;
+      needsUpdate = true;
+    } else if (today.difference(lastLoginDay).inDays == 0) {
+      // Same day
+    } else if (today.difference(lastLoginDay).inDays == 1) {
+      newStreak += 1;
+      needsUpdate = true;
+    } else {
+      newStreak = 1;
+      needsUpdate = true;
+    }
+
+    final updatedUser = user.copyWith(
+      streakDays: newStreak,
+      lastLoginDate: now,
+    );
+
+    if (needsUpdate || lastLoginDay != today) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.id)
+            .update({
+              'streakDays': newStreak,
+              'lastLoginDate': Timestamp.fromDate(now),
+            });
+      } catch (e) {
+        printLog("Error updating streak: $e");
+      }
+    }
+    return updatedUser;
   }
 }

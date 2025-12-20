@@ -119,12 +119,11 @@ dev_dependencies:
 
 
 flutter_native_splash:
-  color: "#FF121212" # Background color (white)
-  image: assets/images/linguaflow_logo.png # Your app logo
-  # branding: assets/images/branding.png # Optional: Text at bottom
+  color: "#121212"  
+  image: assets/images/linguaflow_logo.png
   android_12:
     image: assets/images/linguaflow_logo.png 
-    color: "#FF121212"
+    color: "#121212"
 
 
 # The following section is specific to Flutter packages.

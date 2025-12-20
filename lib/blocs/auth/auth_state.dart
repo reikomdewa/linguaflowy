@@ -1,28 +1,43 @@
-// ==========================================
-// STATES
-// ==========================================
-part of 'auth_bloc.dart';
+import 'package:equatable/equatable.dart';
+import 'package:linguaflow/models/user_model.dart';
 
-abstract class AuthState {}
+abstract class AuthState extends Equatable {
+  const AuthState();
+  
+  @override
+  List<Object?> get props => [];
+}
 
 class AuthInitial extends AuthState {}
 
 class AuthLoading extends AuthState {}
 
+class AuthUnauthenticated extends AuthState {}
+
 class AuthAuthenticated extends AuthState {
   final UserModel user;
-  AuthAuthenticated(this.user);
-}
 
-class AuthUnauthenticated extends AuthState {}
+  const AuthAuthenticated(this.user);
+
+  @override
+  List<Object> get props => [user];
+}
 
 class AuthError extends AuthState {
   final String message;
   final bool isVerificationError;
-  AuthError(this.message, {this.isVerificationError = false});
+
+  const AuthError(this.message, {this.isVerificationError = false});
+
+  @override
+  List<Object> get props => [message, isVerificationError];
 }
 
 class AuthMessage extends AuthState {
   final String message;
-  AuthMessage(this.message);
+
+  const AuthMessage(this.message);
+
+  @override
+  List<Object> get props => [message];
 }
