@@ -12,7 +12,6 @@ import 'package:linguaflow/screens/library/library_screen.dart';
 import 'package:linguaflow/screens/profile/profile_screen.dart';
 import 'package:linguaflow/screens/vocabulary/vocabulary_screen.dart';
 import 'package:linguaflow/screens/admin/admin_dashboard_screen.dart';
-// import 'package:linguaflow/screens/speak/speak_screen.dart'; // Uncomment when ready
 
 // --- INHERITED WIDGET ---
 class ActiveTabNotifier extends InheritedWidget {
@@ -73,14 +72,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     // 2. Setup Theme & User Data
     final user = authState.user;
     final bool isAdmin = AppConstants.isAdmin(user.email);
+    
+    // --- THEME AWARE COLORS ---
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    // Colors
-    final navBarColor = isDark ? const Color(0xFF000000) : Colors.white;
-    final selectedColor = isDark ? Colors.white : Colors.blueAccent;
-    final unselectedColor = isDark ? Colors.grey[600] : Colors.grey[500];
-    final borderColor = isDark ? Colors.white10 : Colors.black12;
+    final colorScheme = theme.colorScheme;
+    
+    // Use the theme's background (White or Charcoal)
+    final navBarColor = theme.scaffoldBackgroundColor;
+    
+    // Use the theme's primary color (Black or White) for selected items
+    final selectedColor = colorScheme.primary;
+    
+    // Use the theme's text color with opacity for unselected items
+    final unselectedColor = colorScheme.onSurface.withOpacity(0.5);
+    
+    // Use the theme's defined divider color
+    final borderColor = theme.dividerColor;
 
     // ----------------------------------------------------------------------
     // 3. DEFINE NAVIGATION ITEMS
@@ -106,23 +113,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       _NavItem(
         screen: const SearchScreen(),
-        // Padding used to align FontAwesome icon with Material icons
         icon: const Padding(
           padding: EdgeInsets.only(bottom: 4.0),
           child: FaIcon(FontAwesomeIcons.magnifyingGlass, size: 20),
         ),
         label: 'Discover',
       ),
-      
-      // --- SPEAK SCREEN (Commented out for later) ---
-      // _NavItem(
-      //   screen: const SpeakScreen(),
-      //   icon: const Padding(
-      //     padding: EdgeInsets.only(bottom: 4.0),
-      //     child: FaIcon(FontAwesomeIcons.microphone, size: 20),
-      //   ),
-      //   label: 'Speak',
-      // ),
     ];
 
     // Admin Tab
@@ -158,7 +154,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             // DESKTOP LAYOUT (Left Sidebar / NavigationRail)
             // ============================================================
             return Scaffold(
-              backgroundColor: theme.scaffoldBackgroundColor,
+              backgroundColor: navBarColor,
               body: Row(
                 children: [
                   // LEFT SIDEBAR
@@ -168,15 +164,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     onDestinationSelected: (index) {
                       setState(() => _currentIndex = index);
                     },
-                    // Label behavior: like YouTube/Threads (show selected or all)
                     labelType: NavigationRailLabelType.all,
-                    groupAlignment: 0.0, // Center items vertically
-                    indicatorColor: isDark ? Colors.white10 : Colors.blue.withOpacity(0.1),
+                    groupAlignment: 0.0,
+                    
+                    // Use a very subtle wash of the secondary color (HyperBlue) or transparent
+                    indicatorColor: colorScheme.secondary.withOpacity(0.08),
+                    
+                    // Theme Aware Icons
                     selectedIconTheme: IconThemeData(color: selectedColor),
                     unselectedIconTheme: IconThemeData(color: unselectedColor),
+                    
+                    // Theme Aware Text
                     selectedLabelTextStyle: TextStyle(
                       color: selectedColor,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       fontSize: 11,
                     ),
                     unselectedLabelTextStyle: TextStyle(
@@ -184,6 +185,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       fontWeight: FontWeight.w500,
                       fontSize: 11,
                     ),
+                    
                     // Leading Logo
                     leading: Padding(
                       padding: const EdgeInsets.only(bottom: 32.0, top: 16.0),
@@ -191,11 +193,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                         'assets/images/linguaflow_logo_transparent.png', 
                         height: 40,
                         width: 40,
-                        errorBuilder: (_, __, ___) =>
-                            const Icon(Icons.language, size: 40),
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.language, 
+                          size: 40, 
+                          color: selectedColor,
+                        ),
                       ),
                     ),
-                    // Vertical Line Border
+                    
+                    // Vertical Line Border (Using Theme Divider Color)
                     trailing: Expanded(
                       child: Align(
                         alignment: Alignment.centerRight,
@@ -250,9 +256,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     currentIndex: _currentIndex,
                     onTap: (index) => setState(() => _currentIndex = index),
                     type: BottomNavigationBarType.fixed,
+                    
+                    // Theme Aware Colors
                     backgroundColor: navBarColor,
                     selectedItemColor: selectedColor,
                     unselectedItemColor: unselectedColor,
+                    
                     selectedLabelStyle: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 11,

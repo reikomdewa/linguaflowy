@@ -1,21 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_text_card.dart';
-import 'package:linguaflow/screens/library/widgets/cards/library_video_card.dart'; 
+import 'package:linguaflow/screens/library/widgets/cards/library_video_card.dart';
 
 class LibrarySearchDelegate extends SearchDelegate {
   final List<LessonModel> lessons;
   final bool isDark;
-  final String? initialQuery; // Add this
+  final String? initialQuery;
 
   LibrarySearchDelegate({
     required this.lessons,
     required this.isDark,
-    this.initialQuery, 
+    this.initialQuery,
   }) {
-    // Set the query if passed (allows auto-search on open)
     if (initialQuery != null) {
-      query = initialQuery!; 
+      query = initialQuery!;
     }
   }
 
@@ -32,9 +31,12 @@ class LibrarySearchDelegate extends SearchDelegate {
           color: isDark ? Colors.white : Colors.black,
           fontSize: 18,
         ),
+        // Stop color change on scroll
+        scrolledUnderElevation: 0,
       ),
       inputDecorationTheme: InputDecorationTheme(
-        hintStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+        hintStyle:
+            TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
         border: InputBorder.none,
       ),
       textSelectionTheme: TextSelectionThemeData(
@@ -73,23 +75,23 @@ class LibrarySearchDelegate extends SearchDelegate {
 
   @override
   Widget buildResults(BuildContext context) {
-    return _buildFilteredList();
+    return _buildFilteredList(context);
   }
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    return _buildFilteredList();
+    return _buildFilteredList(context);
   }
 
-  Widget _buildFilteredList() {
+  Widget _buildFilteredList(BuildContext context) {
     // 1. Filter Logic
     final filteredLessons = lessons.where((lesson) {
       final titleLower = lesson.title.toLowerCase();
-      final genreLower = lesson.genre.toLowerCase(); // <--- CHECK GENRE
+      final genreLower = lesson.genre.toLowerCase();
       final searchLower = query.toLowerCase();
 
-      // Simple keyword matching: Title OR Genre
-      return titleLower.contains(searchLower) || genreLower.contains(searchLower);
+      return titleLower.contains(searchLower) ||
+          genreLower.contains(searchLower);
     }).toList();
 
     // 2. Empty State
@@ -112,23 +114,46 @@ class LibrarySearchDelegate extends SearchDelegate {
       );
     }
 
-    // 3. Results List
+    // 3. Responsive Results List
     return Container(
       color: isDark ? const Color(0xFF121212) : Colors.white,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: filteredLessons.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 16),
-        itemBuilder: (context, index) {
-          final lesson = filteredLessons[index];
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isDesktop = constraints.maxWidth > 750;
 
-          if (lesson.type == 'video' || lesson.videoUrl != null) {
-            return LibraryVideoCard(lesson: lesson, isDark: isDark);
+          if (isDesktop) {
+            // --- DESKTOP GRID VIEW ---
+            return GridView.builder(
+              padding: const EdgeInsets.all(24),
+              itemCount: filteredLessons.length,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 400, // Card width limit
+                mainAxisExtent: 280, // Fixed Card height
+                crossAxisSpacing: 24,
+                mainAxisSpacing: 24,
+              ),
+              itemBuilder: (context, index) => _buildCard(filteredLessons[index]),
+            );
           } else {
-            return LibraryTextCard(lesson: lesson, isDark: isDark);
+            // --- MOBILE LIST VIEW ---
+            return ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: filteredLessons.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 16),
+              itemBuilder: (context, index) => _buildCard(filteredLessons[index]),
+            );
           }
         },
       ),
     );
+  }
+
+  // Helper to build the correct card type
+  Widget _buildCard(LessonModel lesson) {
+    if (lesson.type == 'video' || lesson.videoUrl != null) {
+      return LibraryVideoCard(lesson: lesson, isDark: isDark);
+    } else {
+      return LibraryTextCard(lesson: lesson, isDark: isDark);
+    }
   }
 }
