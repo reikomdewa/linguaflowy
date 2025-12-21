@@ -20,6 +20,7 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart' as mobile;
 import 'package:youtube_player_iframe/youtube_player_iframe.dart' as web;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 // --- Internal App Imports ---
 import 'package:linguaflow/screens/reader/widgets/reader_media_widgets.dart';
@@ -1234,16 +1235,18 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _showLimitDialog() => showDialog(
     context: context,
-    builder: (c) => LayoutBuilder(
-      builder: (context, constraints) {
-        bool isDesktop = constraints.maxWidth >= 800;
-        return kIsWeb && isDesktop
-            ? CenteredView(
-                horizontalPadding: 500,
-                child: const PremiumLockDialog(),
-              )
-            : const PremiumLockDialog();
-      },
+    builder: (c) => PointerInterceptor( // <--- WRAP THE ROOT OF THE DIALOG
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          bool isDesktop = constraints.maxWidth >= 800;
+          return kIsWeb && isDesktop
+              ? CenteredView(
+                  horizontalPadding: 500,
+                  child: const PremiumLockDialog(),
+                )
+              : const PremiumLockDialog();
+        },
+      ),
     ),
   );
   Future<void> _logActivitySession(int minutes, int xpGained) async {
@@ -1642,21 +1645,19 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   // --- DESKTOP BODY (New Layout) ---
-  Widget _buildDesktopBody(bool isDark) {
+ Widget _buildDesktopBody(bool isDark) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // LEFT SIDE: Video + Subtitle Box (Flex 3)
         Expanded(
           flex: 3,
           child: Column(
             children: [
-              // Large Video Player
               Expanded(
                 flex: 4,
                 child: Container(
                   color: Colors.black,
-                  // WRAP WITH MOUSE REGION TO DETECT HOVER
+                  // MouseRegion detects hover to show controls
                   child: MouseRegion(
                     onEnter: (_) => _showControlsOnInteraction(),
                     onHover: (_) => _showControlsOnInteraction(),
@@ -1668,61 +1669,47 @@ class _ReaderScreenState extends State<ReaderScreen>
                             child: _buildSharedPlayer(),
                           ),
                         ),
-                        // USE THE UNIFIED OVERLAY
-                        VideoControlsOverlay(
-                          isPlaying: _isPlaying,
-                          position: (_isSeeking && _optimisticPosition != null)
-                              ? _optimisticPosition!
-                              : _currentPosition,
-                          duration: _totalDuration,
-                          // FIX: Use the variable, not 'true'
-                          showControls: _showControls,
-                          onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
-                          onSeekRelative: _seekRelative,
-                          onSeekTo: (d) =>
-                              _seekToTime(d.inMilliseconds / 1000.0),
-                          onToggleFullscreen: () {},
+                        // FIX: Wrap overlay in IgnorePointer
+                        IgnorePointer(
+                          ignoring: !_showControls, // Allow clicks on video when controls are hidden
+                          child: VideoControlsOverlay(
+                            isPlaying: _isPlaying,
+                            position: (_isSeeking && _optimisticPosition != null)
+                                ? _optimisticPosition!
+                                : _currentPosition,
+                            duration: _totalDuration,
+                            showControls: _showControls,
+                            onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
+                            onSeekRelative: _seekRelative,
+                            onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
+                            onToggleFullscreen: () {},
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
               ),
-
-              // Fixed Subtitle Box (YouTube Style)
-              Container(
-                width: double.infinity,
-                color: isDark
-                    ? const Color(0xFF121212)
-                    : const Color(0xFFF0F0F0),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
-                alignment: Alignment.center,
-                child: _buildDesktopSubtitleArea(isDark),
-              ),
-              Text(
-                'Tap on words to translate',
-                style: TextStyle(
-                  color: isDark ? Colors.white70 : Colors.black54,
-                  fontStyle: FontStyle.italic,
+              // ... subtitle area (keep existing code) ...
+              Expanded(
+                flex: 1,
+                child: Container(
+                  width: double.infinity,
+                  color: isDark ? const Color(0xFF121212) : const Color(0xFFF0F0F0),
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  alignment: Alignment.center,
+                  child: _buildDesktopSubtitleArea(isDark),
                 ),
               ),
             ],
           ),
         ),
-
-        // RIGHT SIDE: Playlist / Series
+        // ... playlist sidebar (keep existing code) ...
         if (widget.lesson.seriesId != null)
           Container(
             width: 350,
             decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: isDark ? Colors.white12 : Colors.grey[300]!,
-                ),
-              ),
+              border: Border(left: BorderSide(color: isDark ? Colors.white12 : Colors.grey[300]!)),
               color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
             ),
             child: _buildDesktopPlaylistSidebar(isDark),
@@ -1935,7 +1922,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
-  Widget _buildMobilePlayerContainer() {
+ Widget _buildMobilePlayerContainer() {
     return Container(
       width: double.infinity,
       color: Colors.black,
@@ -1963,27 +1950,22 @@ class _ReaderScreenState extends State<ReaderScreen>
               isLocalMedia: _isLocalMedia,
               localVideoController: null,
               localPlayer: _localPlayer,
-              // Pass mobile controller only if not web (or refactor header to use variables too)
               youtubeController: kIsWeb ? null : _mobileYoutubeController,
               onToggleFullscreen: _toggleCustomFullScreen,
             )
           : AspectRatio(
               aspectRatio: 16 / 9,
-              child: GestureDetector(
-                onTap: _toggleControls,
-                onVerticalDragEnd: (details) {
-                  if (details.primaryVelocity != null &&
-                      details.primaryVelocity! < -400) {
-                    _toggleCustomFullScreen();
-                  }
-                },
-                child: Stack(
-                  children: [
-                    _buildSharedPlayer(),
-                    // CUSTOM OVERLAY - ENABLED FOR WEB NOW
-                    VideoControlsOverlay(
+              // FIX: Removed the wrapping GestureDetector here!
+              // We rely on the internal buttons or the native iframe click-to-play
+              child: Stack(
+                children: [
+                  _buildSharedPlayer(),
+                  
+                  // FIX: Wrap overlay in IgnorePointer
+                  IgnorePointer(
+                    ignoring: !_showControls, // Allow clicks to pass through when hidden
+                    child: VideoControlsOverlay(
                       isPlaying: _isPlaying,
-                      // Use Optimistic if dragging, otherwise use Unified Position
                       position: (_isSeeking && _optimisticPosition != null)
                           ? _optimisticPosition!
                           : _currentPosition,
@@ -1994,8 +1976,12 @@ class _ReaderScreenState extends State<ReaderScreen>
                       onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
                       onToggleFullscreen: _toggleCustomFullScreen,
                     ),
-                  ],
-                ),
+                  ),
+                  
+                  // OPTIONAL: Add a transparent layer ONLY if you need tap-to-show behavior
+                  // that native YouTube doesn't provide. But usually, clicking YouTube
+                  // pauses it, which triggers our listener to show controls anyway.
+                ],
               ),
             ),
     );

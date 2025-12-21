@@ -9,6 +9,7 @@ import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart'; // Import Reader
+import 'package:linguaflow/screens/search/library_search_delegate.dart';
 import 'package:linguaflow/utils/centered_views.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/widgets/buttons/build_ai_button.dart';
@@ -123,136 +124,142 @@ PreferredSizeWidget buildAppBar(
               ),
             ),
 
-            // --- SPACER & SEARCH BAR (Moved inside Title Row for centering alignment) ---
-            SizedBox(width: isDesktop ? 40 : 16),
+            // --- SPACER & SEARCH BAR (Moved nside Title Row for centering alignment) ---
+            if (isDesktop) ...[
+              BlocBuilder<LessonBloc, LessonState>(
+                builder: (context, state) {
+                  final isLoaded = state is LessonLoaded;
+
+                  // If not loaded, show a disabled placeholder
+                  if (!isLoaded) return const SizedBox();
+
+                  final lessons = state.lessons;
+
+                  // SEARCH ANCHOR: The modern "Type here to search" widget
+                  return SizedBox(
+                    width: isDesktop ? 700 : 180, // Control width
+                    height: 42,
+                    child: SearchAnchor(
+                      // 1. Configure the "Bar" (The input field)
+                      builder:
+                          (BuildContext context, SearchController controller) {
+                            return SearchBar(
+                              controller: controller,
+                              padding:
+                                  const MaterialStatePropertyAll<EdgeInsets>(
+                                    EdgeInsets.symmetric(horizontal: 16.0),
+                                  ),
+                              onTap: () => controller.openView(),
+                              onChanged: (_) => controller.openView(),
+                              leading: FaIcon(
+                                FontAwesomeIcons.magnifyingGlass,
+                                size: 15,
+                                color: isDark ? Colors.white54 : Colors.black45,
+                              ),
+                              hintText: 'Search library...',
+                              hintStyle: MaterialStatePropertyAll(
+                                TextStyle(
+                                  color: isDark
+                                      ? Colors.white54
+                                      : Colors.black45,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              // YouTube Style Styling
+                              backgroundColor: MaterialStatePropertyAll(
+                                isDark
+                                    ? Colors.white.withValues(alpha: 0.1)
+                                    : Colors.grey.shade200,
+                              ),
+                              elevation: const MaterialStatePropertyAll(0),
+                              shape: MaterialStatePropertyAll(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(25),
+                                  side: BorderSide(
+                                    color: isDark
+                                        ? Colors.white10
+                                        : Colors.transparent,
+                                  ),
+                                ),
+                              ),
+                              textStyle: MaterialStatePropertyAll(
+                                TextStyle(
+                                  color: isDark ? Colors.white : Colors.black,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            );
+                          },
+
+                      // 2. Configure the "View" (The dropdown results)
+                      suggestionsBuilder:
+                          (BuildContext context, SearchController controller) {
+                            final keyword = controller.text.toLowerCase();
+
+                            // Filter Logic (Same as your Delegate)
+                            final results = lessons.where((lesson) {
+                              final title = lesson.title.toLowerCase();
+                              final genre = lesson.genre.toLowerCase();
+                              return title.contains(keyword) ||
+                                  genre.contains(keyword);
+                            }).toList();
+
+                            return results.map((lesson) {
+                              return ListTile(
+                                leading: Icon(
+                                  lesson.type == 'video'
+                                      ? Icons.play_circle_outline
+                                      : Icons.book_outlined,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : Colors.black54,
+                                ),
+                                title: Text(
+                                  lesson.title,
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : Colors.black,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  lesson.genre,
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.grey
+                                        : Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                onTap: () {
+                                  // Close search and navigate
+                                  controller.closeView(lesson.title);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          ReaderScreen(lesson: lesson),
+                                    ),
+                                  );
+                                },
+                              );
+                            });
+                          },
+                      // Style the Dropdown View
+                      viewBackgroundColor: isDark
+                          ? const Color(0xFF1E1E1E)
+                          : Colors.white,
+                      dividerColor: isDark ? Colors.white10 : Colors.grey[200],
+                      viewConstraints: const BoxConstraints(
+                        maxHeight: 400, // Limit dropdown height
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
 
             // This is the Search Bar Area
-            BlocBuilder<LessonBloc, LessonState>(
-              builder: (context, state) {
-                final isLoaded = state is LessonLoaded;
-
-                // If not loaded, show a disabled placeholder
-                if (!isLoaded) return const SizedBox();
-
-                final lessons = state.lessons;
-
-                // SEARCH ANCHOR: The modern "Type here to search" widget
-                return SizedBox(
-                  width: isDesktop ? 700 : 180, // Control width
-                  height: 42,
-                  child: SearchAnchor(
-                    // 1. Configure the "Bar" (The input field)
-                    builder:
-                        (BuildContext context, SearchController controller) {
-                          return SearchBar(
-                            controller: controller,
-                            padding: const MaterialStatePropertyAll<EdgeInsets>(
-                              EdgeInsets.symmetric(horizontal: 16.0),
-                            ),
-                            onTap: () => controller.openView(),
-                            onChanged: (_) => controller.openView(),
-                            leading: FaIcon(
-                              FontAwesomeIcons.magnifyingGlass,
-                              size: 15,
-                              color: isDark ? Colors.white54 : Colors.black45,
-                            ),
-                            hintText: 'Search library...',
-                            hintStyle: MaterialStatePropertyAll(
-                              TextStyle(
-                                color: isDark ? Colors.white54 : Colors.black45,
-                                fontSize: 14,
-                              ),
-                            ),
-                            // YouTube Style Styling
-                            backgroundColor: MaterialStatePropertyAll(
-                              isDark
-                                  ? Colors.white.withValues(alpha: 0.1)
-                                  : Colors.grey.shade200,
-                            ),
-                            elevation: const MaterialStatePropertyAll(0),
-                            shape: MaterialStatePropertyAll(
-                              RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(25),
-                                side: BorderSide(
-                                  color: isDark
-                                      ? Colors.white10
-                                      : Colors.transparent,
-                                ),
-                              ),
-                            ),
-                            textStyle: MaterialStatePropertyAll(
-                              TextStyle(
-                                color: isDark ? Colors.white : Colors.black,
-                                fontSize: 14,
-                              ),
-                            ),
-                          );
-                        },
-
-                    // 2. Configure the "View" (The dropdown results)
-                    suggestionsBuilder:
-                        (BuildContext context, SearchController controller) {
-                          final keyword = controller.text.toLowerCase();
-
-                          // Filter Logic (Same as your Delegate)
-                          final results = lessons.where((lesson) {
-                            final title = lesson.title.toLowerCase();
-                            final genre = lesson.genre.toLowerCase();
-                            return title.contains(keyword) ||
-                                genre.contains(keyword);
-                          }).toList();
-
-                          return results.map((lesson) {
-                            return ListTile(
-                              leading: Icon(
-                                lesson.type == 'video'
-                                    ? Icons.play_circle_outline
-                                    : Icons.book_outlined,
-                                color: isDark ? Colors.white70 : Colors.black54,
-                              ),
-                              title: Text(
-                                lesson.title,
-                                style: TextStyle(
-                                  color: isDark ? Colors.white : Colors.black,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(
-                                lesson.genre,
-                                style: TextStyle(
-                                  color: isDark
-                                      ? Colors.grey
-                                      : Colors.grey[600],
-                                  fontSize: 12,
-                                ),
-                              ),
-                              onTap: () {
-                                // Close search and navigate
-                                controller.closeView(lesson.title);
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        ReaderScreen(lesson: lesson),
-                                  ),
-                                );
-                              },
-                            );
-                          });
-                        },
-                    // Style the Dropdown View
-                    viewBackgroundColor: isDark
-                        ? const Color(0xFF1E1E1E)
-                        : Colors.white,
-                    dividerColor: isDark ? Colors.white10 : Colors.grey[200],
-                    viewConstraints: const BoxConstraints(
-                      maxHeight: 400, // Limit dropdown height
-                    ),
-                  ),
-                );
-              },
-            ),
           ],
         );
       },
@@ -261,10 +268,50 @@ PreferredSizeWidget buildAppBar(
     // --- ACTIONS (Stats, Premium, AI) ---
     actions: [
       if (isDesktop) buildAIStoryButton(context, isDark),
-
+      if (!isDesktop)
+        BlocBuilder<LessonBloc, LessonState>(
+          builder: (context, state) {
+            final isLoaded = state is LessonLoaded;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: InkWell(
+                onTap: isLoaded
+                    ? () {
+                        showSearch(
+                          context: context,
+                          delegate: LibrarySearchDelegate(
+                            lessons: state.lessons,
+                            isDark: isDark,
+                          ),
+                        );
+                      }
+                    : null,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  alignment: Alignment.center,
+                  child: FaIcon(
+                    FontAwesomeIcons.magnifyingGlass,
+                    size: 18,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
       // --- STATS BUTTON ---
       Padding(
-        padding: const EdgeInsets.only(right: 8.0, left: 8.0),
+        padding: isDesktop
+            ? const EdgeInsets.only(right: 8.0, left: 8.0)
+            : const EdgeInsets.only(right: 4.0, left: 4.0),
         child: InkWell(
           onTap: () {
             final vocabState = context.read<VocabularyBloc>().state;
@@ -281,8 +328,10 @@ PreferredSizeWidget buildAppBar(
           },
           borderRadius: BorderRadius.circular(20),
           child: Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            height: isDesktop ? 40 : 36,
+            padding: isDesktop
+                ? const EdgeInsets.symmetric(horizontal: 12)
+                : const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.1)
@@ -297,14 +346,15 @@ PreferredSizeWidget buildAppBar(
                   color: isDark ? Colors.white70 : Colors.black54,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  "Stats",
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white70 : Colors.black54,
-                    fontSize: 13,
+                if (isDesktop)
+                  Text(
+                    "Stats",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -357,7 +407,9 @@ PreferredSizeWidget buildAppBar(
             },
             borderRadius: BorderRadius.circular(20),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: isDesktop
+                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 6)
+                  : const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
                 color: isPremium
                     ? const Color(0xFFFFC107).withValues(alpha: 0.15)
@@ -384,15 +436,16 @@ PreferredSizeWidget buildAppBar(
                   ),
                   if (isPremium) ...[
                     const SizedBox(width: 6),
-                    const Text(
-                      "PRO",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFFFA000),
-                        fontSize: 13,
-                        letterSpacing: 0.5,
+                    if (isDesktop)
+                      const Text(
+                        "PRO",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFFFFA000),
+                          fontSize: 13,
+                          letterSpacing: 0.5,
+                        ),
                       ),
-                    ),
                   ],
                 ],
               ),
