@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
@@ -10,6 +11,7 @@ import 'package:linguaflow/screens/home/widgets/sections/genre_feed_section.dart
 import 'package:linguaflow/screens/home/widgets/sections/guided_courses_section.dart';
 import 'package:linguaflow/screens/home/widgets/sections/immersion_section.dart';
 import 'package:linguaflow/screens/home/widgets/sections/library_section.dart';
+import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:linguaflow/widgets/buttons/build_ai_button.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
@@ -852,7 +854,11 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)),
+        MaterialPageRoute(
+          builder: (context) => kIsWeb
+              ? ReaderScreenWeb(lesson: lesson)
+              : ReaderScreen(lesson: lesson),
+        ),
       );
     }
   }

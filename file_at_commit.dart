@@ -355,7 +355,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     _listeningTrackingTimer?.cancel();
   }
 
-  // --- MARK AS COMPLETE & NAVIGATE ---
+// --- MARK AS COMPLETE & NAVIGATE ---
   void _markLessonAsComplete() {
     if (!_hasMarkedLessonComplete) {
       setState(() => _hasMarkedLessonComplete = true);
@@ -366,9 +366,9 @@ class _ReaderScreenState extends State<ReaderScreen>
 
       // 2. SMART COMPLETION XP CALCULATION
       // We reward the user based on how many words they interacted with in this session
-      const int baseXP = 50;
+      const int baseXP = 50; 
       const int bonusPerWord = 10;
-
+      
       // Final XP = 50 + (words * 10), capped between 50 and 200
       int calculatedXp = (baseXP + (_sessionWordsLearned.length * bonusPerWord))
           .clamp(50, 200);
@@ -394,6 +394,8 @@ class _ReaderScreenState extends State<ReaderScreen>
       );
     }
   }
+
+
 
   // --- PRO FIX: Stream Vocabulary ---
   void _startVocabularyStream() {
@@ -1174,10 +1176,8 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  void _showLimitDialog() => showDialog(
-    context: context,
-    builder: (c) => PremiumLockDialog(onClose: () {}),
-  );
+  void _showLimitDialog() =>
+      showDialog(context: context, builder: (c) => const PremiumLockDialog());
   Future<void> _logActivitySession(int minutes, int xpGained) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final dateId = DateTime.now()

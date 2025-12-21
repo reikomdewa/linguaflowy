@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -9,6 +10,7 @@ import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart'; // Import Reader
+import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/screens/search/library_search_delegate.dart';
 import 'package:linguaflow/utils/centered_views.dart';
 import 'package:linguaflow/utils/language_helper.dart';
@@ -238,7 +240,7 @@ PreferredSizeWidget buildAppBar(
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) =>
-                                          ReaderScreen(lesson: lesson),
+                                          kIsWeb? ReaderScreenWeb(lesson: lesson) : ReaderScreen(lesson: lesson),
                                     ),
                                   );
                                 },

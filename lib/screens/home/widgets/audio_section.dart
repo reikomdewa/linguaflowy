@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
+import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 // Add this import for the dialog
 import 'package:linguaflow/utils/utils.dart';
 
@@ -177,7 +179,7 @@ class _AudioLibrarySectionState extends State<AudioLibrarySection> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ReaderScreen(lesson: lesson),
+              builder: (context) => kIsWeb? ReaderScreenWeb(lesson: lesson) : ReaderScreen(lesson: lesson),
             ),
           );
         } else {

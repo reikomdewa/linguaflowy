@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
+import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/utils/utils.dart';
 
 class LibraryTextCard extends StatelessWidget {
@@ -22,7 +24,7 @@ class LibraryTextCard extends StatelessWidget {
       return GestureDetector(
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)),
+          MaterialPageRoute(builder: (context) => kIsWeb? ReaderScreenWeb(lesson: lesson) : ReaderScreen(lesson: lesson)),
         ),
         child: Container(
           width: width,
@@ -118,7 +120,7 @@ class LibraryTextCard extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ReaderScreen(lesson: lesson),
+              builder: (context) => kIsWeb? ReaderScreenWeb(lesson: lesson) : ReaderScreen(lesson: lesson),
             ),
           );
         },

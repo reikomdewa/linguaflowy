@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/constants/genre_constants.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
+import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
@@ -229,7 +231,7 @@ class _GenreFeedSectionState extends State<GenreFeedSection>
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => ReaderScreen(lesson: lesson),
+                            builder: (context) => kIsWeb? ReaderScreenWeb(lesson: lesson) : ReaderScreen(lesson: lesson),
                           ),
                         );
                       },

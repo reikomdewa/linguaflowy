@@ -3,6 +3,7 @@ library;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -11,6 +12,7 @@ import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/constants/constants.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
+import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/utils/playlist_helper_functions.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -176,7 +178,7 @@ void showPlaylistBottomSheet(
                     await Navigator.push(
                       parentContext,
                       MaterialPageRoute(
-                        builder: (context) => ReaderScreen(lesson: item),
+                        builder: (context) => kIsWeb? ReaderScreenWeb(lesson: item) : ReaderScreen(lesson: item),
                       ),
                     );
 

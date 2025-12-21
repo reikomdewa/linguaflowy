@@ -1,10 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 
 // --- SCREEN IMPORTS ---
 import 'package:linguaflow/screens/learn/active_lesson_screen.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
-import 'package:linguaflow/screens/learn/ai_conversation_screen.dart'; 
+import 'package:linguaflow/screens/learn/ai_conversation_screen.dart';
+import 'package:linguaflow/screens/reader/reader_screen_web.dart'; 
 
 class LessonUnitCard extends StatelessWidget {
   final int lessonIndex;
@@ -278,7 +280,7 @@ class LessonUnitCard extends StatelessWidget {
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => ReaderScreen(lesson: lesson),
+                    builder: (_) => kIsWeb? ReaderScreenWeb(lesson: lesson) : ReaderScreen(lesson: lesson),
                   ),
                 );
               } 
