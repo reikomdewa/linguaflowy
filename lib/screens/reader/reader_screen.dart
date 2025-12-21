@@ -13,6 +13,7 @@ import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/screens/completion/completion_screen.dart';
 import 'package:linguaflow/services/local_lemmatizer.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart'; // Needed for playlist fetch
+import 'package:linguaflow/utils/centered_views.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart' as mobile;
@@ -493,7 +494,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (currentPageIndices.isNotEmpty) _bookPages.add(currentPageIndices);
   }
 
- void _initializeYoutubePlayer(String url) {
+  void _initializeYoutubePlayer(String url) {
     String? videoId;
     if (widget.lesson.id.startsWith('yt_audio_')) {
       videoId = widget.lesson.id.replaceAll('yt_audio_', '');
@@ -501,6 +502,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     } else if (widget.lesson.id.startsWith('yt_')) {
       videoId = widget.lesson.id.replaceAll('yt_', '');
     }
+    // Use the mobile package's helper to extract ID (works for both strings)
     if (videoId == null || videoId.isEmpty) {
       videoId = mobile.YoutubePlayer.convertUrlToId(url);
     }
@@ -511,28 +513,33 @@ class _ReaderScreenState extends State<ReaderScreen>
         _webYoutubeController = web.YoutubePlayerController.fromVideoId(
           videoId: videoId,
           params: const web.YoutubePlayerParams(
-            showControls: false, // CRITICAL: Hide native controls so yours show
-            showFullscreenButton: false, 
+            showControls: false, // HIDE Native controls so Custom Overlay works
+            showFullscreenButton: false,
             mute: false,
             playsInline: true,
           ),
         );
 
-        // Listen to state changes immediately
+        // LISTEN FOR EVENTS (Crucial for Play/Pause sync and Completion)
         _webYoutubeController!.listen((event) {
+          // 1. Sync Play/Pause State
           final isPlaying = event.playerState == web.PlayerState.playing;
           if (isPlaying != _isPlaying) {
-             setState(() {
-               _isPlaying = isPlaying;
-               // If playing, ensure controls show briefly then fade
-               if (isPlaying) {
-                 _showControls = true;
-                 _resetControlsTimer();
-               }
-             });
+            setState(() {
+              _isPlaying = isPlaying;
+              if (isPlaying) {
+                // Show controls briefly when play starts, then timer hides them
+                _showControls = true;
+                _resetControlsTimer();
+              }
+            });
+          }
+
+          // 2. Handle Completion Reliably (Fixes the "pause triggers finish" bug)
+          if (event.playerState == web.PlayerState.ended) {
+            _markLessonAsComplete();
           }
         });
-
       } else {
         // --- MOBILE INIT ---
         _mobileYoutubeController = mobile.YoutubePlayerController(
@@ -541,7 +548,7 @@ class _ReaderScreenState extends State<ReaderScreen>
             autoPlay: false,
             mute: false,
             enableCaption: false,
-            hideControls: true, // Hide native controls
+            hideControls: true, // Use custom controls
           ),
         );
       }
@@ -554,13 +561,14 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-// Update this getter to be safer
+  // Update this getter to be safer
   bool get _isYoutubePlaying {
     if (kIsWeb) {
-      // On web, checking value directly can be stale. 
-      // Reliance on the stream listener (above) is better, 
+      // On web, checking value directly can be stale.
+      // Reliance on the stream listener (above) is better,
       // but for polling, we check the generic value.
-      return _webYoutubeController?.value.playerState == web.PlayerState.playing;
+      return _webYoutubeController?.value.playerState ==
+          web.PlayerState.playing;
     }
     return _mobileYoutubeController?.value.isPlaying ?? false;
   }
@@ -622,76 +630,80 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   // [Include _checkSync, _pauseMedia, _playMedia, _seekRelative, _seekToTime, _toggleControls, _resetControlsTimer]
   // Assumed existing
-Future<void> _checkSync() async {
-    // 1. Don't sync while seeking/transitioning
+  Future<void> _checkSync() async {
+    // 1. Don't sync while seeking or transitioning (prevents stutter)
     if (_isSeeking || _isTransitioningFullscreen) return;
 
     bool isPlaying = false;
     double currentSeconds = 0.0;
     double totalSeconds = 0.0;
 
-    // --- 2. FETCH DATA ---
+    // --- 2. FETCH DATA (Platform Agnostic) ---
     if (_isLocalMedia && _localPlayer != null) {
       isPlaying = _localPlayer!.state.playing;
       currentSeconds = _localPlayer!.state.position.inMilliseconds / 1000.0;
       totalSeconds = _localPlayer!.state.duration.inSeconds.toDouble();
     } else if (kIsWeb && _webYoutubeController != null) {
+      // WEB: Async Fetch
+      // We rely on the event listener for isPlaying, but fetch precise time here
       isPlaying = _isPlaying;
       try {
         currentSeconds = await _webYoutubeController!.currentTime;
         totalSeconds = await _webYoutubeController!.duration;
       } catch (e) {
-        return;
+        return; // Bridge not ready yet
       }
     } else if (!kIsWeb && _mobileYoutubeController != null) {
+      // MOBILE: Sync Fetch
       isPlaying = _mobileYoutubeController!.value.isPlaying;
       currentSeconds =
           _mobileYoutubeController!.value.position.inMilliseconds / 1000.0;
-      totalSeconds =
-          _mobileYoutubeController!.metadata.duration.inSeconds.toDouble();
+      totalSeconds = _mobileYoutubeController!.metadata.duration.inSeconds
+          .toDouble();
     } else {
       return;
     }
 
     if (!mounted) return;
 
-    // --- 3. UPDATE STATE ---
+    // --- 3. UPDATE UNIFIED STATE (Feeds the Custom Overlay) ---
     setState(() {
       _isPlaying = isPlaying;
-      _currentPosition = Duration(milliseconds: (currentSeconds * 1000).toInt());
+      _currentPosition = Duration(
+        milliseconds: (currentSeconds * 1000).toInt(),
+      );
       _totalDuration = Duration(milliseconds: (totalSeconds * 1000).toInt());
     });
 
+    // --- 4. HANDLE PLAYING TRACKER ---
     if (isPlaying) {
       _startListeningTracker();
     } else {
       _stopListeningTracker();
     }
 
-    // --- 4. CHECK COMPLETION (FIXED) ---
+    // --- 5. CHECK COMPLETION (FIXED) ---
     if ((_isVideo || _isAudio || _isYoutubeAudio) && totalSeconds > 0) {
-      // BUG FIX: On Web, duration might briefly be 0 or 1 while loading.
-      // If totalSeconds is 1, then (1 - 2) = -1.
-      // Since currentSeconds (0) >= -1 is TRUE, it triggered completion immediately.
-      
-      // Safety Checks:
-      // 1. Duration must be substantial (e.g. > 10s) to be a valid lesson
-      // 2. We must have actually played something (> 0.5s)
-      if (totalSeconds > 10 && currentSeconds > 0.5) {
-         if (currentSeconds >= totalSeconds - 2) {
-           _markLessonAsComplete();
-         }
+      // FIX: Only use math check for Mobile/Local.
+      // Web uses the 'PlayerState.ended' event in _initializeYoutubePlayer.
+      if (!kIsWeb) {
+        // Safety buffer: only check if video is substantial (>10s) and actually played (>0.5s)
+        if (totalSeconds > 10 && currentSeconds > 0.5) {
+          if (currentSeconds >= totalSeconds - 2) {
+            _markLessonAsComplete();
+          }
+        }
       }
     }
 
-    // --- 5. SYNC TRANSCRIPT ---
     if (!isPlaying || _activeTranscript.isEmpty) return;
 
-    // Auto-pause single sentence mode
+    // --- 6. HANDLE SINGLE SENTENCE MODE ---
     if (_isSentenceMode && _isPlayingSingleSentence) {
       if (_activeSentenceIndex >= 0 &&
           _activeSentenceIndex < _activeTranscript.length) {
-        if (currentSeconds >= _activeTranscript[_activeSentenceIndex].end - 0.05) {
+        if (currentSeconds >=
+            _activeTranscript[_activeSentenceIndex].end - 0.05) {
           _pauseMedia();
           setState(() {
             _isPlayingSingleSentence = false;
@@ -702,13 +714,14 @@ Future<void> _checkSync() async {
       }
     }
 
-    // Transcript Scrolling Logic
+    // --- 7. HANDLE SUBTITLE SCROLLING ---
     bool shouldSync = !_isSentenceMode;
     if (MediaQuery.of(context).size.width > 900) shouldSync = true;
 
     if (shouldSync) {
       int activeIndex = -1;
-      // Optimization: Check current first
+
+      // Optimization: Check current index first
       if (_activeSentenceIndex != -1 &&
           _activeSentenceIndex < _activeTranscript.length &&
           currentSeconds >= _activeTranscript[_activeSentenceIndex].start &&
@@ -775,7 +788,7 @@ Future<void> _checkSync() async {
   Future<void> _seekToTime(double seconds) async {
     _seekResetTimer?.cancel();
     final d = Duration(milliseconds: (seconds * 1000).toInt());
-    
+
     // Set UI to optimistic state immediately
     setState(() {
       _isSeeking = true;
@@ -819,14 +832,14 @@ Future<void> _checkSync() async {
     _resetControlsTimer();
   }
 
-void _toggleControls() {
+  void _toggleControls() {
     setState(() => _showControls = !_showControls);
     if (_showControls) {
       _resetControlsTimer();
     }
   }
 
- void _resetControlsTimer() {
+  void _resetControlsTimer() {
     _controlsHideTimer?.cancel();
     _controlsHideTimer = Timer(const Duration(seconds: 3), () {
       // Only auto-hide if:
@@ -1219,8 +1232,20 @@ void _toggleControls() {
     }
   }
 
-  void _showLimitDialog() =>
-      showDialog(context: context, builder: (c) => const PremiumLockDialog());
+  void _showLimitDialog() => showDialog(
+    context: context,
+    builder: (c) => LayoutBuilder(
+      builder: (context, constraints) {
+        bool isDesktop = constraints.maxWidth >= 800;
+        return kIsWeb && isDesktop
+            ? CenteredView(
+                horizontalPadding: 500,
+                child: const PremiumLockDialog(),
+              )
+            : const PremiumLockDialog();
+      },
+    ),
+  );
   Future<void> _logActivitySession(int minutes, int xpGained) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final dateId = DateTime.now().toIso8601String().split('T').first;
@@ -1606,7 +1631,8 @@ void _toggleControls() {
       ),
     );
   }
-void _showControlsOnInteraction() {
+
+  void _showControlsOnInteraction() {
     // Only verify state to prevent unnecessary rebuilds
     if (!_showControls) {
       setState(() => _showControls = true);
@@ -1614,8 +1640,9 @@ void _showControlsOnInteraction() {
     // Always reset the timer when interaction happens
     _resetControlsTimer();
   }
+
   // --- DESKTOP BODY (New Layout) ---
- Widget _buildDesktopBody(bool isDark) {
+  Widget _buildDesktopBody(bool isDark) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1649,10 +1676,11 @@ void _showControlsOnInteraction() {
                               : _currentPosition,
                           duration: _totalDuration,
                           // FIX: Use the variable, not 'true'
-                          showControls: _showControls, 
+                          showControls: _showControls,
                           onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
                           onSeekRelative: _seekRelative,
-                          onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
+                          onSeekTo: (d) =>
+                              _seekToTime(d.inMilliseconds / 1000.0),
                           onToggleFullscreen: () {},
                         ),
                       ],
@@ -1662,14 +1690,23 @@ void _showControlsOnInteraction() {
               ),
 
               // Fixed Subtitle Box (YouTube Style)
-              Expanded(
-                flex: 1,
-                child: Container(
-                  width: double.infinity,
-                  color: isDark ? const Color(0xFF121212) : const Color(0xFFF0F0F0),
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                  alignment: Alignment.center,
-                  child: _buildDesktopSubtitleArea(isDark),
+              Container(
+                width: double.infinity,
+                color: isDark
+                    ? const Color(0xFF121212)
+                    : const Color(0xFFF0F0F0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+                alignment: Alignment.center,
+                child: _buildDesktopSubtitleArea(isDark),
+              ),
+              Text(
+                'Tap on words to translate',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black54,
+                  fontStyle: FontStyle.italic,
                 ),
               ),
             ],
@@ -1681,7 +1718,11 @@ void _showControlsOnInteraction() {
           Container(
             width: 350,
             decoration: BoxDecoration(
-              border: Border(left: BorderSide(color: isDark ? Colors.white12 : Colors.grey[300]!)),
+              border: Border(
+                left: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.grey[300]!,
+                ),
+              ),
               color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
             ),
             child: _buildDesktopPlaylistSidebar(isDark),
@@ -1691,7 +1732,7 @@ void _showControlsOnInteraction() {
   }
 
   // --- DESKTOP SUBTITLE AREA ---
- Widget _buildDesktopSubtitleArea(bool isDark) {
+  Widget _buildDesktopSubtitleArea(bool isDark) {
     // 1. Safety Check: If data isn't loaded yet, show a loader.
     if (_smartChunks.isEmpty) {
       return Center(
@@ -1727,7 +1768,6 @@ void _showControlsOnInteraction() {
         ),
 
         const SizedBox(height: 24), // Added a bit more breathing room
-
         // Translation Area (Only appears when a word is clicked)
         // We use AnimatedOpacity so it doesn't jump around when appearing
         AnimatedOpacity(
@@ -1735,12 +1775,17 @@ void _showControlsOnInteraction() {
           opacity: _showCard ? 1.0 : 0.0,
           child: _showCard
               ? Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isDark ? Colors.white10 : Colors.blueAccent.withOpacity(0.2),
+                      color: isDark
+                          ? Colors.white10
+                          : Colors.blueAccent.withOpacity(0.2),
                     ),
                     boxShadow: [
                       BoxShadow(
@@ -1777,8 +1822,8 @@ void _showControlsOnInteraction() {
                           ),
                           const SizedBox(width: 8),
                           Icon(
-                            Icons.arrow_forward, 
-                            size: 16, 
+                            Icons.arrow_forward,
+                            size: 16,
                             color: isDark ? Colors.white54 : Colors.grey,
                           ),
                           const SizedBox(width: 8),
@@ -1786,7 +1831,9 @@ void _showControlsOnInteraction() {
                             translationContent,
                             style: TextStyle(
                               fontSize: 16,
-                              color: isDark ? Colors.blueAccent[100] : Colors.blue[700],
+                              color: isDark
+                                  ? Colors.blueAccent[100]
+                                  : Colors.blue[700],
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -1795,7 +1842,9 @@ void _showControlsOnInteraction() {
                     },
                   ),
                 )
-              : const SizedBox(height: 48), // Placeholder to keep layout stable if you prefer
+              : const SizedBox(
+                  height: 48,
+                ), // Placeholder to keep layout stable if you prefer
         ),
       ],
     );
@@ -1886,7 +1935,7 @@ void _showControlsOnInteraction() {
     );
   }
 
- Widget _buildMobilePlayerContainer() {
+  Widget _buildMobilePlayerContainer() {
     return Container(
       width: double.infinity,
       color: Colors.black,

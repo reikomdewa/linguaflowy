@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:linguaflow/utils/logger.dart';
 import 'package:path_provider/path_provider.dart';
@@ -79,9 +80,23 @@ class Utils {
     );
   }
 
+
+
   static void showXpPop(int amount, BuildContext context) {
-    // This clears any existing snackbar immediately so they don't stack up
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
+
+    // 1. Detect if we are on Web
+    final bool isWeb = kIsWeb;
+
+    // 2. Calculate Margin for Web
+    // SnackBars are bottom-anchored by default. To move it to the top,
+    // we give it a massive bottom margin: (ScreenHeight - TopOffset).
+    EdgeInsets? webMargin;
+    if (isWeb) {
+      final double screenHeight = MediaQuery.of(context).size.height;
+      // Places the popup ~80px from the top of the screen
+      webMargin = EdgeInsets.only(bottom: screenHeight - 80);
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -96,13 +111,14 @@ class Utils {
             const Icon(Icons.bolt, color: Colors.amber, size: 18),
           ],
         ),
-        duration: const Duration(
-          milliseconds: 800,
-        ), // Slightly longer to be readable
+        duration: const Duration(milliseconds: 800),
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.blueAccent.withOpacity(0.9),
-        width: 120, // Keep it small and centered
+        width: 120,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+
+        // 3. Apply the margin if on Web (otherwise null uses default bottom position)
+        margin: webMargin,
       ),
     );
   }
