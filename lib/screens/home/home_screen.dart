@@ -265,8 +265,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               var processedLessons = lessonState.lessons;
 
                               // --- 1. SPECIAL CASE: GENRE FILTER ---
-                              // If a specific genre is selected, we bypass the local filtering
-                              // and use the specialized fetcher widget.
+                              // --- 1. SPECIAL CASE: GENRE FILTER ---
                               if (_selectedGenre != 'All') {
                                 return FilteredGenreList(
                                   genreKey: _selectedGenre,
@@ -274,23 +273,31 @@ class _HomeScreenState extends State<HomeScreen> {
                                   vocabMap: vocabMap,
                                   isDark: isDark,
                                   isDesktop: isDesktop,
+                                  sortOrder: _selectedSort,
+                                  filterDifficulty:
+                                      _selectedDifficulty, // <--- PASS IT HERE
                                 );
                               }
 
-                              // --- 2. LOCAL FILTERING (For Type, Difficulty, Sort) ---
-                              // This logic works fine locally because types usually exist in the feed
+                              // --- 2. LOCAL FILTERING ---
+                              // We MUST include _selectedSort != 'Newest' here.
+                              // If user sorts by "Oldest", we must switch to the vertical list view.
                               bool isFiltering =
                                   _selectedGlobalFilter != 'All' ||
-                                  _selectedDifficulty != 'All';
+                                  _selectedDifficulty != 'All' ||
+                                  _selectedSort !=
+                                      'Newest'; // <--- ADD THIS CHECK
 
                               if (isFiltering) {
                                 return _buildFilteredList(
-                                  processedLessons, // Only filters the 20 loaded items
+                                  processedLessons,
                                   vocabMap,
                                   isDark,
                                   isDesktop,
                                 );
                               }
+
+                              // ... (Dashboard Code) ...
 
                               // --- DASHBOARD MODE (Horizontal Sections) ---
                               final nativeLessons = processedLessons
