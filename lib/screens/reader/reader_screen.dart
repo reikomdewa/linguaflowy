@@ -15,11 +15,10 @@ import 'package:linguaflow/services/local_lemmatizer.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart'; // Needed for playlist fetch
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/utils/utils.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart' as mobile;
+import 'package:youtube_player_iframe/youtube_player_iframe.dart' as web;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:flutter/foundation.dart'; // For kIsWeb
-import 'package:youtube_player_iframe/youtube_player_iframe.dart' as web_yt;
 
 // --- Internal App Imports ---
 import 'package:linguaflow/screens/reader/widgets/reader_media_widgets.dart';
@@ -67,9 +66,10 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _showSubtitles = true;
 
   // --- Media Players ---
-  YoutubePlayerController? _youtubeController;
-  web_yt.YoutubePlayerController? _webYoutubeController;
-
+  // Mobile Controller
+  mobile.YoutubePlayerController? _mobileYoutubeController;
+  // Web Controller
+  web.YoutubePlayerController? _webYoutubeController;
   Player? _localPlayer;
   VideoController? _localVideoController;
   Timer? _syncTimer;
@@ -132,10 +132,10 @@ class _ReaderScreenState extends State<ReaderScreen>
   static const int xpPerWordLookup = 5;
   static const int xpPerWordLearned = 20;
   static const int xpPerMinuteRead = 2;
-  Timer? _webSyncTimer;
+  // --- ADD THESE NEW VARIABLES ---
+  Duration _currentPosition = Duration.zero;
+  Duration _totalDuration = Duration.zero;
 
-  Duration _currentWebPosition = Duration.zero;
-  Duration _currentWebDuration = Duration.zero;
   @override
   void initState() {
     super.initState();
@@ -295,161 +295,12 @@ class _ReaderScreenState extends State<ReaderScreen>
         url.toLowerCase().contains('youtube.com') ||
         url.toLowerCase().contains('youtu.be');
 
-    // 1. WEB CHECK
-    if (kIsWeb && isYoutube) {
-      _initializeWebYoutubePlayer(url);
-      return;
-    }
-
-    // 2. DESKTOP APP CHECK (Windows/Mac/Linux)
-    bool isDesktopApp =
-        !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
-
     if (isYoutube) {
-      if (isDesktopApp) {
-        _initializeLocalMediaPlayer(url); // MediaKit
-      } else {
-        _initializeYoutubePlayer(url); // Mobile Native
-      }
+      _initializeYoutubePlayer(url);
     } else if (!isNetwork) {
       _initializeLocalMediaPlayer(url);
     } else {
-      _initializeLocalMediaPlayer(url);
-    }
-  }
-
-  void _initializeWebYoutubePlayer(String url) {
-    String? videoId;
-    if (widget.lesson.id.startsWith('yt_')) {
-      videoId = widget.lesson.id.replaceAll('yt_', '');
-    } else {
-      videoId = YoutubePlayer.convertUrlToId(url);
-    }
-
-    if (videoId != null) {
-      _webYoutubeController = web_yt.YoutubePlayerController.fromVideoId(
-        videoId: videoId,
-        params: const web_yt.YoutubePlayerParams(
-          showControls: false,
-          showFullscreenButton: false,
-          mute: false,
-          playsInline: true,
-        ),
-      );
-
-      // 1. LISTEN TO STREAM (Use 'stream', not 'videoStateStream')
-      // 'stream' emits 'YoutubePlayerValue' which has 'playerState'
-      _webYoutubeController!.stream.listen((value) {
-        if (!mounted) return;
-
-        final isPlaying = value.playerState == web_yt.PlayerState.playing;
-
-        if (isPlaying != _isPlaying) {
-          setState(() => _isPlaying = isPlaying);
-
-          if (isPlaying) {
-            _startListeningTracker();
-            _startWebSyncTimer(); // Start polling time
-          } else {
-            _stopListeningTracker();
-            _stopWebSyncTimer(); // Stop polling time
-          }
-        }
-      });
-
-      // 2. Initial Metadata (Use 'metadata' lowercase)
-      // It is a property, not a Future in v5, but usually requires a small delay or play to populate.
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() {
-            _currentWebDuration = Duration(
-              seconds: _webYoutubeController!.metadata.duration.inSeconds,
-            );
-          });
-        }
-      });
-
-      setState(() {
-        _isLocalMedia = false;
-        _isVideo = true;
-        _isYoutubeAudio = false;
-        _isInitializingMedia = false;
-      });
-    }
-  }
-
-  void _startWebSyncTimer() {
-    _webSyncTimer?.cancel();
-    _webSyncTimer = Timer.periodic(const Duration(milliseconds: 200), (
-      timer,
-    ) async {
-      if (!mounted || _webYoutubeController == null) {
-        timer.cancel();
-        return;
-      }
-
-      // A. Fetch Time Data (These are Futures in v5)
-      final positionSeconds = await _webYoutubeController!.currentTime;
-      final durationSeconds = await _webYoutubeController!.duration;
-
-      setState(() {
-        _currentWebPosition = Duration(
-          milliseconds: (positionSeconds * 1000).toInt(),
-        );
-        _currentWebDuration = Duration(
-          milliseconds: (durationSeconds * 1000).toInt(),
-        );
-      });
-
-      // B. Check Completion
-      if (durationSeconds > 0 && positionSeconds >= durationSeconds - 2) {
-        _markLessonAsComplete();
-      }
-
-      // C. Sync Sentence Highlighting
-      if (_activeTranscript.isNotEmpty && !_isSentenceMode) {
-        _syncTextToAudio(positionSeconds);
-      }
-    });
-  }
-
-  void _stopWebSyncTimer() {
-    _webSyncTimer?.cancel();
-  }
-
-  // Helper extracted to avoid code duplication between Web Stream and Mobile Timer
-  void _syncTextToAudio(double currentSeconds) {
-    if (_isSeeking || _activeTranscript.isEmpty) return;
-
-    int activeIndex = -1;
-    // Find current sentence
-    for (int i = 0; i < _activeTranscript.length; i++) {
-      if (currentSeconds >= _activeTranscript[i].start &&
-          currentSeconds < _activeTranscript[i].end) {
-        activeIndex = i;
-        break;
-      }
-    }
-    // Fallback logic
-    if (activeIndex == -1) {
-      for (int i = 0; i < _activeTranscript.length; i++) {
-        if (_activeTranscript[i].start > currentSeconds) {
-          activeIndex = i > 0 ? i - 1 : 0;
-          break;
-        }
-      }
-      if (activeIndex == -1) activeIndex = _activeTranscript.length - 1;
-    }
-
-    if (activeIndex != -1 && activeIndex != _activeSentenceIndex) {
-      setState(() {
-        _activeSentenceIndex = activeIndex;
-        _resetTranslationState();
-      });
-      // Only scroll on mobile
-      if (MediaQuery.of(context).size.width <= 900) {
-        _scrollToActiveLine(activeIndex);
-      }
+      _initializeTts();
     }
   }
 
@@ -476,12 +327,16 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   @override
   void dispose() {
-    _stopWebSyncTimer();
     _stopListeningTracker();
     _vocabSubscription?.cancel();
     if (_secondsListenedInSession > 10) {
       final int minutes = (_secondsListenedInSession / 60).ceil();
       _authBloc.add(AuthUpdateListeningTime(minutes));
+    }
+    if (kIsWeb) {
+      _webYoutubeController?.close();
+    } else {
+      _mobileYoutubeController?.dispose();
     }
     WidgetsBinding.instance.removeObserver(this);
     _syncTimer?.cancel();
@@ -496,8 +351,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
     _localVideoController = null;
     _localPlayer = null;
-    _youtubeController?.dispose();
-    _youtubeController = null;
+
     _flutterTts.stop();
     _pageController.dispose();
     _listScrollController.dispose();
@@ -639,7 +493,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (currentPageIndices.isNotEmpty) _bookPages.add(currentPageIndices);
   }
 
-  void _initializeYoutubePlayer(String url) {
+ void _initializeYoutubePlayer(String url) {
     String? videoId;
     if (widget.lesson.id.startsWith('yt_audio_')) {
       videoId = widget.lesson.id.replaceAll('yt_audio_', '');
@@ -648,28 +502,87 @@ class _ReaderScreenState extends State<ReaderScreen>
       videoId = widget.lesson.id.replaceAll('yt_', '');
     }
     if (videoId == null || videoId.isEmpty) {
-      videoId = YoutubePlayer.convertUrlToId(url);
+      videoId = mobile.YoutubePlayer.convertUrlToId(url);
     }
+
     if (videoId != null) {
-      _youtubeController = YoutubePlayerController(
-        initialVideoId: videoId,
-        flags: const YoutubePlayerFlags(
-          autoPlay: false,
-          mute: false,
-          enableCaption: false,
-          hideControls: true,
-          disableDragSeek: false,
-          loop: false,
-          isLive: false,
-          forceHD: false,
-        ),
-      );
+      if (kIsWeb) {
+        // --- WEB INIT ---
+        _webYoutubeController = web.YoutubePlayerController.fromVideoId(
+          videoId: videoId,
+          params: const web.YoutubePlayerParams(
+            showControls: false, // CRITICAL: Hide native controls so yours show
+            showFullscreenButton: false, 
+            mute: false,
+            playsInline: true,
+          ),
+        );
+
+        // Listen to state changes immediately
+        _webYoutubeController!.listen((event) {
+          final isPlaying = event.playerState == web.PlayerState.playing;
+          if (isPlaying != _isPlaying) {
+             setState(() {
+               _isPlaying = isPlaying;
+               // If playing, ensure controls show briefly then fade
+               if (isPlaying) {
+                 _showControls = true;
+                 _resetControlsTimer();
+               }
+             });
+          }
+        });
+
+      } else {
+        // --- MOBILE INIT ---
+        _mobileYoutubeController = mobile.YoutubePlayerController(
+          initialVideoId: videoId,
+          flags: const mobile.YoutubePlayerFlags(
+            autoPlay: false,
+            mute: false,
+            enableCaption: false,
+            hideControls: true, // Hide native controls
+          ),
+        );
+      }
+
       setState(() {
         _isLocalMedia = false;
         _isVideo = !_isYoutubeAudio;
       });
       _startSyncTimer();
     }
+  }
+
+// Update this getter to be safer
+  bool get _isYoutubePlaying {
+    if (kIsWeb) {
+      // On web, checking value directly can be stale. 
+      // Reliance on the stream listener (above) is better, 
+      // but for polling, we check the generic value.
+      return _webYoutubeController?.value.playerState == web.PlayerState.playing;
+    }
+    return _mobileYoutubeController?.value.isPlaying ?? false;
+  }
+
+  Future<double> get _youtubeCurrentTimeInSeconds async {
+    if (kIsWeb && _webYoutubeController != null) {
+      return await _webYoutubeController!.currentTime;
+    }
+    if (_mobileYoutubeController != null) {
+      return _mobileYoutubeController!.value.position.inMilliseconds / 1000.0;
+    }
+    return 0.0;
+  }
+
+  Future<double> get _youtubeTotalDurationInSeconds async {
+    if (kIsWeb && _webYoutubeController != null) {
+      return await _webYoutubeController!.duration;
+    }
+    if (_mobileYoutubeController != null) {
+      return _mobileYoutubeController!.metadata.duration.inSeconds.toDouble();
+    }
+    return 0.0;
   }
 
   Future<void> _initializeLocalMediaPlayer(String path) async {
@@ -709,45 +622,76 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   // [Include _checkSync, _pauseMedia, _playMedia, _seekRelative, _seekToTime, _toggleControls, _resetControlsTimer]
   // Assumed existing
-  void _checkSync() {
-    if (kIsWeb) return;
+Future<void> _checkSync() async {
+    // 1. Don't sync while seeking/transitioning
     if (_isSeeking || _isTransitioningFullscreen) return;
+
     bool isPlaying = false;
     double currentSeconds = 0.0;
-    double totalDuration = 0.0;
+    double totalSeconds = 0.0;
 
+    // --- 2. FETCH DATA ---
     if (_isLocalMedia && _localPlayer != null) {
       isPlaying = _localPlayer!.state.playing;
       currentSeconds = _localPlayer!.state.position.inMilliseconds / 1000.0;
-      totalDuration = _localPlayer!.state.duration.inSeconds.toDouble();
-    } else if (_youtubeController != null) {
-      isPlaying = _youtubeController!.value.isPlaying;
+      totalSeconds = _localPlayer!.state.duration.inSeconds.toDouble();
+    } else if (kIsWeb && _webYoutubeController != null) {
+      isPlaying = _isPlaying;
+      try {
+        currentSeconds = await _webYoutubeController!.currentTime;
+        totalSeconds = await _webYoutubeController!.duration;
+      } catch (e) {
+        return;
+      }
+    } else if (!kIsWeb && _mobileYoutubeController != null) {
+      isPlaying = _mobileYoutubeController!.value.isPlaying;
       currentSeconds =
-          _youtubeController!.value.position.inMilliseconds / 1000.0;
-      totalDuration = _youtubeController!.metadata.duration.inSeconds
-          .toDouble();
+          _mobileYoutubeController!.value.position.inMilliseconds / 1000.0;
+      totalSeconds =
+          _mobileYoutubeController!.metadata.duration.inSeconds.toDouble();
     } else {
       return;
     }
 
-    if (isPlaying != _isPlaying) {
-      setState(() => _isPlaying = isPlaying);
-      if (isPlaying)
-        _startListeningTracker();
-      else
-        _stopListeningTracker();
+    if (!mounted) return;
+
+    // --- 3. UPDATE STATE ---
+    setState(() {
+      _isPlaying = isPlaying;
+      _currentPosition = Duration(milliseconds: (currentSeconds * 1000).toInt());
+      _totalDuration = Duration(milliseconds: (totalSeconds * 1000).toInt());
+    });
+
+    if (isPlaying) {
+      _startListeningTracker();
+    } else {
+      _stopListeningTracker();
     }
 
-    if ((_isVideo || _isAudio || _isYoutubeAudio) && totalDuration > 0) {
-      if (currentSeconds >= totalDuration - 2) _markLessonAsComplete();
+    // --- 4. CHECK COMPLETION (FIXED) ---
+    if ((_isVideo || _isAudio || _isYoutubeAudio) && totalSeconds > 0) {
+      // BUG FIX: On Web, duration might briefly be 0 or 1 while loading.
+      // If totalSeconds is 1, then (1 - 2) = -1.
+      // Since currentSeconds (0) >= -1 is TRUE, it triggered completion immediately.
+      
+      // Safety Checks:
+      // 1. Duration must be substantial (e.g. > 10s) to be a valid lesson
+      // 2. We must have actually played something (> 0.5s)
+      if (totalSeconds > 10 && currentSeconds > 0.5) {
+         if (currentSeconds >= totalSeconds - 2) {
+           _markLessonAsComplete();
+         }
+      }
     }
 
+    // --- 5. SYNC TRANSCRIPT ---
     if (!isPlaying || _activeTranscript.isEmpty) return;
+
+    // Auto-pause single sentence mode
     if (_isSentenceMode && _isPlayingSingleSentence) {
       if (_activeSentenceIndex >= 0 &&
           _activeSentenceIndex < _activeTranscript.length) {
-        if (currentSeconds >=
-            _activeTranscript[_activeSentenceIndex].end - 0.05) {
+        if (currentSeconds >= _activeTranscript[_activeSentenceIndex].end - 0.05) {
           _pauseMedia();
           setState(() {
             _isPlayingSingleSentence = false;
@@ -758,19 +702,30 @@ class _ReaderScreenState extends State<ReaderScreen>
       }
     }
 
+    // Transcript Scrolling Logic
     bool shouldSync = !_isSentenceMode;
-    // On Desktop, we ALWAYS sync
     if (MediaQuery.of(context).size.width > 900) shouldSync = true;
 
     if (shouldSync) {
       int activeIndex = -1;
-      for (int i = 0; i < _activeTranscript.length; i++) {
-        if (currentSeconds >= _activeTranscript[i].start &&
-            currentSeconds < _activeTranscript[i].end) {
-          activeIndex = i;
-          break;
+      // Optimization: Check current first
+      if (_activeSentenceIndex != -1 &&
+          _activeSentenceIndex < _activeTranscript.length &&
+          currentSeconds >= _activeTranscript[_activeSentenceIndex].start &&
+          currentSeconds < _activeTranscript[_activeSentenceIndex].end) {
+        activeIndex = _activeSentenceIndex;
+      } else {
+        // Full search
+        for (int i = 0; i < _activeTranscript.length; i++) {
+          if (currentSeconds >= _activeTranscript[i].start &&
+              currentSeconds < _activeTranscript[i].end) {
+            activeIndex = i;
+            break;
+          }
         }
       }
+
+      // Handle Gaps
       if (activeIndex == -1) {
         for (int i = 0; i < _activeTranscript.length; i++) {
           if (_activeTranscript[i].start > currentSeconds) {
@@ -782,36 +737,37 @@ class _ReaderScreenState extends State<ReaderScreen>
           activeIndex = _activeTranscript.length - 1;
         }
       }
+
       if (activeIndex != -1 && activeIndex != _activeSentenceIndex) {
         setState(() {
           _activeSentenceIndex = activeIndex;
           _resetTranslationState();
         });
-        // Only scroll if mobile
-        if (MediaQuery.of(context).size.width <= 900)
+        if (MediaQuery.of(context).size.width <= 900) {
           _scrollToActiveLine(activeIndex);
+        }
       }
     }
   }
 
-  void _playMedia() {
-    if (kIsWeb && _webYoutubeController != null) {
-      _webYoutubeController!.playVideo();
-    } else if (_isLocalMedia && _localPlayer != null) {
-      _localPlayer!.play();
+  void _pauseMedia() {
+    if (_isLocalMedia && _localPlayer != null) {
+      _localPlayer!.pause();
+    } else if (kIsWeb) {
+      _webYoutubeController?.pauseVideo();
     } else {
-      _youtubeController?.play();
+      _mobileYoutubeController?.pause();
     }
     _resetControlsTimer();
   }
 
-  void _pauseMedia() {
-    if (kIsWeb && _webYoutubeController != null) {
-      _webYoutubeController!.pauseVideo();
-    } else if (_isLocalMedia && _localPlayer != null) {
-      _localPlayer!.pause();
+  void _playMedia() {
+    if (_isLocalMedia && _localPlayer != null) {
+      _localPlayer!.play();
+    } else if (kIsWeb) {
+      _webYoutubeController?.playVideo();
     } else {
-      _youtubeController?.pause();
+      _mobileYoutubeController?.play();
     }
     _resetControlsTimer();
   }
@@ -819,58 +775,67 @@ class _ReaderScreenState extends State<ReaderScreen>
   Future<void> _seekToTime(double seconds) async {
     _seekResetTimer?.cancel();
     final d = Duration(milliseconds: (seconds * 1000).toInt());
-
+    
+    // Set UI to optimistic state immediately
     setState(() {
       _isSeeking = true;
       _optimisticPosition = d;
+      _currentPosition = d; // Force UI update
     });
 
-    if (kIsWeb && _webYoutubeController != null) {
-      // Web seek
-      _webYoutubeController!.seekTo(seconds: seconds, allowSeekAhead: true);
-    } else if (_isLocalMedia && _localPlayer != null) {
+    if (_isLocalMedia && _localPlayer != null) {
       await _localPlayer!.seek(d);
-    } else if (_youtubeController != null) {
-      _youtubeController!.seekTo(d);
+    } else if (kIsWeb) {
+      // Web uses Seconds (double)
+      _webYoutubeController?.seekTo(seconds: seconds, allowSeekAhead: true);
+    } else {
+      // Mobile uses Duration
+      _mobileYoutubeController?.seekTo(d);
     }
 
+    // Reset seeking flag after a delay to allow player to catch up
     _seekResetTimer = Timer(const Duration(milliseconds: 600), () {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isSeeking = false;
           _optimisticPosition = null;
         });
+      }
     });
   }
 
-  void _seekRelative(int seconds) async {
-    Duration current = Duration.zero;
-    Duration total = Duration.zero;
-    if (_isLocalMedia && _localPlayer != null) {
-      current = _localPlayer!.state.position;
-      total = _localPlayer!.state.duration;
-    } else if (_youtubeController != null) {
-      current = _youtubeController!.value.position;
-      total = _youtubeController!.metadata.duration;
-    }
-    final newPos = current + Duration(seconds: seconds);
-    final clamped = newPos < Duration.zero
-        ? Duration.zero
-        : (newPos > total ? total : newPos);
-    await _seekToTime(clamped.inMilliseconds / 1000.0);
+  // Update _seekRelative similarly
+  void _seekRelative(int offsetSeconds) async {
+    // Use the Unified variables we are already tracking!
+    double currentSeconds = _currentPosition.inMilliseconds / 1000.0;
+    double totalSeconds = _totalDuration.inMilliseconds / 1000.0;
+
+    double newPos = currentSeconds + offsetSeconds;
+
+    if (newPos < 0) newPos = 0;
+    if (totalSeconds > 0 && newPos > totalSeconds) newPos = totalSeconds;
+
+    await _seekToTime(newPos);
     _resetControlsTimer();
   }
 
-  void _toggleControls() {
+void _toggleControls() {
     setState(() => _showControls = !_showControls);
-    if (_showControls) _resetControlsTimer();
+    if (_showControls) {
+      _resetControlsTimer();
+    }
   }
 
-  void _resetControlsTimer() {
+ void _resetControlsTimer() {
     _controlsHideTimer?.cancel();
     _controlsHideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _isPlaying && !_isSeeking)
+      // Only auto-hide if:
+      // 1. The widget is still active (mounted)
+      // 2. The video is PLAYING (don't hide play button if paused)
+      // 3. The user is NOT actively scrubbing/seeking
+      if (mounted && _isPlaying && !_isSeeking) {
         setState(() => _showControls = false);
+      }
     });
   }
 
@@ -1641,8 +1606,16 @@ class _ReaderScreenState extends State<ReaderScreen>
       ),
     );
   }
-
-  Widget _buildDesktopBody(bool isDark) {
+void _showControlsOnInteraction() {
+    // Only verify state to prevent unnecessary rebuilds
+    if (!_showControls) {
+      setState(() => _showControls = true);
+    }
+    // Always reset the timer when interaction happens
+    _resetControlsTimer();
+  }
+  // --- DESKTOP BODY (New Layout) ---
+ Widget _buildDesktopBody(bool isDark) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1656,43 +1629,34 @@ class _ReaderScreenState extends State<ReaderScreen>
                 flex: 4,
                 child: Container(
                   color: Colors.black,
-                  child: Stack(
-                    alignment: Alignment.center, // Center the video
-                    children: [
-                      // The Video Player
-                      AspectRatio(
-                        aspectRatio: 16 / 9,
-                        child: _buildSharedPlayer(),
-                      ),
-
-                      // Controls Overlay
-                      VideoControlsOverlay(
-                        isPlaying: _isPlaying,
-                        position: kIsWeb
-                            ? ((_isSeeking && _optimisticPosition != null)
-                                  ? _optimisticPosition!
-                                  : _currentWebPosition)
-                            : ((_isSeeking && _optimisticPosition != null)
-                                  ? _optimisticPosition!
-                                  : (_isLocalMedia && _localPlayer != null
-                                        ? _localPlayer!.state.position
-                                        : (_youtubeController?.value.position ??
-                                              Duration.zero))),
-                        duration: kIsWeb
-                            ? _currentWebDuration
-                            : (_isLocalMedia && _localPlayer != null
-                                  ? _localPlayer!.state.duration
-                                  : (_youtubeController?.metadata.duration ??
-                                        Duration.zero)),
-                        showControls: true, // Always show/hover on desktop
-                        onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
-                        onSeekRelative: _seekRelative,
-                        onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
-
-                        // FIX: Re-enable the button!
-                        onToggleFullscreen: _toggleCustomFullScreen,
-                      ),
-                    ],
+                  // WRAP WITH MOUSE REGION TO DETECT HOVER
+                  child: MouseRegion(
+                    onEnter: (_) => _showControlsOnInteraction(),
+                    onHover: (_) => _showControlsOnInteraction(),
+                    child: Stack(
+                      children: [
+                        Center(
+                          child: AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: _buildSharedPlayer(),
+                          ),
+                        ),
+                        // USE THE UNIFIED OVERLAY
+                        VideoControlsOverlay(
+                          isPlaying: _isPlaying,
+                          position: (_isSeeking && _optimisticPosition != null)
+                              ? _optimisticPosition!
+                              : _currentPosition,
+                          duration: _totalDuration,
+                          // FIX: Use the variable, not 'true'
+                          showControls: _showControls, 
+                          onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
+                          onSeekRelative: _seekRelative,
+                          onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
+                          onToggleFullscreen: () {},
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1702,13 +1666,8 @@ class _ReaderScreenState extends State<ReaderScreen>
                 flex: 1,
                 child: Container(
                   width: double.infinity,
-                  color: isDark
-                      ? const Color(0xFF121212)
-                      : const Color(0xFFF0F0F0),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 16,
-                  ),
+                  color: isDark ? const Color(0xFF121212) : const Color(0xFFF0F0F0),
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                   alignment: Alignment.center,
                   child: _buildDesktopSubtitleArea(isDark),
                 ),
@@ -1717,16 +1676,12 @@ class _ReaderScreenState extends State<ReaderScreen>
           ),
         ),
 
-        // RIGHT SIDE: Playlist / Series (Flex 1)
+        // RIGHT SIDE: Playlist / Series
         if (widget.lesson.seriesId != null)
           Container(
-            width: 350, // Fixed width sidebar
+            width: 350,
             decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: isDark ? Colors.white12 : Colors.grey[300]!,
-                ),
-              ),
+              border: Border(left: BorderSide(color: isDark ? Colors.white12 : Colors.grey[300]!)),
               color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
             ),
             child: _buildDesktopPlaylistSidebar(isDark),
@@ -1736,67 +1691,112 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   // --- DESKTOP SUBTITLE AREA ---
-  Widget _buildDesktopSubtitleArea(bool isDark) {
-    if (_activeSentenceIndex == -1 ||
-        _activeSentenceIndex >= _smartChunks.length) {
-      return Text(
-        "Listen carefully...",
-        style: TextStyle(
-          fontSize: 18,
-          color: isDark ? Colors.grey : Colors.grey[600],
-          fontStyle: FontStyle.italic,
+ Widget _buildDesktopSubtitleArea(bool isDark) {
+    // 1. Safety Check: If data isn't loaded yet, show a loader.
+    if (_smartChunks.isEmpty) {
+      return Center(
+        child: Text(
+          "Loading text...",
+          style: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
         ),
       );
+    }
+
+    // 2. Logic: Which sentence to display?
+    // If _activeSentenceIndex is -1 (not started/silence), default to 0 (the first sentence).
+    // This ensures there is ALWAYS text for the user to click.
+    int displayIndex = _activeSentenceIndex;
+    if (displayIndex < 0 || displayIndex >= _smartChunks.length) {
+      displayIndex = 0;
     }
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // The Interactive Text
+        // The Interactive Text (Always Visible)
         InteractiveTextDisplay(
-          text: _smartChunks[_activeSentenceIndex],
-          sentenceIndex: _activeSentenceIndex,
+          text: _smartChunks[displayIndex],
+          sentenceIndex: displayIndex, // Use our safe 'displayIndex'
           vocabulary: _vocabulary,
           language: widget.lesson.language,
           onWordTap: _handleWordTap,
           onPhraseSelected: _handlePhraseSelected,
-          isBigMode: true, // Make text large
+          isBigMode: true, // Large text for desktop
           isListeningMode: false,
           isOverlay: false,
-          // textColor: isDark ? Colors.white : Colors.black,
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 24), // Added a bit more breathing room
 
-        // Translation Area (if card active)
-        if (_showCard)
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.grey[800] : Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
-            ),
-            child: FutureBuilder<String>(
-              future: _cardTranslationFuture,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData)
-                  return const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  );
-                return Text(
-                  "${_selectedText}: ${snapshot.data}",
-                  style: TextStyle(
-                    color: isDark ? Colors.white70 : Colors.black87,
-                    fontWeight: FontWeight.w500,
+        // Translation Area (Only appears when a word is clicked)
+        // We use AnimatedOpacity so it doesn't jump around when appearing
+        AnimatedOpacity(
+          duration: const Duration(milliseconds: 200),
+          opacity: _showCard ? 1.0 : 0.0,
+          child: _showCard
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? Colors.white10 : Colors.blueAccent.withOpacity(0.2),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                );
-              },
-            ),
-          ),
+                  child: FutureBuilder<String>(
+                    future: _cardTranslationFuture,
+                    builder: (context, snapshot) {
+                      String translationContent = "";
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        );
+                      } else if (snapshot.hasData) {
+                        translationContent = snapshot.data!;
+                      }
+
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _selectedText,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.arrow_forward, 
+                            size: 16, 
+                            color: isDark ? Colors.white54 : Colors.grey,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            translationContent,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: isDark ? Colors.blueAccent[100] : Colors.blue[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                )
+              : const SizedBox(height: 48), // Placeholder to keep layout stable if you prefer
+        ),
       ],
     );
   }
@@ -1886,7 +1886,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
-  Widget _buildMobilePlayerContainer() {
+ Widget _buildMobilePlayerContainer() {
     return Container(
       width: double.infinity,
       color: Colors.black,
@@ -1914,7 +1914,8 @@ class _ReaderScreenState extends State<ReaderScreen>
               isLocalMedia: _isLocalMedia,
               localVideoController: null,
               localPlayer: _localPlayer,
-              youtubeController: _youtubeController,
+              // Pass mobile controller only if not web (or refactor header to use variables too)
+              youtubeController: kIsWeb ? null : _mobileYoutubeController,
               onToggleFullscreen: _toggleCustomFullScreen,
             )
           : AspectRatio(
@@ -1930,18 +1931,14 @@ class _ReaderScreenState extends State<ReaderScreen>
                 child: Stack(
                   children: [
                     _buildSharedPlayer(),
+                    // CUSTOM OVERLAY - ENABLED FOR WEB NOW
                     VideoControlsOverlay(
                       isPlaying: _isPlaying,
+                      // Use Optimistic if dragging, otherwise use Unified Position
                       position: (_isSeeking && _optimisticPosition != null)
                           ? _optimisticPosition!
-                          : (_isLocalMedia && _localPlayer != null
-                                ? _localPlayer!.state.position
-                                : (_youtubeController?.value.position ??
-                                      Duration.zero)),
-                      duration: _isLocalMedia && _localPlayer != null
-                          ? _localPlayer!.state.duration
-                          : (_youtubeController?.metadata.duration ??
-                                Duration.zero),
+                          : _currentPosition,
+                      duration: _totalDuration,
                       showControls: _showControls,
                       onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
                       onSeekRelative: _seekRelative,
@@ -1965,38 +1962,43 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
+  // ... [Keep existing _buildSharedPlayer, _buildYoutubeAudioControls, _formatDuration, _replayPreviousSentence, _buildInteractiveSubtitleOverlay] ...
   Widget _buildSharedPlayer() {
-    // 1. WEB PLAYER
-    if (kIsWeb && _webYoutubeController != null) {
-      return web_yt.YoutubePlayer(
+    Widget playerWidget;
+
+    if (_isLocalMedia && _localVideoController != null) {
+      playerWidget = Video(
+        controller: _localVideoController!,
+        controls: NoVideoControls,
+      );
+    } else if (kIsWeb && _webYoutubeController != null) {
+      // --- WEB PLAYER WIDGET ---
+      playerWidget = web.YoutubePlayer(
         controller: _webYoutubeController!,
         aspectRatio: 16 / 9,
       );
-    }
-
-    // 2. MEDIA KIT (Desktop App)
-    if (_isLocalMedia && _localVideoController != null) {
-      return Video(
-        controller: _localVideoController!,
-        controls: NoVideoControls,
-        fit: BoxFit.contain,
-      );
-    }
-    // 3. MOBILE NATIVE
-    else if (_youtubeController != null) {
-      return YoutubePlayer(
-        controller: _youtubeController!,
+    } else if (!kIsWeb && _mobileYoutubeController != null) {
+      // --- MOBILE PLAYER WIDGET ---
+      playerWidget = mobile.YoutubePlayer(
+        controller: _mobileYoutubeController!,
         showVideoProgressIndicator: false,
         width: MediaQuery.of(context).size.width,
       );
     } else {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox.shrink();
     }
+
+    return Container(
+      key: _videoPlayerKey,
+      color: Colors.black,
+      child: playerWidget,
+    );
   }
 
   Widget _buildYoutubeAudioControls() {
-    final duration = _youtubeController?.metadata.duration ?? Duration.zero;
-    final position = _youtubeController?.value.position ?? Duration.zero;
+    final duration =
+        _mobileYoutubeController?.metadata.duration ?? Duration.zero;
+    final position = _mobileYoutubeController?.value.position ?? Duration.zero;
     final max = duration.inSeconds.toDouble();
     final value = position.inSeconds.toDouble().clamp(0.0, max);
     return Container(
@@ -2068,30 +2070,21 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _toggleCustomFullScreen() {
     setState(() => _isTransitioningFullscreen = true);
-
     final bool targetState = !_isFullScreen;
     setState(() => _isFullScreen = targetState);
-
-    // Only change orientation on Mobile devices
-    // On Desktop/Web, we just rebuild the UI with the _isFullScreen flag
-    final bool isDesktop = MediaQuery.of(context).size.width > 900;
-
-    if (!isDesktop) {
-      if (targetState) {
-        SystemChrome.setPreferredOrientations([
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      } else {
-        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-        SystemChrome.setEnabledSystemUIMode(
-          SystemUiMode.manual,
-          overlays: SystemUiOverlay.values,
-        );
-      }
+    if (targetState) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: SystemUiOverlay.values,
+      );
     }
-
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _isTransitioningFullscreen = false);
     });
