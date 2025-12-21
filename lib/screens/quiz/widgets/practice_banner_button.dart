@@ -12,6 +12,7 @@ class PracticeBannerButton extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Container(
+        padding: const EdgeInsets.only(right: 10, left: 5),
         height: 50, // Slightly taller for better touch target
         decoration: BoxDecoration(
           gradient: const LinearGradient(

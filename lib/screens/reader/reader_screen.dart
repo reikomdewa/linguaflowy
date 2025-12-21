@@ -1892,7 +1892,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                   bottom: 24,
                   right: 24,
                   child: FloatingActionButton(
-                    backgroundColor: Theme.of(context).primaryColor,
+                    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                     onPressed: () =>
                         setState(() => _isSentenceMode = !_isSentenceMode),
                     child: Icon(
