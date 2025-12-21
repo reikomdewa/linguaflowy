@@ -72,20 +72,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     // 2. Setup Theme & User Data
     final user = authState.user;
     final bool isAdmin = AppConstants.isAdmin(user.email);
-    
+
     // --- THEME AWARE COLORS ---
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     // Use the theme's background (White or Charcoal)
     final navBarColor = theme.scaffoldBackgroundColor;
-    
+
     // Use the theme's primary color (Black or White) for selected items
     final selectedColor = colorScheme.primary;
-    
+
     // Use the theme's text color with opacity for unselected items
     final unselectedColor = colorScheme.onSurface.withOpacity(0.5);
-    
+
     // Use the theme's defined divider color
     final borderColor = theme.dividerColor;
 
@@ -123,21 +123,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     // Admin Tab
     if (isAdmin) {
-      navItems.add(_NavItem(
-        screen: const AdminDashboardScreen(),
-        icon: const Icon(Icons.admin_panel_settings_outlined),
-        activeIcon: const Icon(Icons.admin_panel_settings_rounded),
-        label: 'Admin',
-      ));
+      navItems.add(
+        _NavItem(
+          screen: const AdminDashboardScreen(),
+          icon: const Icon(Icons.admin_panel_settings_outlined),
+          activeIcon: const Icon(Icons.admin_panel_settings_rounded),
+          label: 'Admin',
+        ),
+      );
     }
 
     // Profile Tab
-    navItems.add(_NavItem(
-      screen: ProfileScreen(),
-      icon: const Icon(Icons.person_outline),
-      activeIcon: const Icon(Icons.person_rounded),
-      label: 'Profile',
-    ));
+    navItems.add(
+      _NavItem(
+        screen: ProfileScreen(),
+        icon: const Icon(Icons.person_outline),
+        activeIcon: const Icon(Icons.person_rounded),
+        label: 'Profile',
+      ),
+    );
 
     // ----------------------------------------------------------------------
     // 4. BUILD LAYOUT
@@ -166,14 +170,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     },
                     labelType: NavigationRailLabelType.all,
                     groupAlignment: 0.0,
-                    
+
                     // Use a very subtle wash of the secondary color (HyperBlue) or transparent
                     indicatorColor: colorScheme.secondary.withOpacity(0.08),
-                    
+
                     // Theme Aware Icons
                     selectedIconTheme: IconThemeData(color: selectedColor),
                     unselectedIconTheme: IconThemeData(color: unselectedColor),
-                    
+
                     // Theme Aware Text
                     selectedLabelTextStyle: TextStyle(
                       color: selectedColor,
@@ -185,22 +189,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       fontWeight: FontWeight.w500,
                       fontSize: 11,
                     ),
-                    
+
                     // Leading Logo
                     leading: Padding(
                       padding: const EdgeInsets.only(bottom: 32.0, top: 16.0),
                       child: Image.asset(
-                        'assets/images/linguaflow_logo_transparent.png', 
+                        'assets/images/linguaflow_logo_transparent.png',
                         height: 40,
                         width: 40,
                         errorBuilder: (_, __, ___) => Icon(
-                          Icons.language, 
-                          size: 40, 
+                          Icons.language,
+                          size: 40,
                           color: selectedColor,
                         ),
                       ),
                     ),
-                    
+
                     // Vertical Line Border (Using Theme Divider Color)
                     trailing: Expanded(
                       child: Align(
@@ -256,12 +260,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     currentIndex: _currentIndex,
                     onTap: (index) => setState(() => _currentIndex = index),
                     type: BottomNavigationBarType.fixed,
-                    
+
                     // Theme Aware Colors
                     backgroundColor: navBarColor,
                     selectedItemColor: selectedColor,
                     unselectedItemColor: unselectedColor,
-                    
+
                     selectedLabelStyle: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 11,

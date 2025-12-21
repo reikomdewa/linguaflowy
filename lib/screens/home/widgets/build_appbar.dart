@@ -9,6 +9,7 @@ import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart'; // Import Reader
+import 'package:linguaflow/utils/centered_views.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/widgets/buttons/build_ai_button.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
@@ -319,7 +320,17 @@ PreferredSizeWidget buildAppBar(
               if (!isPremium) {
                 showDialog(
                   context: context,
-                  builder: (context) => const PremiumLockDialog(),
+                  builder: (context) => LayoutBuilder(
+                    builder: (context, constraints) {
+                      bool isDesktop = constraints.maxWidth > 600;
+                      return isDesktop
+                          ? CenteredView(
+                              horizontalPadding: 500,
+                              child: const PremiumLockDialog(),
+                            )
+                          : const PremiumLockDialog();
+                    },
+                  ),
                 ).then((unlocked) {
                   if (unlocked == true && context.mounted) {
                     context.read<AuthBloc>().add(AuthCheckRequested());
