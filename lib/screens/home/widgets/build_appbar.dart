@@ -239,8 +239,9 @@ PreferredSizeWidget buildAppBar(
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) =>
-                                          kIsWeb? ReaderScreenWeb(lesson: lesson) : ReaderScreen(lesson: lesson),
+                                      builder: (context) => kIsWeb
+                                          ? ReaderScreenWeb(lesson: lesson)
+                                          : ReaderScreen(lesson: lesson),
                                     ),
                                   );
                                 },
@@ -328,7 +329,7 @@ PreferredSizeWidget buildAppBar(
               LanguageHelper.availableLanguages,
             );
           },
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(10),
           child: Container(
             height: isDesktop ? 40 : 36,
             padding: isDesktop
@@ -338,7 +339,7 @@ PreferredSizeWidget buildAppBar(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.1)
                   : Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               children: [
@@ -347,7 +348,7 @@ PreferredSizeWidget buildAppBar(
                   size: 20,
                   color: isDark ? Colors.white70 : Colors.black54,
                 ),
-                const SizedBox(width: 6),
+                if (isDesktop) const SizedBox(width: 6),
                 if (isDesktop)
                   Text(
                     "Stats",
@@ -365,7 +366,7 @@ PreferredSizeWidget buildAppBar(
 
       // --- PRO / PREMIUM BUTTON ---
       Padding(
-        padding: const EdgeInsets.only(right: 16, top: 12, bottom: 12, left: 4),
+        padding: const EdgeInsets.only(right: 12, top: 12, bottom: 12, left: 4),
         child: Center(
           child: InkWell(
             onTap: () {
@@ -378,11 +379,9 @@ PreferredSizeWidget buildAppBar(
                       return isDesktop
                           ? CenteredView(
                               horizontalPadding: 500,
-                              child:  PremiumLockDialog(
-                                    onClose: () {},
-                              ),
+                              child: PremiumLockDialog(onClose: () {}),
                             )
-                          :  PremiumLockDialog(    onClose: () {},);
+                          : PremiumLockDialog(onClose: () {});
                     },
                   ),
                 ).then((unlocked) {
@@ -411,9 +410,7 @@ PreferredSizeWidget buildAppBar(
             },
             borderRadius: BorderRadius.circular(20),
             child: Container(
-              padding: isDesktop
-                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 6)
-                  : const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
               decoration: BoxDecoration(
                 color: isPremium
                     ? const Color(0xFFFFC107).withValues(alpha: 0.15)
@@ -429,6 +426,7 @@ PreferredSizeWidget buildAppBar(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  const SizedBox(width: 4),
                   Icon(
                     isPremium
                         ? Icons.workspace_premium_rounded
@@ -439,7 +437,8 @@ PreferredSizeWidget buildAppBar(
                         : (isDark ? Colors.white70 : Colors.grey.shade600),
                   ),
                   if (isPremium) ...[
-                    const SizedBox(width: 6),
+                    if (isDesktop) const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     if (isDesktop)
                       const Text(
                         "PRO",
