@@ -643,7 +643,9 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
               Navigator.pop(context);
               showDialog(
                 context: context,
-                builder: (_) => const PremiumLockDialog(),
+                builder: (_) =>  PremiumLockDialog(
+                  onClose: () {},
+                ),
               );
             },
             child: const Text("Upgrade"),

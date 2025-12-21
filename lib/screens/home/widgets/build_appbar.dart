@@ -376,9 +376,11 @@ PreferredSizeWidget buildAppBar(
                       return isDesktop
                           ? CenteredView(
                               horizontalPadding: 500,
-                              child: const PremiumLockDialog(),
+                              child:  PremiumLockDialog(
+                                    onClose: () {},
+                              ),
                             )
-                          : const PremiumLockDialog();
+                          :  PremiumLockDialog(    onClose: () {},);
                     },
                   ),
                 ).then((unlocked) {

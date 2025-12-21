@@ -137,6 +137,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   // --- ADD THESE NEW VARIABLES ---
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
+  bool _isLimitDialogOpen = false;
 
   @override
   void initState() {
@@ -503,7 +504,6 @@ class _ReaderScreenState extends State<ReaderScreen>
     } else if (widget.lesson.id.startsWith('yt_')) {
       videoId = widget.lesson.id.replaceAll('yt_', '');
     }
-    // Use the mobile package's helper to extract ID (works for both strings)
     if (videoId == null || videoId.isEmpty) {
       videoId = mobile.YoutubePlayer.convertUrlToId(url);
     }
@@ -514,33 +514,29 @@ class _ReaderScreenState extends State<ReaderScreen>
         _webYoutubeController = web.YoutubePlayerController.fromVideoId(
           videoId: videoId,
           params: const web.YoutubePlayerParams(
-            showControls: false, // HIDE Native controls so Custom Overlay works
+            showControls: false,
             showFullscreenButton: false,
             mute: false,
             playsInline: true,
+            strictRelatedVideos: true,
+            showVideoAnnotations: false,
+            // modestBranding: true,  <-- REMOVED (Not supported in v5+)
           ),
         );
 
-        // LISTEN FOR EVENTS (Crucial for Play/Pause sync and Completion)
         _webYoutubeController!.listen((event) {
-          // 1. Sync Play/Pause State
           final isPlaying = event.playerState == web.PlayerState.playing;
           if (isPlaying != _isPlaying) {
-            setState(() {
-              _isPlaying = isPlaying;
-              if (isPlaying) {
-                // Show controls briefly when play starts, then timer hides them
-                _showControls = true;
-                _resetControlsTimer();
-              }
-            });
+             setState(() {
+               _isPlaying = isPlaying;
+               if (isPlaying) { _showControls = true; _resetControlsTimer(); }
+             });
           }
-
-          // 2. Handle Completion Reliably (Fixes the "pause triggers finish" bug)
           if (event.playerState == web.PlayerState.ended) {
             _markLessonAsComplete();
           }
         });
+
       } else {
         // --- MOBILE INIT ---
         _mobileYoutubeController = mobile.YoutubePlayerController(
@@ -549,15 +545,17 @@ class _ReaderScreenState extends State<ReaderScreen>
             autoPlay: false,
             mute: false,
             enableCaption: false,
-            hideControls: true, // Use custom controls
+            hideControls: true, 
+            controlsVisibleAtStart: false,
+            disableDragSeek: true,
+            loop: false,
+            isLive: false,
+            forceHD: false,
+            // modestBranding: true, <-- REMOVED (Not supported in mobile package)
           ),
         );
       }
-
-      setState(() {
-        _isLocalMedia = false;
-        _isVideo = !_isYoutubeAudio;
-      });
+      setState(() { _isLocalMedia = false; _isVideo = !_isYoutubeAudio; });
       _startSyncTimer();
     }
   }
@@ -632,30 +630,26 @@ class _ReaderScreenState extends State<ReaderScreen>
   // [Include _checkSync, _pauseMedia, _playMedia, _seekRelative, _seekToTime, _toggleControls, _resetControlsTimer]
   // Assumed existing
   Future<void> _checkSync() async {
-    // 1. Don't sync while seeking or transitioning (prevents stutter)
     if (_isSeeking || _isTransitioningFullscreen) return;
 
     bool isPlaying = false;
     double currentSeconds = 0.0;
     double totalSeconds = 0.0;
 
-    // --- 2. FETCH DATA (Platform Agnostic) ---
+    // 1. Fetch Data
     if (_isLocalMedia && _localPlayer != null) {
       isPlaying = _localPlayer!.state.playing;
       currentSeconds = _localPlayer!.state.position.inMilliseconds / 1000.0;
       totalSeconds = _localPlayer!.state.duration.inSeconds.toDouble();
     } else if (kIsWeb && _webYoutubeController != null) {
-      // WEB: Async Fetch
-      // We rely on the event listener for isPlaying, but fetch precise time here
       isPlaying = _isPlaying;
       try {
         currentSeconds = await _webYoutubeController!.currentTime;
         totalSeconds = await _webYoutubeController!.duration;
       } catch (e) {
-        return; // Bridge not ready yet
+        return;
       }
     } else if (!kIsWeb && _mobileYoutubeController != null) {
-      // MOBILE: Sync Fetch
       isPlaying = _mobileYoutubeController!.value.isPlaying;
       currentSeconds =
           _mobileYoutubeController!.value.position.inMilliseconds / 1000.0;
@@ -667,7 +661,7 @@ class _ReaderScreenState extends State<ReaderScreen>
 
     if (!mounted) return;
 
-    // --- 3. UPDATE UNIFIED STATE (Feeds the Custom Overlay) ---
+    // 2. Update UI
     setState(() {
       _isPlaying = isPlaying;
       _currentPosition = Duration(
@@ -676,30 +670,23 @@ class _ReaderScreenState extends State<ReaderScreen>
       _totalDuration = Duration(milliseconds: (totalSeconds * 1000).toInt());
     });
 
-    // --- 4. HANDLE PLAYING TRACKER ---
-    if (isPlaying) {
+    if (isPlaying)
       _startListeningTracker();
-    } else {
+    else
       _stopListeningTracker();
-    }
 
-    // --- 5. CHECK COMPLETION (FIXED) ---
+    // 3. Check Completion (Skip math check on Web)
     if ((_isVideo || _isAudio || _isYoutubeAudio) && totalSeconds > 0) {
-      // FIX: Only use math check for Mobile/Local.
-      // Web uses the 'PlayerState.ended' event in _initializeYoutubePlayer.
       if (!kIsWeb) {
-        // Safety buffer: only check if video is substantial (>10s) and actually played (>0.5s)
         if (totalSeconds > 10 && currentSeconds > 0.5) {
-          if (currentSeconds >= totalSeconds - 2) {
-            _markLessonAsComplete();
-          }
+          if (currentSeconds >= totalSeconds - 2) _markLessonAsComplete();
         }
       }
     }
 
+    // 4. Transcript Logic (Kept same)
     if (!isPlaying || _activeTranscript.isEmpty) return;
 
-    // --- 6. HANDLE SINGLE SENTENCE MODE ---
     if (_isSentenceMode && _isPlayingSingleSentence) {
       if (_activeSentenceIndex >= 0 &&
           _activeSentenceIndex < _activeTranscript.length) {
@@ -715,21 +702,16 @@ class _ReaderScreenState extends State<ReaderScreen>
       }
     }
 
-    // --- 7. HANDLE SUBTITLE SCROLLING ---
-    bool shouldSync = !_isSentenceMode;
-    if (MediaQuery.of(context).size.width > 900) shouldSync = true;
-
+    bool shouldSync =
+        MediaQuery.of(context).size.width > 900 || !_isSentenceMode;
     if (shouldSync) {
       int activeIndex = -1;
-
-      // Optimization: Check current index first
       if (_activeSentenceIndex != -1 &&
           _activeSentenceIndex < _activeTranscript.length &&
           currentSeconds >= _activeTranscript[_activeSentenceIndex].start &&
           currentSeconds < _activeTranscript[_activeSentenceIndex].end) {
         activeIndex = _activeSentenceIndex;
       } else {
-        // Full search
         for (int i = 0; i < _activeTranscript.length; i++) {
           if (currentSeconds >= _activeTranscript[i].start &&
               currentSeconds < _activeTranscript[i].end) {
@@ -738,8 +720,6 @@ class _ReaderScreenState extends State<ReaderScreen>
           }
         }
       }
-
-      // Handle Gaps
       if (activeIndex == -1) {
         for (int i = 0; i < _activeTranscript.length; i++) {
           if (_activeTranscript[i].start > currentSeconds) {
@@ -747,19 +727,16 @@ class _ReaderScreenState extends State<ReaderScreen>
             break;
           }
         }
-        if (activeIndex == -1 && _activeTranscript.isNotEmpty) {
+        if (activeIndex == -1 && _activeTranscript.isNotEmpty)
           activeIndex = _activeTranscript.length - 1;
-        }
       }
-
       if (activeIndex != -1 && activeIndex != _activeSentenceIndex) {
         setState(() {
           _activeSentenceIndex = activeIndex;
           _resetTranslationState();
         });
-        if (MediaQuery.of(context).size.width <= 900) {
+        if (MediaQuery.of(context).size.width <= 900)
           _scrollToActiveLine(activeIndex);
-        }
       }
     }
   }
@@ -1233,22 +1210,39 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  void _showLimitDialog() => showDialog(
-    context: context,
-    builder: (c) => PointerInterceptor( // <--- WRAP THE ROOT OF THE DIALOG
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          bool isDesktop = constraints.maxWidth >= 800;
-          return kIsWeb && isDesktop
-              ? CenteredView(
-                  horizontalPadding: 500,
-                  child: const PremiumLockDialog(),
-                )
-              : const PremiumLockDialog();
-        },
-      ),
-    ),
-  );
+  // Simple toggle now
+  void _showLimitDialog() {
+    _pauseMedia(); // Pause video so audio stops
+    setState(() => _isLimitDialogOpen = true);
+  }
+
+  // The Manual Stack Overlay
+  Widget _buildLimitDialogOverlay() {
+    return Stack(
+      children: [
+        // 1. Barrier
+        GestureDetector(
+          onTap: () => setState(() => _isLimitDialogOpen = false),
+          child: Container(
+            color: Colors.black.withOpacity(0.8),
+          ), // Darker background since video is hidden
+        ),
+
+        // 2. Dialog
+        Positioned.fill(
+          child: PointerInterceptor(
+            child: PremiumLockDialog(
+              onClose: () => setState(() => _isLimitDialogOpen = false),
+              onSuccess: () {
+                setState(() => _isLimitDialogOpen = false);
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _logActivitySession(int minutes, int xpGained) async {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final dateId = DateTime.now().toIso8601String().split('T').first;
@@ -1610,7 +1604,7 @@ class _ReaderScreenState extends State<ReaderScreen>
             bottom: 24,
             right: 24,
             child: FloatingActionButton(
-              backgroundColor: Theme.of(context).primaryColor,
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               onPressed: () =>
                   setState(() => _isSentenceMode = !_isSentenceMode),
               child: Icon(
@@ -1645,7 +1639,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   // --- DESKTOP BODY (New Layout) ---
- Widget _buildDesktopBody(bool isDark) {
+  Widget _buildDesktopBody(bool isDark) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1656,47 +1650,69 @@ class _ReaderScreenState extends State<ReaderScreen>
               Expanded(
                 flex: 4,
                 child: Container(
-                  color: Colors.black,
-                  // MouseRegion detects hover to show controls
+                  color: Colors.black, // Background when video is hidden
                   child: MouseRegion(
                     onEnter: (_) => _showControlsOnInteraction(),
                     onHover: (_) => _showControlsOnInteraction(),
                     child: Stack(
                       children: [
+                        // 1. VIDEO PLAYER (Hidden when dialog is open)
+                        // This prevents the Iframe from stealing input focus
                         Center(
                           child: AspectRatio(
                             aspectRatio: 16 / 9,
-                            child: _buildSharedPlayer(),
+                            child: Visibility(
+                              visible:
+                                  !_isLimitDialogOpen, // Hide when dialog is open
+                              maintainState: true, // Keep video loaded
+                              maintainAnimation: true,
+                              maintainSize: true,
+                              child: _buildSharedPlayer(),
+                            ),
                           ),
                         ),
-                        // FIX: Wrap overlay in IgnorePointer
-                        IgnorePointer(
-                          ignoring: !_showControls, // Allow clicks on video when controls are hidden
-                          child: VideoControlsOverlay(
-                            isPlaying: _isPlaying,
-                            position: (_isSeeking && _optimisticPosition != null)
-                                ? _optimisticPosition!
-                                : _currentPosition,
-                            duration: _totalDuration,
-                            showControls: _showControls,
-                            onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
-                            onSeekRelative: _seekRelative,
-                            onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
-                            onToggleFullscreen: () {},
+
+                        // 2. CONTROLS (Only show if video is visible)
+                        if (!_isLimitDialogOpen)
+                          IgnorePointer(
+                            ignoring: !_showControls,
+                            child: VideoControlsOverlay(
+                              isPlaying: _isPlaying,
+                              position:
+                                  (_isSeeking && _optimisticPosition != null)
+                                  ? _optimisticPosition!
+                                  : _currentPosition,
+                              duration: _totalDuration,
+                              showControls: _showControls,
+                              onPlayPause: _isPlaying
+                                  ? _pauseMedia
+                                  : _playMedia,
+                              onSeekRelative: _seekRelative,
+                              onSeekTo: (d) =>
+                                  _seekToTime(d.inMilliseconds / 1000.0),
+                              onToggleFullscreen: _toggleCustomFullScreen,
+                            ),
                           ),
-                        ),
+
+                        // 3. DIALOG OVERLAY (Top)
+                        if (_isLimitDialogOpen) _buildLimitDialogOverlay(),
                       ],
                     ),
                   ),
                 ),
               ),
-              // ... subtitle area (keep existing code) ...
+              // ... subtitle area ...
               Expanded(
                 flex: 1,
                 child: Container(
                   width: double.infinity,
-                  color: isDark ? const Color(0xFF121212) : const Color(0xFFF0F0F0),
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  color: isDark
+                      ? const Color(0xFF121212)
+                      : const Color(0xFFF0F0F0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
                   alignment: Alignment.center,
                   child: _buildDesktopSubtitleArea(isDark),
                 ),
@@ -1704,12 +1720,16 @@ class _ReaderScreenState extends State<ReaderScreen>
             ],
           ),
         ),
-        // ... playlist sidebar (keep existing code) ...
+        // ... sidebar ...
         if (widget.lesson.seriesId != null)
           Container(
             width: 350,
             decoration: BoxDecoration(
-              border: Border(left: BorderSide(color: isDark ? Colors.white12 : Colors.grey[300]!)),
+              border: Border(
+                left: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.grey[300]!,
+                ),
+              ),
               color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
             ),
             child: _buildDesktopPlaylistSidebar(isDark),
@@ -1921,8 +1941,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       ],
     );
   }
-
- Widget _buildMobilePlayerContainer() {
+Widget _buildMobilePlayerContainer() {
     return Container(
       width: double.infinity,
       color: Colors.black,
@@ -1930,57 +1949,67 @@ class _ReaderScreenState extends State<ReaderScreen>
           ? Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
-                  height: 1,
-                  child: IndexedStack(
-                    index: 0,
-                    children: [
-                      _buildSharedPlayer(),
-                      Container(color: Colors.black),
-                    ],
-                  ),
-                ),
+                SizedBox(height: 1, child: IndexedStack(index: 0, children: [_buildSharedPlayer(), Container(color: Colors.black)])),
                 _buildYoutubeAudioControls(),
               ],
             )
           : _isAudio
           ? ReaderMediaHeader(
-              isInitializing: _isInitializingMedia,
-              isAudio: true,
-              isLocalMedia: _isLocalMedia,
-              localVideoController: null,
-              localPlayer: _localPlayer,
-              youtubeController: kIsWeb ? null : _mobileYoutubeController,
-              onToggleFullscreen: _toggleCustomFullScreen,
+               isInitializing: _isInitializingMedia,
+               isAudio: true,
+               isLocalMedia: _isLocalMedia,
+               localVideoController: null,
+               localPlayer: _localPlayer,
+               youtubeController: kIsWeb ? null : _mobileYoutubeController,
+               onToggleFullscreen: _toggleCustomFullScreen,
             )
           : AspectRatio(
               aspectRatio: 16 / 9,
-              // FIX: Removed the wrapping GestureDetector here!
-              // We rely on the internal buttons or the native iframe click-to-play
               child: Stack(
                 children: [
-                  _buildSharedPlayer(),
-                  
-                  // FIX: Wrap overlay in IgnorePointer
-                  IgnorePointer(
-                    ignoring: !_showControls, // Allow clicks to pass through when hidden
-                    child: VideoControlsOverlay(
-                      isPlaying: _isPlaying,
-                      position: (_isSeeking && _optimisticPosition != null)
-                          ? _optimisticPosition!
-                          : _currentPosition,
-                      duration: _totalDuration,
-                      showControls: _showControls,
-                      onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
-                      onSeekRelative: _seekRelative,
-                      onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
-                      onToggleFullscreen: _toggleCustomFullScreen,
+                  // 1. VIDEO PLAYER (Wrapped in IgnorePointer)
+                  // This is the "Nuclear Option". It prevents the WebView from EVER receiving a touch.
+                  // This ensures the YouTube Title Bar / Channel Icon NEVER appears.
+                  Visibility(
+                    visible: !_isLimitDialogOpen,
+                    maintainState: true,
+                    maintainAnimation: true,
+                    maintainSize: true,
+                    child: IgnorePointer(
+                      ignoring: true, // <--- BLOCKS ALL TOUCHES TO YOUTUBE
+                      child: _buildSharedPlayer(),
+                    ),
+                  ),
+
+                  // 2. TAP & SWIPE DETECTOR (The Controller)
+                  // Since the player ignores touches, this layer catches EVERYTHING.
+                  Positioned.fill(
+                    child: GestureDetector(
+                      onTap: _toggleControls, // Taps toggle our controls
+                      onVerticalDragEnd: _handleVerticalSwipe, // Swipes handle fullscreen
+                      behavior: HitTestBehavior.translucent, // Catches clicks on transparent areas
+                      child: Container(color: Colors.transparent),
                     ),
                   ),
                   
-                  // OPTIONAL: Add a transparent layer ONLY if you need tap-to-show behavior
-                  // that native YouTube doesn't provide. But usually, clicking YouTube
-                  // pauses it, which triggers our listener to show controls anyway.
+                  // 3. CONTROLS OVERLAY
+                  if (!_isLimitDialogOpen)
+                    IgnorePointer(
+                      ignoring: !_showControls,
+                      child: VideoControlsOverlay(
+                        isPlaying: _isPlaying,
+                        position: (_isSeeking && _optimisticPosition != null) ? _optimisticPosition! : _currentPosition,
+                        duration: _totalDuration,
+                        showControls: _showControls,
+                        onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
+                        onSeekRelative: _seekRelative,
+                        onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
+                        onToggleFullscreen: _toggleCustomFullScreen,
+                      ),
+                    ),
+                  
+                  // 4. DIALOG OVERLAY
+                  if (_isLimitDialogOpen) _buildLimitDialogOverlay(),
                 ],
               ),
             ),
@@ -1988,13 +2017,156 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   // --- FULLSCREEN MEDIA (Unchanged from original) ---
-  Widget _buildFullscreenMedia() {
-    // ... [Original Logic for Fullscreen kept here, no changes needed for Mobile logic] ...
-    // Using a placeholder to save answer length, assumes keeping your existing code
+Widget _buildFullscreenMedia() {
+    int displayIndex = _activeSentenceIndex;
+    if (displayIndex < 0 || displayIndex >= _smartChunks.length) {
+      displayIndex = 0;
+    }
+    
+    final bool hasText = _smartChunks.isNotEmpty;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Center(child: _buildSharedPlayer()),
+      body: MouseRegion(
+        onEnter: (_) => _showControlsOnInteraction(),
+        onHover: (_) => _showControlsOnInteraction(),
+        child: Stack(
+          children: [
+            // 1. VIDEO LAYER
+            Center(
+              child: Visibility(
+                visible: !_isLimitDialogOpen,
+                maintainState: true,
+                maintainAnimation: true,
+                maintainSize: true,
+                child: _buildSharedPlayer(),
+              ),
+            ),
+
+            // 2. OPAQUE SHIELD (The Fix for Title/Recommendations)
+            // 'opaque' blocks the mouse from reaching the iframe.
+            // This prevents the YouTube Title bar from showing on hover.
+            if (!kIsWeb || (kIsWeb && !_isLimitDialogOpen))
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: _toggleControls,
+                  onVerticalDragEnd: _handleVerticalSwipe,
+                  behavior: HitTestBehavior.opaque, // <--- CRITICAL FIX
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
+
+            // 3. CONTROLS OVERLAY (Bottom)
+            if (!_isLimitDialogOpen)
+              IgnorePointer(
+                ignoring: !_showControls,
+                child: VideoControlsOverlay(
+                  isPlaying: _isPlaying,
+                  position: (_isSeeking && _optimisticPosition != null)
+                      ? _optimisticPosition!
+                      : _currentPosition,
+                  duration: _totalDuration,
+                  showControls: _showControls,
+                  onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
+                  onSeekRelative: _seekRelative,
+                  onSeekTo: (d) => _seekToTime(d.inMilliseconds / 1000.0),
+                  onToggleFullscreen: _toggleCustomFullScreen,
+                ),
+              ),
+
+            // 4. SUBTITLES (Above controls)
+            if (hasText && _showSubtitles && !_isLimitDialogOpen)
+              Positioned(
+                left: 24,
+                right: 24,
+                bottom: 100, 
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: InteractiveTextDisplay(
+                      text: _smartChunks[displayIndex],
+                      sentenceIndex: displayIndex,
+                      vocabulary: _vocabulary,
+                      language: widget.lesson.language,
+                      onWordTap: _handleWordTap,
+                      onPhraseSelected: _handlePhraseSelected,
+                      isBigMode: true,
+                      isListeningMode: false,
+                      isOverlay: true,
+                    ),
+                  ),
+                ),
+              ),
+
+            // 5. REPLAY BUTTON (Floating Left - Single Button)
+            // Sits ON TOP of the shield and controls
+            if (_showControls && !_isLimitDialogOpen)
+              Positioned(
+                left: 30, 
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Material(
+                    color: Colors.black.withOpacity(0.5), 
+                    shape: const CircleBorder(),
+                    clipBehavior: Clip.hardEdge,
+                    child: InkWell(
+                      onTap: () {
+                        _resetControlsTimer();
+                        _goToPrevSentence();
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: Icon(Icons.replay, color: Colors.white, size: 36),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // 6. TRANSLATION CARD
+            if (_showCard)
+               Align(
+                 alignment: Alignment.topCenter,
+                 child: Padding(
+                   padding: const EdgeInsets.only(top: 60),
+                   child: SizedBox(
+                     width: 600,
+                     child: _buildTranslationOverlay(),
+                   ),
+                 ),
+               ),
+
+            // 7. DIALOG OVERLAY
+            if (_isLimitDialogOpen) _buildLimitDialogOverlay(),
+          ],
+        ),
+      ),
     );
+  }
+
+  void _handleVerticalSwipe(DragEndDetails details) {
+    // If no velocity data, ignore
+    if (details.primaryVelocity == null) return;
+
+    const double sensitivity = 300; // Adjust sensitivity
+
+    // Negative Velocity = Swipe UP (Go Fullscreen)
+    if (details.primaryVelocity! < -sensitivity) {
+      if (!_isFullScreen) {
+        _toggleCustomFullScreen();
+      }
+    }
+    // Positive Velocity = Swipe DOWN (Exit Fullscreen)
+    else if (details.primaryVelocity! > sensitivity) {
+      if (_isFullScreen) {
+        _toggleCustomFullScreen();
+      }
+    }
   }
 
   // ... [Keep existing _buildSharedPlayer, _buildYoutubeAudioControls, _formatDuration, _replayPreviousSentence, _buildInteractiveSubtitleOverlay] ...
@@ -2105,21 +2277,32 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _toggleCustomFullScreen() {
     setState(() => _isTransitioningFullscreen = true);
+
     final bool targetState = !_isFullScreen;
     setState(() => _isFullScreen = targetState);
-    if (targetState) {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    } else {
-      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.manual,
-        overlays: SystemUiOverlay.values,
-      );
+
+    // FIX: Only change orientation on Mobile devices
+    final bool isMobile =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android);
+
+    if (isMobile) {
+      if (targetState) {
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      } else {
+        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+        SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: SystemUiOverlay.values,
+        );
+      }
     }
+
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _isTransitioningFullscreen = false);
     });

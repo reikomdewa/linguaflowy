@@ -385,7 +385,9 @@ class _UnitsBottomSheetState extends State<UnitsBottomSheet> {
               Navigator.pop(context);
               showDialog(
                 context: context,
-                builder: (context) => const PremiumLockDialog(),
+                builder: (context) =>  PremiumLockDialog(
+                          onClose: () {},
+                ),
               ).then((unlocked) {
                 if (unlocked == true && context.mounted) {
                   context.read<AuthBloc>().add(AuthCheckRequested());
