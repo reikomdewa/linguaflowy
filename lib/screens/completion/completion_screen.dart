@@ -16,7 +16,6 @@ class LessonCompletionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     // Determine brightness for status bar and theme
     final isDark = Theme.of(context).brightness == Brightness.dark;
-   
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -136,7 +135,6 @@ class LessonCompletionScreen extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     backgroundColor: Theme.of(context).primaryColor,
-                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),

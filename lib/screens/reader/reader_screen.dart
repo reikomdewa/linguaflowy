@@ -230,7 +230,6 @@ class _ReaderScreenState extends State<ReaderScreen>
         }
       }
     } catch (e) {
-      debugPrint("❌ Error parsing local subtitles: $e");
     } finally {
       if (mounted) _finalizeContentInitialization();
     }
@@ -306,9 +305,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       try {
         _localPlayer!.stop(); // Stop playback first
         _localPlayer!.dispose(); // Release native resources
-      } catch (e) {
-        // debugPrint("⚠️ MediaKit dispose warning: $e");
-      }
+      } catch (e) {}
     }
     _localVideoController = null;
     _localPlayer = null;
@@ -513,7 +510,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (videoId != null) {
       _youtubeController = YoutubePlayerController(
         initialVideoId: videoId,
-        flags: const YoutubePlayerFlags(
+        flags: YoutubePlayerFlags(
           autoPlay: false,
           mute: false,
           enableCaption: false,
@@ -555,7 +552,6 @@ class _ReaderScreenState extends State<ReaderScreen>
         _startSyncTimer();
       }
     } catch (e) {
-      debugPrint("❌ MediaKit Init Error: $e");
       if (mounted) setState(() => _isInitializingMedia = false);
     }
   }
@@ -1167,7 +1163,6 @@ class _ReaderScreenState extends State<ReaderScreen>
         }
       });
     } catch (e) {
-      debugPrint("Error checking limit: $e");
       // In case of error (offline), you might want to allow or deny.
       // Denying prevents exploit, allowing prevents frustration.
       return false;
@@ -1301,7 +1296,6 @@ class _ReaderScreenState extends State<ReaderScreen>
       learnedAt = DateTime.now();
     }
     if (xpGained > 0) {
-      Utils.showXpPop(xpGained, context);
       context.read<AuthBloc>().add(AuthUpdateXP(xpGained));
     }
     // 3. Create Item with learnedAt

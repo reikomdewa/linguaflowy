@@ -79,7 +79,5 @@ dependencies {
 flutter {
     source = "../.."
 }
-afterEvaluate {
-    println(">>> MIN SDK = ${android.defaultConfig.minSdk}")
-}
+
 

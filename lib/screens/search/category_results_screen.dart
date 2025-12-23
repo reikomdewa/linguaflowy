@@ -165,6 +165,11 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // RESPONSIVE CHECK: Desktop/Tablet vs Mobile
+    final width = MediaQuery.of(context).size.width;
+    final bool isDesktop = width > 900;
+    final bool isTablet = width > 600 && width <= 900;
+
     final vocabState = context.watch<VocabularyBloc>().state;
     Map<String, VocabularyItem> vocabMap = {};
     if (vocabState is VocabularyLoaded) {
@@ -174,7 +179,11 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.categoryTitle), elevation: 0),
+      appBar: AppBar(
+        scrolledUnderElevation: 0,
+        title: Text(widget.categoryTitle),
+        elevation: 0,
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _lessons.isEmpty
@@ -184,45 +193,100 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
                 style: const TextStyle(color: Colors.grey),
               ),
             )
-          : ListView.separated(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _lessons.length + (_isDynamicMode ? 1 : 0),
-              separatorBuilder: (ctx, i) => const SizedBox(height: 16),
-              itemBuilder: (context, index) {
-                // Spinner / End Logic
-                if (index >= _lessons.length) {
-                  // If we reached max, show nothing (or a "No more items" text)
-                  if (_hasReachedMax || !_isDynamicMode) {
-                    return const SizedBox(height: 20);
-                  }
-
-                  // Show Spinner only if we are actively loading
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                }
-
-                final lesson = _lessons[index];
-                return VideoLessonCard(
-                  lesson: lesson,
-                  vocabMap: vocabMap,
-                  isDark: isDark,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ReaderScreen(lesson: lesson),
+          : Center(
+              // Limits max width on huge screens for better aesthetics
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: Scrollbar(
+                  // Adds a scrollbar for desktop users
+                  controller: _scrollController,
+                  thumbVisibility: isDesktop,
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    physics: const BouncingScrollPhysics(),
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.all(16),
+                        // RESPONSIVE LOGIC: Switch between List and Grid
+                        sliver: isDesktop || isTablet
+                            ? _buildDesktopGrid(vocabMap, isDark, width)
+                            : _buildMobileList(vocabMap, isDark),
                       ),
-                    );
-                  },
-                  onOptionTap: () => showLessonOptions(context, lesson, isDark),
-                );
-              },
+
+                      // Bottom Loader
+                      SliverToBoxAdapter(child: _buildBottomLoader()),
+                    ],
+                  ),
+                ),
+              ),
             ),
+    );
+  }
+
+  // --- MOBILE LAYOUT (List) ---
+  Widget _buildMobileList(Map<String, VocabularyItem> vocabMap, bool isDark) {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final lesson = _lessons[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: VideoLessonCard(
+            lesson: lesson,
+            vocabMap: vocabMap,
+            isDark: isDark,
+            onTap: () => _navigateToReader(lesson),
+            onOptionTap: () => showLessonOptions(context, lesson, isDark),
+          ),
+        );
+      }, childCount: _lessons.length),
+    );
+  }
+
+  // --- DESKTOP/WEB LAYOUT (Grid) ---
+  Widget _buildDesktopGrid(
+    Map<String, VocabularyItem> vocabMap,
+    bool isDark,
+    double width,
+  ) {
+    // Calculate columns: 2 for tablet, 3 or 4 for desktop
+    int crossAxisCount = width > 1100 ? 4 : (width > 900 ? 3 : 2);
+
+    return SliverGrid(
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 0.85, // Taller ratio for cards on grid
+      ),
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final lesson = _lessons[index];
+        return VideoLessonCard(
+          lesson: lesson,
+          vocabMap: vocabMap,
+          isDark: isDark,
+          onTap: () => _navigateToReader(lesson),
+          onOptionTap: () => showLessonOptions(context, lesson, isDark),
+        );
+      }, childCount: _lessons.length),
+    );
+  }
+
+  Widget _buildBottomLoader() {
+    if (_hasReachedMax || !_isDynamicMode) {
+      return const SizedBox(height: 40); // Spacer at bottom
+    }
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(24.0),
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+
+  void _navigateToReader(LessonModel lesson) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ReaderScreen(lesson: lesson)),
     );
   }
 }

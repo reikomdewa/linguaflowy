@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:linguaflow/constants/constants.dart';
 import 'package:linguaflow/utils/logger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,6 +13,14 @@ export 'logger.dart';
 export '../screens/home/utils/lesson_card_utils.dart';
 
 class Utils {
+   String? _encodeQueryParameters(Map<String, String> params) {
+    return params.entries
+        .map(
+          (e) =>
+              '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+        )
+        .join('&');
+  }
   Color getLevelShade(int level, MaterialColor color) {
     if (level == 0) {
       return color.shade300; // Lightest shade
@@ -23,7 +32,25 @@ class Utils {
       return color.shade800; // Darkest shade
     }
   }
-
+    Future<void> launchEmail() async {
+    final Uri emailLaunchUri = Uri(
+      scheme: 'mailto',
+      path: ADMIN_EMAIL,
+      query: _encodeQueryParameters({
+        'subject': 'Linguaflow Premium Request',
+        'body':
+            'Hello, I would like to purchase a premium code via bank transfer/other method.',
+      }),
+    );
+    try {
+      if (!await launchUrl(emailLaunchUri)) throw 'Could not launch email';
+    } catch (_) {}
+  }
+  Future<void> launchWhatsApp() async {
+    final String message = "Hello, I would like to purchase a premium code via bank transfer/other method.";
+    final Uri whatsappUri = Uri.parse("https://wa.me/$ADMIN_PHONE_NUMBER?text=${Uri.encodeComponent(message)}");
+    try { if (!await launchUrl(whatsappUri, mode: LaunchMode.externalApplication)) throw 'Could not launch WhatsApp'; } catch (_) {}
+  }
   Widget buildTextBadge(String text, Color bgColor, {double fontSize = 10}) {
     return Container(
       margin: const EdgeInsets.only(right: 3.0), // Spacing between badges

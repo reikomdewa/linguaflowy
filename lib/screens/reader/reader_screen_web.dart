@@ -13,7 +13,6 @@ import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/screens/completion/completion_screen.dart';
 import 'package:linguaflow/services/local_lemmatizer.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart'; // Needed for playlist fetch
-import 'package:linguaflow/utils/centered_views.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart' as mobile;
@@ -527,16 +526,18 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
         _webYoutubeController!.listen((event) {
           final isPlaying = event.playerState == web.PlayerState.playing;
           if (isPlaying != _isPlaying) {
-             setState(() {
-               _isPlaying = isPlaying;
-               if (isPlaying) { _showControls = true; _resetControlsTimer(); }
-             });
+            setState(() {
+              _isPlaying = isPlaying;
+              if (isPlaying) {
+                _showControls = true;
+                _resetControlsTimer();
+              }
+            });
           }
           if (event.playerState == web.PlayerState.ended) {
             _markLessonAsComplete();
           }
         });
-
       } else {
         // --- MOBILE INIT ---
         _mobileYoutubeController = mobile.YoutubePlayerController(
@@ -545,7 +546,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
             autoPlay: false,
             mute: false,
             enableCaption: false,
-            hideControls: true, 
+            hideControls: true,
             controlsVisibleAtStart: false,
             disableDragSeek: true,
             loop: false,
@@ -555,7 +556,10 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
           ),
         );
       }
-      setState(() { _isLocalMedia = false; _isVideo = !_isYoutubeAudio; });
+      setState(() {
+        _isLocalMedia = false;
+        _isVideo = !_isYoutubeAudio;
+      });
       _startSyncTimer();
     }
   }
@@ -1301,7 +1305,6 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     if (learnedAt == null && oldStatus == 0 && status > 0)
       learnedAt = DateTime.now();
     if (xpGained > 0) {
-      Utils.showXpPop(xpGained, context);
       context.read<AuthBloc>().add(AuthUpdateXP(xpGained));
     }
     final item = VocabularyItem(
@@ -1941,7 +1944,8 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       ],
     );
   }
-Widget _buildMobilePlayerContainer() {
+
+  Widget _buildMobilePlayerContainer() {
     return Container(
       width: double.infinity,
       color: Colors.black,
@@ -1949,19 +1953,28 @@ Widget _buildMobilePlayerContainer() {
           ? Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(height: 1, child: IndexedStack(index: 0, children: [_buildSharedPlayer(), Container(color: Colors.black)])),
+                SizedBox(
+                  height: 1,
+                  child: IndexedStack(
+                    index: 0,
+                    children: [
+                      _buildSharedPlayer(),
+                      Container(color: Colors.black),
+                    ],
+                  ),
+                ),
                 _buildYoutubeAudioControls(),
               ],
             )
           : _isAudio
           ? ReaderMediaHeader(
-               isInitializing: _isInitializingMedia,
-               isAudio: true,
-               isLocalMedia: _isLocalMedia,
-               localVideoController: null,
-               localPlayer: _localPlayer,
-               youtubeController: kIsWeb ? null : _mobileYoutubeController,
-               onToggleFullscreen: _toggleCustomFullScreen,
+              isInitializing: _isInitializingMedia,
+              isAudio: true,
+              isLocalMedia: _isLocalMedia,
+              localVideoController: null,
+              localPlayer: _localPlayer,
+              youtubeController: kIsWeb ? null : _mobileYoutubeController,
+              onToggleFullscreen: _toggleCustomFullScreen,
             )
           : AspectRatio(
               aspectRatio: 16 / 9,
@@ -1986,19 +1999,23 @@ Widget _buildMobilePlayerContainer() {
                   Positioned.fill(
                     child: GestureDetector(
                       onTap: _toggleControls, // Taps toggle our controls
-                      onVerticalDragEnd: _handleVerticalSwipe, // Swipes handle fullscreen
-                      behavior: HitTestBehavior.translucent, // Catches clicks on transparent areas
+                      onVerticalDragEnd:
+                          _handleVerticalSwipe, // Swipes handle fullscreen
+                      behavior: HitTestBehavior
+                          .translucent, // Catches clicks on transparent areas
                       child: Container(color: Colors.transparent),
                     ),
                   ),
-                  
+
                   // 3. CONTROLS OVERLAY
                   if (!_isLimitDialogOpen)
                     IgnorePointer(
                       ignoring: !_showControls,
                       child: VideoControlsOverlay(
                         isPlaying: _isPlaying,
-                        position: (_isSeeking && _optimisticPosition != null) ? _optimisticPosition! : _currentPosition,
+                        position: (_isSeeking && _optimisticPosition != null)
+                            ? _optimisticPosition!
+                            : _currentPosition,
                         duration: _totalDuration,
                         showControls: _showControls,
                         onPlayPause: _isPlaying ? _pauseMedia : _playMedia,
@@ -2007,7 +2024,7 @@ Widget _buildMobilePlayerContainer() {
                         onToggleFullscreen: _toggleCustomFullScreen,
                       ),
                     ),
-                  
+
                   // 4. DIALOG OVERLAY
                   if (_isLimitDialogOpen) _buildLimitDialogOverlay(),
                 ],
@@ -2017,12 +2034,12 @@ Widget _buildMobilePlayerContainer() {
   }
 
   // --- FULLSCREEN MEDIA (Unchanged from original) ---
-Widget _buildFullscreenMedia() {
+  Widget _buildFullscreenMedia() {
     int displayIndex = _activeSentenceIndex;
     if (displayIndex < 0 || displayIndex >= _smartChunks.length) {
       displayIndex = 0;
     }
-    
+
     final bool hasText = _smartChunks.isNotEmpty;
 
     return Scaffold(
@@ -2079,10 +2096,13 @@ Widget _buildFullscreenMedia() {
               Positioned(
                 left: 24,
                 right: 24,
-                bottom: 100, 
+                bottom: 100,
                 child: Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(8),
@@ -2106,12 +2126,12 @@ Widget _buildFullscreenMedia() {
             // Sits ON TOP of the shield and controls
             if (_showControls && !_isLimitDialogOpen)
               Positioned(
-                left: 30, 
+                left: 30,
                 top: 0,
                 bottom: 0,
                 child: Center(
                   child: Material(
-                    color: Colors.black.withOpacity(0.5), 
+                    color: Colors.black.withOpacity(0.5),
                     shape: const CircleBorder(),
                     clipBehavior: Clip.hardEdge,
                     child: InkWell(
@@ -2121,7 +2141,11 @@ Widget _buildFullscreenMedia() {
                       },
                       child: const Padding(
                         padding: EdgeInsets.all(12.0),
-                        child: Icon(Icons.replay, color: Colors.white, size: 36),
+                        child: Icon(
+                          Icons.replay,
+                          color: Colors.white,
+                          size: 36,
+                        ),
                       ),
                     ),
                   ),
@@ -2130,16 +2154,16 @@ Widget _buildFullscreenMedia() {
 
             // 6. TRANSLATION CARD
             if (_showCard)
-               Align(
-                 alignment: Alignment.topCenter,
-                 child: Padding(
-                   padding: const EdgeInsets.only(top: 60),
-                   child: SizedBox(
-                     width: 600,
-                     child: _buildTranslationOverlay(),
-                   ),
-                 ),
-               ),
+              Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 60),
+                  child: SizedBox(
+                    width: 600,
+                    child: _buildTranslationOverlay(),
+                  ),
+                ),
+              ),
 
             // 7. DIALOG OVERLAY
             if (_isLimitDialogOpen) _buildLimitDialogOverlay(),

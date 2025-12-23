@@ -8,10 +8,13 @@ import 'package:linguaflow/screens/profile/widgets/profile_data_exporter.dart';
 import 'package:linguaflow/services/home_feed_cache_service.dart';
 import 'package:linguaflow/services/lesson_cache_service.dart';
 import 'package:linguaflow/utils/language_helper.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 // Local Imports (Ensure these files exist in the same folder or adjust paths)
 import 'widgets/profile_section_card.dart';
 import 'widgets/profile_dialogs.dart';
+
+final Future<PackageInfo> _packageInfoFuture = PackageInfo.fromPlatform();
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -256,8 +259,8 @@ class ProfileScreen extends StatelessWidget {
           ElevatedButton.icon(
             onPressed: () async {
               context.read<AuthBloc>().add(AuthLogoutRequested());
-               await HomeFeedCacheService().clearAllCache();
-    //  await LessonCacheService().removeLesson();
+              await HomeFeedCacheService().clearAllCache();
+              //  await LessonCacheService().removeLesson();
             },
             icon: const Icon(Icons.logout),
             label: const Text('Logout'),
@@ -271,11 +274,22 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const Center(
-            child: Text(
-              'Version 1.0.0',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
+          FutureBuilder<PackageInfo>(
+            future: _packageInfoFuture,
+            builder: (context, snapshot) {
+              if (snapshot.hasData) {
+                return Center(
+                  child: Text(
+                    'Version ${snapshot.data!.version}', // Gets "1.0.0"
+                    // Use this if you want build number too:
+                    // 'Version ${snapshot.data!.version} (${snapshot.data!.buildNumber})',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                );
+              }
+              // Show a placeholder or empty container while loading
+              return const SizedBox.shrink();
+            },
           ),
         ],
       ),

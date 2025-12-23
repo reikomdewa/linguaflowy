@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -13,12 +15,12 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 
 // WIDGETS
-import 'package:linguaflow/screens/home/widgets/sections/genre_feed_section.dart'; // The new pagination widget
-import 'package:linguaflow/widgets/category_video_section.dart'; // Keep for "Trending"
+import 'package:linguaflow/screens/home/widgets/sections/genre_feed_section.dart'; 
+import 'package:linguaflow/widgets/category_video_section.dart'; 
 import 'package:linguaflow/screens/search/library_search_delegate.dart';
 
 // SCREENS
-import 'package:linguaflow/screens/search/category_results_screen.dart'; // The upgraded results screen
+import 'package:linguaflow/screens/search/category_results_screen.dart'; 
 
 // UTILS & CONSTANTS
 import 'package:linguaflow/constants/genre_constants.dart';
@@ -56,6 +58,9 @@ class SearchScreen extends StatelessWidget {
 
     // 4. Get Categories List
     final List<String> allUiCategories = GenreConstants.categoryMap.keys.toList();
+    
+    // RESPONSIVE CHECK: Is Desktop/Web or Mobile?
+    final bool isDesktop = MediaQuery.of(context).size.width >= 800;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -66,7 +71,7 @@ class SearchScreen extends StatelessWidget {
             List<LessonModel> loadedLessons = (state is LessonLoaded)
                 ? state.lessons
                 : [];
-            
+
             // Filter locally loaded videos for "Trending"
             final trendingVideos = loadedLessons
                 .where((l) => l.type == 'video' || l.type == 'video_native')
@@ -102,35 +107,39 @@ class SearchScreen extends StatelessWidget {
                   ),
                 ),
 
-                // --- C. CHIPS GRID ---
+                // --- C. CHIPS GRID (Responsive) ---
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   sliver: SliverGrid(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 3.5,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      // RESPONSIVE: 4 columns on Desktop, 2 on Mobile
+                      crossAxisCount: isDesktop ? 4 : 2, 
+                      // RESPONSIVE: Taller chips on Desktop (using your nice design), wider on Mobile
+                      childAspectRatio: isDesktop ? 4.5 : 3.5, 
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 10,
                     ),
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final uiCategory = allUiCategories[index];
-                      final genreKey = GenreConstants.categoryMap[uiCategory]; 
+                      final genreKey = GenreConstants.categoryMap[uiCategory];
 
                       return _buildMinimalistChip(
                         title: uiCategory,
                         bgColor: chipColor!,
                         textColor: textColor,
+                        isDesktop: isDesktop,
                         onTap: () {
-                          // --- FIX: Navigate using GENRE KEYS (Server Fetch) ---
+                          // Navigate using GENRE KEYS (Server Fetch)
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => CategoryResultsScreen(
                                 categoryTitle: uiCategory,
-                                // We pass keys, so the screen knows to fetch data
                                 genreKey: genreKey,
                                 languageCode: currentLangCode,
-                                // initialLessons is NULL here
                               ),
                             ),
                           );
@@ -149,22 +158,21 @@ class SearchScreen extends StatelessWidget {
                       title: "Trending Now",
                       lessons: trendingVideos,
                       onSeeAll: () {
-                         // --- FIX: Navigate using STATIC LIST (Local Data) ---
-                         Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => CategoryResultsScreen(
-                                categoryTitle: "Trending Now",
-                                initialLessons: trendingVideos,
-                                // genreKey is NULL here
-                              ),
+                        // Navigate using STATIC LIST (Local Data)
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CategoryResultsScreen(
+                              categoryTitle: "Trending Now",
+                              initialLessons: trendingVideos,
                             ),
-                          );
+                          ),
+                        );
                       },
                     ),
                   ),
 
-                // --- E. DYNAMIC PAGINATED GENRES (The New Widgets) ---
+                // --- E. DYNAMIC PAGINATED GENRES ---
                 SliverList(
                   delegate: SliverChildBuilderDelegate((context, index) {
                     final uiCategory = allUiCategories[index];
@@ -209,7 +217,25 @@ class SearchScreen extends StatelessWidget {
     required Color bgColor,
     required Color textColor,
     required VoidCallback onTap,
+    required bool isDesktop,
   }) {
+    // WEB/DESKTOP: Use the nice compact chip
+    if (isDesktop && kIsWeb) {
+      return _webChipContainer(bgColor, onTap, title, textColor);
+    } 
+    // MOBILE: Use the original larger touch target
+    else {
+      return _chipContainer(bgColor, onTap, title, textColor);
+    }
+  }
+
+  // Original Mobile Container
+  Container _chipContainer(
+    Color bgColor,
+    VoidCallback onTap,
+    String title,
+    Color textColor,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: bgColor,
@@ -240,6 +266,63 @@ class SearchScreen extends StatelessWidget {
       ),
     );
   }
+
+  // The Nice Web Container
+  Widget _webChipContainer(
+    Color bgColor,
+    VoidCallback onTap,
+    String title,
+    Color textColor,
+  ) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Container(
+        height: 24, // Compact height for web
+        constraints: const BoxConstraints(minWidth: 40),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12), // Pill shape
+          border: Border.all(
+            color: textColor.withOpacity(0.15), 
+            width: 0.5
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onTap,
+            hoverColor: textColor.withOpacity(0.05),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Center(
+                widthFactor: 1.0,
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    letterSpacing: 0.2,
+                    height: 1.0,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // --- STICKY SEARCH BAR DELEGATE ---
@@ -262,38 +345,46 @@ class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
+    // RESPONSIVE: Limit search bar width on Desktop
+    final bool isDesktop = MediaQuery.of(context).size.width > 800;
+    
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       alignment: Alignment.center,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 45,
-          decoration: BoxDecoration(
-            color: searchBarColor,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Icon(
-                FontAwesomeIcons.magnifyingGlass,
-                color: isDark ? Colors.grey[500] : Colors.grey[600],
-                size: 16,
+      child: Center( // Center on desktop
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: isDesktop ? 600 : double.infinity),
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              height: 45,
+              decoration: BoxDecoration(
+                color: searchBarColor,
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  "Podcasts, episodes, topics...",
-                  style: TextStyle(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Icon(
+                    FontAwesomeIcons.magnifyingGlass,
                     color: isDark ? Colors.grey[500] : Colors.grey[600],
-                    fontSize: 15,
+                    size: 16,
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "Podcasts, episodes, topics...",
+                      style: TextStyle(
+                        color: isDark ? Colors.grey[500] : Colors.grey[600],
+                        fontSize: 15,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

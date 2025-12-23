@@ -17,6 +17,7 @@ import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/firebase_options.dart';
 import 'package:linguaflow/screens/login/web_login_layout.dart';
+import 'package:linguaflow/screens/premium/premium_screen.dart';
 
 // --- SERVICES & REPOSITORIES ---
 import 'package:linguaflow/services/auth_service.dart';
@@ -29,6 +30,7 @@ import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
 import 'package:linguaflow/utils/centered_views.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:upgrader/upgrader.dart';
 
 // --- SCREENS ---
 import 'package:linguaflow/screens/login/login_screen.dart';
@@ -218,7 +220,15 @@ class LinguaflowApp extends StatelessWidget {
                   ),
                 ),
               ),
-              home: const AuthGate(),
+              // home: const AuthGate(),
+              initialRoute: '',
+
+              routes: {
+                '': (context) => UpgradeAlert(child: AuthGate()),
+
+                LoginScreen.routeName: (context) => const LoginScreen(),
+                // PremiumScreen.routeName: (context) =>  PremiumScreen(user: false),
+              },
             );
           },
         ),
@@ -226,6 +236,7 @@ class LinguaflowApp extends StatelessWidget {
     );
   }
 }
+
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -242,16 +253,16 @@ class AuthGate extends StatelessWidget {
         // 2. Loading -> Show Spinner (Fixes blank screen on click)
         if (state is AuthLoading) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 
         // 3. Unauthenticated OR Error -> Show Login
         // We include AuthError here so the Login Screen stays visible
         // and allows the SnackBar to show the specific error message.
-        if (state is AuthUnauthenticated || state is AuthError || state is AuthMessage) {
+        if (state is AuthUnauthenticated ||
+            state is AuthError ||
+            state is AuthMessage) {
           FlutterNativeSplash.remove();
           if (kIsWeb) {
             return const Scaffold(body: WebLoginLayout());
@@ -262,9 +273,7 @@ class AuthGate extends StatelessWidget {
 
         // 4. Initial State -> Show Spinner (Fixes blank screen on startup)
         // If the app is just starting and hasn't checked auth yet.
-        return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        );
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
       },
     );
   }

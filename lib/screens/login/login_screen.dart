@@ -13,6 +13,7 @@ import 'package:linguaflow/constants/terms_and_policies.dart';
 // ==============================================================================
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
+  static const String routeName = '/login';
 
   @override
   Widget build(BuildContext context) {

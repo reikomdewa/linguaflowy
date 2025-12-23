@@ -9,6 +9,7 @@ import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
+import 'package:linguaflow/screens/premium/premium_screen.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart'; // Import Reader
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/screens/search/library_search_delegate.dart';
@@ -370,32 +371,13 @@ PreferredSizeWidget buildAppBar(
         child: Center(
           child: InkWell(
             onTap: () {
-              if (!isPremium) {
-                showDialog(
-                  context: context,
-                  builder: (context) => LayoutBuilder(
-                    builder: (context, constraints) {
-                      bool isDesktop = constraints.maxWidth > 600;
-                      return isDesktop
-                          ? CenteredView(
-                              horizontalPadding: 500,
-                              child: PremiumLockDialog(onClose: () {}),
-                            )
-                          : PremiumLockDialog(onClose: () {});
-                    },
-                  ),
-                ).then((unlocked) {
-                  if (unlocked == true && context.mounted) {
-                    context.read<AuthBloc>().add(AuthCheckRequested());
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Welcome to Premium!"),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
-                });
-              } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PremiumScreen(isPremium: isPremium),
+                ),
+              );
+              if (isPremium) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(
@@ -403,7 +385,7 @@ PreferredSizeWidget buildAppBar(
                       style: TextStyle(color: Colors.white),
                     ),
                     backgroundColor: Colors.amber,
-                    duration: Duration(seconds: 1),
+                    duration: Duration(seconds: 5), // Changed to 5 seconds
                   ),
                 );
               }
@@ -426,19 +408,21 @@ PreferredSizeWidget buildAppBar(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(width: 4),
-                  Icon(
-                    isPremium
-                        ? Icons.workspace_premium_rounded
-                        : Icons.lock_outline_rounded,
-                    size: 18,
-                    color: isPremium
-                        ? const Color(0xFFFFA000)
-                        : (isDark ? Colors.white70 : Colors.grey.shade600),
+                  // const SizedBox(width: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2.0, right: 2),
+                    child: Icon(
+                      isPremium
+                          ? Icons.workspace_premium_rounded
+                          : Icons.lock_outline_rounded,
+                      size: 18,
+                      color: isPremium
+                          ? const Color(0xFFFFA000)
+                          : (isDark ? Colors.white70 : Colors.grey.shade600),
+                    ),
                   ),
                   if (isPremium) ...[
                     if (isDesktop) const SizedBox(width: 6),
-                    const SizedBox(width: 4),
                     if (isDesktop)
                       const Text(
                         "PRO",

@@ -16,3 +16,7 @@ class AppConstants {
   }
 }
 
+  final String GUMROADLINK = "https://reikom.gumroad.com/l/linguaflow";
+  final String ADMIN_EMAIL = "reikomuk@gmail.com";
+  final String ADMIN_PHONE_NUMBER = '212621630573';
+
