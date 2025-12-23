@@ -32,10 +32,11 @@ class _PremiumLockDialogState extends State<PremiumLockDialog> {
   Future<void> _launchURL(String url) async {
     final Uri uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Could not open link")));
+      }
     }
   }
 
@@ -116,11 +117,12 @@ class _PremiumLockDialogState extends State<PremiumLockDialog> {
         widget.onClose();
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoading = false;
           _error = e.toString().replaceAll("Exception:", "").trim();
         });
+      }
     }
   }
 

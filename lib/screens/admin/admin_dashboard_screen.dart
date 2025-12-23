@@ -1,5 +1,3 @@
-
-
 import 'package:flutter/material.dart';
 import 'tabs/analytics_tab.dart';
 import 'tabs/promo_codes_tab.dart';
@@ -40,15 +38,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         iconTheme: IconThemeData(color: textColor),
         bottom: TabBar(
           controller: _tabController,
+          tabAlignment: TabAlignment.start,
+          padding: EdgeInsets.zero,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
           isScrollable: true, // Essential for 7 tabs
           indicatorColor: Colors.amber,
           labelColor: Colors.amber,
           unselectedLabelColor: Colors.grey,
           tabs: const [
             Tab(icon: Icon(Icons.bar_chart), text: "Analytics"),
-            Tab(icon: Icon(Icons.vpn_key), text: "Promo Codes"),
+            Tab(icon: Icon(Icons.vpn_key), text: "Codes"),
             Tab(icon: Icon(Icons.people), text: "Users"),
-            Tab(icon: Icon(Icons.library_books), text: "Content CMS"),
+            Tab(icon: Icon(Icons.library_books), text: "CMS"),
 
             Tab(icon: Icon(Icons.leaderboard), text: "Leaderboard"),
             Tab(icon: Icon(Icons.bug_report), text: "Bugs"),

@@ -232,7 +232,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                                 }
                               });
                             } else {
-                              if (widget.isPremium)
+                              if (widget.isPremium) {
                                 showPremiumDialog(context).then((unlocked) {
                                   if (unlocked == true && context.mounted) {
                                     context.read<AuthBloc>().add(
@@ -240,6 +240,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                                     );
                                   }
                                 });
+                              }
                             }
                           },
                           child: widget.isPremium
@@ -407,9 +408,9 @@ class _PremiumScreenState extends State<PremiumScreen> {
         return "Expired on ${_formatDate(expireDate)}";
       }
 
-      return "Renews: ${_formatDate(expireDate)}";
+      return "Expires: ${_formatDate(expireDate)}";
     } catch (e) {
-      print("Date Error: $e");
+      // print("Date Error: $e");
       return "Active";
     }
   }

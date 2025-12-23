@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:intl/intl.dart'; // Add intl to pubspec.yaml for date formatting
+import 'package:intl/intl.dart'; 
 
 class AnalyticsTab extends StatefulWidget {
   const AnalyticsTab({super.key});
@@ -11,7 +11,6 @@ class AnalyticsTab extends StatefulWidget {
 }
 
 class _AnalyticsTabState extends State<AnalyticsTab> {
-  // Cache the future so the chart doesn't reload constantly
   late Future<Map<String, dynamic>> _statsFuture;
 
   @override
@@ -27,7 +26,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     final totalSnapshot = await firestore.collection('users').count().get();
     final total = totalSnapshot.count ?? 0;
 
-    // 2. Get Premium Users (Assumes field 'isPremium' == true)
+    // 2. Get Premium Users
     final premiumSnapshot = await firestore
         .collection('users')
         .where('isPremium', isEqualTo: true)
@@ -35,8 +34,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
         .get();
     final premium = premiumSnapshot.count ?? 0;
 
-    // 3. Get Active Users (Assumes 'lastActiveAt' is within last 24 hours)
-    // If you don't have 'lastActiveAt', this will return 0
+    // 3. Get Active Users (Last 24h)
     final yesterday = DateTime.now().subtract(const Duration(hours: 24));
     final activeSnapshot = await firestore
         .collection('users')
@@ -45,8 +43,30 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
         .get();
     final active = activeSnapshot.count ?? 0;
 
-    // 4. Get Data for Graph (Users created in last 7 days)
-    // We query the last 7 days of users to build the line chart
+    // -------------------------------------------------------------------------
+    // 4. REAL REVENUE CALCULATION (The Fix)
+    // -------------------------------------------------------------------------
+    // We fetch all "claimed" promo codes and sum their 'amount_paid'.
+    // Note: For a massive app (10k+ payments), you would use a Cloud Function 
+    // to keep a running total. For now, client-side summing is fine.
+    
+    final revenueQuery = await firestore
+        .collection('promo_codes')
+        .where('isClaimed', isEqualTo: true)
+        .get();
+
+    double totalRevenue = 0.0;
+
+    for (var doc in revenueQuery.docs) {
+      final data = doc.data();
+      // amount_paid is in cents (e.g. 2000 cents = $20)
+      // We use (as num?) to handle if it was stored as int or double safely
+      final amountInCents = (data['amount_paid'] as num?)?.toInt() ?? 0;
+      
+      totalRevenue += (amountInCents / 100.0);
+    }
+
+    // 5. Get Graph Data (New Users Last 7 Days)
     final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
     final recentUsersFn = await firestore
         .collection('users')
@@ -57,7 +77,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
       'total': total,
       'premium': premium,
       'active': active,
-      'revenue': premium * 9.99, // Assuming $9.99 price
+      'revenue': totalRevenue, // Now accurate based on DB
       'graphData': recentUsersFn.docs,
     };
   }
@@ -90,7 +110,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
               _StatGrid(
                 totalUsers: data['total'],
                 premiumCount: data['premium'],
-                activeCount: data['active'], // Using real data now
+                activeCount: data['active'],
                 revenue: data['revenue'],
               ),
               const SizedBox(height: 30),
@@ -113,7 +133,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
 }
 
 // -----------------------------------------------------------------------------
-// WIDGETS
+// WIDGETS (Updated to show decimals for Revenue)
 // -----------------------------------------------------------------------------
 
 class _StatGrid extends StatelessWidget {
@@ -150,8 +170,9 @@ class _StatGrid extends StatelessWidget {
           color: Colors.amber,
         ),
         _StatCard(
-          title: "Est. Revenue",
-          value: "\$${revenue.toStringAsFixed(0)}",
+          title: "Total Revenue",
+          // Show 2 decimal places (e.g., $120.50)
+          value: "\$${revenue.toStringAsFixed(2)}",
           color: Colors.green,
         ),
         _StatCard(
@@ -176,22 +197,25 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ... (Same as your previous code) ...
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1), // changed withValues to withOpacity for compatibility
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
+          FittedBox( // Added to prevent overflow if revenue is huge
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
           const SizedBox(height: 4),
@@ -203,37 +227,29 @@ class _StatCard extends StatelessWidget {
 }
 
 class _UsersGrowthChart extends StatelessWidget {
+  // ... (Same as your previous code) ...
   final List<DocumentSnapshot> recentDocs;
-
   const _UsersGrowthChart({required this.recentDocs});
 
   List<FlSpot> _generateSpots() {
-    // Logic: distinct users by Day created
+     // ... (Same as your previous code) ...
     Map<int, int> daysMap = {};
     final now = DateTime.now();
-
-    // Initialize last 7 days with 0
     for (int i = 6; i >= 0; i--) {
       daysMap[i] = 0;
     }
-
     for (var doc in recentDocs) {
       final data = doc.data() as Map<String, dynamic>;
       if (data['createdAt'] != null) {
         final date = (data['createdAt'] as Timestamp).toDate();
         final diff = now.difference(date).inDays;
         if (diff >= 0 && diff < 7) {
-          // Invert index: 0 = today, 6 = 7 days ago
-          // For chart X-axis: 0 = 7 days ago, 6 = today
           daysMap[diff] = (daysMap[diff] ?? 0) + 1;
         }
       }
     }
-
     List<FlSpot> spots = [];
     for (int i = 0; i < 7; i++) {
-      // x: 0 to 6, y: count
-      // We map "days ago" to x-axis ascending
       int daysAgo = 6 - i;
       spots.add(FlSpot(i.toDouble(), (daysMap[daysAgo] ?? 0).toDouble()));
     }
@@ -242,8 +258,8 @@ class _UsersGrowthChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+     // ... (Same as your previous code) ...
     final spots = _generateSpots();
-
     return LineChart(
       LineChartData(
         gridData: FlGridData(show: false),
@@ -255,14 +271,11 @@ class _UsersGrowthChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                // Return simpler labels: "Mon", "Tue"
-                final date = DateTime.now().subtract(
-                  Duration(days: 6 - value.toInt()),
-                );
+                final date = DateTime.now().subtract(Duration(days: 6 - value.toInt()));
                 return Padding(
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Text(
-                    DateFormat('E').format(date), // Requires 'intl' package
+                    DateFormat('E').format(date),
                     style: const TextStyle(fontSize: 10),
                   ),
                 );
@@ -279,10 +292,7 @@ class _UsersGrowthChart extends StatelessWidget {
             barWidth: 3,
             isStrokeCapRound: true,
             dotData: FlDotData(show: true),
-            belowBarData: BarAreaData(
-              show: true,
-              color: Colors.amber.withValues(alpha: 0.2),
-            ),
+            belowBarData: BarAreaData(show: true, color: Colors.amber.withOpacity(0.2)),
           ),
         ],
       ),
