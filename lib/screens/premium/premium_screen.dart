@@ -142,11 +142,27 @@ class _PremiumScreenState extends State<PremiumScreen> {
                       itemBuilder: (context, index) {
                         return InkWell(
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const PaymentDetailsPage(),
+                            showDialog(
+                              context: context,
+                              builder: (context) => LayoutBuilder(
+                                builder: (context, constraints) {
+                                  bool isDesktop = constraints.maxWidth > 600;
+                                  return isDesktop
+                                      ? CenteredView(
+                                          horizontalPadding: 500,
+                                          child: PremiumLockDialog(
+                                            onClose: () {
+                                              Navigator.pop(context);
+                                            },
+                                          ),
+                                        )
+                                      : PremiumLockDialog(
+                                          title: 'Upgrade',
+                                          onClose: () {
+                                            Navigator.pop(context);
+                                          },
+                                        );
+                                },
                               ),
                             );
                           },
@@ -202,28 +218,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                         ElevatedButton(
                           onPressed: () {
                             if (!widget.isPremium) {
-                              showDialog(
-                                context: context,
-                                builder: (context) => LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    bool isDesktop = constraints.maxWidth > 600;
-                                    return isDesktop
-                                        ? CenteredView(
-                                            horizontalPadding: 500,
-                                            child: PremiumLockDialog(
-                                              onClose: () {
-                                                Navigator.pop(context);
-                                              },
-                                            ),
-                                          )
-                                        : PremiumLockDialog(
-                                            onClose: () {
-                                              Navigator.pop(context);
-                                            },
-                                          );
-                                  },
-                                ),
-                              ).then((unlocked) {
+                              showPremiumDialog(context).then((unlocked) {
                                 if (unlocked == true && context.mounted) {
                                   context.read<AuthBloc>().add(
                                     AuthCheckRequested(),
@@ -289,7 +284,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                           final expiration = _calculateExpiration(data);
 
                           return Text(
-                            "Paid: ${data['amount_paid'] / 100} • $expiration",
+                            "Paid: ${data['amount_paid'] / 100} at ${_formatDate((data["createdAt"] as Timestamp).toDate())} • $expiration",
                           );
                         }
 
@@ -339,6 +334,31 @@ class _PremiumScreenState extends State<PremiumScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Future<dynamic> showPremiumDialog(BuildContext context) {
+    return showDialog(
+      context: context,
+      builder: (context) => LayoutBuilder(
+        builder: (context, constraints) {
+          bool isDesktop = constraints.maxWidth > 600;
+          return isDesktop
+              ? CenteredView(
+                  horizontalPadding: 500,
+                  child: PremiumLockDialog(
+                    onClose: () {
+                      Navigator.pop(context);
+                    },
+                  ),
+                )
+              : PremiumLockDialog(
+                  onClose: () {
+                    Navigator.pop(context);
+                  },
+                );
+        },
       ),
     );
   }

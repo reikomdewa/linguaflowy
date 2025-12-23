@@ -11,8 +11,14 @@ class PremiumLockDialog extends StatefulWidget {
   // NEW: Callbacks instead of Navigator.pop
   final VoidCallback onClose;
   final VoidCallback? onSuccess;
+  final String? title;
 
-  const PremiumLockDialog({super.key, required this.onClose, this.onSuccess});
+  const PremiumLockDialog({
+    super.key,
+    required this.onClose,
+    this.onSuccess,
+    this.title,
+  });
 
   @override
   State<PremiumLockDialog> createState() => _PremiumLockDialogState();
@@ -65,10 +71,6 @@ class _PremiumLockDialogState extends State<PremiumLockDialog> {
       },
     );
   }
-
-
-
- 
 
   void _handleRedeem() async {
     if (_controller.text.trim().isEmpty) return;
@@ -160,7 +162,7 @@ class _PremiumLockDialogState extends State<PremiumLockDialog> {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    "Unlock Premium",
+                    widget.title == null ? "Unlock Premium" : widget.title!,
                     style: TextStyle(
                       color: textColor,
                       fontSize: 20,
