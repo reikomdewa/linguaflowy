@@ -18,7 +18,8 @@ class UserModel {
 
   final DateTime createdAt;
   final bool isPremium;
-  
+  final Map<String, dynamic>? premiumDetails;
+
   // --- TRACKING & GAMIFICATION ---
   final int xp; // Total experience points
   final int streakDays; // Current daily streak
@@ -40,6 +41,7 @@ class UserModel {
     this.completedLevels = const [],
     required this.createdAt,
     this.isPremium = false,
+    this.premiumDetails,
     this.xp = 0,
     this.languageLevels = const {},
     this.streakDays = 0,
@@ -67,29 +69,41 @@ class UserModel {
       photoUrl: map['photoUrl']?.toString(), // Added mapping
       nativeLanguage: map['nativeLanguage']?.toString() ?? 'en',
       currentLanguage: map['currentLanguage']?.toString() ?? '',
-      
-      targetLanguages: (map['targetLanguages'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ?? [],
 
-      completedLevels: (map['completedLevels'] as List<dynamic>?)
+      targetLanguages:
+          (map['targetLanguages'] as List<dynamic>?)
               ?.map((e) => e.toString())
-              .toList() ?? [],
+              .toList() ??
+          [],
+
+      completedLevels:
+          (map['completedLevels'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
 
       createdAt: parseDate(map['createdAt']),
-      
+
       isPremium: map['isPremium'] == true,
-      
+      premiumDetails: map['premiumDetails'] != null
+          ? Map<String, dynamic>.from(map['premiumDetails'])
+          : null,
+
       xp: (map['xp'] as num?)?.toInt() ?? 0,
       streakDays: (map['streakDays'] as num?)?.toInt() ?? 0,
       lessonsCompleted: (map['lessonsCompleted'] as num?)?.toInt() ?? 0,
-      totalListeningMinutes: (map['totalListeningMinutes'] as num?)?.toInt() ?? 0,
-      
-      lastLoginDate: map['lastLoginDate'] != null ? parseDate(map['lastLoginDate']) : null,
+      totalListeningMinutes:
+          (map['totalListeningMinutes'] as num?)?.toInt() ?? 0,
 
-      languageLevels: (map['languageLevels'] as Map<String, dynamic>?)?.map(
+      lastLoginDate: map['lastLoginDate'] != null
+          ? parseDate(map['lastLoginDate'])
+          : null,
+
+      languageLevels:
+          (map['languageLevels'] as Map<String, dynamic>?)?.map(
             (key, value) => MapEntry(key, value.toString()),
-          ) ?? {},
+          ) ??
+          {},
     );
   }
 
@@ -103,13 +117,16 @@ class UserModel {
       'targetLanguages': targetLanguages,
       'completedLevels': completedLevels,
       'isPremium': isPremium,
+      'premiumDetails': premiumDetails,
       'xp': xp,
       'streakDays': streakDays,
       'lessonsCompleted': lessonsCompleted,
       'totalListeningMinutes': totalListeningMinutes,
       'languageLevels': languageLevels,
       'createdAt': Timestamp.fromDate(createdAt),
-      'lastLoginDate': lastLoginDate != null ? Timestamp.fromDate(lastLoginDate!) : null,
+      'lastLoginDate': lastLoginDate != null
+          ? Timestamp.fromDate(lastLoginDate!)
+          : null,
     };
   }
 
@@ -124,6 +141,7 @@ class UserModel {
     List<String>? completedLevels,
     DateTime? createdAt,
     bool? isPremium,
+    Map<String, dynamic>? premiumDetails,
     int? xp,
     Map<String, String>? languageLevels,
     int? streakDays,
@@ -135,19 +153,23 @@ class UserModel {
       id: id ?? this.id,
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
-      photoUrl: photoUrl ?? this.photoUrl, // Logic to keep existing photo if not provided
+      photoUrl:
+          photoUrl ??
+          this.photoUrl, // Logic to keep existing photo if not provided
       nativeLanguage: nativeLanguage ?? this.nativeLanguage,
       currentLanguage: currentLanguage ?? this.currentLanguage,
       targetLanguages: targetLanguages ?? this.targetLanguages,
       completedLevels: completedLevels ?? this.completedLevels,
       createdAt: createdAt ?? this.createdAt,
       isPremium: isPremium ?? this.isPremium,
+      premiumDetails: premiumDetails ?? this.premiumDetails,
       xp: xp ?? this.xp,
       languageLevels: languageLevels ?? this.languageLevels,
       streakDays: streakDays ?? this.streakDays,
       lastLoginDate: lastLoginDate ?? this.lastLoginDate,
       lessonsCompleted: lessonsCompleted ?? this.lessonsCompleted,
-      totalListeningMinutes: totalListeningMinutes ?? this.totalListeningMinutes,
+      totalListeningMinutes:
+          totalListeningMinutes ?? this.totalListeningMinutes,
     );
   }
 }

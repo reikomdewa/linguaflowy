@@ -1,19 +1,25 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart'; // 1. REQUIRED FOR kIsWeb
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/auth_service.dart';
 import 'package:linguaflow/utils/logger.dart';
+// ADD THIS IMPORT
+import 'package:linguaflow/utils/firebase_utils.dart';
 
-// Import the separate files
 import 'auth_event.dart';
 import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthService authService;
   DateTime? _lastEmailSentTime;
+  final _storage = const FlutterSecureStorage(); // 1. Init Storage
+  static const String _gumroadProductId = "uIq5F1GwaxHuVmADcfcbIw==";
 
   AuthBloc(this.authService) : super(AuthInitial()) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
@@ -32,6 +38,174 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthUpdateXP>(_onAuthUpdateXP);
   }
 
+  // --- HELPER: Fetch Premium Data Once ---
+  // --- HELPER: Fetch Premium Data & Check Expiration ---
+  Future<UserModel> _attachPremiumData(UserModel user) async {
+    // A. Check Local Cache first (Fix #5 - Offline Support)
+    final cachedExpiry = await _storage.read(key: 'premium_expiry_${user.id}');
+
+    // Only fetch from network if user is marked Premium in Firebase
+    if (user.isPremium) {
+      try {
+        final premiumData = await FirebaseUtils().getPurchaseData(user.id);
+
+        if (premiumData != null) {
+          // --- FIX #2: GUMROAD REFUND CHECK ---
+          if (premiumData['source'] == 'gumroad') {
+            // We can do a lightweight check here.
+            // To save API calls, maybe only check if 7 days passed?
+            // For now, let's check every session for maximum security.
+            final isStillValid = await _reverifyGumroadStatus(
+              premiumData['code_id'] ?? '',
+            );
+
+            if (!isStillValid) {
+              printLog(
+                "License Key is no longer valid (Refund/Chargeback). Downgrading.",
+              );
+              await _downgradeUser(user.id);
+              return user.copyWith(isPremium: false, premiumDetails: null);
+            }
+
+            // Since doc ID = License Key in our setup:
+            // We need the document ID (the code). FirebaseUtils needs to return the doc ID too.
+            // Assuming premiumData contains the ID or we can pass it if we change FirebaseUtils.
+          }
+
+          // 1. CALCULATE EXPIRATION DATE
+          DateTime? expireDate;
+
+          // Priority 1: Manual Date set by Admin
+          if (premiumData['manual_expires_at'] != null) {
+            expireDate = DateTime.tryParse(premiumData['manual_expires_at']);
+          }
+          // Priority 2: Calculated from Amount
+          else {
+            DateTime? purchaseDate;
+            if (premiumData['claimedAt'] != null) {
+              purchaseDate = (premiumData['claimedAt'] as Timestamp).toDate();
+            } else if (premiumData['purchased_at'] != null) {
+              purchaseDate = DateTime.tryParse(premiumData['purchased_at']);
+            }
+
+            if (purchaseDate != null) {
+              final int amountPaid = premiumData['amount_paid'] ?? 0;
+              // Lifetime
+              if (amountPaid >= 9500) {
+                expireDate = null;
+              }
+              // 6 Months
+              else if (amountPaid >= 2000) {
+                expireDate = purchaseDate.add(const Duration(days: 30 * 6));
+              }
+              // 1 Month
+              else {
+                expireDate = purchaseDate.add(const Duration(days: 30));
+              }
+            }
+          }
+
+          // 2. CHECK IF EXPIRED
+          if (expireDate != null && DateTime.now().isAfter(expireDate)) {
+            printLog("EXPIRED. Downgrading.");
+            await _downgradeUser(user.id);
+            return user.copyWith(isPremium: false, premiumDetails: null);
+          }
+
+          // 3. CACHE THE EXPIRY FOR OFFLINE USE (Fix #5)
+          await _storage.write(
+            key: 'premium_expiry_${user.id}',
+            value: expireDate?.toIso8601String() ?? 'LIFETIME',
+          );
+
+          return user.copyWith(premiumDetails: premiumData);
+        }
+      } catch (e) {
+        printLog("Network error fetching premium: $e");
+        // FALLBACK TO SECURE STORAGE (Fix #5)
+        if (cachedExpiry != null) {
+          if (cachedExpiry == 'LIFETIME') return user; // Still premium
+
+          final localDate = DateTime.tryParse(cachedExpiry);
+          if (localDate != null && DateTime.now().isAfter(localDate)) {
+            // Expired locally
+            return user.copyWith(isPremium: false, premiumDetails: null);
+          }
+          // Valid locally
+          return user;
+        }
+      }
+    }
+    return user;
+  }
+
+  // --- HELPER: Downgrade User ---
+  Future<void> _downgradeUser(String userId) async {
+    await _storage.delete(key: 'premium_expiry_$userId');
+    await FirebaseFirestore.instance.collection('users').doc(userId).update({
+      'isPremium': false,
+    });
+  }
+
+  // --- HELPER: Re-verify Gumroad (Fix #2) ---
+  // Call this inside _attachPremiumData if you have the key
+  Future<bool> _reverifyGumroadStatus(String key) async {
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.gumroad.com/v2/licenses/verify'),
+        body: {'product_id': _gumroadProductId, 'license_key': key},
+      );
+
+      // If Gumroad is down or error, fail safe (allow access) to not block innocent users
+      if (response.statusCode != 200) return true;
+
+      final data = jsonDecode(response.body);
+
+      // 1. Check if the key itself exists
+      if (data['success'] != true) return false;
+
+      final purchase = data['purchase'];
+
+      // 2. PARSE THE "OTHER DATA" (Security Checks)
+
+      // A. Refunded: Merchant voluntarily gave money back
+      if (purchase['refunded'] == true) {
+        printLog("Gumroad Check: User was refunded.");
+        return false;
+      }
+
+      // B. Chargebacked: User forced money back via bank (Fraud)
+      if (purchase['chargebacked'] == true) {
+        printLog("Gumroad Check: Payment was chargebacked.");
+        return false;
+      }
+
+      // C. Disputed: User opened a dispute with PayPal/Bank
+      // (Usually treated as suspended access until resolved)
+      if (purchase['disputed'] == true) {
+        printLog("Gumroad Check: Payment is disputed.");
+        return false;
+      }
+
+      // D. Subscription Failed: (Only for recurring subscriptions)
+      // If the latest payment failed, this might be non-null.
+      if (purchase['subscription_failed_at'] != null) {
+        // Optional: Check if grace period is over
+        printLog("Gumroad Check: Subscription payment failed.");
+        // return false; // Uncomment if you want strict enforcement
+      }
+
+      // E. Subscription Cancelled:
+      // purchase['subscription_cancelled_at'] will be set if they cancelled.
+      // Usually you still let them finish the paid month, so we return TRUE here
+      // and let the Date Logic in _attachPremiumData handle the expiration.
+
+      return true;
+    } catch (e) {
+      printLog("Gumroad Re-verify Network Error: $e");
+      return true; // Assume valid on network error
+    }
+  }
   // --- HANDLERS ---
 
   Future<void> _onAuthUpdateXP(
@@ -42,7 +216,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final currentUser = (state as AuthAuthenticated).user;
       final int newXp = (currentUser.xp + event.xpToAdd).toInt();
       final updatedUser = currentUser.copyWith(xp: newXp);
-      
+
       emit(AuthAuthenticated(updatedUser));
 
       try {
@@ -60,8 +234,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthCheckRequested event,
     Emitter<AuthState> emit,
   ) async {
-    // 2. WEB PERSISTENCE FIX
-    // On Web, ensure we look for Local Persistence so refresh doesn't logout
     if (kIsWeb) {
       try {
         await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
@@ -75,24 +247,24 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       try {
         await firebaseUser.reload();
       } catch (e) {
-        // If reload fails (e.g. token expired), we might need to logout
         printLog("Error reloading user: $e");
       }
 
       if (firebaseUser.emailVerified) {
         UserModel? user = await authService.getCurrentUser();
         if (user != null) {
-          // Sync Photo Logic
           if ((user.photoUrl == null || user.photoUrl!.isEmpty) &&
               firebaseUser.photoURL != null) {
             user = user.copyWith(photoUrl: firebaseUser.photoURL);
-            FirebaseFirestore.instance
-                .collection('users')
-                .doc(user.id)
-                .update({'photoUrl': user.photoUrl});
+            FirebaseFirestore.instance.collection('users').doc(user.id).update({
+              'photoUrl': user.photoUrl,
+            });
           }
 
           user = await _checkAndUpateStreak(user);
+          // NEW: Load premium data into memory
+          user = await _attachPremiumData(user);
+
           emit(AuthAuthenticated(user));
           return;
         }
@@ -122,6 +294,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         UserModel? user = await authService.getCurrentUser();
         if (user != null) {
           user = await _checkAndUpateStreak(user);
+          // NEW: Load premium data into memory
+          user = await _attachPremiumData(user);
+
           emit(AuthAuthenticated(user));
         } else {
           emit(const AuthError("User data not found."));
@@ -132,27 +307,33 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
- Future<void> _onAuthGoogleLoginRequested(
+  Future<void> _onAuthGoogleLoginRequested(
     AuthGoogleLoginRequested event,
     Emitter<AuthState> emit,
   ) async {
-    print("🔹 BLOC: Received Google Login Request!"); // <--- ADD THIS
+    print("🔹 BLOC: Received Google Login Request!");
     emit(AuthLoading());
-    
+
     try {
-      print("🔹 BLOC: Calling AuthService..."); // <--- ADD THIS
+      print("🔹 BLOC: Calling AuthService...");
       UserModel? user = await authService.signInWithGoogle();
-      
+
       if (user != null) {
-        print("🔹 BLOC: User found: ${user.email}"); // <--- ADD THIS
-        // ... rest of logic
+        print("🔹 BLOC: User found: ${user.email}");
+
+        user = await _checkAndUpateStreak(
+          user,
+        ); // Good to update streak here too
+        // NEW: Load premium data into memory
+        user = await _attachPremiumData(user);
+
         emit(AuthAuthenticated(user));
       } else {
-        print("🔹 BLOC: User cancelled or null"); // <--- ADD THIS
+        print("🔹 BLOC: User cancelled or null");
         emit(AuthUnauthenticated());
       }
     } catch (e) {
-      print("🔴 BLOC ERROR: $e"); // <--- ADD THIS
+      print("🔴 BLOC ERROR: $e");
       emit(AuthError("Google Sign In Failed: $e"));
     }
   }
@@ -172,10 +353,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(currentUser.id)
-            .set(
-              {'totalListeningMinutes': newTotal},
-              SetOptions(merge: true),
-            );
+            .set({'totalListeningMinutes': newTotal}, SetOptions(merge: true));
       } catch (e) {
         rethrow;
       }
@@ -253,12 +431,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         await user.sendEmailVerification();
         _lastEmailSentTime = DateTime.now();
         await authService.signOut();
-        emit(const AuthMessage("Verification email resent! Check your spam folder."));
+        emit(
+          const AuthMessage(
+            "Verification email resent! Check your spam folder.",
+          ),
+        );
         emit(AuthUnauthenticated());
       } else if (user != null && user.emailVerified) {
         final userModel = await authService.getCurrentUser();
         if (userModel != null) {
-          emit(AuthAuthenticated(userModel));
+          // If they just verified, load their data
+          var user = userModel;
+          user = await _attachPremiumData(user);
+          emit(AuthAuthenticated(user));
         }
       }
     } catch (e) {
@@ -358,9 +543,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       try {
         final updates = <String, dynamic>{};
-        if (event.nativeLanguage != null) updates['nativeLanguage'] = event.nativeLanguage;
-        if (event.targetLanguages != null) updates['targetLanguages'] = event.targetLanguages;
-        if (event.displayName != null) updates['displayName'] = event.displayName;
+        if (event.nativeLanguage != null)
+          updates['nativeLanguage'] = event.nativeLanguage;
+        if (event.targetLanguages != null)
+          updates['targetLanguages'] = event.targetLanguages;
+        if (event.displayName != null)
+          updates['displayName'] = event.displayName;
         if (event.photoUrl != null) updates['photoUrl'] = event.photoUrl;
 
         await FirebaseFirestore.instance
@@ -369,9 +557,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             .update(updates);
 
         if (event.displayName != null || event.photoUrl != null) {
-          await FirebaseAuth.instance.currentUser?.updateDisplayName(event.displayName);
+          await FirebaseAuth.instance.currentUser?.updateDisplayName(
+            event.displayName,
+          );
           if (event.photoUrl != null) {
-            await FirebaseAuth.instance.currentUser?.updatePhotoURL(event.photoUrl);
+            await FirebaseAuth.instance.currentUser?.updatePhotoURL(
+              event.photoUrl,
+            );
           }
         }
       } catch (e) {
@@ -396,13 +588,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(AuthUnauthenticated());
       }
     } catch (e) {
-      emit(const AuthError("Failed to delete account. Please log in again and try."));
+      emit(
+        const AuthError(
+          "Failed to delete account. Please log in again and try.",
+        ),
+      );
     }
   }
 
   // --- INTERNAL UTILITIES ---
-  
-  // Ideally, move this to AuthService
+
   Future<UserModel> _checkAndUpateStreak(UserModel user) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);

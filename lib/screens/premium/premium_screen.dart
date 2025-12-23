@@ -1,9 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
+import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/constants/firebase_constants.dart';
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/screens/premium/payment_details_screen.dart';
@@ -15,6 +17,8 @@ import 'package:linguaflow/screens/premium/payment_details_page.dart';
 import 'package:linguaflow/utils/centered_views.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
+// NEW IMPORT
+import 'package:linguaflow/utils/firebase_utils.dart';
 
 class PremiumScreen extends StatefulWidget {
   static const String routeName = 'premium';
@@ -34,7 +38,6 @@ class _PremiumScreenState extends State<PremiumScreen> {
   @override
   void initState() {
     super.initState();
-    FirebaseConstants.fetchAppData();
   }
 
   static const List proBenefits = [
@@ -99,8 +102,6 @@ class _PremiumScreenState extends State<PremiumScreen> {
 
   @override
   Widget build(BuildContext context) {
-    FirebaseConstants.fetchAppData();
-
     //  final prices = FirebaseConstants.appData['prices'];
     final size = MediaQuery.of(context).size;
     return ClipRRect(
@@ -198,60 +199,60 @@ class _PremiumScreenState extends State<PremiumScreen> {
 
                     Row(
                       children: [
-                        if (!widget.isPremium)
-                          ElevatedButton(
-                            onPressed: () {
-                              if (!widget.isPremium) {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      bool isDesktop =
-                                          constraints.maxWidth > 600;
-                                      return isDesktop
-                                          ? CenteredView(
-                                              horizontalPadding: 500,
-                                              child: PremiumLockDialog(
-                                                onClose: () {
-                                                  Navigator.pop(context);
-                                                },
-                                              ),
-                                            )
-                                          : PremiumLockDialog(
+                        ElevatedButton(
+                          onPressed: () {
+                            if (!widget.isPremium) {
+                              showDialog(
+                                context: context,
+                                builder: (context) => LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    bool isDesktop = constraints.maxWidth > 600;
+                                    return isDesktop
+                                        ? CenteredView(
+                                            horizontalPadding: 500,
+                                            child: PremiumLockDialog(
                                               onClose: () {
                                                 Navigator.pop(context);
                                               },
-                                            );
-                                    },
-                                  ),
-                                ).then((unlocked) {
-                                  if (unlocked == true && context.mounted) {
-                                    context.read<AuthBloc>().add(
-                                      AuthCheckRequested(),
-                                    );
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text("Welcome to Premium!"),
-                                        backgroundColor: Colors.green,
-                                      ),
-                                    );
-                                  }
-                                });
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      "You are a PRO member!",
-                                      style: TextStyle(color: Colors.white),
+                                            ),
+                                          )
+                                        : PremiumLockDialog(
+                                            onClose: () {
+                                              Navigator.pop(context);
+                                            },
+                                          );
+                                  },
+                                ),
+                              ).then((unlocked) {
+                                if (unlocked == true && context.mounted) {
+                                  context.read<AuthBloc>().add(
+                                    AuthCheckRequested(),
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Welcome to Premium!"),
+                                      backgroundColor: Colors.green,
                                     ),
-                                    backgroundColor: Colors.amber,
-                                    duration: Duration(seconds: 1),
+                                  );
+                                }
+                              });
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "You are a PRO member!",
+                                    style: TextStyle(color: Colors.white),
                                   ),
-                                );
-                              }
-                            },
-                            child: const Text('Get Premium'),
-                          ),
+                                  backgroundColor: Colors.amber,
+                                  duration: Duration(seconds: 5),
+                                ),
+                              );
+                            }
+                          },
+                          child: widget.isPremium
+                              ? const Text('Upgrade')
+                              : const Text('Get Premium'),
+                        ),
                         SizedBox(width: 10),
                         ElevatedButton(
                           onPressed: () {
@@ -262,12 +263,41 @@ class _PremiumScreenState extends State<PremiumScreen> {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    widget.isPremium
-                        ? Text('You are a pro Member', style: titleStyleBigPro)
-                        : Text(
-                            'With Linguaflow Pro you will:',
-                            style: titleStyleBig,
+
+                    // --------------------------------------------------------
+                    // UPDATED SECTION: Payment Data Display
+                    // --------------------------------------------------------
+                    // Inside your PremiumScreen or any Widget
+                    if (widget.isPremium)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "You are a Pro Member",
+                            style: titleStyleBig.copyWith(
+                              color: Colors.greenAccent,
+                            ),
                           ),
+                        ],
+                      ),
+                    BlocBuilder<AuthBloc, AuthState>(
+                      builder: (context, state) {
+                        if (state is AuthAuthenticated &&
+                            state.user.premiumDetails != null) {
+                          final data = state.user.premiumDetails!;
+                          // Use your _calculateExpiration logic here
+                          final expiration = _calculateExpiration(data);
+
+                          return Text(
+                            "Paid: ${data['amount_paid'] / 100} • $expiration",
+                          );
+                        }
+
+                        return const SizedBox(); // Or loading/default text
+                      },
+                    ),
+
+                    // --------------------------------------------------------
                     const SizedBox(height: 10),
                     ListView.builder(
                       shrinkWrap: true,
@@ -311,5 +341,61 @@ class _PremiumScreenState extends State<PremiumScreen> {
         ),
       ),
     );
+  }
+
+  String _calculateExpiration(Map<String, dynamic> data) {
+    try {
+      DateTime purchaseDate;
+
+      // 1. Try to get the date from 'claimedAt' (Timestamp)
+      if (data['claimedAt'] != null) {
+        // Firestore stores dates as Timestamp objects
+        purchaseDate = (data['claimedAt'] as Timestamp).toDate();
+      }
+      // 2. Fallback: Try 'purchased_at' (String from Gumroad)
+      else if (data['purchased_at'] != null) {
+        purchaseDate = DateTime.parse(data['purchased_at']);
+      } else {
+        return "Unknown";
+      }
+
+      final int amountPaid =
+          data['amount_paid'] ?? 0; // In cents (e.g. 2000 = $20)
+
+      // 3. Determine Duration based on Price Ranges
+
+      // Range: $100+ (10000 cents) -> Lifetime
+      if (amountPaid >= 10000) {
+        return "Lifetime Access";
+      }
+
+      DateTime expireDate;
+
+      // Range: $20.00 to $99.99 (2000 - 9999 cents) -> 6 Months
+      if (amountPaid >= 2000) {
+        expireDate = purchaseDate.add(const Duration(days: 30 * 6));
+      }
+      // Range: $4.99 to $19.99 (499 - 1999 cents) -> 1 Month
+      // Also catches $0 test keys by default logic below, or you can check >= 499
+      else {
+        // Default -> 1 Month
+        expireDate = purchaseDate.add(const Duration(days: 30));
+      }
+
+      // 4. Check if Expired
+      if (DateTime.now().isAfter(expireDate)) {
+        return "Expired on ${_formatDate(expireDate)}";
+      }
+
+      return "Renews: ${_formatDate(expireDate)}";
+    } catch (e) {
+      print("Date Error: $e");
+      return "Active";
+    }
+  }
+
+  // Simple date formatter (DD/MM/YYYY)
+  String _formatDate(DateTime date) {
+    return "${date.day}/${date.month}/${date.year}";
   }
 }
