@@ -232,16 +232,14 @@ class _PremiumScreenState extends State<PremiumScreen> {
                                 }
                               });
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    "You are a PRO member!",
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                  backgroundColor: Colors.amber,
-                                  duration: Duration(seconds: 5),
-                                ),
-                              );
+                              if (widget.isPremium)
+                                showPremiumDialog(context).then((unlocked) {
+                                  if (unlocked == true && context.mounted) {
+                                    context.read<AuthBloc>().add(
+                                      AuthCheckRequested(),
+                                    );
+                                  }
+                                });
                             }
                           },
                           child: widget.isPremium
@@ -348,12 +346,14 @@ class _PremiumScreenState extends State<PremiumScreen> {
               ? CenteredView(
                   horizontalPadding: 500,
                   child: PremiumLockDialog(
+                    title: widget.isPremium ? "Upgrade" : null,
                     onClose: () {
                       Navigator.pop(context);
                     },
                   ),
                 )
               : PremiumLockDialog(
+                  title: widget.isPremium ? "Upgrade" : null,
                   onClose: () {
                     Navigator.pop(context);
                   },
