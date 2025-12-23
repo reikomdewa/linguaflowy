@@ -125,9 +125,9 @@ dev_dependencies:
 
 flutter_native_splash:
   color: "#121212"  
-  image: assets/images/linguaflow_logo.png
+  image: assets/images/linguaflow_logo_400_transparent.png
   android_12:
-    image: assets/images/linguaflow_logo.png 
+    image: assets/images/linguaflow_logo_400_transparent.png 
     color: "#121212"
 
 
