@@ -272,8 +272,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
     emit(AuthUnauthenticated());
   }
-
-  Future<void> _onAuthLoginRequested(
+Future<void> _onAuthLoginRequested(
     AuthLoginRequested event,
     Emitter<AuthState> emit,
   ) async {
@@ -302,7 +301,25 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           emit(const AuthError("User data not found."));
         }
       }
+    } on FirebaseAuthException catch (e) {
+      // Handle specific Firebase errors
+      // 'invalid-credential' is the new standard error for Email Enumeration Protection
+      if (e.code == 'invalid-credential' || 
+          e.code == 'user-not-found' || 
+          e.code == 'wrong-password') {
+        emit(const AuthError("Invalid email or password."));
+      } else if (e.code == 'invalid-email') {
+        emit(const AuthError("The email address is invalid."));
+      } else if (e.code == 'user-disabled') {
+        emit(const AuthError("This user account has been disabled."));
+      } else if (e.code == 'too-many-requests') {
+        emit(const AuthError("Too many attempts. Try again later."));
+      } else {
+        // Fallback for other Firebase errors
+        emit(AuthError(e.message ?? "Authentication failed."));
+      }
     } catch (e) {
+      // Fallback for non-Firebase errors (e.g. Network issues)
       emit(AuthError(e.toString()));
     }
   }

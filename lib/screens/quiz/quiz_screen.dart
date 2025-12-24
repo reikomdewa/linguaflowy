@@ -4,10 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_state.dart'; // Ensure this is imported
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/services/quiz_service.dart';
 import 'package:linguaflow/services/translation_service.dart';
@@ -40,7 +40,7 @@ class _QuizScreenState extends State<QuizScreen> {
   bool _isManuallyPlaying = false;
 
   // --- QUIZ STATE ---
-  String _targetLangCode = 'en';
+  String _targetLangCode = 'en'; // Default
   String _targetLangName = 'English';
   String _targetFlag = '🇬🇧';
   Timer? _cooldownTimer;
@@ -49,39 +49,57 @@ class _QuizScreenState extends State<QuizScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // 1. FIX: Initialize Language Variables IMMEDIATELY from Bloc
+    // This ensures _targetLangCode is correct even if _loadQuiz isn't called.
+    _initializeLanguageFromBloc();
+    
+    // 2. Initialize TTS and App logic
     _initializeAppSequence();
+    
     if (widget.levelId != null && widget.levelId!.startsWith('yt_')) {
       _loadVideoById(widget.levelId!.replaceFirst('yt_', ''));
     }
   }
 
-  // --- VIDEO LOGIC ---
+  /// NEW METHOD: Extracts language synchronously on startup
+  void _initializeLanguageFromBloc() {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      final code = LanguageHelper.getLangCode(authState.user.currentLanguage);
+      setState(() {
+        _targetLangCode = code;
+        _targetLangName = LanguageHelper.getLanguageName(code);
+        _targetFlag = LanguageHelper.getFlagEmoji(code);
+      });
+    }
+  }
 
+  // --- VIDEO LOGIC ---
   void _loadVideoById(String videoId) {
     if (_currentLoadedVideoId == videoId) return;
 
     _videoController?.dispose();
     _currentLoadedVideoId = videoId;
 
-    _videoController =
-        YoutubePlayerController(
-          initialVideoId: videoId,
-          flags: const YoutubePlayerFlags(
-            autoPlay: false,
-            mute: false,
-            disableDragSeek: false,
-            enableCaption: false,
-            controlsVisibleAtStart: true,
-            hideControls: false,
-            forceHD: false,
-          ),
-        )..addListener(() {
-          if (mounted) {
-            setState(() {
-              _isVideoReady = _videoController!.value.isReady;
-            });
-          }
-        });
+    _videoController = YoutubePlayerController(
+      initialVideoId: videoId,
+      flags: const YoutubePlayerFlags(
+        autoPlay: false,
+        mute: false,
+        disableDragSeek: false,
+        enableCaption: false,
+        controlsVisibleAtStart: true,
+        hideControls: false,
+        forceHD: false,
+      ),
+    )..addListener(() {
+        if (mounted) {
+          setState(() {
+            _isVideoReady = _videoController!.value.isReady;
+          });
+        }
+      });
     setState(() {});
   }
 
@@ -93,37 +111,28 @@ class _QuizScreenState extends State<QuizScreen> {
 
     _videoSegmentTimer?.cancel();
 
-    // 1. SUBTRACT FROM START (Start 0.5s earlier)
-    // We clamp to 0.0 to prevent negative time errors
     double paddedStart = startSeconds - 1.5;
     if (paddedStart < 0.0) paddedStart = 0.0;
 
-    // 2. SEEK to the new earlier start time
     _videoController!.seekTo(
       Duration(milliseconds: (paddedStart * 1000).toInt()),
     );
     _videoController!.play();
 
-    // 3. ADD TO END (Calculate duration based on original end + 1.5s buffer)
-    // Duration = (Original End - New Start) + 1.5 seconds safety
     double playDuration = (endSeconds - paddedStart) + 2;
-
     final durationMs = (playDuration * 1000).toInt();
 
-    // 4. Set Timer
     _videoSegmentTimer = Timer(Duration(milliseconds: durationMs), () {
       if (mounted && !_isManuallyPlaying) _videoController!.pause();
     });
   }
 
-  /// Plays 30 seconds of context starting slightly before the sentence
   void _playContext(double startSeconds) {
     if (_videoController == null || !_isVideoReady) return;
 
     setState(() => _isManuallyPlaying = true);
     _videoSegmentTimer?.cancel();
 
-    // Start 0.5s earlier for context too
     double paddedStart = startSeconds - 0.5;
     if (paddedStart < 0.0) paddedStart = 0.0;
 
@@ -142,12 +151,22 @@ class _QuizScreenState extends State<QuizScreen> {
 
   // --- APP & TTS SETUP ---
   Future<void> _initializeAppSequence() async {
-    if (Platform.isAndroid) await Future.delayed(const Duration(seconds: 1));
+    // 3. FIX: Explicitly set the language on the TTS engine at startup
     try {
+      if (Platform.isAndroid) await Future.delayed(const Duration(seconds: 1));
+      
       await _tts.awaitSpeakCompletion(true);
       await _tts.setVolume(1.0);
-    } catch (_) {}
+      
+      // Force set the language we extracted in _initializeLanguageFromBloc
+      await _tts.setLanguage(_targetLangCode); 
+    } catch (e) {
+      debugPrint("TTS Setup Error: $e");
+    }
+
     if (!mounted) return;
+    
+    // Only load quiz if not already loaded in Bloc
     if (context.read<QuizBloc>().state.status == QuizStatus.initial) {
       _loadQuiz();
     }
@@ -167,48 +186,35 @@ class _QuizScreenState extends State<QuizScreen> {
     _hasLoaded = true;
 
     final authState = context.read<AuthBloc>().state;
-    String targetLang = 'es';
+    String targetLang = _targetLangCode; // Use the one we already set
     String nativeLang = 'en';
     String userId = '';
     bool isPremium = false;
 
     if (authState is AuthAuthenticated) {
-      targetLang = LanguageHelper.getLangCode(authState.user.currentLanguage);
       nativeLang = LanguageHelper.getLangCode(authState.user.nativeLanguage);
       userId = authState.user.id;
       isPremium = authState.user.isPremium;
-      if (mounted) {
-        setState(() {
-          _targetLangCode = targetLang;
-          _targetLangName = LanguageHelper.getLanguageName(targetLang);
-          _targetFlag = LanguageHelper.getFlagEmoji(targetLang);
-        });
-      }
     }
-    try {
-      await _tts.setLanguage(_targetLangCode);
-    } catch (_) {}
-    if (!mounted) return;
 
-    if (widget.initialQuestions != null &&
-        widget.initialQuestions!.isNotEmpty) {
+    if (widget.initialQuestions != null && widget.initialQuestions!.isNotEmpty) {
       context.read<QuizBloc>().add(
-        QuizStartWithQuestions(
-          questions: widget.initialQuestions!,
-          userId: userId,
-          isPremium: isPremium,
-        ),
-      );
+            QuizStartWithQuestions(
+              questions: widget.initialQuestions!,
+              userId: userId,
+              isPremium: isPremium,
+            ),
+          );
     } else {
       context.read<QuizBloc>().add(
-        QuizLoadRequested(
-          promptType: QuizPromptType.dailyPractice,
-          userId: userId,
-          targetLanguage: targetLang,
-          nativeLanguage: nativeLang,
-          isPremium: isPremium,
-        ),
-      );
+            QuizLoadRequested(
+              promptType: QuizPromptType.dailyPractice,
+              userId: userId,
+              targetLanguage: targetLang,
+              nativeLanguage: nativeLang,
+              isPremium: isPremium,
+            ),
+          );
     }
   }
 
@@ -236,6 +242,8 @@ class _QuizScreenState extends State<QuizScreen> {
       _playVideoSegment(start, end);
       return;
     }
+    
+    // 4. FIX: Ensure language is set immediately before speaking every time
     try {
       await _tts.setLanguage(_targetLangCode);
       await _tts.speak(text);
@@ -247,10 +255,10 @@ class _QuizScreenState extends State<QuizScreen> {
     if (authState is! AuthAuthenticated) return;
 
     final translationFuture = context.read<TranslationService>().translate(
-      originalWord,
-      LanguageHelper.getLangCode(authState.user.nativeLanguage),
-      LanguageHelper.getLangCode(authState.user.currentLanguage),
-    );
+          originalWord,
+          LanguageHelper.getLangCode(authState.user.nativeLanguage),
+          LanguageHelper.getLangCode(authState.user.currentLanguage),
+        );
 
     showDialog(
       context: context,
@@ -262,8 +270,6 @@ class _QuizScreenState extends State<QuizScreen> {
       ),
     );
   }
-
- 
 
   @override
   Widget build(BuildContext context) {
@@ -405,13 +411,11 @@ class _QuizScreenState extends State<QuizScreen> {
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
-                            // LAYER 1: The Player
                             YoutubePlayer(
                               controller: _videoController!,
                               showVideoProgressIndicator: true,
                               progressIndicatorColor: Colors.blueAccent,
                               bottomActions: [
-                                // "The Play Button on the Controls"
                                 if (hasVideoContext)
                                   IconButton(
                                     icon: Icon(
@@ -424,7 +428,6 @@ class _QuizScreenState extends State<QuizScreen> {
                                       if (_videoController!.value.isPlaying) {
                                         _videoController!.pause();
                                       } else {
-                                        // Jump to padded start
                                         _playVideoSegment(
                                           question.videoStart!,
                                           question.videoEnd!,
@@ -437,8 +440,6 @@ class _QuizScreenState extends State<QuizScreen> {
                                 RemainingDuration(),
                               ],
                             ),
-
-                            // LAYER 2: "Play Button in the Middle"
                             if (!_videoController!.value.isPlaying &&
                                 hasVideoContext)
                               GestureDetector(
@@ -468,8 +469,6 @@ class _QuizScreenState extends State<QuizScreen> {
                         ),
                       ),
                     ),
-
-                    // "Watch 30s Context" Button
                     if (hasVideoContext)
                       GestureDetector(
                         onTap: () => _playContext(question.videoStart!),
@@ -539,8 +538,6 @@ class _QuizScreenState extends State<QuizScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
-
-                        // SENTENCE ROW
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -622,8 +619,6 @@ class _QuizScreenState extends State<QuizScreen> {
                         ),
 
                         const SizedBox(height: 12),
-
-                        // ANSWER AREA
                         Container(
                           width: double.infinity,
                           constraints: const BoxConstraints(minHeight: 80),
@@ -652,8 +647,6 @@ class _QuizScreenState extends State<QuizScreen> {
                         ),
 
                         const SizedBox(height: 12),
-
-                        // WORD BANK
                         Center(
                           child: Wrap(
                             spacing: 12,
@@ -679,7 +672,6 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
 
-              // 3. BOTTOM BAR
               QuizBottomBar(
                 state: state,
                 onCheck: () => context.read<QuizBloc>().add(QuizCheckAnswer()),
