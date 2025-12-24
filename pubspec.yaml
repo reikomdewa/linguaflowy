@@ -58,10 +58,9 @@ dependencies:
   media_kit: ^1.2.3
   media_kit_libs_video: ^1.0.7
   uuid: ^4.5.1
-  livekit_client: ^2.0.0      # Verify latest version
-  flutter_chat_ui: ^2.11.1   # UI Component
-  flutter_chat_core: ^2.0.0 
-  flutter_chat_types: ^3.6.0  # Data Models
+  livekit_client: ^2.0.0  
+    # Verify latest version
+  flutter_chat_types: ^3.6.2  # Data Models
   upgrader: ^12.3.0
   flutter_secure_storage: ^10.0.0
  
