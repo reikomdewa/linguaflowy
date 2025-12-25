@@ -23,7 +23,7 @@ import 'package:linguaflow/utils/firebase_utils.dart';
 class PremiumScreen extends StatefulWidget {
   static const String routeName = 'premium';
   bool isPremium;
-  PremiumScreen({required this.isPremium, super.key});
+  PremiumScreen({required this.isPremium, Key? key}) : super(key: key);
 
   @override
   State<PremiumScreen> createState() => _PremiumScreenState();

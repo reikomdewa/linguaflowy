@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_event.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
+import 'package:path/path.dart';
 
 class TutorCard extends StatelessWidget {
   final Tutor tutor;

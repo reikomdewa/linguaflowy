@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/screens/speak/widgets/full_screen_participant.dart';
+import 'package:linguaflow/screens/speak/widgets/participant_tile.dart';
 import 'package:livekit_client/livekit_client.dart';
 
-// Your App Imports
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_event.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
@@ -25,15 +28,25 @@ class ActiveRoomScreen extends StatefulWidget {
 }
 
 class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
+  // Room State
   List<Participant> _participants = [];
   EventsListener<RoomEvent>? _listener;
   bool _isLeaving = false;
 
+  // Chat Notification State
   final ChatService _chatService = ChatService();
   StreamSubscription? _chatSubscription;
   int _unreadCount = 0;
   int _lastReadCount = 0;
   bool _isChatOpen = false;
+
+  // Firestore Sync State (Kick + Spotlight)
+  StreamSubscription? _roomDocSubscription;
+  String? _currentSpotlightId;
+  bool _isFullScreenOpen = false;
+
+  // FIX: Safety flag to prevent kicking before data syncs
+  bool _hasSyncedMembership = false;
 
   @override
   void initState() {
@@ -41,8 +54,10 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     _refreshParticipants();
     _setUpListeners();
     _setupChatListener();
+    _setupFirestoreListeners(); // Single listener for Kick & Spotlight
   }
 
+  // --- 1. LIVEKIT LISTENERS ---
   void _refreshParticipants() {
     if (!mounted || _isLeaving) return;
     setState(() {
@@ -56,7 +71,6 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
 
   void _setUpListeners() {
     _listener = widget.livekitRoom.createListener();
-
     _listener!
       ..on<ParticipantConnectedEvent>((_) => _refreshParticipants())
       ..on<ParticipantDisconnectedEvent>((_) => _refreshParticipants())
@@ -64,17 +78,15 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
       ..on<TrackUnsubscribedEvent>((_) => setState(() {}))
       ..on<LocalTrackPublishedEvent>((_) => setState(() {}))
       ..on<LocalTrackUnpublishedEvent>((_) => setState(() {}))
-      // Mute events are crucial for switching between Video/Avatar
       ..on<TrackMutedEvent>((_) => setState(() {}))
       ..on<TrackUnmutedEvent>((_) => setState(() {}))
       ..on<ActiveSpeakersChangedEvent>((_) => setState(() {}))
       ..on<RoomDisconnectedEvent>((_) {
-        if (mounted && !_isLeaving) {
-          Navigator.pop(context);
-        }
+        if (mounted && !_isLeaving) Navigator.pop(context);
       });
   }
 
+  // --- 2. CHAT LISTENER ---
   void _setupChatListener() {
     _lastReadCount = _chatService.currentMessages.length;
     _chatSubscription = _chatService.messagesStream.listen((messages) {
@@ -84,9 +96,78 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
         setState(() => _unreadCount = 0);
       } else {
         final diff = messages.length - _lastReadCount;
-        setState(() {
-          _unreadCount = diff > 0 ? diff : 0;
-        });
+        setState(() => _unreadCount = diff > 0 ? diff : 0);
+      }
+    });
+  }
+
+  // --- 3. FIRESTORE LISTENER (Kick & Spotlight) ---
+  void _setupFirestoreListeners() {
+    final docRef = FirebaseFirestore.instance
+        .collection('rooms')
+        .doc(widget.roomData.id);
+
+    _roomDocSubscription = docRef.snapshots().listen((snapshot) {
+      if (!snapshot.exists || !mounted) {
+        // Room deleted? Leave.
+        if (!_isLeaving) Navigator.pop(context);
+        return;
+      }
+
+      final data = snapshot.data();
+      if (data == null) return;
+
+      // A. KICK CHECK
+      final members = List.from(data['members'] ?? []);
+      final currentUser = FirebaseAuth.instance.currentUser;
+
+      if (currentUser != null) {
+        final myUid = currentUser.uid;
+
+        final amIInList = members.any((m) => m['uid'] == myUid);
+        final amIHost = widget.roomData.hostId == myUid;
+
+        // FIX: Only verify kicking if we have successfully synced AT LEAST ONCE.
+        // This prevents the "Race Condition" where you join before Firestore updates.
+        if (amIInList || amIHost) {
+          _hasSyncedMembership = true;
+        }
+
+        // Only kick if:
+        // 1. We knew we were in the list before (_hasSyncedMembership)
+        // 2. We are NO LONGER in the list (!amIInList)
+        // 3. We are not the host
+        // 4. We are not already leaving
+        if (_hasSyncedMembership && !amIInList && !amIHost && !_isLeaving) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("You have been kicked from the room."),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+            ),
+          );
+          _leaveRoom(context);
+          return;
+        }
+      }
+
+      // B. SPOTLIGHT CHECK
+      final spotlightId = data['spotlightedUserId'] as String?;
+      if (spotlightId != _currentSpotlightId) {
+        _currentSpotlightId = spotlightId;
+
+        if (spotlightId != null) {
+          // Open Full Screen
+          try {
+            final p = _participants.firstWhere(
+              (p) => p.identity == spotlightId,
+            );
+            _openFullScreen(p, isRemoteTriggered: true);
+          } catch (_) {}
+        } else {
+          // Close Full Screen
+          if (_isFullScreenOpen) Navigator.pop(context);
+        }
       }
     });
   }
@@ -95,29 +176,172 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
   void dispose() {
     _listener?.dispose();
     _chatSubscription?.cancel();
+    _roomDocSubscription?.cancel();
     super.dispose();
   }
 
+  // --- 4. TAP LOGIC & HOST SHEET ---
+  void _handleParticipantTap(Participant p) {
+    final myId = widget.livekitRoom.localParticipant?.identity;
+    final targetId = p.identity;
+    final hostId = widget.roomData.hostId;
+    final hostName = widget.roomData.hostName;
+
+    final isMe = myId == targetId;
+    final amIHost = (myId == hostId) || (myId == hostName);
+
+    if (amIHost) {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.grey[900],
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (context) {
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 10),
+                Text(
+                  targetId ?? "Participant",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                const Divider(color: Colors.grey),
+
+                ListTile(
+                  leading: const Icon(
+                    Icons.fullscreen,
+                    color: Colors.blueAccent,
+                  ),
+                  title: const Text(
+                    "Full Screen (Me Only)",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openFullScreen(p, isRemoteTriggered: false);
+                  },
+                ),
+
+                ListTile(
+                  leading: const Icon(Icons.star_border, color: Colors.amber),
+                  title: Text(
+                    _currentSpotlightId == targetId
+                        ? "Remove Spotlight"
+                        : "Spotlight for Everyone",
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    final isCurrentlySpotlighted =
+                        _currentSpotlightId == targetId;
+                    context.read<SpeakBloc>().add(
+                      ToggleSpotlightEvent(
+                        roomId: widget.roomData.id,
+                        userId: isCurrentlySpotlighted ? null : targetId,
+                      ),
+                    );
+                  },
+                ),
+
+                if (!isMe)
+                  ListTile(
+                    leading: const Icon(
+                      Icons.remove_circle_outline,
+                      color: Colors.redAccent,
+                    ),
+                    title: const Text(
+                      "Kick User",
+                      style: TextStyle(color: Colors.redAccent),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _confirmKick(targetId!);
+                    },
+                  ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          );
+        },
+      );
+    } else if (isMe) {
+      _openFullScreen(p, isRemoteTriggered: false);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Only the Host can manage participants.")),
+      );
+    }
+  }
+
+  void _confirmKick(String userId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Kick User?"),
+        content: const Text("This will remove them from the room."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<SpeakBloc>().add(
+                KickUserEvent(roomId: widget.roomData.id, userId: userId),
+              );
+            },
+            child: const Text("Kick", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openFullScreen(Participant p, {required bool isRemoteTriggered}) async {
+    if (_isFullScreenOpen) return;
+    setState(() => _isFullScreenOpen = true);
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FullScreenParticipantScreen(participant: p),
+      ),
+    );
+
+    if (mounted) {
+      setState(() => _isFullScreenOpen = false);
+
+      final myId = widget.livekitRoom.localParticipant?.identity;
+      final hostId = widget.roomData.hostId;
+      final hostName = widget.roomData.hostName;
+      final amIHost = (myId == hostId) || (myId == hostName);
+
+      if (amIHost && isRemoteTriggered) {
+        context.read<SpeakBloc>().add(
+          ToggleSpotlightEvent(roomId: widget.roomData.id, userId: null),
+        );
+      }
+    }
+  }
+
+  // --- 5. ROOM CONTROLS ---
   Future<void> _toggleMic() async {
     final local = widget.livekitRoom.localParticipant;
     if (local != null) {
-      final isEnabled = local.isMicrophoneEnabled();
-      await local.setMicrophoneEnabled(!isEnabled);
+      await local.setMicrophoneEnabled(!local.isMicrophoneEnabled());
     }
   }
 
   Future<void> _toggleCamera() async {
     final local = widget.livekitRoom.localParticipant;
     if (local != null) {
-      final isEnabled = local.isCameraEnabled();
-      try {
-        await local.setCameraEnabled(!isEnabled);
-      } catch (e) {
-        debugPrint("Camera toggle error: $e");
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Could not access camera")),
-        );
-      }
+      await local.setCameraEnabled(!local.isCameraEnabled());
     }
   }
 
@@ -153,26 +377,18 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     }
   }
 
-  // --- NEW: Open Full Screen Logic ---
-  void _openFullScreen(Participant p) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => FullScreenParticipantScreen(participant: p),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
     final localP = widget.livekitRoom.localParticipant;
     final isMicEnabled = localP?.isMicrophoneEnabled() ?? false;
     final isCamEnabled = localP?.isCameraEnabled() ?? false;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF5F5F5),
+      backgroundColor: isDark
+          ? const Color(0xFF1A1A1A)
+          : const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -199,16 +415,12 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
           onPressed: () => _leaveRoom(context),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () {},
-          ),
+          IconButton(icon: const Icon(Icons.info_outline), onPressed: () {}),
         ],
       ),
       body: SafeArea(
         child: Column(
           children: [
-            // GRID
             Expanded(
               child: _isLeaving
                   ? const Center(child: CircularProgressIndicator())
@@ -219,25 +431,22 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
                           : GridView.builder(
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
-                                childAspectRatio: 0.85,
-                              ),
+                                    crossAxisCount: 3,
+                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 12,
+                                    childAspectRatio: 0.85,
+                                  ),
                               itemCount: _participants.length,
                               itemBuilder: (context, index) {
                                 final p = _participants[index];
                                 return GestureDetector(
-                                  // NEW: Tap to expand
-                                  onTap: () => _openFullScreen(p),
+                                  onTap: () => _handleParticipantTap(p),
                                   child: ParticipantTile(participant: p),
                                 );
                               },
                             ),
                     ),
             ),
-
-            // CONTROLS
             Container(
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
               decoration: BoxDecoration(
@@ -296,50 +505,8 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
   }
 }
 
-// =============================================================================
-// FULL SCREEN PARTICIPANT WIDGET (TikTok Style)
-// =============================================================================
-class FullScreenParticipantScreen extends StatelessWidget {
-  final Participant participant;
-
-  const FullScreenParticipantScreen({super.key, required this.participant});
-
-  @override
-  Widget build(BuildContext context) {
-    // Reuse the ParticipantTile logic, but we make it fill the screen
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // 1. The Big Video
-          Positioned.fill(
-            child: ParticipantTile(
-              participant: participant,
-              isFullScreen: true, // Tell tile to render differently
-            ),
-          ),
-
-          // 2. Close Button
-          Positioned(
-            top: 40,
-            left: 16,
-            child: CircleAvatar(
-              backgroundColor: Colors.black54,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// HELPER WIDGETS
-// =============================================================================
+// ... FullScreenParticipantScreen, _ControlIcon, ParticipantTile are same as previous ...
+// (Include them below this line as before)
 
 class _ControlIcon extends StatelessWidget {
   final IconData icon;
@@ -399,140 +566,6 @@ class _ControlIcon extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(label, style: const TextStyle(fontSize: 10)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// -----------------------------------------------------------------------------
-// PARTICIPANT TILE (Updated for Fixes)
-// -----------------------------------------------------------------------------
-class ParticipantTile extends StatelessWidget {
-  final Participant participant;
-  final bool isFullScreen;
-
-  const ParticipantTile({
-    super.key,
-    required this.participant,
-    this.isFullScreen = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    TrackPublication? videoPub;
-    if (participant.videoTrackPublications.isNotEmpty) {
-      videoPub = participant.videoTrackPublications.first;
-    }
-
-    final name = participant.name.isNotEmpty
-        ? participant.name
-        : participant.identity;
-    final isMe = participant is LocalParticipant;
-    final isMicOn = participant.isMicrophoneEnabled();
-    final isSpeaking = participant.isSpeaking;
-
-    // FIX 1: Strict check for video active status
-    // Must be subscribed AND not muted
-    final isVideoActive =
-        videoPub != null &&
-        videoPub.subscribed &&
-        videoPub.track != null &&
-        !videoPub.muted; // <-- Crucial check!
-
-    Color borderColor = Colors.transparent;
-    double borderWidth = 0;
-
-    if (!isFullScreen) {
-      if (isSpeaking) {
-        borderColor = Colors.greenAccent;
-        borderWidth = 3.0;
-      } else if (isMe) {
-        borderColor = Colors.blueAccent.withOpacity(0.5);
-        borderWidth = 2.0;
-      }
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey[800],
-        borderRadius: isFullScreen ? null : BorderRadius.circular(12),
-        border: isFullScreen ? null : Border.all(color: borderColor, width: borderWidth),
-      ),
-      child: ClipRRect(
-        borderRadius: isFullScreen ? BorderRadius.circular(0) : BorderRadius.circular(10),
-        child: Stack(
-          children: [
-            // LAYER 1: VIDEO or AVATAR
-            if (isVideoActive)
-              VideoTrackRenderer(
-                videoPub.track as VideoTrack,
-                // Full screen usually uses 'cover' to fill phone screen
-                fit: VideoViewFit.cover, 
-              )
-            else
-              // Fallback to Avatar when camera is off
-              Container(
-                color: Colors.grey[900], // Dark background for avatar
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.person,
-                        color: Colors.white24,
-                        size: isFullScreen ? 80 : 30, // Bigger icon in full screen
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        name.length > 2
-                            ? name.substring(0, 2).toUpperCase()
-                            : name,
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontWeight: FontWeight.bold,
-                          fontSize: isFullScreen ? 30 : 14, // Bigger font
-                        ),
-                      )
-                    ],
-                  ),
-                ),
-              ),
-
-            // LAYER 2: STATUS BAR
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                color: Colors.black54, // Semi-transparent bar
-                padding: EdgeInsets.symmetric(
-                  horizontal: isFullScreen ? 20 : 6,
-                  vertical: isFullScreen ? 20 : 4,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        isMe ? "You" : name,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: isFullScreen ? 18 : 10,
-                          fontWeight: isFullScreen ? FontWeight.bold : FontWeight.normal,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Icon(
-                      isMicOn ? Icons.mic : Icons.mic_off,
-                      size: isFullScreen ? 24 : 12,
-                      color: isMicOn ? Colors.greenAccent : Colors.redAccent,
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),

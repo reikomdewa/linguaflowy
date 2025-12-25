@@ -25,6 +25,7 @@ class ChatRoom extends Equatable {
   final List<String> tags; // Future: Search tags like #Anime, #Coding
   final String roomType; // 'audio' or 'video'
   final bool isActive;
+   final String? spotlightedUserId; 
 
   const ChatRoom({
     required this.id,
@@ -47,6 +48,7 @@ class ChatRoom extends Equatable {
     this.tags = const [],
     this.roomType = 'audio',
     this.isActive = true,
+     this.spotlightedUserId, 
   });
 
   List<RoomMember> get displayMembers => members.take(10).toList();
@@ -74,6 +76,7 @@ class ChatRoom extends Equatable {
       'tags': tags,
       'roomType': roomType,
       'isActive': isActive,
+       'spotlightedUserId': spotlightedUserId,
     };
   }
 
@@ -101,6 +104,7 @@ class ChatRoom extends Equatable {
       tags: List<String>.from(map['tags'] ?? []),
       roomType: map['roomType'] ?? 'audio',
       isActive: map['isActive'] ?? true,
+        spotlightedUserId: map['spotlightedUserId'],
     );
   }
 
@@ -110,6 +114,7 @@ class ChatRoom extends Equatable {
     String? title,
     String? level,
     bool? isActive,
+     String? spotlightedUserId, 
   }) {
     return ChatRoom(
       id: id, hostId: hostId, language: language, createdAt: createdAt,
@@ -120,11 +125,12 @@ class ChatRoom extends Equatable {
       isActive: isActive ?? this.isActive,
       maxMembers: maxMembers, isPaid: isPaid, isPrivate: isPrivate,
       hostName: hostName, hostAvatarUrl: hostAvatarUrl, liveKitRoomId: liveKitRoomId,
+        spotlightedUserId: spotlightedUserId ?? this.spotlightedUserId,
     );
   }
 
   @override
-  List<Object?> get props => [id, title, memberCount, members, hostId, level, isActive];
+  List<Object?> get props => [id, title, memberCount, members, hostId, level, isActive, spotlightedUserId];
 }
 
 // ==========================================

@@ -247,7 +247,7 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
               _buildSectionTitle("Teaching Details", theme),
               _buildLabel("Language to Teach", theme),
               DropdownButtonFormField<String>(
-                initialValue: _selectedLanguageCode,
+                value: _selectedLanguageCode,
                 dropdownColor: theme.cardColor,
                 decoration: _inputDecoration("", Icons.language_rounded),
                 items: LanguageHelper.availableLanguages.entries.map((entry) {
@@ -278,7 +278,7 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
               const SizedBox(height: 20),
               _buildLabel("Your Proficiency Level", theme),
               DropdownButtonFormField<String>(
-                initialValue: _selectedLevel,
+                value: _selectedLevel,
                 dropdownColor: theme.cardColor,
                 decoration: _inputDecoration("", Icons.bar_chart_rounded),
                 items: _levels

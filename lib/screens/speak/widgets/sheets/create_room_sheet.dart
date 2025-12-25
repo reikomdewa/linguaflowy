@@ -101,7 +101,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 TextField(
                   controller: _topicController,
                   decoration: _inputDecoration(
-                    "e.g., Daily life in $_selectedLanguageName",
+                    "e.g., Daily life in ${_selectedLanguageName}",
                     Icons.topic_outlined,
                   ),
                 ),
@@ -110,7 +110,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 // 2. Language Selection
                 _buildLabel("Room Language", theme),
                 DropdownButtonFormField<String>(
-                  initialValue: LanguageHelper.getLangCode(_selectedLanguageName),
+                  value: LanguageHelper.getLangCode(_selectedLanguageName),
                   dropdownColor: theme.cardColor,
                   decoration: _inputDecoration("", Icons.language_rounded),
                   items: LanguageHelper.availableLanguages.entries.map((entry) {
@@ -134,7 +134,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 // 3. Level Selector
                 _buildLabel("Target Proficiency", theme),
                 DropdownButtonFormField<String>(
-                  initialValue: _selectedLevel,
+                  value: _selectedLevel,
                   dropdownColor: theme.cardColor,
                   decoration: _inputDecoration("", Icons.bar_chart_rounded),
                   items: _levels
@@ -167,7 +167,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                           value: _isUnlimited,
                           onChanged: (val) =>
                               setState(() => _isUnlimited = val),
-                          activeThumbColor: theme.primaryColor,
+                          activeColor: theme.primaryColor,
                         ),
                       ],
                     ),

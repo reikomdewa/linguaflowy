@@ -149,7 +149,7 @@ PreferredSizeWidget buildAppBar(
                             return SearchBar(
                               controller: controller,
                               padding:
-                                  const WidgetStatePropertyAll<EdgeInsets>(
+                                  const MaterialStatePropertyAll<EdgeInsets>(
                                     EdgeInsets.symmetric(horizontal: 16.0),
                                   ),
                               onTap: () => controller.openView(),
@@ -160,7 +160,7 @@ PreferredSizeWidget buildAppBar(
                                 color: isDark ? Colors.white54 : Colors.black45,
                               ),
                               hintText: 'Search library...',
-                              hintStyle: WidgetStatePropertyAll(
+                              hintStyle: MaterialStatePropertyAll(
                                 TextStyle(
                                   color: isDark
                                       ? Colors.white54
@@ -169,13 +169,13 @@ PreferredSizeWidget buildAppBar(
                                 ),
                               ),
                               // YouTube Style Styling
-                              backgroundColor: WidgetStatePropertyAll(
+                              backgroundColor: MaterialStatePropertyAll(
                                 isDark
                                     ? Colors.white.withValues(alpha: 0.1)
                                     : Colors.grey.shade200,
                               ),
-                              elevation: const WidgetStatePropertyAll(0),
-                              shape: WidgetStatePropertyAll(
+                              elevation: const MaterialStatePropertyAll(0),
+                              shape: MaterialStatePropertyAll(
                                 RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(25),
                                   side: BorderSide(
@@ -185,7 +185,7 @@ PreferredSizeWidget buildAppBar(
                                   ),
                                 ),
                               ),
-                              textStyle: WidgetStatePropertyAll(
+                              textStyle: MaterialStatePropertyAll(
                                 TextStyle(
                                   color: isDark ? Colors.white : Colors.black,
                                   fontSize: 14,

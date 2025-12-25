@@ -208,3 +208,30 @@ class BookLessonEvent extends SpeakEvent {
   @override
   List<Object?> get props => [tutor, lesson, scheduledTime];
 }
+
+class ToggleSpotlightEvent extends SpeakEvent {
+  final String roomId;
+  final String? userId; // Pass null to turn off spotlight, or userId to turn on
+
+  const ToggleSpotlightEvent({required this.roomId, this.userId});
+
+  @override
+  List<Object?> get props => [roomId, userId];
+}
+class KickUserEvent extends SpeakEvent {
+  final String roomId;
+  final String userId; // The LiveKit Identity (name or uid) to kick
+
+  const KickUserEvent({required this.roomId, required this.userId});
+
+  @override
+  List<Object?> get props => [roomId, userId];
+}
+
+class RoomsUpdatedEvent extends SpeakEvent {
+  final List<ChatRoom> rooms;
+  const RoomsUpdatedEvent(this.rooms);
+
+  @override
+  List<Object?> get props => [rooms];
+}

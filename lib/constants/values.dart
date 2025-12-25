@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 
 const String mwamba = '0763029638/0978338725(Emmanuel Mambwe)';
 const String subscriptionPrice = '4.99';

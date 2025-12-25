@@ -5,7 +5,7 @@ import 'package:linguaflow/constants/styles.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PaymentDetailsPage extends StatefulWidget {
-  const PaymentDetailsPage({super.key});
+  const PaymentDetailsPage({Key? key}) : super(key: key);
 
   @override
   State<PaymentDetailsPage> createState() => _PaymentDetailsPageState();

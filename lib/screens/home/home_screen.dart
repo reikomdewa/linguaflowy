@@ -742,9 +742,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final filtered = lessons.where((l) {
       // Type Filter
       if (_selectedGlobalFilter == 'Videos' &&
-          !(l.type == 'video' || l.type == 'video_native')) {
+          !(l.type == 'video' || l.type == 'video_native'))
         return false;
-      }
       if (_selectedGlobalFilter == 'Audio' && l.type != 'audio') return false;
       if (_selectedGlobalFilter == 'Text' && l.type != 'text') return false;
 

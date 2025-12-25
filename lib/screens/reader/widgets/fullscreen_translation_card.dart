@@ -68,9 +68,8 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
 
   // --- ROOT TRANSLATION LOGIC ---
   Future<void> _loadRootTranslation() async {
-    if (widget.baseForm == null || widget.baseForm == widget.originalText) {
+    if (widget.baseForm == null || widget.baseForm == widget.originalText)
       return;
-    }
 
     // Simple fetch for the root word
     final result = await _fetchTranslationApi(widget.baseForm!);

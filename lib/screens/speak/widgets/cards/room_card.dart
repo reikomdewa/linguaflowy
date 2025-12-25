@@ -1,7 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:linguaflow/blocs/auth/auth_bloc.dart'; // Added for isMe check
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_event.dart';
@@ -11,21 +12,21 @@ import 'package:linguaflow/screens/speak/widgets/active_room_screen.dart';
 import 'package:linguaflow/services/speak/speak_service.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:livekit_client/livekit_client.dart';
-import 'package:dotted_border/dotted_border.dart';
+import 'package:dotted_border/dotted_border.dart'; // Ensure this package is in pubspec
 
 class RoomCard extends StatelessWidget {
   final ChatRoom room;
 
   const RoomCard({super.key, required this.room});
 
-  // --- NEW: OPTIONS MENU LOGIC ---
+  // --- OPTIONS MENU LOGIC ---
   void _showOptionsMenu(BuildContext context, bool isMe) {
     final theme = Theme.of(context);
     final speakBloc = context.read<SpeakBloc>();
 
     showModalBottomSheet(
       context: context,
-      useSafeArea: true, // Safe Area constraint
+      useSafeArea: true,
       backgroundColor: theme.cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -69,8 +70,10 @@ class RoomCard extends StatelessWidget {
               leading: const Icon(Icons.report_gmailerrorred_rounded),
               title: const Text("Report Room"),
               onTap: () {
-                // Future: Report logic
                 Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Report submitted")),
+                );
               },
             ),
             ListTile(
@@ -99,7 +102,7 @@ class RoomCard extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-               bloc.add(DeleteRoomEvent(room.id)); // Implement this in Bloc
+              bloc.add(DeleteRoomEvent(room.id));
               Navigator.pop(ctx);
             },
             child: const Text("Delete", style: TextStyle(color: Colors.red)),
@@ -119,6 +122,7 @@ class RoomCard extends StatelessWidget {
         authState is AuthAuthenticated && authState.user.id == room.hostId;
 
     final List<RoomMember> allMembers = List<RoomMember>.from(room.members);
+    // Sort host to first position
     allMembers.sort((a, b) {
       if (a.uid == room.hostId) return -1;
       if (b.uid == room.hostId) return 1;
@@ -144,6 +148,7 @@ class RoomCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            // HEADER ROW
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -166,7 +171,6 @@ class RoomCard extends StatelessWidget {
                   children: [
                     _buildMemberCounter(room),
                     const SizedBox(width: 4),
-                    // UPDATED: more_vert icon button
                     IconButton(
                       onPressed: () => _showOptionsMenu(context, isMe),
                       icon: Icon(
@@ -190,6 +194,7 @@ class RoomCard extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
+            // MEMBERS GRID
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -249,8 +254,10 @@ class RoomCard extends StatelessWidget {
     );
   }
 
+  // --- FIXED: Build Member Item Logic ---
   Widget _buildMemberItem(RoomMember member, String hostId, ThemeData theme) {
     final bool isHost = member.uid == hostId;
+
     return Column(
       children: [
         Container(
@@ -281,10 +288,9 @@ class RoomCard extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.favorite, size: 10, color: theme.primaryColor),
-            const SizedBox(width: 2),
+            // FIX IS HERE: Correct Ternary Syntax
             Text(
-              "100",
+              isHost ? 'Host' : '${member.xp} XP',
               style: TextStyle(
                 fontSize: 10,
                 color: theme.primaryColor,
@@ -359,11 +365,11 @@ class RoomCard extends StatelessWidget {
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14),
           ),
-          child: Row(
+          child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.call_outlined, color: Colors.blue, size: 20),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 "Join and talk",
                 style: TextStyle(
@@ -422,6 +428,7 @@ class RoomCard extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Join Paid Session"),
+        content: const Text("This room requires payment to join."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),

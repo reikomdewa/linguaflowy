@@ -7,16 +7,20 @@ import 'speak_event.dart';
 import 'speak_state.dart';
 import '../../models/speak/speak_models.dart';
 import '../../services/speak/speak_service.dart';
+// ADDED FOR SPOTLIGHT
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
   final _uuid = const Uuid();
   final SpeakService _speakService = SpeakService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  // ADDED FOR SPOTLIGHT
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Master lists holding the true data from the database
   List<ChatRoom> _masterRooms = [];
   List<Tutor> _masterTutors = [];
-
+  StreamSubscription? _roomsSubscription;
   SpeakBloc() : super(const SpeakState()) {
     // Basic UI and Loading
     on<LoadSpeakData>(_onLoadSpeakData);
@@ -33,18 +37,110 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
     on<JoinRoomEvent>(_onJoinRoom);
     on<DeleteRoomEvent>(_onDeleteRoom);
 
+    // NEW: Spotlight Event
+    on<ToggleSpotlightEvent>(_onToggleSpotlight);
+    on<KickUserEvent>(_onKickUser);
+    on<RoomsUpdatedEvent>(_onRoomsUpdated);
     // Tutor Management
     on<CreateTutorProfileEvent>(_onCreateTutorProfile);
     on<DeleteTutorProfileEvent>(_onDeleteTutorProfile);
+  }
+  @override
+  Future<void> close() {
+    _roomsSubscription?.cancel();
+    return super.close();
+  }
+
+  // =========================================================
+  Future<void> _onLoadSpeakData(
+    LoadSpeakData event,
+    Emitter<SpeakState> emit,
+  ) async {
+    if (_masterRooms.isEmpty && _masterTutors.isEmpty) {
+      emit(state.copyWith(status: SpeakStatus.loading));
+    }
+
+    // 1. Load Tutors (Keep as Future if you don't need real-time tutors)
+    try {
+      final tutors = await _speakService.getTutors();
+      _masterTutors = tutors;
+      // Emit tutors immediately while waiting for rooms stream
+      _applyFiltersAndEmit(emit);
+    } catch (e) {
+      print("Load Tutors Error: $e");
+    }
+
+    // 2. LISTEN TO ROOMS (Real-time Stream)
+    // Cancel old subscription if refreshing
+    await _roomsSubscription?.cancel();
+
+    _roomsSubscription = _firestore
+        .collection('rooms')
+        .orderBy('createdAt', descending: true) // Optional: Sort by newest
+        .snapshots()
+        .listen((snapshot) {
+          // Convert Firestore Snapshot to your List<ChatRoom>
+          // NOTE: You need to ensure your ChatRoom model has a 'fromSnapshot' or 'fromMap' method.
+          // If you are using 'SpeakService' to parse, you might need to copy that logic here.
+          final List<ChatRoom> liveRooms = snapshot.docs.map((doc) {
+            final data = doc.data();
+
+            // --- ADAPT THIS PART TO MATCH YOUR MODEL ---
+            return ChatRoom(
+              id: doc.id,
+              hostId: data['hostId'] ?? '',
+              title: data['title'] ?? 'Untitled',
+              description: data['description'] ?? '',
+              language: data['language'] ?? 'English',
+              level: data['level'] ?? 'Beginner',
+              memberCount: data['memberCount'] ?? 0,
+              maxMembers: data['maxMembers'] ?? 10,
+              isPaid: data['isPaid'] ?? false,
+              hostName: data['hostName'],
+              hostAvatarUrl: data['hostAvatarUrl'],
+              // Parse members list carefully
+              members: (data['members'] as List<dynamic>? ?? [])
+                  .map(
+                    (m) => RoomMember(
+                      uid: m['uid'],
+                      displayName: m['displayName'],
+                      avatarUrl: m['avatarUrl'],
+                      joinedAt:
+                          (m['joinedAt'] as Timestamp?)?.toDate() ??
+                          DateTime.now(),
+                      isHost: m['isHost'] ?? false,
+                    ),
+                  )
+                  .toList(),
+              createdAt:
+                  (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+              roomType: data['roomType'] ?? 'audio',
+              tags: List<String>.from(data['tags'] ?? []),
+              spotlightedUserId: data['spotlightedUserId'],
+            );
+            // -------------------------------------------
+          }).toList();
+
+          // Trigger the internal event
+          add(RoomsUpdatedEvent(liveRooms));
+        });
+  }
+
+  // <--- 4. NEW HANDLER TO UPDATE STATE
+  void _onRoomsUpdated(RoomsUpdatedEvent event, Emitter<SpeakState> emit) {
+    _masterRooms = event.rooms;
+    // This will re-run filters and update the UI
+    _applyFiltersAndEmit(emit);
   }
 
   // =========================================================
   // THE MASTER FILTER ENGINE
   // =========================================================
-  /// This private method is the "Brain" of the Bloc. Every action 
-  /// (creation, deletion, filtering) calls this to update the UI 
-  /// state instantly based on the current Master lists.
-  void _applyFiltersAndEmit(Emitter<SpeakState> emit, {Map<String, String>? newFilters, String? newSearchQuery}) {
+  void _applyFiltersAndEmit(
+    Emitter<SpeakState> emit, {
+    Map<String, String>? newFilters,
+    String? newSearchQuery,
+  }) {
     final filters = newFilters ?? state.filters;
     final searchStr = (newSearchQuery ?? state.searchQuery ?? "").toLowerCase();
     final currentUser = _auth.currentUser;
@@ -56,20 +152,20 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
         matches = matches && room.level == filters['Language Level'];
       }
       if (filters.containsKey('Paid')) {
-        matches = matches && (filters['Paid'] == 'Free' ? !room.isPaid : room.isPaid);
+        matches =
+            matches && (filters['Paid'] == 'Free' ? !room.isPaid : room.isPaid);
       }
       if (searchStr.isNotEmpty) {
-        matches = matches && (
-          room.title.toLowerCase().contains(searchStr) || 
-          (room.hostName?.toLowerCase().contains(searchStr) ?? false)
-        );
+        matches =
+            matches &&
+            (room.title.toLowerCase().contains(searchStr) ||
+                (room.hostName?.toLowerCase().contains(searchStr) ?? false));
       }
       return matches;
     }).toList();
 
     // 2. Filter Tutors Logic
     final filteredTutors = _masterTutors.where((tutor) {
-      // Force Override: Always show "My Profile" to the user even if filters don't match
       if (currentUser != null && tutor.userId == currentUser.uid) return true;
 
       bool matches = true;
@@ -85,48 +181,29 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
       return matches;
     }).toList();
 
-    // 3. Emit brand new list instances to ensure Flutter detects changes
-    emit(state.copyWith(
-      status: SpeakStatus.success,
-      rooms: List.from(filteredRooms),
-      tutors: List.from(filteredTutors),
-      filters: filters,
-      searchQuery: newSearchQuery ?? state.searchQuery,
-    ));
+    emit(
+      state.copyWith(
+        status: SpeakStatus.success,
+        rooms: List.from(filteredRooms),
+        tutors: List.from(filteredTutors),
+        filters: filters,
+        searchQuery: newSearchQuery ?? state.searchQuery,
+      ),
+    );
   }
 
   // =========================================================
   // DATA LOADING
   // =========================================================
 
-  Future<void> _onLoadSpeakData(LoadSpeakData event, Emitter<SpeakState> emit) async {
-    // Show loading only on first load or manual refresh
-    if (_masterRooms.isEmpty && _masterTutors.isEmpty) {
-      emit(state.copyWith(status: SpeakStatus.loading));
-    }
-
-    try {
-      // Parallel fetch for speed
-      final results = await Future.wait([
-        _speakService.getPublicRooms(),
-        _speakService.getTutors(),
-      ]);
-
-      _masterRooms = results[0] as List<ChatRoom>;
-      _masterTutors = results[1] as List<Tutor>;
-
-      _applyFiltersAndEmit(emit);
-    } catch (e) {
-      print("Load Data Error: $e");
-      emit(state.copyWith(status: SpeakStatus.failure));
-    }
-  }
-
   // =========================================================
   // ROOM HANDLERS
   // =========================================================
 
-  Future<void> _onCreateRoom(CreateRoomEvent event, Emitter<SpeakState> emit) async {
+  Future<void> _onCreateRoom(
+    CreateRoomEvent event,
+    Emitter<SpeakState> emit,
+  ) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
@@ -144,45 +221,51 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
       hostAvatarUrl: user.photoURL,
       members: [
         RoomMember(
-          uid: user.uid, 
-          displayName: user.displayName, 
-          avatarUrl: user.photoURL, 
-          joinedAt: DateTime.now(), 
-          isHost: true
-        )
+          uid: user.uid,
+          displayName: user.displayName,
+          avatarUrl: user.photoURL,
+          joinedAt: DateTime.now(),
+          isHost: true,
+        ),
       ],
       createdAt: DateTime.now(),
       roomType: event.roomType,
       tags: event.tags,
     );
 
-    // Optimistic UI update
     _masterRooms.insert(0, newRoom);
     _applyFiltersAndEmit(emit);
 
-    // Persist to DB in background
-    _speakService.createRoom(newRoom).catchError((e) => print("Firebase Room Error: $e"));
+    _speakService
+        .createRoom(newRoom)
+        .catchError((e) => print("Firebase Room Error: $e"));
   }
 
-  Future<void> _onJoinRoom(JoinRoomEvent event, Emitter<SpeakState> emit) async {
+  Future<void> _onJoinRoom(
+    JoinRoomEvent event,
+    Emitter<SpeakState> emit,
+  ) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
     try {
       ChatRoom? updatedRoom;
-      _masterRooms = _masterRooms.map((room) {
+      // We need to create a new list for _masterRooms to trigger updates safely
+      final newMasterList = _masterRooms.map((room) {
         if (room.id == event.room.id) {
           // Check if already in the room
           if (room.members.any((m) => m.uid == user.uid)) return room;
 
           updatedRoom = room.copyWith(
             members: List<RoomMember>.from(room.members)
-              ..add(RoomMember(
-                uid: user.uid,
-                displayName: user.displayName,
-                avatarUrl: user.photoURL,
-                joinedAt: DateTime.now(),
-              )),
+              ..add(
+                RoomMember(
+                  uid: user.uid,
+                  displayName: user.displayName,
+                  avatarUrl: user.photoURL,
+                  joinedAt: DateTime.now(),
+                ),
+              ),
             memberCount: room.memberCount + 1,
           );
           return updatedRoom!;
@@ -190,13 +273,14 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
         return room;
       }).toList();
 
+      _masterRooms = newMasterList;
+
       if (updatedRoom != null) {
         _applyFiltersAndEmit(emit);
-        // Persist join status to database
         await _speakService.updateRoomMembers(
-          updatedRoom!.id, 
-          updatedRoom!.members, 
-          updatedRoom!.memberCount
+          updatedRoom!.id,
+          updatedRoom!.members,
+          updatedRoom!.memberCount,
         );
       }
     } catch (e) {
@@ -204,12 +288,13 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
     }
   }
 
-  Future<void> _onDeleteRoom(DeleteRoomEvent event, Emitter<SpeakState> emit) async {
-    // Optimistic UI removal
+  Future<void> _onDeleteRoom(
+    DeleteRoomEvent event,
+    Emitter<SpeakState> emit,
+  ) async {
     _masterRooms.removeWhere((r) => r.id == event.roomId);
     _applyFiltersAndEmit(emit);
 
-    // Background deletion
     try {
       await _speakService.deleteRoom(event.roomId);
     } catch (e) {
@@ -217,16 +302,87 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
     }
   }
 
+  // --- NEW: SPOTLIGHT HANDLER ---
+  Future<void> _onToggleSpotlight(
+    ToggleSpotlightEvent event,
+    Emitter<SpeakState> emit,
+  ) async {
+    try {
+      // 1. Optimistic Update (Optional, makes UI snappy for Host)
+      final index = _masterRooms.indexWhere((r) => r.id == event.roomId);
+      if (index != -1) {
+        final updatedRoom = _masterRooms[index].copyWith(
+          spotlightedUserId: event.userId,
+        );
+        _masterRooms[index] = updatedRoom;
+        _applyFiltersAndEmit(emit); // Refresh UI list
+      }
+
+      // 2. Persist to Firestore (This triggers updates for everyone else)
+      await _firestore.collection('rooms').doc(event.roomId).update({
+        'spotlightedUserId': event.userId,
+      });
+    } catch (e) {
+      print("Error toggling spotlight: $e");
+    }
+  }
+
+  Future<void> _onKickUser(
+    KickUserEvent event,
+    Emitter<SpeakState> emit,
+  ) async {
+    try {
+      // 1. FIX: Use correct collection name 'rooms'
+      final roomRef = _firestore.collection('rooms').doc(event.roomId);
+
+      final roomSnapshot = await roomRef.get();
+      if (!roomSnapshot.exists) return;
+
+      final data = roomSnapshot.data() as Map<String, dynamic>;
+      // Get the current members array
+      final membersList = List<Map<String, dynamic>>.from(
+        data['members'] ?? [],
+      );
+
+      // 2. FIX: Remove the user.
+      // We check both 'uid' and 'displayName' because LiveKit identity
+      // might be set to the user's Name or their UID depending on your token server.
+      final int initialLength = membersList.length;
+
+      membersList.removeWhere((m) {
+        final uid = m['uid'] as String?;
+        final name = m['displayName'] as String?;
+        // Check if the target ID matches either the stored UID or Name
+        return uid == event.userId || name == event.userId;
+      });
+
+      // Only update if someone was actually removed
+      if (membersList.length < initialLength) {
+        await roomRef.update({
+          'members': membersList,
+          'memberCount': membersList.length,
+        });
+        print("✅ User ${event.userId} kicked successfully.");
+      } else {
+        print("⚠️ User ${event.userId} not found in members list.");
+      }
+    } catch (e) {
+      print("Error kicking user: $e");
+    }
+  }
   // =========================================================
   // TUTOR HANDLERS
   // =========================================================
 
-  Future<void> _onCreateTutorProfile(CreateTutorProfileEvent event, Emitter<SpeakState> emit) async {
+  Future<void> _onCreateTutorProfile(
+    CreateTutorProfileEvent event,
+    Emitter<SpeakState> emit,
+  ) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
     final newTutor = Tutor(
-      id: user.uid, // Use UID to prevent duplicate profiles
+      id: user.uid,
       userId: user.uid,
       name: event.name,
       imageUrl: event.imageUrl,
@@ -248,7 +404,6 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
       reviews: 0,
     );
 
-    // Optimistic Update: Replace if exists, else insert
     final index = _masterTutors.indexWhere((t) => t.userId == user.uid);
     if (index != -1) {
       _masterTutors[index] = newTutor;
@@ -258,11 +413,15 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
 
     _applyFiltersAndEmit(emit);
 
-    // Save to Firestore
-    _speakService.createTutorProfile(newTutor).catchError((e) => print("Firebase Tutor Error: $e"));
+    _speakService
+        .createTutorProfile(newTutor)
+        .catchError((e) => print("Firebase Tutor Error: $e"));
   }
 
-  Future<void> _onDeleteTutorProfile(DeleteTutorProfileEvent event, Emitter<SpeakState> emit) async {
+  Future<void> _onDeleteTutorProfile(
+    DeleteTutorProfileEvent event,
+    Emitter<SpeakState> emit,
+  ) async {
     _masterTutors.removeWhere((t) => t.id == event.tutorId);
     _applyFiltersAndEmit(emit);
 
@@ -279,7 +438,7 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
 
   void _onFilterSpeakList(FilterSpeakList event, Emitter<SpeakState> emit) {
     final Map<String, String> updatedFilters = Map.from(state.filters);
-    
+
     if (event.category != null) {
       if (event.query != null) {
         updatedFilters[event.category!] = event.query!;
@@ -287,10 +446,11 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
         updatedFilters.remove(event.category);
       }
     }
-    
-    _applyFiltersAndEmit(emit, 
-      newFilters: updatedFilters, 
-      newSearchQuery: event.category == null ? event.query : state.searchQuery
+
+    _applyFiltersAndEmit(
+      emit,
+      newFilters: updatedFilters,
+      newSearchQuery: event.category == null ? event.query : state.searchQuery,
     );
   }
 
@@ -300,11 +460,15 @@ class SpeakBloc extends Bloc<SpeakEvent, SpeakState> {
   }
 
   void _onChangeSpeakTab(ChangeSpeakTab event, Emitter<SpeakState> emit) {
-    final newTab = event.tabIndex == 0 ? SpeakTab.all : (event.tabIndex == 1 ? SpeakTab.tutors : SpeakTab.rooms);
+    final newTab = event.tabIndex == 0
+        ? SpeakTab.all
+        : (event.tabIndex == 1 ? SpeakTab.tutors : SpeakTab.rooms);
     emit(state.copyWith(currentTab: newTab));
   }
 
-  void _onRoomJoined(RoomJoined event, Emitter<SpeakState> emit) => emit(state.copyWith(activeRoom: event.room));
+  void _onRoomJoined(RoomJoined event, Emitter<SpeakState> emit) =>
+      emit(state.copyWith(activeRoom: event.room));
 
-  void _onRoomLeft(LeaveRoomEvent event, Emitter<SpeakState> emit) => emit(state.copyWith(clearActiveRoom: true));
+  void _onRoomLeft(LeaveRoomEvent event, Emitter<SpeakState> emit) =>
+      emit(state.copyWith(clearActiveRoom: true));
 }

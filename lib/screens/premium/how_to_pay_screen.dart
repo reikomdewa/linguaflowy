@@ -29,7 +29,7 @@ email you used to sign in into Rama </li>
 ''';
 
 class HowToPayPage extends StatefulWidget {
-  const HowToPayPage({super.key});
+  const HowToPayPage({Key? key}) : super(key: key);
 
   @override
   State<HowToPayPage> createState() => _HowToPayPageState();
