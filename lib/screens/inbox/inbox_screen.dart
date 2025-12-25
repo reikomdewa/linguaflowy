@@ -3,8 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/models/private_chat_models.dart';
-import 'package:linguaflow/screens/inbox/private_chat_screen.dart'; // Ensure path is correct
-import 'package:linguaflow/services/speak/private_chat_service.dart'; // Ensure path is correct
+import 'package:linguaflow/screens/inbox/private_chat_screen.dart';
+import 'package:linguaflow/services/speak/private_chat_service.dart';
 
 class InboxScreen extends StatelessWidget {
   const InboxScreen({super.key});
@@ -29,7 +29,7 @@ class InboxScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // 2. HANDLE ERRORS (CRITICAL FIX)
+          // 2. HANDLE ERRORS
           if (snapshot.hasError) {
             debugPrint("❌ Inbox Query Error: ${snapshot.error}");
             return Center(
@@ -74,13 +74,26 @@ class InboxScreen extends StatelessWidget {
               // Find the other person's ID safely
               final otherId = chat.participants.firstWhere(
                 (id) => id != myUser.id,
-                orElse: () => '', // Fallback if something is wrong
+                orElse: () => '',
               );
 
               // Get their data
               final otherData = chat.participantData[otherId] ?? {};
               final name = otherData['name'] ?? 'User';
               final photo = otherData['photo'];
+
+              // --- UNREAD LOGIC ---
+              // 1. Did I send the last message?
+              final bool isLastMsgFromMe = chat.lastSenderId == myUser.id;
+              // 2. Is it marked read?
+              final bool isRead = chat.isRead;
+              // 3. Result: It is unread ONLY if I didn't send it AND it's marked false
+              final bool isUnread = !isLastMsgFromMe && !isRead;
+
+              // Color for unread text (Black/White vs Grey)
+              final Color messageColor = isUnread
+                  ? (theme.brightness == Brightness.dark ? Colors.white : Colors.black)
+                  : theme.hintColor;
 
               return ListTile(
                 leading: CircleAvatar(
@@ -96,9 +109,22 @@ class InboxScreen extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: theme.textTheme.bodySmall?.color,
+                    // --- BOLD IF UNREAD ---
+                    fontWeight: isUnread ? FontWeight.w800 : FontWeight.normal,
+                    color: messageColor,
                   ),
                 ),
+                // Optional: Show a blue dot if unread
+                trailing: isUnread 
+                    ? Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: theme.primaryColor, 
+                          shape: BoxShape.circle,
+                        ),
+                      )
+                    : null,
                 onTap: () {
                   Navigator.push(
                     context,

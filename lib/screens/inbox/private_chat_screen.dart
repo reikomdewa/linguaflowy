@@ -30,7 +30,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _service.sendMessage(widget.chatId, myId, _controller.text);
     _controller.clear();
   }
-
+  @override
+  void initState() {
+    super.initState();
+    // CALL THIS: Clear the badge when screen opens
+    PrivateChatService().markChatAsRead(widget.chatId);
+  }
   @override
   Widget build(BuildContext context) {
     final authState = context.read<AuthBloc>().state;

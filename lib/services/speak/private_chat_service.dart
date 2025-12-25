@@ -56,7 +56,8 @@ class PrivateChatService {
       'lastMessage': text.trim(),
       'lastMessageTime': Timestamp.fromDate(timestamp),
       'lastSenderId': senderId, // <--- Key for knowing who sent it
-      'isRead': false,          // <--- Mark as unread for the recipient
+      'isRead': false,   
+       'unreadCount': FieldValue.increment(1),       // <--- Mark as unread for the recipient
     });
   }
 
@@ -65,6 +66,7 @@ class PrivateChatService {
     try {
       await _firestore.collection('private_chats').doc(chatId).update({
         'isRead': true,
+        'unreadCount': 0, 
       });
     } catch (e) {
       // Ignore errors if doc doesn't exist or network fails
@@ -99,7 +101,8 @@ class PrivateChatService {
       'lastMessage': 'Started a conversation',
       'lastMessageTime': FieldValue.serverTimestamp(),
       'lastSenderId': currentUserId, // Initialize sender
-      'isRead': false, // Initialize as unread
+      'isRead': false,
+       'unreadCount': 0, // Initialize as unread
       'participantData': {
         currentUserId: {
           'name': currentUserName,

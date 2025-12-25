@@ -74,6 +74,7 @@ class ChatService {
       await localParticipant.publishData(
         utf8.encode(jsonEncode(payload)),
         reliable: true, 
+         topic: 'chat',
       );
     } catch (e) {
       print('Error sending message: $e');

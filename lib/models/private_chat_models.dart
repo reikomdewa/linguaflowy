@@ -40,9 +40,12 @@ class PrivateConversation {
   final List<String> participants;
   final String lastMessage;
   final DateTime lastMessageTime;
-  // We store user names/photos here so we don't have to fetch them 
-  // every time we load the inbox list (Denormalization).
-  final Map<String, dynamic> participantData; 
+  final Map<String, dynamic> participantData;
+  final String? lastSenderId;
+  final bool isRead;
+  
+  // NEW FIELD
+  final int unreadCount; 
 
   PrivateConversation({
     required this.id,
@@ -50,6 +53,9 @@ class PrivateConversation {
     required this.lastMessage,
     required this.lastMessageTime,
     required this.participantData,
+    this.lastSenderId,
+    this.isRead = true,
+    this.unreadCount = 0, // Default to 0
   });
 
   factory PrivateConversation.fromMap(Map<String, dynamic> map, String id) {
@@ -57,10 +63,15 @@ class PrivateConversation {
       id: id,
       participants: List<String>.from(map['participants'] ?? []),
       lastMessage: map['lastMessage'] ?? '',
-      lastMessageTime: map['lastMessageTime'] != null 
-          ? (map['lastMessageTime'] as Timestamp).toDate() 
+      lastMessageTime: map['lastMessageTime'] != null
+          ? (map['lastMessageTime'] as Timestamp).toDate()
           : DateTime.now(),
       participantData: Map<String, dynamic>.from(map['participantData'] ?? {}),
+      lastSenderId: map['lastSenderId'],
+      isRead: map['isRead'] ?? true,
+      
+      // MAP THE NEW FIELD
+      unreadCount: (map['unreadCount'] as num?)?.toInt() ?? 0,
     );
   }
 }
