@@ -3,8 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
-import 'package:linguaflow/blocs/speak/speak_bloc.dart';
-import 'package:linguaflow/blocs/speak/speak_event.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
@@ -35,15 +33,8 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
   bool _isNative = false;
   final List<String> _selectedSpecialties = [];
 
-  final Map<String, bool> _daysAvailable = {
-    'Mon': false,
-    'Tue': false,
-    'Wed': false,
-    'Thu': false,
-    'Fri': false,
-    'Sat': false,
-    'Sun': false,
-  };
+  // NEW: Robust Schedule State
+  late List<DaySchedule> _weeklySchedule;
 
   final List<String> _levels = [
     'Beginner',
@@ -56,6 +47,8 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
     'Business',
     'Conversation',
     'Grammar',
+    'Kids',
+    'Exam Prep'
   ];
 
   @override
@@ -79,10 +72,30 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
     _countryController = TextEditingController();
     _selectedLanguageCode = initialLang ?? 'en';
 
+    // Initialize Schedule (Default to all days off)
+    _weeklySchedule = [
+      _createDefaultDay('mon', 'Monday'),
+      _createDefaultDay('tue', 'Tuesday'),
+      _createDefaultDay('wed', 'Wednesday'),
+      _createDefaultDay('thu', 'Thursday'),
+      _createDefaultDay('fri', 'Friday'),
+      _createDefaultDay('sat', 'Saturday'),
+      _createDefaultDay('sun', 'Sunday'),
+    ];
+
     // ADD LISTENERS FOR LIVE PREVIEW
     _nameController.addListener(_updatePreview);
     _priceController.addListener(_updatePreview);
     _imageUrlController.addListener(_updatePreview);
+  }
+
+  DaySchedule _createDefaultDay(String id, String name) {
+    return DaySchedule(
+      dayId: id,
+      dayName: name,
+      isDayOff: true, // Default to off
+      slots: [],
+    );
   }
 
   void _updatePreview() => setState(() {});
@@ -115,31 +128,217 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
           : _imageUrlController.text,
       level: _selectedLevel,
       specialties: _selectedSpecialties,
-      description: _descriptionController.text,
+      description: _descriptionController.text.isEmpty 
+          ? "Your biography will appear here..." 
+          : _descriptionController.text,
       otherLanguages: const [],
       countryOfBirth: _countryController.text,
       isNative: _isNative,
-      availability: {},
+      // NEW: Pass the structured schedule
+      availability: _weeklySchedule,
       createdAt: DateTime.now(),
       isOnline: true,
-      isSuperTutor: true,
+      isSuperTutor: false,
     );
   }
 
+  // ==========================================
+  // SCHEDULE LOGIC
+  // ==========================================
+  
+  Future<void> _editDaySchedule(int index) async {
+    final day = _weeklySchedule[index];
+    
+    // Create local copies for the dialog to modify
+    bool isDayOff = day.isDayOff;
+    List<TimeSlot> currentSlots = List.from(day.slots);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final theme = Theme.of(context);
+            
+            return Padding(
+              padding: EdgeInsets.only(
+                top: 24, 
+                left: 24, 
+                right: 24,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Edit ${day.dayName}",
+                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      Switch(
+                        value: !isDayOff, // True means Available
+                        activeColor: Colors.green,
+                        onChanged: (val) {
+                          setModalState(() {
+                            isDayOff = !val;
+                            // Add default slot if turning on and empty
+                            if (!isDayOff && currentSlots.isEmpty) {
+                              currentSlots.add(const TimeSlot(
+                                startHour: 9, startMinute: 0, 
+                                endHour: 17, endMinute: 0
+                              ));
+                            }
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  
+                  if (isDayOff)
+                     Padding(
+                       padding: const EdgeInsets.symmetric(vertical: 30),
+                       child: Center(
+                         child: Text(
+                           "Day Off", 
+                           style: theme.textTheme.bodyLarge?.copyWith(color: theme.hintColor),
+                         ),
+                       ),
+                     )
+                  else ...[
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: currentSlots.length,
+                      itemBuilder: (ctx, i) {
+                        final slot = currentSlots[i];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: const Icon(Icons.access_time),
+                            title: Text("${slot.formattedStart} - ${slot.formattedEnd}"),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () {
+                                setModalState(() {
+                                  currentSlots.removeAt(i);
+                                });
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final newSlot = await _pickTimeSlot(context);
+                        if (newSlot != null) {
+                          setModalState(() {
+                            currentSlots.add(newSlot);
+                            // Sort slots by start time
+                            currentSlots.sort((a, b) => a.startHour.compareTo(b.startHour));
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text("Add Time Slot"),
+                    ),
+                  ],
+
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        // Save changes to main state
+                        setState(() {
+                          _weeklySchedule[index] = DaySchedule(
+                            dayId: day.dayId,
+                            dayName: day.dayName,
+                            isDayOff: isDayOff,
+                            slots: currentSlots,
+                          );
+                        });
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text("Save Schedule"),
+                    ),
+                  )
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<TimeSlot?> _pickTimeSlot(BuildContext context) async {
+    // 1. Pick Start
+    final start = await showTimePicker(
+      context: context, 
+      initialTime: const TimeOfDay(hour: 9, minute: 0),
+      helpText: "Select Start Time"
+    );
+    if (start == null) return null;
+
+    if (!context.mounted) return null;
+
+    // 2. Pick End
+    final end = await showTimePicker(
+      context: context, 
+      initialTime: TimeOfDay(hour: start.hour + 1, minute: start.minute),
+      helpText: "Select End Time"
+    );
+    if (end == null) return null;
+
+    // Validation
+    final startMinutes = start.hour * 60 + start.minute;
+    final endMinutes = end.hour * 60 + end.minute;
+
+    if (endMinutes <= startMinutes) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("End time must be after start time")),
+        );
+      }
+      return null;
+    }
+
+    return TimeSlot(
+      startHour: start.hour, 
+      startMinute: start.minute, 
+      endHour: end.hour, 
+      endMinute: end.minute
+    );
+  }
+
+  // ==========================================
+  // SUBMIT
+  // ==========================================
   void _submitProfile() {
     if (_formKey.currentState!.validate()) {
-      final Map<String, String> availabilityMap = {};
-      _daysAvailable.forEach((day, isSelected) {
-        if (isSelected) availabilityMap[day] = "Available";
-      });
+      
+      // Ensure at least one day is active
+      bool hasAvailability = _weeklySchedule.any((d) => !d.isDayOff && d.slots.isNotEmpty);
 
-      if (availabilityMap.isEmpty) {
+      if (!hasAvailability) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please select availability")),
+          const SnackBar(content: Text("Please add at least one available time slot.")),
         );
         return;
       }
 
+      // NOTE: Ensure your TutorBloc -> CreateTutorProfileEvent 
+      // accepts List<DaySchedule> for 'availability'.
       context.read<TutorBloc>().add(
         CreateTutorProfileEvent(
           name: _nameController.text.trim(),
@@ -152,7 +351,10 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
           otherLanguages: const [],
           countryOfBirth: _countryController.text.trim(),
           isNative: _isNative,
-          availability: availabilityMap,
+          
+          // PASSING THE NEW STRUCTURE
+          availability: _weeklySchedule, 
+          
           lessons: const [],
         ),
       );
@@ -192,6 +394,7 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              // Ensure TutorCard supports the updated Tutor model
               TutorCard(tutor: _generatePreviewTutor()),
 
               const Padding(
@@ -322,21 +525,61 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
               ),
 
               const SizedBox(height: 32),
+              
+              // ===================================
+              // NEW: AVAILABILITY SECTION
+              // ===================================
               _buildSectionTitle("Availability & Rates", theme),
-              _buildLabel("Available Days", theme),
-              Wrap(
-                spacing: 8,
-                children: _daysAvailable.keys.map((day) {
-                  final isSelected = _daysAvailable[day]!;
-                  return FilterChip(
-                    label: Text(day),
-                    selected: isSelected,
-                    selectedColor: theme.primaryColor.withOpacity(0.3),
-                    onSelected: (val) =>
-                        setState(() => _daysAvailable[day] = val),
-                  );
-                }).toList(),
+              Text(
+                "Tap a day to set your hours.",
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
               ),
+              const SizedBox(height: 12),
+              
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: theme.dividerColor),
+                ),
+                child: Column(
+                  children: List.generate(_weeklySchedule.length, (index) {
+                    final day = _weeklySchedule[index];
+                    final bool isLast = index == _weeklySchedule.length - 1;
+                    
+                    return Column(
+                      children: [
+                        ListTile(
+                          onTap: () => _editDaySchedule(index),
+                          title: Text(
+                            day.dayName,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Text(
+                            day.isDayOff 
+                                ? "Day Off" 
+                                : day.slots.isEmpty 
+                                    ? "No times set (Click to add)"
+                                    : day.slots.map((s) => "${s.formattedStart}-${s.formattedEnd}").join(", "),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: day.isDayOff ? theme.hintColor : theme.primaryColor,
+                            ),
+                          ),
+                          trailing: Icon(
+                            Icons.arrow_forward_ios_rounded, 
+                            size: 14,
+                            color: theme.hintColor.withOpacity(0.5),
+                          ),
+                        ),
+                        if (!isLast) Divider(height: 1, indent: 16, endIndent: 16),
+                      ],
+                    );
+                  }),
+                ),
+              ),
+              
               const SizedBox(height: 20),
 
               _buildLabel("Hourly Rate (USD)", theme),

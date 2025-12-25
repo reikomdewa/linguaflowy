@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:dotted_border/dotted_border.dart'; 
@@ -434,15 +435,71 @@ class RoomCard extends StatelessWidget {
   }
 
   void _showPaymentDialog(BuildContext context) {
+    final TextEditingController passwordController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Join Paid Session"),
-        content: const Text("This room requires payment to join."),
+        title: const Text("Enter Access Code"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("This room requires a 4-digit code to join."),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passwordController,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              obscureText: true, // Hide the numbers like a password
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+              ],
+              decoration: InputDecoration(
+                hintText: "0000",
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () {
+              final inputCode = passwordController.text.trim();
+
+              // 1. Verify Code
+              // We compare the input against the password stored in the room object
+              if (inputCode == room.password) {
+                Navigator.pop(ctx); // Close dialog
+                _joinRoom(context, room); // Proceed to join
+              } else {
+                // 2. Show Error
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Incorrect access code."),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text(
+              "Join",
+            ),
           ),
         ],
       ),

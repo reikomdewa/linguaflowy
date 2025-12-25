@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
-import 'package:linguaflow/models/speak/speak_models.dart';
+import 'package:linguaflow/models/speak/speak_models.dart'; 
+// ^ Ensure this points to the file where you saved the new Tutor, DaySchedule, etc.
 
 abstract class TutorEvent extends Equatable {
   const TutorEvent();
@@ -41,8 +42,13 @@ class CreateTutorProfileEvent extends TutorEvent {
   final double pricePerHour;
   final List<String> specialties;
   final List<String> otherLanguages;
-  final Map<String, String> availability;
+  
+  // FIXED: Now uses the robust List<DaySchedule>
+  final List<DaySchedule> availability;
+  
+  // FIXED: Now uses the robust List<TutorLesson>
   final List<TutorLesson> lessons;
+  
   final Map<String, dynamic> metadata;
 
   const CreateTutorProfileEvent({
@@ -62,7 +68,11 @@ class CreateTutorProfileEvent extends TutorEvent {
   });
 
   @override
-  List<Object?> get props => [name, language, pricePerHour, isNative];
+  List<Object?> get props => [
+    name, description, imageUrl, countryOfBirth, isNative,
+    language, level, pricePerHour, specialties, otherLanguages,
+    availability, lessons, metadata
+  ];
 }
 
 class UpdateTutorProfileEvent extends CreateTutorProfileEvent {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -191,10 +192,10 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
-                    "Paid Session (Entrance Fee)",
+                    "Paid Session",
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  subtitle: const Text("Require an access code to join"),
+                  subtitle: const Text("Require an access code to join."),
                   value: _isPaid,
                   onChanged: (val) => setState(() => _isPaid = val),
                   secondary: Icon(
@@ -206,11 +207,13 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 if (_isPaid) ...[
                   const SizedBox(height: 10),
                   TextField(
+                    maxLength: 4,
                     controller: _accessCodeController,
                     decoration: _inputDecoration(
                       "Set 4-digit Access Code",
                       Icons.lock_outline,
                     ),
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     keyboardType: TextInputType.number,
                   ),
                 ],
@@ -231,9 +234,25 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                     ),
                     onPressed: () {
                       final String topic = _topicController.text.trim();
+                      final String password = _accessCodeController.text
+                          .trim(); // 1. Get the password
+
+                      // Validation: Topic
                       if (topic.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text("Please enter a topic")),
+                        );
+                        return;
+                      }
+
+                      // Validation: Password (If paid is selected)
+                      if (_isPaid && password.length != 4) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "Access code must be exactly 4 digits",
+                            ),
+                          ),
                         );
                         return;
                       }
@@ -243,10 +262,10 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                         CreateRoomEvent(
                           topic: topic,
                           language: _selectedLanguageName,
-                          level:
-                              _selectedLevel, // Corrected from Language to Level
+                          level: _selectedLevel,
                           maxMembers: _isUnlimited ? 50 : _memberCount.toInt(),
                           isPaid: _isPaid,
+                          password: _isPaid ? password : null,
                         ),
                       );
 
