@@ -10,6 +10,7 @@ import 'package:linguaflow/screens/home/home_screen.dart';
 import 'package:linguaflow/screens/search/search_screen.dart';
 import 'package:linguaflow/screens/library/library_screen.dart';
 import 'package:linguaflow/screens/profile/profile_screen.dart';
+import 'package:linguaflow/screens/speak/speak_screen.dart';
 import 'package:linguaflow/screens/vocabulary/vocabulary_screen.dart';
 import 'package:linguaflow/screens/admin/admin_dashboard_screen.dart';
 
@@ -111,6 +112,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         activeIcon: const Icon(Icons.school_rounded),
         label: 'Vocabulary',
       ),
+
       _NavItem(
         screen: const SearchScreen(),
         icon: const Padding(
@@ -118,6 +120,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           child: FaIcon(FontAwesomeIcons.magnifyingGlass, size: 20),
         ),
         label: 'Discover',
+      ),
+      _NavItem(
+        screen: SpeakScreen(),
+        icon: FaIcon(FontAwesomeIcons.microphone, size: 20),
+        label: 'Speak',
       ),
     ];
 

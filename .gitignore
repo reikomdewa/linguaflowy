@@ -53,3 +53,6 @@ key.properties
 # Firebase Service Account Key
 serviceAccountKey.json
 **/serviceAccountKey.json
+
+# Local Netlify folder
+.netlify

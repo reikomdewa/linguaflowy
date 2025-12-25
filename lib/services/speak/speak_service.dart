@@ -1,5 +1,6 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http; // Add http to pubspec.yaml
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:linguaflow/models/speak/room_member.dart';
 import '../../models/speak/speak_models.dart';
@@ -7,10 +8,10 @@ import '../../models/speak/speak_models.dart';
 class SpeakService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+
+  // --- TUTOR LOGIC ---
 
   Future<void> createTutorProfile(Tutor tutor) async {
-    // Ensure we await the firestore call
     await _firestore
         .collection('tutors')
         .doc(tutor.id)
@@ -24,24 +25,25 @@ class SpeakService {
         .toList();
   }
 
+  Future<void> deleteTutorProfile(String tutorId) async => 
+      await _firestore.collection('tutors').doc(tutorId).delete();
+
+  // --- ROOM LOGIC ---
+
   Future<void> createRoom(ChatRoom room) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception("User not logged in");
     
-    // Explicitly await the set operation
+    // Create room in Top-Level 'rooms' collection for public access
     await _firestore.collection('rooms').doc(room.id).set(room.toMap());
   }
 
-  // NEW: Helper to persist members when someone joins
   Future<void> updateRoomMembers(String roomId, List<RoomMember> members, int count) async {
     await _firestore.collection('rooms').doc(roomId).update({
       'members': members.map((m) => m.toMap()).toList(),
       'memberCount': count,
     });
   }
-
-  Future<void> deleteTutorProfile(String tutorId) async => 
-      await _firestore.collection('tutors').doc(tutorId).delete();
 
   Future<void> deleteRoom(String roomId) async => 
       await _firestore.collection('rooms').doc(roomId).delete();
@@ -54,14 +56,28 @@ class SpeakService {
     return snapshot.docs.map((doc) => ChatRoom.fromMap(doc.data(), doc.id)).toList();
   }
 
+  // --- LIVEKIT TOKEN LOGIC (Via Netlify) ---
+
   Future<String> getLiveKitToken(String roomId, String username) async {
+    // URL to your Netlify function
+    const String baseUrl = "https://linguaflowy.netlify.app/.netlify/functions/getToken";
+
     try {
-      final result = await _functions
-          .httpsCallable('generateLiveKitToken')
-          .call({'roomId': roomId, 'username': username});
-      return result.data['token'];
+      // Build the URL with query parameters
+      final uri = Uri.parse("$baseUrl?roomName=$roomId&username=$username");
+      
+      // Make the GET request
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        // Parse JSON response
+        final data = jsonDecode(response.body);
+        return data['token'];
+      } else {
+        throw Exception("Server Error: ${response.body}");
+      }
     } catch (e) {
-      throw Exception("Failed to generate token: $e");
+      throw Exception("Failed to generate LiveKit token: $e");
     }
   }
 }
