@@ -1,8 +1,7 @@
-// ==========================================
-// 1. CHAT ROOM MODEL
-// ==========================================
 import 'package:equatable/equatable.dart';
-import 'package:linguaflow/models/speak/room_member.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- 1. ADD THIS IMPORT
+
+import 'room_member.dart'; 
 
 class ChatRoom extends Equatable {
   final String id;
@@ -20,16 +19,12 @@ class ChatRoom extends Equatable {
   final String? hostName;
   final String? hostAvatarUrl;
   final List<RoomMember> members;
-
-  // --- TIMESTAMPS FOR CLEANUP ---
   final DateTime createdAt;
-  final DateTime? expireAt; // For Firebase TTL (Auto-delete)
-  final DateTime? lastUpdatedAt; // For "Ghost Room" logic
-  // ------------------------------
-
+  final DateTime? expireAt;       
+  final DateTime? lastUpdatedAt; 
   final String? liveKitRoomId;
   final List<String> tags;
-  final String roomType; // 'audio' or 'video'
+  final String roomType;
   final bool isActive;
   final String? spotlightedUserId;
 
@@ -44,8 +39,8 @@ class ChatRoom extends Equatable {
     required this.maxMembers,
     required this.members,
     required this.createdAt,
-    this.expireAt, // Changed to Nullable
-    this.lastUpdatedAt, // Added
+    this.expireAt,
+    this.lastUpdatedAt,
     this.isPaid = false,
     this.entryPrice,
     this.isPrivate = false,
@@ -62,9 +57,6 @@ class ChatRoom extends Equatable {
   List<RoomMember> get displayMembers => members.take(10).toList();
   int get othersCount => memberCount > 10 ? memberCount - 10 : 0;
 
-  // ---------------------------------------------------------------------------
-  // TO MAP (Saving to Firestore)
-  // ---------------------------------------------------------------------------
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -82,11 +74,11 @@ class ChatRoom extends Equatable {
       'hostName': hostName,
       'hostAvatarUrl': hostAvatarUrl,
       'liveKitRoomId': liveKitRoomId ?? id,
-
-      // Timestamps
+      
+      // We still save as Int from Flutter side, but handle reading differently below
       'createdAt': createdAt.millisecondsSinceEpoch,
-      'expireAt': expireAt?.millisecondsSinceEpoch, // <--- FIXED
-      'lastUpdatedAt': lastUpdatedAt?.millisecondsSinceEpoch, // <--- FIXED
+      'expireAt': expireAt?.millisecondsSinceEpoch,       
+      'lastUpdatedAt': lastUpdatedAt?.millisecondsSinceEpoch,
 
       'members': members.map((m) => m.toMap()).toList(),
       'tags': tags,
@@ -96,10 +88,22 @@ class ChatRoom extends Equatable {
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // FROM MAP (Loading from Firestore)
-  // ---------------------------------------------------------------------------
   factory ChatRoom.fromMap(Map<String, dynamic> map, String id) {
+    // --- 2. ROBUST DATE PARSER HELPER ---
+    DateTime parseDate(dynamic val) {
+      if (val is Timestamp) return val.toDate(); // Handle Firestore Timestamp
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val); // Handle Legacy Int
+      return DateTime.now(); // Fallback
+    }
+
+    DateTime? parseNullableDate(dynamic val) {
+      if (val == null) return null;
+      if (val is Timestamp) return val.toDate();
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+      return null;
+    }
+    // ------------------------------------
+
     return ChatRoom(
       id: id,
       hostId: map['hostId'] ?? '',
@@ -116,17 +120,12 @@ class ChatRoom extends Equatable {
       hostName: map['hostName'],
       hostAvatarUrl: map['hostAvatarUrl'],
       liveKitRoomId: map['liveKitRoomId'],
-
-      // Timestamps
-      createdAt: DateTime.fromMillisecondsSinceEpoch(
-        map['createdAt'] ?? DateTime.now().millisecondsSinceEpoch,
-      ),
-      expireAt: map['expireAt'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['expireAt'])
-          : null,
-      lastUpdatedAt: map['lastUpdatedAt'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['lastUpdatedAt'])
-          : null,
+      
+      // --- 3. USE THE HELPERS HERE ---
+      createdAt: parseDate(map['createdAt']),
+      expireAt: parseNullableDate(map['expireAt']),
+      lastUpdatedAt: parseNullableDate(map['lastUpdatedAt']),
+      // -------------------------------
 
       members: map['members'] != null
           ? List<RoomMember>.from(
@@ -140,9 +139,6 @@ class ChatRoom extends Equatable {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // COPY WITH (Updating State)
-  // ---------------------------------------------------------------------------
   ChatRoom copyWith({
     int? memberCount,
     List<RoomMember>? members,
@@ -150,15 +146,14 @@ class ChatRoom extends Equatable {
     String? level,
     bool? isActive,
     String? spotlightedUserId,
-    DateTime? lastUpdatedAt, // Added
-    DateTime? expireAt, // Added
+    DateTime? lastUpdatedAt,
+    DateTime? expireAt,
   }) {
     return ChatRoom(
       id: id,
       hostId: hostId,
       language: language,
       createdAt: createdAt,
-      // Updates
       title: title ?? this.title,
       level: level ?? this.level,
       memberCount: memberCount ?? this.memberCount,
@@ -167,7 +162,6 @@ class ChatRoom extends Equatable {
       spotlightedUserId: spotlightedUserId ?? this.spotlightedUserId,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       expireAt: expireAt ?? this.expireAt,
-      // Existing
       maxMembers: maxMembers,
       isPaid: isPaid,
       isPrivate: isPrivate,
