@@ -8,7 +8,7 @@ import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_event.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
-import 'package:linguaflow/services/speak/chat_service.dart'; // Import ChatService
+import 'package:linguaflow/services/speak/chat_service.dart';
 
 class ActiveRoomScreen extends StatefulWidget {
   final ChatRoom roomData;
@@ -25,12 +25,10 @@ class ActiveRoomScreen extends StatefulWidget {
 }
 
 class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
-  // Room State
   List<Participant> _participants = [];
   EventsListener<RoomEvent>? _listener;
   bool _isLeaving = false;
 
-  // Chat Notification State
   final ChatService _chatService = ChatService();
   StreamSubscription? _chatSubscription;
   int _unreadCount = 0;
@@ -66,6 +64,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
       ..on<TrackUnsubscribedEvent>((_) => setState(() {}))
       ..on<LocalTrackPublishedEvent>((_) => setState(() {}))
       ..on<LocalTrackUnpublishedEvent>((_) => setState(() {}))
+      // Mute events are crucial for switching between Video/Avatar
       ..on<TrackMutedEvent>((_) => setState(() {}))
       ..on<TrackUnmutedEvent>((_) => setState(() {}))
       ..on<ActiveSpeakersChangedEvent>((_) => setState(() {}))
@@ -76,21 +75,14 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
       });
   }
 
-  // --- 1. CHAT LISTENER LOGIC ---
   void _setupChatListener() {
-    // Initialize last read count to current history so we don't show badges for old messages immediately
     _lastReadCount = _chatService.currentMessages.length;
-
     _chatSubscription = _chatService.messagesStream.listen((messages) {
       if (!mounted) return;
-
       if (_isChatOpen) {
-        // If chat is open, we are reading them instantly.
         _lastReadCount = messages.length;
         setState(() => _unreadCount = 0);
       } else {
-        // If chat is closed, calculate how many are new since we last looked.
-        // We ensure it doesn't go negative.
         final diff = messages.length - _lastReadCount;
         setState(() {
           _unreadCount = diff > 0 ? diff : 0;
@@ -102,7 +94,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
   @override
   void dispose() {
     _listener?.dispose();
-    _chatSubscription?.cancel(); // Cancel stream
+    _chatSubscription?.cancel();
     super.dispose();
   }
 
@@ -139,13 +131,10 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     }
   }
 
-  // --- 2. OPEN CHAT LOGIC ---
   void _openChat() async {
-    // Mark as open and clear badge
     setState(() {
       _isChatOpen = true;
       _unreadCount = 0;
-      // Sync read count to current total
       _lastReadCount = _chatService.currentMessages.length;
     });
 
@@ -156,14 +145,21 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
       builder: (_) => RoomChatSheet(room: widget.livekitRoom),
     );
 
-    // When sheet closes:
     if (mounted) {
       setState(() {
         _isChatOpen = false;
-        // Sync again in case messages arrived while closing animation played
         _lastReadCount = _chatService.currentMessages.length;
       });
     }
+  }
+
+  // --- NEW: Open Full Screen Logic ---
+  void _openFullScreen(Participant p) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FullScreenParticipantScreen(participant: p),
+      ),
+    );
   }
 
   @override
@@ -230,8 +226,11 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
                               ),
                               itemCount: _participants.length,
                               itemBuilder: (context, index) {
-                                return ParticipantTile(
-                                  participant: _participants[index],
+                                final p = _participants[index];
+                                return GestureDetector(
+                                  // NEW: Tap to expand
+                                  onTap: () => _openFullScreen(p),
+                                  child: ParticipantTile(participant: p),
                                 );
                               },
                             ),
@@ -257,32 +256,25 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  // 1. Mic
                   _ControlIcon(
                     icon: isMicEnabled ? Icons.mic : Icons.mic_off,
                     color: isMicEnabled ? theme.primaryColor : Colors.red,
                     label: isMicEnabled ? "Mute" : "Unmute",
                     onTap: _toggleMic,
                   ),
-
-                  // 2. Camera
                   _ControlIcon(
                     icon: isCamEnabled ? Icons.videocam : Icons.videocam_off,
                     color: isCamEnabled ? theme.primaryColor : Colors.grey,
                     label: "Camera",
                     onTap: _toggleCamera,
                   ),
-
-                  // 3. Chat (With Badge)
                   _ControlIcon(
                     icon: Icons.chat_bubble_outline,
                     color: theme.iconTheme.color,
                     label: "Chat",
-                    onTap: _openChat, // Use the new method
-                    badgeCount: _unreadCount, // Pass the count
+                    onTap: _openChat,
+                    badgeCount: _unreadCount,
                   ),
-
-                  // 4. Leave
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.1),
@@ -305,6 +297,47 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
 }
 
 // =============================================================================
+// FULL SCREEN PARTICIPANT WIDGET (TikTok Style)
+// =============================================================================
+class FullScreenParticipantScreen extends StatelessWidget {
+  final Participant participant;
+
+  const FullScreenParticipantScreen({super.key, required this.participant});
+
+  @override
+  Widget build(BuildContext context) {
+    // Reuse the ParticipantTile logic, but we make it fill the screen
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // 1. The Big Video
+          Positioned.fill(
+            child: ParticipantTile(
+              participant: participant,
+              isFullScreen: true, // Tell tile to render differently
+            ),
+          ),
+
+          // 2. Close Button
+          Positioned(
+            top: 40,
+            left: 16,
+            child: CircleAvatar(
+              backgroundColor: Colors.black54,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
 // HELPER WIDGETS
 // =============================================================================
 
@@ -313,7 +346,7 @@ class _ControlIcon extends StatelessWidget {
   final String label;
   final Color? color;
   final VoidCallback onTap;
-  final int badgeCount; // Added Badge Count
+  final int badgeCount;
 
   const _ControlIcon({
     required this.icon,
@@ -333,7 +366,6 @@ class _ControlIcon extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon + Badge Stack
             Stack(
               clipBehavior: Clip.none,
               children: [
@@ -374,10 +406,18 @@ class _ControlIcon extends StatelessWidget {
   }
 }
 
+// -----------------------------------------------------------------------------
+// PARTICIPANT TILE (Updated for Fixes)
+// -----------------------------------------------------------------------------
 class ParticipantTile extends StatelessWidget {
   final Participant participant;
+  final bool isFullScreen;
 
-  const ParticipantTile({super.key, required this.participant});
+  const ParticipantTile({
+    super.key,
+    required this.participant,
+    this.isFullScreen = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -393,75 +433,100 @@ class ParticipantTile extends StatelessWidget {
     final isMicOn = participant.isMicrophoneEnabled();
     final isSpeaking = participant.isSpeaking;
 
+    // FIX 1: Strict check for video active status
+    // Must be subscribed AND not muted
+    final isVideoActive =
+        videoPub != null &&
+        videoPub.subscribed &&
+        videoPub.track != null &&
+        !videoPub.muted; // <-- Crucial check!
+
     Color borderColor = Colors.transparent;
     double borderWidth = 0;
 
-    if (isSpeaking) {
-      borderColor = Colors.greenAccent;
-      borderWidth = 3.0;
-    } else if (isMe) {
-      borderColor = Colors.blueAccent.withOpacity(0.5);
-      borderWidth = 2.0;
+    if (!isFullScreen) {
+      if (isSpeaking) {
+        borderColor = Colors.greenAccent;
+        borderWidth = 3.0;
+      } else if (isMe) {
+        borderColor = Colors.blueAccent.withOpacity(0.5);
+        borderWidth = 2.0;
+      }
     }
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey[800],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor, width: borderWidth),
+        borderRadius: isFullScreen ? null : BorderRadius.circular(12),
+        border: isFullScreen ? null : Border.all(color: borderColor, width: borderWidth),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: isFullScreen ? BorderRadius.circular(0) : BorderRadius.circular(10),
         child: Stack(
           children: [
-            if (videoPub != null &&
-                videoPub.subscribed &&
-                videoPub.track != null)
+            // LAYER 1: VIDEO or AVATAR
+            if (isVideoActive)
               VideoTrackRenderer(
                 videoPub.track as VideoTrack,
-                fit: VideoViewFit.cover,
+                // Full screen usually uses 'cover' to fill phone screen
+                fit: VideoViewFit.cover, 
               )
             else
-              Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.person, color: Colors.white24, size: 30),
-                    const SizedBox(height: 4),
-                    Text(
-                      name.length > 2
-                          ? name.substring(0, 2).toUpperCase()
-                          : name,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontWeight: FontWeight.bold,
+              // Fallback to Avatar when camera is off
+              Container(
+                color: Colors.grey[900], // Dark background for avatar
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.person,
+                        color: Colors.white24,
+                        size: isFullScreen ? 80 : 30, // Bigger icon in full screen
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 10),
+                      Text(
+                        name.length > 2
+                            ? name.substring(0, 2).toUpperCase()
+                            : name,
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontWeight: FontWeight.bold,
+                          fontSize: isFullScreen ? 30 : 14, // Bigger font
+                        ),
+                      )
+                    ],
+                  ),
                 ),
               ),
+
+            // LAYER 2: STATUS BAR
             Positioned(
               bottom: 0,
               left: 0,
               right: 0,
               child: Container(
-                color: Colors.black54,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                color: Colors.black54, // Semi-transparent bar
+                padding: EdgeInsets.symmetric(
+                  horizontal: isFullScreen ? 20 : 6,
+                  vertical: isFullScreen ? 20 : 4,
+                ),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
                         isMe ? "You" : name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
-                          fontSize: 10,
+                          fontSize: isFullScreen ? 18 : 10,
+                          fontWeight: isFullScreen ? FontWeight.bold : FontWeight.normal,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Icon(
                       isMicOn ? Icons.mic : Icons.mic_off,
-                      size: 12,
+                      size: isFullScreen ? 24 : 12,
                       color: isMicOn ? Colors.greenAccent : Colors.redAccent,
                     ),
                   ],
