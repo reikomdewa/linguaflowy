@@ -2,17 +2,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:dotted_border/dotted_border.dart'; 
+import 'package:livekit_client/livekit_client.dart';
+
+// 1. UPDATED BLOC IMPORTS
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
-import 'package:linguaflow/blocs/speak/speak_bloc.dart';
-import 'package:linguaflow/blocs/speak/speak_event.dart';
+import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_event.dart';
+
+// Models & Services
 import 'package:linguaflow/models/speak/room_member.dart';
-import 'package:linguaflow/models/speak/speak_models.dart';
+import 'package:linguaflow/models/speak/speak_models.dart'; // Barrel file
 import 'package:linguaflow/screens/speak/widgets/active_room_screen.dart';
 import 'package:linguaflow/services/speak/speak_service.dart';
 import 'package:linguaflow/utils/language_helper.dart';
-import 'package:livekit_client/livekit_client.dart';
-import 'package:dotted_border/dotted_border.dart'; // Ensure this package is in pubspec
 
 class RoomCard extends StatelessWidget {
   final ChatRoom room;
@@ -22,7 +26,8 @@ class RoomCard extends StatelessWidget {
   // --- OPTIONS MENU LOGIC ---
   void _showOptionsMenu(BuildContext context, bool isMe) {
     final theme = Theme.of(context);
-    final speakBloc = context.read<SpeakBloc>();
+    // 2. GET ROOM BLOC
+    final roomBloc = context.read<RoomBloc>();
 
     showModalBottomSheet(
       context: context,
@@ -61,7 +66,7 @@ class RoomCard extends StatelessWidget {
                 subtitle: const Text("This will remove the room for everyone"),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _showDeleteConfirmation(context, speakBloc);
+                  _showDeleteConfirmation(context, roomBloc);
                 },
               ),
               const Divider(),
@@ -87,7 +92,8 @@ class RoomCard extends StatelessWidget {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, SpeakBloc bloc) {
+  // 3. ACCEPT ROOM BLOC
+  void _showDeleteConfirmation(BuildContext context, RoomBloc bloc) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -254,7 +260,6 @@ class RoomCard extends StatelessWidget {
     );
   }
 
-  // --- FIXED: Build Member Item Logic ---
   Widget _buildMemberItem(RoomMember member, String hostId, ThemeData theme) {
     final bool isHost = member.uid == hostId;
 
@@ -288,9 +293,8 @@ class RoomCard extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // FIX IS HERE: Correct Ternary Syntax
             Text(
-              isHost ? 'Host' : '${member.xp} XP',
+              isHost ? 'Host' : '${member.xp ?? 0} XP',
               style: TextStyle(
                 fontSize: 10,
                 color: theme.primaryColor,
@@ -306,6 +310,7 @@ class RoomCard extends StatelessWidget {
   Widget _buildPlaceholder(ThemeData theme) {
     return Column(
       children: [
+        // KEEPING YOUR EXACT UI HERE
         DottedBorder(
           options: RoundedRectDottedBorderOptions(
             color: theme.hintColor.withOpacity(0.3),
@@ -350,6 +355,7 @@ class RoomCard extends StatelessWidget {
 
   Widget _buildJoinButton(BuildContext context, ThemeData theme) {
     return DottedBorder(
+      // KEEPING YOUR EXACT UI HERE
       options: RoundedRectDottedBorderOptions(
         color: theme.dividerColor,
         strokeWidth: 1.2,
@@ -385,7 +391,7 @@ class RoomCard extends StatelessWidget {
     );
   }
 
-  // --- LOGIC METHODS ---
+  // --- 4. LOGIC UPDATED TO USE RoomBloc ---
   Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
     showDialog(
       context: context,
@@ -403,7 +409,11 @@ class RoomCard extends StatelessWidget {
         token,
       );
       if (context.mounted) {
-        context.read<SpeakBloc>().add(RoomJoined(livekitRoom));
+        // USE RoomBloc
+        context.read<RoomBloc>().add(RoomJoined(livekitRoom));
+        // Optional: Trigger JoinRoomEvent to update Firestore (if not handled by RoomJoined)
+        context.read<RoomBloc>().add(JoinRoomEvent(roomData));
+
         Navigator.pop(context);
         Navigator.push(
           context,

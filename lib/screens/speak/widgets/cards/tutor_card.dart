@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
+// 1. UPDATED BLOC IMPORTS
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
-import 'package:linguaflow/blocs/speak/speak_bloc.dart';
-import 'package:linguaflow/blocs/speak/speak_event.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
+
 import 'package:linguaflow/models/speak/speak_models.dart';
-import 'package:path/path.dart';
 
 class TutorCard extends StatelessWidget {
   final Tutor tutor;
@@ -14,12 +15,13 @@ class TutorCard extends StatelessWidget {
   const TutorCard({super.key, required this.tutor});
 
   void _showOptionsMenu(BuildContext context, bool isMe) {
-    final speakBloc = context.read<SpeakBloc>();
+    // 2. GET TUTOR BLOC
+    final tutorBloc = context.read<TutorBloc>();
     final theme = Theme.of(context);
 
     showModalBottomSheet(
       context: context,
-      useSafeArea: true, // Ensures it doesn't overlap system bars
+      useSafeArea: true,
       backgroundColor: theme.cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -43,7 +45,7 @@ class TutorCard extends StatelessWidget {
                 leading: const Icon(Icons.favorite_rounded, color: Colors.red),
                 title: const Text("Add to Favorites"),
                 onTap: () {
-                  speakBloc.add(ToggleFavoriteTutor(tutor.id));
+                  tutorBloc.add(ToggleFavoriteTutor(tutor.id));
                   Navigator.pop(ctx);
                 },
               ),
@@ -60,8 +62,8 @@ class TutorCard extends StatelessWidget {
                   ),
                   subtitle: const Text("This action cannot be undone"),
                   onTap: () {
-                    // Logic for deletion (You might need a DeleteTutorProfile event in your Bloc)
-                    _showDeleteConfirmation(context, speakBloc);
+                    // Pass the bloc to the dialog
+                    _showDeleteConfirmation(context, tutorBloc);
                   },
                 ),
               ],
@@ -77,7 +79,8 @@ class TutorCard extends StatelessWidget {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, SpeakBloc bloc) {
+  // 3. ACCEPT TUTOR BLOC
+  void _showDeleteConfirmation(BuildContext context, TutorBloc bloc) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -93,8 +96,8 @@ class TutorCard extends StatelessWidget {
           TextButton(
             onPressed: () {
                bloc.add(DeleteTutorProfileEvent(tutor.id));
-              Navigator.pop(ctx); // Close Dialog
-              Navigator.pop(context); // Close BottomSheet
+               Navigator.pop(ctx); // Close Dialog
+               Navigator.pop(context); // Close BottomSheet
             },
             child: const Text("Delete", style: TextStyle(color: Colors.red)),
           ),
@@ -311,7 +314,6 @@ class TutorCard extends StatelessWidget {
                     onPressed: () {},
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.primaryColor,
-
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(24),

@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_event.dart' hide RoomEvent;
 import 'package:linguaflow/screens/speak/widgets/full_screen_participant.dart';
 import 'package:linguaflow/screens/speak/widgets/participant_tile.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -240,7 +242,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
                     Navigator.pop(context);
                     final isCurrentlySpotlighted =
                         _currentSpotlightId == targetId;
-                    context.read<SpeakBloc>().add(
+                    context.read<RoomBloc>().add(
                       ToggleSpotlightEvent(
                         roomId: widget.roomData.id,
                         userId: isCurrentlySpotlighted ? null : targetId,
@@ -293,7 +295,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              context.read<SpeakBloc>().add(
+              context.read<RoomBloc>().add(
                 KickUserEvent(roomId: widget.roomData.id, userId: userId),
               );
             },
@@ -323,7 +325,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
       final amIHost = (myId == hostId) || (myId == hostName);
 
       if (amIHost && isRemoteTriggered) {
-        context.read<SpeakBloc>().add(
+        context.read<RoomBloc>().add(
           ToggleSpotlightEvent(roomId: widget.roomData.id, userId: null),
         );
       }
@@ -350,7 +352,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     setState(() => _isLeaving = true);
     await widget.livekitRoom.disconnect();
     if (mounted) {
-      context.read<SpeakBloc>().add(LeaveRoomEvent());
+      context.read<RoomBloc>().add(LeaveRoomEvent());
       Navigator.of(context).pop();
     }
   }

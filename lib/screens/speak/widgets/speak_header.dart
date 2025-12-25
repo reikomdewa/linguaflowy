@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:linguaflow/blocs/speak/speak_bloc.dart';
-import 'package:linguaflow/blocs/speak/speak_event.dart';
+
+// 1. IMPORT YOUR NEW BLOCS & EVENTS
+import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_event.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
 
 class SpeakHeader extends StatelessWidget {
   final bool isSearching;
@@ -18,6 +22,7 @@ class SpeakHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: AnimatedSwitcher(
@@ -42,7 +47,11 @@ class SpeakHeader extends StatelessWidget {
                   ),
                   contentPadding: EdgeInsets.zero,
                 ),
-                onChanged: (val) => context.read<SpeakBloc>().add(FilterSpeakList(val)),
+                // 2. TRIGGER BOTH BLOCS ON CHANGE
+                onChanged: (val) {
+                  context.read<RoomBloc>().add(FilterRooms(val));
+                  context.read<TutorBloc>().add(FilterTutors(val));
+                },
               )
             : Row(
                 key: const ValueKey('title_bar'),
@@ -50,7 +59,8 @@ class SpeakHeader extends StatelessWidget {
                 children: [
                   Text(
                     'Practice Speaking',
-                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   IconButton(
                     icon: const Icon(Icons.search_rounded),

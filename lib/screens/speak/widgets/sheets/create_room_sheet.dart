@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
+import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_event.dart';
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_event.dart';
 import 'package:linguaflow/utils/language_helper.dart';
@@ -237,7 +239,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                       }
 
                       // DISPATCH EVENT
-                      context.read<SpeakBloc>().add(
+                      context.read<RoomBloc>().add(
                         CreateRoomEvent(
                           topic: topic,
                           language: _selectedLanguageName,

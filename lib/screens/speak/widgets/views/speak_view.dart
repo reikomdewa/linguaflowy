@@ -1,23 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-
-// Bloc and State imports
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
-import 'package:linguaflow/blocs/speak/speak_bloc.dart';
-import 'package:linguaflow/blocs/speak/speak_event.dart';
-import 'package:linguaflow/blocs/speak/speak_state.dart';
+import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_event.dart';
+import 'package:linguaflow/blocs/speak/room/room_state.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_state.dart';
+import 'package:livekit_client/livekit_client.dart'; // <--- 1. ADDED THIS IMPORT
+
+
 
 // Model and Utils imports
-import 'package:linguaflow/models/speak/speak_models.dart';
+import 'package:linguaflow/models/speak/speak_models.dart'; // Barrel file
 import 'package:linguaflow/screens/speak/create_tutor_profile_screen.dart';
 import 'package:linguaflow/screens/speak/widgets/filter_bottom_sheet.dart';
 import 'package:linguaflow/screens/speak/widgets/speak_header.dart';
 import 'package:linguaflow/screens/speak/widgets/tab_chip.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 
-// Reusable UI components from your project structure
+// Reusable UI components
 import 'package:linguaflow/screens/speak/widgets/sheets/create_room_sheet.dart';
 import 'package:linguaflow/screens/speak/widgets/cards/room_card.dart';
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
@@ -31,6 +35,8 @@ class SpeakView extends StatefulWidget {
 }
 
 class _SpeakViewState extends State<SpeakView> {
+  int _currentTabIndex = 0; // 0: All, 1: Tutors, 2: Rooms
+  
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
 
@@ -44,7 +50,9 @@ class _SpeakViewState extends State<SpeakView> {
     setState(() => _isSearching = !_isSearching);
     if (!_isSearching) {
       _searchController.clear();
-      context.read<SpeakBloc>().add(ClearAllFilters());
+      // Clear filters on BOTH blocs
+      context.read<RoomBloc>().add(const FilterRooms(null));
+      context.read<TutorBloc>().add(const FilterTutors(null));
     }
   }
 
@@ -53,9 +61,7 @@ class _SpeakViewState extends State<SpeakView> {
     final theme = Theme.of(context);
     final authState = context.watch<AuthBloc>().state;
 
-    // Safety check for auth state
-    if (authState is! AuthAuthenticated)
-      return const Scaffold(body: SizedBox());
+    if (authState is! AuthAuthenticated) return const Scaffold(body: SizedBox());
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -72,38 +78,7 @@ class _SpeakViewState extends State<SpeakView> {
             _buildTabSelector(context),
             const SizedBox(height: 10),
             Expanded(
-              child: BlocBuilder<SpeakBloc, SpeakState>(
-                builder: (context, state) {
-                  // SMART LOADING: Only show the full-screen spinner if the lists are empty.
-                  // If we already have rooms or tutors, don't show the spinner.
-                  if (state.status == SpeakStatus.loading &&
-                      state.rooms.isEmpty &&
-                      state.tutors.isEmpty) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (state.status == SpeakStatus.failure &&
-                      state.rooms.isEmpty) {
-                    return Center(
-                      child: TextButton(
-                        onPressed: () =>
-                            context.read<SpeakBloc>().add(LoadSpeakData()),
-                        child: const Text("Retry"),
-                      ),
-                    );
-                  }
-
-                  // If we have data (or just finished creating), show the list immediately
-                  switch (state.currentTab) {
-                    case SpeakTab.all:
-                      return _buildMixedList(context, state, authState.user);
-                    case SpeakTab.tutors:
-                      return _buildTutorList(state);
-                    case SpeakTab.rooms:
-                      return _buildRoomList(state);
-                  }
-                },
-              ),
+              child: _buildBody(context, authState.user),
             ),
           ],
         ),
@@ -111,14 +86,37 @@ class _SpeakViewState extends State<SpeakView> {
     );
   }
 
+  Widget _buildBody(BuildContext context, dynamic user) {
+    switch (_currentTabIndex) {
+      case 0:
+        return _buildMixedList(user); 
+      case 1:
+        return _buildTutorList();    
+      case 2:
+        return _buildRoomList();      
+      default:
+        return const SizedBox();
+    }
+  }
+
+  // ===========================================================================
+  // TABS & FILTERS
+  // ===========================================================================
   Widget _buildTabSelector(BuildContext context) {
-    return BlocBuilder<SpeakBloc, SpeakState>(
-      builder: (context, state) {
-        final isTutorContext =
-            state.currentTab == SpeakTab.all ||
-            state.currentTab == SpeakTab.tutors;
-        String getLabel(String category, String defaultName) =>
-            state.filters[category] ?? defaultName;
+    return Builder(
+      builder: (context) {
+        final roomFilters = context.watch<RoomBloc>().state.filters;
+        final tutorFilters = context.watch<TutorBloc>().state.filters;
+
+        String getLabel(String category, String defaultName) {
+           if (roomFilters.containsKey(category)) return roomFilters[category]!;
+           if (tutorFilters.containsKey(category)) return tutorFilters[category]!;
+           return defaultName;
+        }
+        
+        bool isActive(String category) {
+          return roomFilters.containsKey(category) || tutorFilters.containsKey(category);
+        }
 
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -127,60 +125,50 @@ class _SpeakViewState extends State<SpeakView> {
             children: [
               TabChip(
                 label: 'All',
-                isSelected: state.currentTab == SpeakTab.all,
-                onTap: () =>
-                    context.read<SpeakBloc>().add(const ChangeSpeakTab(0)),
+                isSelected: _currentTabIndex == 0,
+                onTap: () => setState(() => _currentTabIndex = 0),
               ),
               const SizedBox(width: 8),
               TabChip(
                 label: 'Tutors',
-                isSelected: state.currentTab == SpeakTab.tutors,
-                onTap: () =>
-                    context.read<SpeakBloc>().add(const ChangeSpeakTab(1)),
+                isSelected: _currentTabIndex == 1,
+                onTap: () => setState(() => _currentTabIndex = 1),
               ),
               const SizedBox(width: 8),
               TabChip(
                 label: 'Rooms',
-                isSelected: state.currentTab == SpeakTab.rooms,
-                onTap: () =>
-                    context.read<SpeakBloc>().add(const ChangeSpeakTab(2)),
+                isSelected: _currentTabIndex == 2,
+                onTap: () => setState(() => _currentTabIndex = 2),
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12),
                 child: SizedBox(height: 24, child: VerticalDivider(width: 1)),
               ),
-
               TabChip(
                 label: getLabel('Language Level', 'Level'),
                 isFilter: true,
-                isSelected: state.filters.containsKey('Language Level'),
+                isSelected: isActive('Language Level'),
                 onTap: () => _showFilterSheet(context, 'Language Level', [
-                  'Beginner',
-                  'Intermediate',
-                  'Advanced',
-                  'Native',
+                  'Beginner', 'Intermediate', 'Advanced', 'Native',
                 ]),
               ),
               const SizedBox(width: 8),
-              TabChip(
-                label: getLabel('Paid', 'Paid'),
-                isFilter: true,
-                isSelected: state.filters.containsKey('Paid'),
-                onTap: () =>
-                    _showFilterSheet(context, 'Paid', ['Free', 'Paid']),
-              ),
-
-              if (isTutorContext) ...[
+              if (_currentTabIndex != 1) ...[ 
+                TabChip(
+                  label: getLabel('Paid', 'Paid'),
+                  isFilter: true,
+                  isSelected: isActive('Paid'),
+                  onTap: () => _showFilterSheet(context, 'Paid', ['Free', 'Paid']),
+                ),
                 const SizedBox(width: 8),
+              ],
+              if (_currentTabIndex != 2) ...[
                 TabChip(
                   label: getLabel('Specialty', 'Specialty'),
                   isFilter: true,
-                  isSelected: state.filters.containsKey('Specialty'),
+                  isSelected: isActive('Specialty'),
                   onTap: () => _showFilterSheet(context, 'Specialty', [
-                    'IELTS',
-                    'Business',
-                    'Conversation',
-                    'Grammar',
+                    'IELTS', 'Business', 'Conversation', 'Grammar',
                   ]),
                 ),
               ],
@@ -191,12 +179,17 @@ class _SpeakViewState extends State<SpeakView> {
     );
   }
 
-  void _showFilterSheet(
-    BuildContext context,
-    String category,
-    List<String> options,
-  ) {
-    final speakBloc = context.read<SpeakBloc>();
+  void _showFilterSheet(BuildContext context, String category, List<String> options) {
+    String? currentVal;
+    final roomBloc = context.read<RoomBloc>();
+    final tutorBloc = context.read<TutorBloc>();
+    
+    if (_currentTabIndex == 1) {
+      currentVal = tutorBloc.state.filters[category];
+    } else {
+      currentVal = roomBloc.state.filters[category];
+    }
+
     showModalBottomSheet(
       context: context,
       useSafeArea: true,
@@ -206,118 +199,172 @@ class _SpeakViewState extends State<SpeakView> {
       builder: (ctx) => FilterBottomSheet(
         category: category,
         options: options,
-        currentSelection: speakBloc.state.filters[category],
-        onSelect: (val) =>
-            speakBloc.add(FilterSpeakList(val, category: category)),
+        currentSelection: currentVal,
+        onSelect: (val) {
+          if (_currentTabIndex == 0) {
+             roomBloc.add(FilterRooms(val, category: category));
+             tutorBloc.add(FilterTutors(val, category: category));
+          } else if (_currentTabIndex == 1) {
+             tutorBloc.add(FilterTutors(val, category: category));
+          } else {
+             roomBloc.add(FilterRooms(val, category: category));
+          }
+        },
       ),
     );
   }
 
-Widget _buildMixedList(BuildContext context, SpeakState state, dynamic user) {
-  // 1. Combine both lists into one dynamic list
-  final List<dynamic> feedItems = [...state.rooms, ...state.tutors];
+  // ===========================================================================
+  // LIST BUILDERS
+  // ===========================================================================
 
-  // 2. Sort them by createdAt (Latest first)
-  feedItems.sort((a, b) {
-    DateTime dateA = (a is ChatRoom) ? a.createdAt : (a as Tutor).createdAt;
-    DateTime dateB = (b is ChatRoom) ? b.createdAt : (b as Tutor).createdAt;
-    return dateB.compareTo(dateA); // Newest on top
-  });
+  Widget _buildMixedList(dynamic user) {
+    return BlocBuilder<RoomBloc, RoomState>(
+      builder: (context, roomState) {
+        return BlocBuilder<TutorBloc, TutorState>(
+          builder: (context, tutorState) {
+            
+            if (roomState.status == RoomStatus.loading && 
+                tutorState.status == TutorStatus.loading && 
+                roomState.allRooms.isEmpty) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-  if (feedItems.isEmpty) {
-    return const Center(child: Text("No suggestions found."));
+            final List<dynamic> feedItems = [
+              ...roomState.filteredRooms, 
+              ...tutorState.filteredTutors
+            ];
+
+            feedItems.sort((a, b) {
+              DateTime dateA = (a is ChatRoom) ? a.createdAt : (a as Tutor).createdAt;
+              DateTime dateB = (b is ChatRoom) ? b.createdAt : (b as Tutor).createdAt;
+              return dateB.compareTo(dateA);
+            });
+
+            if (feedItems.isEmpty) {
+               return const Center(child: Text("No suggestions found."));
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+              itemCount: feedItems.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) return _buildSuggestedHeader(context, user);
+                final item = feedItems[index - 1];
+
+                if (item is ChatRoom) return RoomCard(room: item);
+                return TutorCard(tutor: item as Tutor);
+              },
+            );
+          },
+        );
+      },
+    );
   }
 
-  return ListView.builder(
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-    // +1 for the "Suggestions" header
-    itemCount: feedItems.length + 1,
-    itemBuilder: (context, index) {
-      if (index == 0) return _buildSuggestedHeader(context, user);
+  Widget _buildTutorList() {
+    return BlocBuilder<TutorBloc, TutorState>(
+      builder: (context, state) {
+        if (state.status == TutorStatus.loading && state.allTutors.isEmpty) {
+           return const Center(child: CircularProgressIndicator());
+        }
+        if (state.filteredTutors.isEmpty) {
+           return const Center(child: Text("No tutors found"));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+          itemCount: state.filteredTutors.length,
+          itemBuilder: (context, index) => TutorCard(tutor: state.filteredTutors[index]),
+        );
+      },
+    );
+  }
 
-      final item = feedItems[index - 1];
-
-      // 3. Render the correct card based on the object type
-      if (item is ChatRoom) {
-        return RoomCard(room: item);
-      } else {
-        return TutorCard(tutor: item as Tutor);
-      }
-    },
-  );
-}
+  Widget _buildRoomList() {
+    return BlocBuilder<RoomBloc, RoomState>(
+      builder: (context, state) {
+        if (state.status == RoomStatus.loading && state.allRooms.isEmpty) {
+           return const Center(child: CircularProgressIndicator());
+        }
+        if (state.filteredRooms.isEmpty) {
+           return const Center(child: Text("No active rooms"));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+          itemCount: state.filteredRooms.length,
+          itemBuilder: (context, index) => RoomCard(room: state.filteredRooms[index]),
+        );
+      },
+    );
+  }
 
   Widget _buildSuggestedHeader(BuildContext context, dynamic user) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16, left: 4),
       child: Row(
         children: [
-          Icon(
-            Icons.auto_awesome,
-            size: 18,
-            color: Theme.of(context).primaryColor,
-          ),
+          Icon(Icons.auto_awesome, size: 18, color: Theme.of(context).primaryColor),
           const SizedBox(width: 8),
           Text(
             "${LanguageHelper.getLanguageName(user.currentLanguage)} suggestions",
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTutorList(SpeakState state) => ListView.builder(
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-    itemCount: state.tutors.length,
-    itemBuilder: (context, index) {
-      // FIX: Pass the specific tutor from the state list
-      return TutorCard(tutor: state.tutors[index]);
-    },
-  );
-
-  Widget _buildRoomList(SpeakState state) => ListView.builder(
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-    itemCount: state.rooms.length,
-    itemBuilder: (context, index) => RoomCard(room: state.rooms[index]),
-  );
-
-  // --- RESTORED LOGIC FOR FAB AND SHEETS ---
-
+  // ===========================================================================
+  // FAB & ACTIONS
+  // ===========================================================================
   Widget _buildFab(BuildContext context) {
     final theme = Theme.of(context);
-    return BlocBuilder<SpeakBloc, SpeakState>(
-      builder: (context, state) => Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton(
-            heroTag: 'create',
-            backgroundColor: theme.cardColor.withOpacity(0.9),
-            onPressed: () => _showCreateOptions(context),
-            child: const Icon(Icons.add_rounded, size: 32),
-          ),
-          const SizedBox(height: 16),
-          FloatingActionButton(
-            heroTag: 'msg',
-            onPressed: () => state.activeRoom != null
-                ? _showRoomChat(context, state.activeRoom!)
-                : Navigator.pushNamed(context, '/global_messages'),
-            child: Icon(
-              state.activeRoom != null
-                  ? Icons.chat_bubble_outline_rounded
-                  : Icons.message_rounded,
+    
+    // Listen to RoomBloc to see if we are in a room
+    return BlocBuilder<RoomBloc, RoomState>(
+      builder: (context, state) {
+        // activeChatRoom is set immediately when joining (showing "Loading...")
+        final isInRoom = state.activeChatRoom != null;
+        // activeLivekitRoom is set when connected
+        final isConnected = state.activeLivekitRoom != null;
+        
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FloatingActionButton(
+              heroTag: 'create',
+              backgroundColor: theme.cardColor.withOpacity(0.9),
+              onPressed: () => _showCreateOptions(context),
+              child: const Icon(Icons.add_rounded, size: 32),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(height: 16),
+            FloatingActionButton(
+              heroTag: 'msg',
+              onPressed: () {
+                if (isConnected) {
+                  // 2. PASS THE LIVEKIT ROOM OBJECT
+                  _showRoomChat(context, state.activeLivekitRoom!);
+                } else if (isInRoom) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     const SnackBar(content: Text("Please wait, connecting to room..."))
+                   );
+                } else {
+                   Navigator.pushNamed(context, '/global_messages');
+                }
+              },
+              child: Icon(
+                isInRoom ? Icons.chat_bubble_outline_rounded : Icons.message_rounded,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
   void _showCreateOptions(BuildContext context) {
-    final speakBloc = context.read<SpeakBloc>();
+    final roomBloc = context.read<RoomBloc>();
     showModalBottomSheet(
       context: context,
       useSafeArea: true,
@@ -338,11 +385,7 @@ Widget _buildMixedList(BuildContext context, SpeakState state, dynamic user) {
               ListTile(
                 leading: CircleAvatar(
                   backgroundColor: Colors.green.withOpacity(0.1),
-                  child: const Icon(
-                    FontAwesomeIcons.microphone,
-                    color: Colors.green,
-                    size: 20,
-                  ),
+                  child: const Icon(FontAwesomeIcons.microphone, color: Colors.green, size: 20),
                 ),
                 title: const Text("Start Live Room"),
                 subtitle: const Text("Host a conversation for others to join"),
@@ -353,7 +396,7 @@ Widget _buildMixedList(BuildContext context, SpeakState state, dynamic user) {
                     useSafeArea: true,
                     isScrollControlled: true,
                     builder: (_) => BlocProvider.value(
-                      value: speakBloc,
+                      value: roomBloc,
                       child: const CreateRoomSheet(),
                     ),
                   );
@@ -362,22 +405,15 @@ Widget _buildMixedList(BuildContext context, SpeakState state, dynamic user) {
               ListTile(
                 leading: CircleAvatar(
                   backgroundColor: Colors.blue.withOpacity(0.1),
-                  child: const Icon(
-                    FontAwesomeIcons.chalkboardUser,
-                    color: Colors.blue,
-                    size: 20,
-                  ),
+                  child: const Icon(FontAwesomeIcons.chalkboardUser, color: Colors.blue, size: 20),
                 ),
                 title: const Text("Create Tutor Profile"),
                 subtitle: const Text("Offer paid lessons and coaching"),
                 onTap: () {
-                  Navigator.pop(ctx); // Close the bottom sheet
-                  // Navigate to the new screen
+                  Navigator.pop(ctx);
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (context) => const CreateTutorProfileScreen(),
-                    ),
+                    MaterialPageRoute(builder: (context) => const CreateTutorProfileScreen()),
                   );
                 },
               ),
@@ -388,7 +424,8 @@ Widget _buildMixedList(BuildContext context, SpeakState state, dynamic user) {
     );
   }
 
-  void _showRoomChat(BuildContext context, dynamic room) {
+  // 3. UPDATED SIGNATURE: Accepts LiveKit Room
+  void _showRoomChat(BuildContext context, Room room) {
     showModalBottomSheet(
       context: context,
       useSafeArea: true,

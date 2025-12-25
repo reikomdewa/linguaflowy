@@ -5,6 +5,8 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_event.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
 import 'package:linguaflow/screens/speak/widgets/cards/tutor_card.dart';
 import 'package:linguaflow/utils/language_helper.dart';
@@ -138,7 +140,7 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
         return;
       }
 
-      context.read<SpeakBloc>().add(
+      context.read<TutorBloc>().add(
         CreateTutorProfileEvent(
           name: _nameController.text.trim(),
           language: LanguageHelper.getLanguageName(_selectedLanguageCode!),

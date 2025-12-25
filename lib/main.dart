@@ -13,7 +13,11 @@ import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart'; // Crucial for Themes
+import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_event.dart';
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
+import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/firebase_options.dart';
 import 'package:linguaflow/screens/login/web_login_layout.dart';
@@ -108,7 +112,13 @@ class LinguaflowApp extends StatelessWidget {
           ),
           // 4. QUIZ BLOC
           BlocProvider<QuizBloc>(create: (context) => QuizBloc()),
-          BlocProvider<SpeakBloc>(create: (context) => SpeakBloc()),
+          BlocProvider<RoomBloc>(
+            create: (context) => RoomBloc()..add(const LoadRooms()),
+          ),
+          // 2. Tutor Bloc (Loads tutors once)
+          BlocProvider<TutorBloc>(
+            create: (context) => TutorBloc()..add(const LoadTutors()),
+          ),
           // 5. VOCABULARY BLOC
           BlocProvider(
             create: (context) =>
