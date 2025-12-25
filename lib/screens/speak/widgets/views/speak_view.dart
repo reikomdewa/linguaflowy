@@ -54,8 +54,9 @@ class _SpeakViewState extends State<SpeakView> {
     final authState = context.watch<AuthBloc>().state;
 
     // Safety check for auth state
-    if (authState is! AuthAuthenticated)
+    if (authState is! AuthAuthenticated) {
       return const Scaffold(body: SizedBox());
+    }
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

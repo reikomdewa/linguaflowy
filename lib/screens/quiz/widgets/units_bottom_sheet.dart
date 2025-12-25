@@ -7,7 +7,6 @@ import 'package:linguaflow/screens/quiz/quiz_screen.dart';
 import 'package:linguaflow/screens/learn/learn_screen.dart';
 import 'package:linguaflow/screens/quiz/widgets/unit_path_card.dart';
 import 'package:linguaflow/services/quiz_limit_service.dart';
-import 'package:linguaflow/utils/logger.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 class UnitsBottomSheet extends StatefulWidget {

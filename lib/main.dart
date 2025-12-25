@@ -17,7 +17,6 @@ import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/firebase_options.dart';
 import 'package:linguaflow/screens/login/web_login_layout.dart';
-import 'package:linguaflow/screens/premium/premium_screen.dart';
 
 // --- SERVICES & REPOSITORIES ---
 import 'package:linguaflow/services/auth_service.dart';
@@ -28,7 +27,6 @@ import 'package:linguaflow/services/hybrid_lesson_service.dart'; // Local Servic
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
-import 'package:linguaflow/utils/centered_views.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:upgrader/upgrader.dart';
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ParticipantTile extends StatefulWidget {
   final Participant participant;

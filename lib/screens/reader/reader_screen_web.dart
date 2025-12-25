@@ -674,10 +674,11 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       _totalDuration = Duration(milliseconds: (totalSeconds * 1000).toInt());
     });
 
-    if (isPlaying)
+    if (isPlaying) {
       _startListeningTracker();
-    else
+    } else {
       _stopListeningTracker();
+    }
 
     // 3. Check Completion (Skip math check on Web)
     if ((_isVideo || _isAudio || _isYoutubeAudio) && totalSeconds > 0) {
@@ -731,16 +732,18 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
             break;
           }
         }
-        if (activeIndex == -1 && _activeTranscript.isNotEmpty)
+        if (activeIndex == -1 && _activeTranscript.isNotEmpty) {
           activeIndex = _activeTranscript.length - 1;
+        }
       }
       if (activeIndex != -1 && activeIndex != _activeSentenceIndex) {
         setState(() {
           _activeSentenceIndex = activeIndex;
           _resetTranslationState();
         });
-        if (MediaQuery.of(context).size.width <= 900)
+        if (MediaQuery.of(context).size.width <= 900) {
           _scrollToActiveLine(activeIndex);
+        }
       }
     }
   }
@@ -930,10 +933,11 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     await _flutterTts.setLanguage(widget.lesson.language);
     await _flutterTts.setSpeechRate(_ttsSpeed);
     _flutterTts.setCompletionHandler(() {
-      if (!_isSentenceMode)
+      if (!_isSentenceMode) {
         _playNextTtsSentence();
-      else
+      } else {
         setState(() => _isTtsPlaying = false);
+      }
     });
   }
 
@@ -1016,8 +1020,9 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
   String _restoreSpaces(String compressedPhrase) {
     if (_activeSentenceIndex >= 0 &&
         _activeSentenceIndex < _smartChunks.length) {
-      if (_smartChunks[_activeSentenceIndex].contains(compressedPhrase))
+      if (_smartChunks[_activeSentenceIndex].contains(compressedPhrase)) {
         return compressedPhrase;
+      }
     }
     for (final chunk in _smartChunks) {
       if (chunk.contains(compressedPhrase)) return compressedPhrase;
@@ -1031,11 +1036,12 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
         _activeSentenceIndex < _smartChunks.length) {
       try {
         final match = regex.firstMatch(_smartChunks[_activeSentenceIndex]);
-        if (match != null)
+        if (match != null) {
           return _smartChunks[_activeSentenceIndex].substring(
             match.start,
             match.end,
           );
+        }
       } catch (_) {}
     }
     for (String chunk in _smartChunks) {
@@ -1267,8 +1273,9 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
   int _calculateSmartStatus(VocabularyItem? item) {
     if (item == null || item.status == 0) return 1;
     if (item.status >= 5) return 5;
-    if (DateTime.now().difference(item.lastReviewed).inHours >= 1)
+    if (DateTime.now().difference(item.lastReviewed).inHours >= 1) {
       return item.status + 1;
+    }
     return item.status;
   }
 
@@ -1302,8 +1309,9 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       userLevel: user.currentLevel,
     );
     DateTime? learnedAt = existingItem?.learnedAt;
-    if (learnedAt == null && oldStatus == 0 && status > 0)
+    if (learnedAt == null && oldStatus == 0 && status > 0) {
       learnedAt = DateTime.now();
+    }
     if (xpGained > 0) {
       context.read<AuthBloc>().add(AuthUpdateXP(xpGained));
     }
@@ -1345,13 +1353,14 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
         }, SetOptions(merge: true));
     if (showDialog && !_hasSeenStatusHint) {
       setState(() => _hasSeenStatusHint = true);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Word status updated"),
             duration: Duration(seconds: 1),
           ),
         );
+      }
     }
   }
 
@@ -1383,18 +1392,20 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
         sourceLang: widget.lesson.language,
         targetLang: user.nativeLanguage,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _googleTranslation = g;
           _myMemoryTranslation = m;
           _isLoadingTranslation = false;
         });
+      }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoadingTranslation = false;
           _showError = true;
         });
+      }
     }
   }
 

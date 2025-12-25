@@ -229,7 +229,6 @@ class _ReaderScreenState extends State<ReaderScreen>
           _activeTranscript = lines;
         }
       }
-    } catch (e) {
     } finally {
       if (mounted) _finalizeContentInitialization();
     }

@@ -82,7 +82,7 @@ class AuthService {
         await _googleSignIn.initialize();
 
         // FIX 3: Use authenticate() instead of signIn()
-        final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate();
+        final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
         
         if (googleUser == null) {
           print("⚠️ SERVICE: User cancelled Google Login.");
@@ -90,7 +90,7 @@ class AuthService {
         }
 
         // Get Tokens
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
         // FIX 4: Pass null for accessToken
         // v7 removed .accessToken from the auth object. 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Add intl to pubspec for time formatting
+import 'package:intl/intl.dart'; 
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:livekit_client/livekit_client.dart';
 import 'package:linguaflow/services/speak/chat_service.dart';
@@ -21,17 +21,15 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
   @override
   void initState() {
     super.initState();
-    // Get local user ID from LiveKit
     _currentUserId = widget.room.localParticipant?.identity ?? 'local';
     
-    // Connect Service
+    // Connects (keeps history if same room)
     _chatService.connect(widget.room);
   }
 
   @override
   void dispose() {
     _textController.dispose();
-    // Optional: _chatService.dispose() if your service has a dispose method
     super.dispose();
   }
 
@@ -50,122 +48,123 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
     final backgroundColor = theme.scaffoldBackgroundColor;
     final inputColor = isDark ? Colors.grey[900] : Colors.grey[100];
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          // --- HEADER ---
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Room Chat",
-                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
+    return SafeArea( // Added SafeArea to avoid bottom notch issues
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // HEADER
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Room Chat",
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const Divider(height: 1),
-
-          // --- MESSAGE LIST ---
-          Expanded(
-            child: StreamBuilder<List<types.Message>>(
-              stream: _chatService.messagesStream,
-              initialData: const [],
-              builder: (context, snapshot) {
-                final messages = snapshot.data ?? [];
-
-                if (messages.isEmpty) {
-                  return Center(
-                    child: Text(
-                      "No messages yet.",
-                      style: TextStyle(color: Colors.grey[500]),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  // Reverse so the list starts from the bottom
-                  reverse: true, 
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    // Because list is reversed in UI, but data might be Newest->Oldest
-                    // Ensure your ChatService sends Newest First (index 0).
-                    final message = messages[index];
-                    final isMe = message.author.id == _currentUserId;
-                    
-                    return _MessageBubble(
-                      message: message, 
-                      isMe: isMe,
-                      isDark: isDark,
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-
-          // --- INPUT AREA ---
-          Container(
-            padding: const EdgeInsets.only(
-              left: 16, 
-              right: 16, 
-              top: 10, 
-              bottom: 30 // Safe area for iPhone home bar
-            ),
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.2))),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: inputColor,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: TextField(
-                      controller: _textController,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        hintText: "Type a message...",
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            const Divider(height: 1),
+      
+            // MESSAGE LIST
+            Expanded(
+              child: StreamBuilder<List<types.Message>>(
+                stream: _chatService.messagesStream,
+                
+                // --- FIX: USE SAVED MESSAGES AS INITIAL DATA ---
+                // If you use const [], it flashes empty until the stream emits.
+                initialData: _chatService.currentMessages, 
+                
+                builder: (context, snapshot) {
+                  final messages = snapshot.data ?? [];
+      
+                  if (messages.isEmpty) {
+                    return Center(
+                      child: Text(
+                        "No messages yet.",
+                        style: TextStyle(color: Colors.grey[500]),
                       ),
-                      onSubmitted: (_) => _sendMessage(),
+                    );
+                  }
+      
+                  return ListView.builder(
+                    reverse: true, 
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    itemCount: messages.length,
+                    itemBuilder: (context, index) {
+                      final message = messages[index];
+                      final isMe = message.author.id == _currentUserId;
+                      
+                      return _MessageBubble(
+                        message: message, 
+                        isMe: isMe,
+                        isDark: isDark,
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+      
+            // INPUT AREA
+            Container(
+              padding: const EdgeInsets.only(
+                left: 16, 
+                right: 16, 
+                top: 10, 
+                bottom: 10 // Bottom padding handled by SafeArea now
+              ),
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.2))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: inputColor,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: TextField(
+                        controller: _textController,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          hintText: "Type a message...",
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _sendMessage,
-                  icon: const Icon(Icons.send),
-                  color: Colors.blueAccent,
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _sendMessage,
+                    icon: const Icon(Icons.send),
+                    color: Colors.blueAccent,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-// =============================================================================
-// CUSTOM BUBBLE WIDGET
-// =============================================================================
+// BUBBLE WIDGET (Kept in same file is fine)
 class _MessageBubble extends StatelessWidget {
   final types.Message message;
   final bool isMe;
@@ -179,7 +178,6 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Only handle TextMessages for now
     if (message is! types.TextMessage) return const SizedBox.shrink();
 
     final textMessage = message as types.TextMessage;
@@ -207,7 +205,6 @@ class _MessageBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Sender Name (Only for others)
             if (!isMe)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4.0),
@@ -221,7 +218,6 @@ class _MessageBubble extends StatelessWidget {
                 ),
               ),
             
-            // Message Text
             Text(
               textMessage.text,
               style: TextStyle(
@@ -230,7 +226,6 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
 
-            // Timestamp
             if (time.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),

@@ -6,7 +6,6 @@ import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
 import 'package:linguaflow/screens/profile/widgets/profile_data_exporter.dart';
 import 'package:linguaflow/services/home_feed_cache_service.dart';
-import 'package:linguaflow/services/lesson_cache_service.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 

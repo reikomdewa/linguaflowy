@@ -181,8 +181,9 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
                 itemCount: displayLessons.length + (_isLoadingMore ? 1 : 0),
                 separatorBuilder: (ctx, i) => const SizedBox(width: 16),
                 itemBuilder: (context, index) {
-                  if (index >= displayLessons.length)
+                  if (index >= displayLessons.length) {
                     return const Center(child: CircularProgressIndicator());
+                  }
                   final lesson = displayLessons[index];
                   final bool isSeries =
                       lesson.seriesId != null && lesson.seriesId!.isNotEmpty;
@@ -367,8 +368,9 @@ class _ImmersionSectionState extends State<ImmersionSection> {
             itemCount: display.length + (_loading ? 1 : 0),
             separatorBuilder: (ctx, i) => const SizedBox(width: 16),
             itemBuilder: (context, index) {
-              if (index >= display.length)
+              if (index >= display.length) {
                 return const Center(child: CircularProgressIndicator());
+              }
               final l = display[index];
               return VideoLessonCard(
                 lesson: l,

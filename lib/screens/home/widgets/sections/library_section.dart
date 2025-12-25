@@ -137,8 +137,9 @@ class _LibrarySectionState extends State<LibrarySection> {
             itemCount: display.length + (_loading ? 1 : 0),
             separatorBuilder: (ctx, i) => const SizedBox(width: 16),
             itemBuilder: (context, index) {
-              if (index >= display.length)
+              if (index >= display.length) {
                 return const Center(child: CircularProgressIndicator());
+              }
               final l = display[index];
               return l.type == 'text'
                   ? TextLessonCard(
