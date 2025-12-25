@@ -48,7 +48,7 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
     'Conversation',
     'Grammar',
     'Kids',
-    'Exam Prep'
+    'Exam Prep',
   ];
 
   @override
@@ -128,8 +128,8 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
           : _imageUrlController.text,
       level: _selectedLevel,
       specialties: _selectedSpecialties,
-      description: _descriptionController.text.isEmpty 
-          ? "Your biography will appear here..." 
+      description: _descriptionController.text.isEmpty
+          ? "Your biography will appear here..."
           : _descriptionController.text,
       otherLanguages: const [],
       countryOfBirth: _countryController.text,
@@ -145,10 +145,10 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
   // ==========================================
   // SCHEDULE LOGIC
   // ==========================================
-  
+
   Future<void> _editDaySchedule(int index) async {
     final day = _weeklySchedule[index];
-    
+
     // Create local copies for the dialog to modify
     bool isDayOff = day.isDayOff;
     List<TimeSlot> currentSlots = List.from(day.slots);
@@ -163,13 +163,13 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final theme = Theme.of(context);
-            
+
             return Padding(
               padding: EdgeInsets.only(
-                top: 24, 
-                left: 24, 
+                top: 24,
+                left: 24,
                 right: 24,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -180,7 +180,9 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                     children: [
                       Text(
                         "Edit ${day.dayName}",
-                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       Switch(
                         value: !isDayOff, // True means Available
@@ -190,10 +192,14 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                             isDayOff = !val;
                             // Add default slot if turning on and empty
                             if (!isDayOff && currentSlots.isEmpty) {
-                              currentSlots.add(const TimeSlot(
-                                startHour: 9, startMinute: 0, 
-                                endHour: 17, endMinute: 0
-                              ));
+                              currentSlots.add(
+                                const TimeSlot(
+                                  startHour: 9,
+                                  startMinute: 0,
+                                  endHour: 17,
+                                  endMinute: 0,
+                                ),
+                              );
                             }
                           });
                         },
@@ -201,17 +207,19 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                     ],
                   ),
                   const Divider(),
-                  
+
                   if (isDayOff)
-                     Padding(
-                       padding: const EdgeInsets.symmetric(vertical: 30),
-                       child: Center(
-                         child: Text(
-                           "Day Off", 
-                           style: theme.textTheme.bodyLarge?.copyWith(color: theme.hintColor),
-                         ),
-                       ),
-                     )
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 30),
+                      child: Center(
+                        child: Text(
+                          "Day Off",
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: theme.hintColor,
+                          ),
+                        ),
+                      ),
+                    )
                   else ...[
                     ListView.builder(
                       shrinkWrap: true,
@@ -223,7 +231,9 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                           margin: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
                             leading: const Icon(Icons.access_time),
-                            title: Text("${slot.formattedStart} - ${slot.formattedEnd}"),
+                            title: Text(
+                              "${slot.formattedStart} - ${slot.formattedEnd}",
+                            ),
                             trailing: IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
                               onPressed: () {
@@ -239,12 +249,32 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () async {
+                        // final newSlot = await _pickTimeSlot(context);
+                        // if (newSlot != null) {
+                        //   setModalState(() {
+                        //     currentSlots.add(newSlot);
+                        //     // Sort slots by start time
+                        //     currentSlots.sort((a, b) => a.startHour.compareTo(b.startHour));
+                        //   });
+                        // }
+
+                        if (currentSlots.length >= 3) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Maximum 3 slots allowed per day."),
+                            ),
+                          );
+                          return; // Stop here
+                        }
+
+                        // 2. Proceed to pick time if under limit
                         final newSlot = await _pickTimeSlot(context);
                         if (newSlot != null) {
                           setModalState(() {
                             currentSlots.add(newSlot);
-                            // Sort slots by start time
-                            currentSlots.sort((a, b) => a.startHour.compareTo(b.startHour));
+                            currentSlots.sort(
+                              (a, b) => a.startHour.compareTo(b.startHour),
+                            );
                           });
                         }
                       },
@@ -271,7 +301,7 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                       },
                       child: const Text("Save Schedule"),
                     ),
-                  )
+                  ),
                 ],
               ),
             );
@@ -284,9 +314,9 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
   Future<TimeSlot?> _pickTimeSlot(BuildContext context) async {
     // 1. Pick Start
     final start = await showTimePicker(
-      context: context, 
+      context: context,
       initialTime: const TimeOfDay(hour: 9, minute: 0),
-      helpText: "Select Start Time"
+      helpText: "Select Start Time",
     );
     if (start == null) return null;
 
@@ -294,9 +324,9 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
 
     // 2. Pick End
     final end = await showTimePicker(
-      context: context, 
+      context: context,
       initialTime: TimeOfDay(hour: start.hour + 1, minute: start.minute),
-      helpText: "Select End Time"
+      helpText: "Select End Time",
     );
     if (end == null) return null;
 
@@ -314,10 +344,10 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
     }
 
     return TimeSlot(
-      startHour: start.hour, 
-      startMinute: start.minute, 
-      endHour: end.hour, 
-      endMinute: end.minute
+      startHour: start.hour,
+      startMinute: start.minute,
+      endHour: end.hour,
+      endMinute: end.minute,
     );
   }
 
@@ -326,18 +356,21 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
   // ==========================================
   void _submitProfile() {
     if (_formKey.currentState!.validate()) {
-      
       // Ensure at least one day is active
-      bool hasAvailability = _weeklySchedule.any((d) => !d.isDayOff && d.slots.isNotEmpty);
+      bool hasAvailability = _weeklySchedule.any(
+        (d) => !d.isDayOff && d.slots.isNotEmpty,
+      );
 
       if (!hasAvailability) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please add at least one available time slot.")),
+          const SnackBar(
+            content: Text("Please add at least one available time slot."),
+          ),
         );
         return;
       }
 
-      // NOTE: Ensure your TutorBloc -> CreateTutorProfileEvent 
+      // NOTE: Ensure your TutorBloc -> CreateTutorProfileEvent
       // accepts List<DaySchedule> for 'availability'.
       context.read<TutorBloc>().add(
         CreateTutorProfileEvent(
@@ -351,10 +384,10 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
           otherLanguages: const [],
           countryOfBirth: _countryController.text.trim(),
           isNative: _isNative,
-          
+
           // PASSING THE NEW STRUCTURE
-          availability: _weeklySchedule, 
-          
+          availability: _weeklySchedule,
+
           lessons: const [],
         ),
       );
@@ -525,17 +558,19 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
               ),
 
               const SizedBox(height: 32),
-              
+
               // ===================================
               // NEW: AVAILABILITY SECTION
               // ===================================
               _buildSectionTitle("Availability & Rates", theme),
               Text(
                 "Tap a day to set your hours.",
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.hintColor,
+                ),
               ),
               const SizedBox(height: 12),
-              
+
               Container(
                 decoration: BoxDecoration(
                   color: theme.cardColor,
@@ -546,7 +581,7 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                   children: List.generate(_weeklySchedule.length, (index) {
                     final day = _weeklySchedule[index];
                     final bool isLast = index == _weeklySchedule.length - 1;
-                    
+
                     return Column(
                       children: [
                         ListTile(
@@ -556,30 +591,38 @@ class _CreateTutorProfileScreenState extends State<CreateTutorProfileScreen> {
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           subtitle: Text(
-                            day.isDayOff 
-                                ? "Day Off" 
-                                : day.slots.isEmpty 
-                                    ? "No times set (Click to add)"
-                                    : day.slots.map((s) => "${s.formattedStart}-${s.formattedEnd}").join(", "),
+                            day.isDayOff
+                                ? "Day Off"
+                                : day.slots.isEmpty
+                                ? "No times set (Click to add)"
+                                : day.slots
+                                      .map(
+                                        (s) =>
+                                            "${s.formattedStart}-${s.formattedEnd}",
+                                      )
+                                      .join(", "),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: day.isDayOff ? theme.hintColor : theme.primaryColor,
+                              color: day.isDayOff
+                                  ? theme.hintColor
+                                  : theme.primaryColor,
                             ),
                           ),
                           trailing: Icon(
-                            Icons.arrow_forward_ios_rounded, 
+                            Icons.arrow_forward_ios_rounded,
                             size: 14,
                             color: theme.hintColor.withOpacity(0.5),
                           ),
                         ),
-                        if (!isLast) Divider(height: 1, indent: 16, endIndent: 16),
+                        if (!isLast)
+                          Divider(height: 1, indent: 16, endIndent: 16),
                       ],
                     );
                   }),
                 ),
               ),
-              
+
               const SizedBox(height: 20),
 
               _buildLabel("Hourly Rate (USD)", theme),

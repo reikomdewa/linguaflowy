@@ -9,6 +9,9 @@ import 'package:linguaflow/blocs/speak/room/room_state.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_state.dart';
+import 'package:linguaflow/models/private_chat_models.dart';
+import 'package:linguaflow/screens/inbox/inbox_screen.dart';
+import 'package:linguaflow/services/speak/private_chat_service.dart';
 import 'package:livekit_client/livekit_client.dart'; // <--- 1. ADDED THIS IMPORT
 
 
@@ -317,17 +320,20 @@ class _SpeakViewState extends State<SpeakView> {
   // ===========================================================================
   // FAB & ACTIONS
   // ===========================================================================
-  Widget _buildFab(BuildContext context) {
+Widget _buildFab(BuildContext context) {
     final theme = Theme.of(context);
-    
+    final authState = context.read<AuthBloc>().state;
+
+    // Guard: If not authenticated, return empty or standard fab
+    if (authState is! AuthAuthenticated) return const SizedBox();
+
+    final currentUser = authState.user;
+
     // Listen to RoomBloc to see if we are in a room
     return BlocBuilder<RoomBloc, RoomState>(
       builder: (context, state) {
-        // activeChatRoom is set immediately when joining (showing "Loading...")
         final isInRoom = state.activeChatRoom != null;
-        // activeLivekitRoom is set when connected
-        final isConnected = state.activeLivekitRoom != null;
-        
+
         return Column(
           mainAxisAlignment: MainAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
@@ -339,22 +345,59 @@ class _SpeakViewState extends State<SpeakView> {
               child: const Icon(Icons.add_rounded, size: 32),
             ),
             const SizedBox(height: 16),
+            
             FloatingActionButton(
               heroTag: 'msg',
+              backgroundColor: theme.primaryColor, // Use primary color for main action
+              foregroundColor: Colors.white, // Ensure icon is visible
               onPressed: () {
-                if (isConnected) {
-                  // 2. PASS THE LIVEKIT ROOM OBJECT
-                  _showRoomChat(context, state.activeLivekitRoom!);
-                } else if (isInRoom) {
-                   ScaffoldMessenger.of(context).showSnackBar(
-                     const SnackBar(content: Text("Please wait, connecting to room..."))
-                   );
-                } else {
-                   Navigator.pushNamed(context, '/global_messages');
-                }
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const InboxScreen()),
+                );
               },
-              child: Icon(
-                isInRoom ? Icons.chat_bubble_outline_rounded : Icons.message_rounded,
+              // Wrap the Icon in a StreamBuilder to get real-time data
+              child: StreamBuilder<List<PrivateConversation>>(
+                stream: PrivateChatService().getInbox(currentUser.id),
+                builder: (context, snapshot) {
+                  int unreadCount = 0;
+
+                  if (snapshot.hasData) {
+                    final chats = snapshot.data!;
+                    
+                    // LOGIC: Count chats that are unread.
+                    // Note: This assumes your PrivateConversation model has 'isRead' 
+                    // and 'lastSenderId'. If not, it defaults to 0 to prevent errors.
+                    // You can simple return chats.length to test if you don't have those fields yet.
+                    unreadCount = chats.where((chat) {
+                      // Attempt to check if unread (Safely handling dynamic/missing fields)
+                      final data = chat as dynamic; 
+                      
+                      // Example Logic: If I am NOT the last sender, and it is NOT read
+                      try {
+                        bool isLastMsgFromMe = data.lastSenderId == currentUser.id;
+                        bool isRead = data.isRead ?? true; 
+                        return !isLastMsgFromMe && !isRead;
+                      } catch (e) {
+                        return false; // Fail safe
+                      }
+                    }).length;
+                  }
+
+                  return Badge(
+                    isLabelVisible: unreadCount > 0,
+                    label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
+                    backgroundColor: Colors.red,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    offset: const Offset(4, -4), // Adjust badge position
+                    child: Icon(
+                      isInRoom
+                          ? Icons.chat_bubble_outline_rounded
+                          : Icons.message_rounded,
+                      size: 24,
+                    ),
+                  );
+                },
               ),
             ),
           ],

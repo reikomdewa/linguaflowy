@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Required for input formatters
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/screens/inbox/private_chat_screen.dart';
+import 'package:linguaflow/services/speak/private_chat_service.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 // 1. BLOC & STATE IMPORTS
@@ -18,6 +20,8 @@ import 'package:linguaflow/models/speak/room_member.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
 import 'package:linguaflow/screens/speak/widgets/active_room_screen.dart';
 import 'package:linguaflow/services/speak/speak_service.dart';
+
+// 3. CHAT IMPORTS (NEW)
 
 class TutorCard extends StatelessWidget {
   final Tutor tutor;
@@ -113,7 +117,59 @@ class TutorCard extends StatelessWidget {
   }
 
   // ==========================================
-  // 2. ENTRY POINT: HANDLE JOIN LOGIC
+  // 2. MESSAGE LOGIC (NEW)
+  // ==========================================
+  Future<void> _handleMessagePress(BuildContext context) async {
+    final authState = context.read<AuthBloc>().state;
+
+    if (authState is! AuthAuthenticated) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please log in to message tutors.")),
+      );
+      return;
+    }
+
+    final myUser = authState.user;
+
+    // Prevent messaging yourself
+    if (myUser.id == tutor.userId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("You cannot message yourself.")),
+      );
+      return;
+    }
+
+    try {
+      // 1. Get or Create Chat ID
+      final chatId = await PrivateChatService().startChat(
+        currentUserId: myUser.id,
+        otherUserId: tutor.userId,
+        currentUserName: myUser.displayName,
+        otherUserName: tutor.name,
+        currentUserPhoto: myUser.photoUrl,
+        otherUserPhoto: tutor.imageUrl,
+      );
+
+      // 2. Open Chat Screen
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PrivateChatScreen(
+              chatId: chatId,
+              otherUserName: tutor.name,
+              otherUserPhoto: tutor.imageUrl,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error starting chat: $e");
+    }
+  }
+
+  // ==========================================
+  // 3. JOIN LOGIC
   // ==========================================
   Future<void> _handleJoinPress(BuildContext context) async {
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -121,14 +177,11 @@ class TutorCard extends StatelessWidget {
 
     final bool isHost = currentUser.uid == tutor.userId;
 
-    // A. HOST: Setup Session immediately
     if (isHost) {
       _showHostSetupDialog(context);
       return;
     }
 
-    // B. STUDENT: Check Status (Ghost Room Check)
-    // Show a loading indicator while we check Firestore
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -141,7 +194,6 @@ class TutorCard extends StatelessWidget {
           .doc(tutor.id)
           .get();
 
-      // Close the loading dialog
       if (context.mounted) Navigator.pop(context);
 
       bool isLive = roomSnapshot.exists;
@@ -152,18 +204,13 @@ class TutorCard extends StatelessWidget {
         final members = data?['members'] as List? ?? [];
         roomPassword = data?['password'] as String?;
 
-        // --- GHOST ROOM CHECK ---
-        // 1. If members list is empty, room is dead.
         if (members.isEmpty) {
           isLive = false;
         } else {
-          // 2. If the HOST is not in the members list, the room is considered dead.
-          // We assume the Host's UID is the same as the Tutor ID (tutor.userId)
           final isHostPresent = members.any((m) {
             if (m is Map) return m['uid'] == tutor.userId;
             return false;
           });
-          
           if (!isHostPresent) isLive = false;
         }
       }
@@ -171,29 +218,25 @@ class TutorCard extends StatelessWidget {
       if (!context.mounted) return;
 
       if (isLive) {
-        // Tutor is Live -> Check Password
         if (roomPassword != null && roomPassword.isNotEmpty) {
           _showStudentPasswordDialog(context, roomPassword);
         } else {
           _joinTutorSession(context);
         }
       } else {
-        // Tutor is Offline -> Show Schedule
         _showScheduleDialog(context);
       }
-
     } catch (e) {
-      // If error occurs (e.g. network), close loading and default to Offline Sheet
       if (context.mounted) {
-        Navigator.pop(context); // Ensure loading is closed
-        _showScheduleDialog(context); // Fallback to schedule
+        Navigator.pop(context);
+        _showScheduleDialog(context);
       }
       debugPrint("Error checking room status: $e");
     }
   }
 
   // ==========================================
-  // 3. DIALOGS
+  // 4. DIALOGS
   // ==========================================
 
   void _showHostSetupDialog(BuildContext context) {
@@ -305,9 +348,6 @@ class TutorCard extends StatelessWidget {
     );
   }
 
-  // ==========================================
-  // 4. JOIN SESSION LOGIC
-  // ==========================================
   Future<void> _joinTutorSession(
     BuildContext context, {
     String? sessionPassword,
@@ -357,7 +397,6 @@ class TutorCard extends StatelessWidget {
         currentUser.displayName ?? "Student",
       );
 
-      // Handle Firestore (Non-blocking for students)
       if (isHost) {
         await FirebaseFirestore.instance
             .collection('rooms')
@@ -605,17 +644,24 @@ class TutorCard extends StatelessWidget {
   }
 
   Widget _buildActionButtons(BuildContext context, ThemeData theme) {
-    return ElevatedButton.icon(
-      onPressed: () => _handleJoinPress(context),
-      icon: const Icon(Icons.video_call_rounded, size: 20),
-      label: const Text("Join Class"),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: theme.primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 2. JOIN BUTTON
+        ElevatedButton.icon(
+          onPressed: () => _handleJoinPress(context),
+          icon: const Icon(Icons.video_call_rounded, size: 20),
+          label: const Text("Join Class"),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: theme.primaryColor,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+      ],
     );
   }
 
@@ -631,9 +677,10 @@ class TutorCard extends StatelessWidget {
       ),
       builder: (ctx) {
         final theme = Theme.of(context);
-        
-        // Ensure we filter out days off or days with no slots
-        final activeSchedule = tutor.availability.where((day) => !day.isDayOff && day.slots.isNotEmpty).toList();
+
+        final activeSchedule = tutor.availability
+            .where((day) => !day.isDayOff && day.slots.isNotEmpty)
+            .toList();
 
         return SafeArea(
           child: Padding(
@@ -642,7 +689,6 @@ class TutorCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
                 Row(
                   children: [
                     CircleAvatar(
@@ -673,9 +719,48 @@ class TutorCard extends StatelessWidget {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 20),
+
+                // 1. MESSAGE BUTTON (Styled with shared background)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _handleMessagePress(context);
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: theme.primaryColor.withOpacity(
+                        0.1,
+                      ), // Background for both
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          color: theme.primaryColor,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Message Tutor',
+                          style: TextStyle(
+                            color: theme.primaryColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
                 const SizedBox(height: 24),
-                
-                // Title
+
                 Text(
                   "Weekly Schedule",
                   style: theme.textTheme.titleSmall?.copyWith(
@@ -685,7 +770,6 @@ class TutorCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
 
-                // Schedule List
                 if (activeSchedule.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -697,14 +781,15 @@ class TutorCard extends StatelessWidget {
                 else
                   Container(
                     constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.4
+                      maxHeight: MediaQuery.of(context).size.height * 0.4,
                     ),
                     child: SingleChildScrollView(
                       child: Column(
                         children: activeSchedule.map((day) {
-                          // Format times: e.g. "09:00-12:00, 14:00-18:00"
                           final timesText = day.slots
-                              .map((s) => "${s.formattedStart}-${s.formattedEnd}")
+                              .map(
+                                (s) => "${s.formattedStart}-${s.formattedEnd}",
+                              )
                               .join(", ");
 
                           return Container(
@@ -720,7 +805,9 @@ class TutorCard extends StatelessWidget {
                               children: [
                                 Text(
                                   day.dayName,
-                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                                 Flexible(
                                   child: Text(
@@ -736,7 +823,6 @@ class TutorCard extends StatelessWidget {
                       ),
                     ),
                   ),
-
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
