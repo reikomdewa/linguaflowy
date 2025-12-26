@@ -3,17 +3,29 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
-import 'package:linguaflow/blocs/speak/room/room_event.dart' hide RoomEvent;
-import 'package:linguaflow/screens/speak/widgets/full_screen_participant.dart';
-import 'package:linguaflow/screens/speak/widgets/participant_tile.dart';
 import 'package:livekit_client/livekit_client.dart';
 
+// BLOC IMPORTS
+import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_state.dart';
+import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_event.dart' hide RoomEvent;
 import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/speak/speak_event.dart';
+
+// MODELS & SERVICES
 import 'package:linguaflow/models/speak/speak_models.dart';
+import 'package:linguaflow/models/speak/room_member.dart'; 
+import 'package:linguaflow/services/speak/chat_service.dart'; // Public LiveKit Chat
+import 'package:linguaflow/services/speak/private_chat_service.dart'; // Private Chat
+import 'package:linguaflow/models/private_chat_models.dart'; // Private Chat Models
+
+// WIDGETS & SCREENS
+import 'package:linguaflow/screens/speak/widgets/full_screen_participant.dart';
+import 'package:linguaflow/screens/speak/widgets/participant_tile.dart';
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
-import 'package:linguaflow/services/speak/chat_service.dart';
+import 'package:linguaflow/screens/inbox/private_chat_screen.dart';
+import 'package:linguaflow/screens/inbox/inbox_screen.dart';
 
 class ActiveRoomScreen extends StatefulWidget {
   final ChatRoom roomData;
@@ -35,10 +47,10 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
   EventsListener<RoomEvent>? _listener;
   bool _isLeaving = false;
 
-  // Chat Notification State
+  // Chat Notification State (LiveKit Public Chat)
   final ChatService _chatService = ChatService();
   StreamSubscription? _chatSubscription;
-  int _unreadCount = 0;
+  int _publicUnreadCount = 0;
   int _lastReadCount = 0;
   bool _isChatOpen = false;
 
@@ -47,7 +59,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
   String? _currentSpotlightId;
   bool _isFullScreenOpen = false;
 
-  // FIX: Safety flag to prevent kicking before data syncs
+  // Safety flag
   bool _hasSyncedMembership = false;
 
   @override
@@ -55,8 +67,8 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     super.initState();
     _refreshParticipants();
     _setUpListeners();
-    _setupChatListener();
-    _setupFirestoreListeners(); // Single listener for Kick & Spotlight
+    _setupPublicChatListener();
+    _setupFirestoreListeners();
   }
 
   // --- 1. LIVEKIT LISTENERS ---
@@ -88,22 +100,22 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
       });
   }
 
-  // --- 2. CHAT LISTENER ---
-  void _setupChatListener() {
+  // --- 2. PUBLIC CHAT LISTENER ---
+  void _setupPublicChatListener() {
     _lastReadCount = _chatService.currentMessages.length;
     _chatSubscription = _chatService.messagesStream.listen((messages) {
       if (!mounted) return;
       if (_isChatOpen) {
         _lastReadCount = messages.length;
-        setState(() => _unreadCount = 0);
+        setState(() => _publicUnreadCount = 0);
       } else {
         final diff = messages.length - _lastReadCount;
-        setState(() => _unreadCount = diff > 0 ? diff : 0);
+        setState(() => _publicUnreadCount = diff > 0 ? diff : 0);
       }
     });
   }
 
-  // --- 3. FIRESTORE LISTENER (Kick & Spotlight) ---
+  // --- 3. FIRESTORE LISTENER ---
   void _setupFirestoreListeners() {
     final docRef = FirebaseFirestore.instance
         .collection('rooms')
@@ -111,7 +123,6 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
 
     _roomDocSubscription = docRef.snapshots().listen((snapshot) {
       if (!snapshot.exists || !mounted) {
-        // Room deleted? Leave.
         if (!_isLeaving) Navigator.pop(context);
         return;
       }
@@ -125,21 +136,17 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
 
       if (currentUser != null) {
         final myUid = currentUser.uid;
-
-        final amIInList = members.any((m) => m['uid'] == myUid);
+        final amIInList = members.any((m) {
+          if (m is Map) return m['uid'] == myUid;
+          return false;
+        });
+        
         final amIHost = widget.roomData.hostId == myUid;
 
-        // FIX: Only verify kicking if we have successfully synced AT LEAST ONCE.
-        // This prevents the "Race Condition" where you join before Firestore updates.
         if (amIInList || amIHost) {
           _hasSyncedMembership = true;
         }
 
-        // Only kick if:
-        // 1. We knew we were in the list before (_hasSyncedMembership)
-        // 2. We are NO LONGER in the list (!amIInList)
-        // 3. We are not the host
-        // 4. We are not already leaving
         if (_hasSyncedMembership && !amIInList && !amIHost && !_isLeaving) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -159,7 +166,6 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
         _currentSpotlightId = spotlightId;
 
         if (spotlightId != null) {
-          // Open Full Screen
           try {
             final p = _participants.firstWhere(
               (p) => p.identity == spotlightId,
@@ -167,7 +173,6 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
             _openFullScreen(p, isRemoteTriggered: true);
           } catch (_) {}
         } else {
-          // Close Full Screen
           if (_isFullScreenOpen) Navigator.pop(context);
         }
       }
@@ -182,102 +187,158 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     super.dispose();
   }
 
-  // --- 4. TAP LOGIC & HOST SHEET ---
+  // --- 4. INTERACTION LOGIC (TAP) ---
   void _handleParticipantTap(Participant p) {
     final myId = widget.livekitRoom.localParticipant?.identity;
     final targetId = p.identity;
     final hostId = widget.roomData.hostId;
-    final hostName = widget.roomData.hostName;
 
     final isMe = myId == targetId;
-    final amIHost = (myId == hostId) || (myId == hostName);
+    final amIHost = myId == hostId;
 
-    if (amIHost) {
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.grey[900],
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (context) {
-          return SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 10),
-                Text(
-                  targetId ?? "Participant",
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
+    if (isMe) {
+      _openFullScreen(p, isRemoteTriggered: false);
+      return;
+    }
+
+    _showParticipantOptionsSheet(
+      context, 
+      targetParticipant: p, 
+      amIHost: amIHost
+    );
+  }
+
+  void _showParticipantOptionsSheet(BuildContext context, {
+    required Participant targetParticipant,
+    required bool amIHost,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const Divider(color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              
+              Text(
+                targetParticipant.name.isNotEmpty ? targetParticipant.name : "User",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              const SizedBox(height: 16),
+              
+              ListTile(
+                leading: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.blueAccent),
+                title: const Text("Message Privately"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _initiatePrivateChat(targetParticipant);
+                },
+              ),
 
-                ListTile(
-                  leading: const Icon(
-                    Icons.fullscreen,
-                    color: Colors.blueAccent,
-                  ),
-                  title: const Text(
-                    "Full Screen (Me Only)",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _openFullScreen(p, isRemoteTriggered: false);
-                  },
-                ),
+              ListTile(
+                leading: const Icon(Icons.fullscreen, color: Colors.grey),
+                title: const Text("View Full Screen"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openFullScreen(targetParticipant, isRemoteTriggered: false);
+                },
+              ),
 
+              if (amIHost) ...[
+                const Divider(),
                 ListTile(
                   leading: const Icon(Icons.star_border, color: Colors.amber),
                   title: Text(
-                    _currentSpotlightId == targetId
+                    _currentSpotlightId == targetParticipant.identity
                         ? "Remove Spotlight"
                         : "Spotlight for Everyone",
-                    style: const TextStyle(color: Colors.white),
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    final isCurrentlySpotlighted =
-                        _currentSpotlightId == targetId;
+                    final isCurrentlySpotlighted = _currentSpotlightId == targetParticipant.identity;
                     context.read<RoomBloc>().add(
                       ToggleSpotlightEvent(
                         roomId: widget.roomData.id,
-                        userId: isCurrentlySpotlighted ? null : targetId,
+                        userId: isCurrentlySpotlighted ? null : targetParticipant.identity,
                       ),
                     );
                   },
                 ),
-
-                if (!isMe)
-                  ListTile(
-                    leading: const Icon(
-                      Icons.remove_circle_outline,
-                      color: Colors.redAccent,
-                    ),
-                    title: const Text(
-                      "Kick User",
-                      style: TextStyle(color: Colors.redAccent),
-                    ),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _confirmKick(targetId!);
-                    },
-                  ),
-                const SizedBox(height: 20),
+                ListTile(
+                  leading: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
+                  title: const Text("Kick User", style: TextStyle(color: Colors.redAccent)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _confirmKick(targetParticipant.identity!);
+                  },
+                ),
               ],
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // --- 5. PRIVATE CHAT HELPER ---
+  Future<void> _initiatePrivateChat(Participant target) async {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return;
+
+    final myUser = authState.user;
+    final targetId = target.identity;
+
+    RoomMember? targetMember;
+    try {
+      targetMember = widget.roomData.members.firstWhere(
+        (m) => m.uid == targetId,
+      );
+    } catch (_) {}
+
+    try {
+      final chatId = await PrivateChatService().startChat(
+        currentUserId: myUser.id,
+        otherUserId: targetId!,
+        currentUserName: myUser.displayName,
+        otherUserName: targetMember?.displayName ?? target.name,
+        currentUserPhoto: myUser.photoUrl,
+        otherUserPhoto: targetMember?.avatarUrl,
+      );
+
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PrivateChatScreen(
+              chatId: chatId,
+              otherUserName: targetMember?.displayName ?? target.name,
+              otherUserPhoto: targetMember?.avatarUrl,
             ),
-          );
-        },
-      );
-    } else if (isMe) {
-      _openFullScreen(p, isRemoteTriggered: false);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Only the Host can manage participants.")),
-      );
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error starting private chat: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not start chat.")),
+        );
+      }
     }
   }
 
@@ -321,8 +382,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
 
       final myId = widget.livekitRoom.localParticipant?.identity;
       final hostId = widget.roomData.hostId;
-      final hostName = widget.roomData.hostName;
-      final amIHost = (myId == hostId) || (myId == hostName);
+      final amIHost = myId == hostId;
 
       if (amIHost && isRemoteTriggered) {
         context.read<RoomBloc>().add(
@@ -332,7 +392,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     }
   }
 
-  // --- 5. ROOM CONTROLS ---
+  // --- 6. ROOM CONTROLS ---
   Future<void> _toggleMic() async {
     final local = widget.livekitRoom.localParticipant;
     if (local != null) {
@@ -357,10 +417,10 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     }
   }
 
-  void _openChat() async {
+  void _openPublicChat() async {
     setState(() {
       _isChatOpen = true;
-      _unreadCount = 0;
+      _publicUnreadCount = 0;
       _lastReadCount = _chatService.currentMessages.length;
     });
 
@@ -379,6 +439,9 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     }
   }
 
+  // ==========================================
+  // 7. BUILD
+  // ==========================================
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -386,11 +449,13 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     final localP = widget.livekitRoom.localParticipant;
     final isMicEnabled = localP?.isMicrophoneEnabled() ?? false;
     final isCamEnabled = localP?.isCameraEnabled() ?? false;
+    
+    // Get Current User for Inbox Stream
+    final authState = context.read<AuthBloc>().state;
+    final myUser = (authState is AuthAuthenticated) ? authState.user : null;
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF1A1A1A)
-          : const Color(0xFFF5F5F5),
+      backgroundColor: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -417,7 +482,40 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
           onPressed: () => _leaveRoom(context),
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.info_outline), onPressed: () {}),
+          // INBOX ICON WITH BADGE (FIXED)
+          if (myUser != null)
+            StreamBuilder<List<PrivateConversation>>(
+              stream: PrivateChatService().getInbox(myUser.id),
+              builder: (context, snapshot) {
+                int totalUnreadMessages = 0;
+                if (snapshot.hasData) {
+                  final chats = snapshot.data!;
+                  for (var chat in chats) {
+                    bool isLastMsgFromMe = chat.lastSenderId == myUser.id;
+                    if (!isLastMsgFromMe) {
+                      totalUnreadMessages += chat.unreadCount;
+                    }
+                  }
+                }
+                return IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const InboxScreen()),
+                    );
+                  },
+                  icon: Badge(
+                    isLabelVisible: totalUnreadMessages > 0,
+                    label: Text(
+                      totalUnreadMessages > 99 ? '99+' : '$totalUnreadMessages',
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                    backgroundColor: Colors.red,
+                    child: const Icon(Icons.message),
+                  ),
+                );
+              },
+            ),
         ],
       ),
       body: SafeArea(
@@ -431,13 +529,12 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
                       child: _participants.isEmpty
                           ? const Center(child: CircularProgressIndicator())
                           : GridView.builder(
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 3,
-                                    crossAxisSpacing: 12,
-                                    mainAxisSpacing: 12,
-                                    childAspectRatio: 0.85,
-                                  ),
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                                childAspectRatio: 0.85,
+                              ),
                               itemCount: _participants.length,
                               itemBuilder: (context, index) {
                                 final p = _participants[index];
@@ -453,9 +550,7 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
               decoration: BoxDecoration(
                 color: theme.cardColor,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
@@ -482,9 +577,9 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
                   _ControlIcon(
                     icon: Icons.chat_bubble_outline,
                     color: theme.iconTheme.color,
-                    label: "Chat",
-                    onTap: _openChat,
-                    badgeCount: _unreadCount,
+                    label: "Room Chat",
+                    onTap: _openPublicChat,
+                    badgeCount: _publicUnreadCount,
                   ),
                   Container(
                     decoration: BoxDecoration(
@@ -506,9 +601,6 @@ class _ActiveRoomScreenState extends State<ActiveRoomScreen> {
     );
   }
 }
-
-// ... FullScreenParticipantScreen, _ControlIcon, ParticipantTile are same as previous ...
-// (Include them below this line as before)
 
 class _ControlIcon extends StatelessWidget {
   final IconData icon;
@@ -549,10 +641,7 @@ class _ControlIcon extends StatelessWidget {
                         color: Colors.red,
                         shape: BoxShape.circle,
                       ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
+                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                       child: Text(
                         badgeCount > 99 ? '99+' : badgeCount.toString(),
                         style: const TextStyle(
