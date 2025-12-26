@@ -18,6 +18,31 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
     on<CreateTutorProfileEvent>(_onCreateTutorProfile);
     on<DeleteTutorProfileEvent>(_onDeleteTutorProfile);
     on<ToggleFavoriteTutor>(_onToggleFavoriteTutor);
+    on<ReportTutorEvent>(_onReportTutor);
+  }
+  Future<void> _onToggleFavoriteTutor(
+    ToggleFavoriteTutor event,
+    Emitter<TutorState> emit,
+  ) async {
+    try {
+      await _speakService.toggleFavorite(event.tutorId);
+      // Ideally, you should also reload the AuthUser to update the UI immediately
+      // or trigger an event in AuthBloc to refresh user data.
+    } catch (e) {
+      print("Error toggling favorite: $e");
+    }
+  }
+
+  // IMPLEMENT REPORT
+  Future<void> _onReportTutor(
+    ReportTutorEvent event,
+    Emitter<TutorState> emit,
+  ) async {
+    try {
+      await _speakService.reportTutor(event.tutorId, event.reason);
+    } catch (e) {
+      print("Error reporting tutor: $e");
+    }
   }
 
   // =========================================================
@@ -32,7 +57,7 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
     try {
       final tutors = await _speakService.getTutors();
       // Apply filters immediately after loading
-      _applyFilters(emit, allTutors: tutors); 
+      _applyFilters(emit, allTutors: tutors);
     } catch (e) {
       emit(state.copyWith(status: TutorStatus.failure));
     }
@@ -64,9 +89,10 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
     _applyFilters(emit, filters: {}, query: "");
   }
 
-  /// Centralized filter logic. 
+  /// Centralized filter logic.
   /// Updates [filteredTutors] based on [allTutors], [filters], and [query].
-  void _applyFilters(Emitter<TutorState> emit, {
+  void _applyFilters(
+    Emitter<TutorState> emit, {
     List<Tutor>? allTutors,
     Map<String, String>? filters,
     String? query,
@@ -90,25 +116,31 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
         if (tutor.level != activeFilters['Language Level']) return false;
       }
       if (activeFilters.containsKey('Specialty')) {
-        if (!tutor.specialties.contains(activeFilters['Specialty'])) return false;
+        if (!tutor.specialties.contains(activeFilters['Specialty']))
+          return false;
       }
 
       return true;
     }).toList();
 
-    emit(state.copyWith(
-      status: TutorStatus.success,
-      allTutors: listToFilter,
-      filteredTutors: filteredList,
-      filters: activeFilters,
-      searchQuery: query,
-    ));
+    emit(
+      state.copyWith(
+        status: TutorStatus.success,
+        allTutors: listToFilter,
+        filteredTutors: filteredList,
+        filters: activeFilters,
+        searchQuery: query,
+      ),
+    );
   }
 
   // =========================================================
   // 3. CRUD (CREATE / DELETE) - WITH OPTIMISTIC UPDATES
   // =========================================================
-  Future<void> _onCreateTutorProfile(CreateTutorProfileEvent event, Emitter<TutorState> emit) async {
+  Future<void> _onCreateTutorProfile(
+    CreateTutorProfileEvent event,
+    Emitter<TutorState> emit,
+  ) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
@@ -126,7 +158,7 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
       specialties: event.specialties,
       otherLanguages: event.otherLanguages,
       pricePerHour: event.pricePerHour,
-      
+
       // New fields from your updated model
       availability: event.availability,
       lessons: event.lessons,
@@ -134,12 +166,12 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
       socialLinks: const {},
       introVideoUrl: null,
       videoThumbnailUrl: null,
-      
+
       metadata: event.metadata,
       createdAt: DateTime.now(),
       lastUpdatedAt: DateTime.now(),
       isOnline: true,
-      rating: 5.0,
+      rating: 2.0,
       reviews: 0,
       isVerified: false,
       isSuperTutor: false,
@@ -149,7 +181,7 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
     // 2. OPTIMISTIC UPDATE: Update Local State Immediately
     // Create a new list with the new tutor added to the top
     final updatedList = List<Tutor>.from(state.allTutors)..insert(0, newTutor);
-    
+
     // Emit state immediately so UI shows the card
     _applyFilters(emit, allTutors: updatedList);
 
@@ -160,17 +192,24 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
     } catch (e) {
       // 4. ROLLBACK ON FAILURE
       // If server fails, remove the item from the list
-      final revertedList = state.allTutors.where((t) => t.id != newTutor.id).toList();
+      final revertedList = state.allTutors
+          .where((t) => t.id != newTutor.id)
+          .toList();
       _applyFilters(emit, allTutors: revertedList);
-      
+
       emit(state.copyWith(status: TutorStatus.failure));
       // You might want to trigger a snackbar here in the UI via a listener
     }
   }
 
-  Future<void> _onDeleteTutorProfile(DeleteTutorProfileEvent event, Emitter<TutorState> emit) async {
+  Future<void> _onDeleteTutorProfile(
+    DeleteTutorProfileEvent event,
+    Emitter<TutorState> emit,
+  ) async {
     // 1. OPTIMISTIC UPDATE: Remove from Local State Immediately
-    final updatedList = state.allTutors.where((t) => t.id != event.tutorId).toList();
+    final updatedList = state.allTutors
+        .where((t) => t.id != event.tutorId)
+        .toList();
     _applyFilters(emit, allTutors: updatedList);
 
     try {
@@ -181,14 +220,5 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
       // Simplest way to restore state is to fetch from server again
       add(const LoadTutors(isRefresh: true));
     }
-  }
-
-  // =========================================================
-  // 4. FAVORITES
-  // =========================================================
-  Future<void> _onToggleFavoriteTutor(ToggleFavoriteTutor event, Emitter<TutorState> emit) async {
-    // Logic depends on where favorites are stored (User object vs Local Storage).
-    // Typically delegated to the service:
-    // await _speakService.toggleFavorite(event.tutorId);
   }
 }

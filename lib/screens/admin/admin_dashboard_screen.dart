@@ -5,6 +5,7 @@ import 'tabs/user_management_tab.dart';
 import 'tabs/content_cms_tab.dart';
 import 'tabs/leaderboard_tab.dart';
 import 'tabs/bug_view_tab.dart';
+import 'tabs/reports_tab.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -21,7 +22,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   void initState() {
     super.initState();
     // 7 Tabs
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -53,6 +54,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
             Tab(icon: Icon(Icons.leaderboard), text: "Leaderboard"),
             Tab(icon: Icon(Icons.bug_report), text: "Bugs"),
+            Tab(icon: Icon(Icons.bug_report), text: "Reports"),
           ],
         ),
       ),
@@ -65,7 +67,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           ContentCMSTab(), // File 4
 
           LeaderboardTab(), // File 5
-          BugViewTab(), // File 5
+          BugViewTab(),
+          ReportsScreen(), // File 5
         ],
       ),
     );

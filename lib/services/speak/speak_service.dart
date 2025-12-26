@@ -80,4 +80,44 @@ class SpeakService {
       throw Exception("Failed to generate LiveKit token: $e");
     }
   }
+
+  // 1. TOGGLE FAVORITE
+  Future<void> toggleFavorite(String tutorId) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final userRef = _firestore.collection('users').doc(user.uid);
+    final doc = await userRef.get();
+    
+    if (doc.exists) {
+      final List<dynamic> favorites = doc.data()?['favoriteTutors'] ?? [];
+      
+      if (favorites.contains(tutorId)) {
+        // Remove
+        await userRef.update({
+          'favoriteTutors': FieldValue.arrayRemove([tutorId])
+        });
+      } else {
+        // Add
+        await userRef.update({
+          'favoriteTutors': FieldValue.arrayUnion([tutorId])
+        });
+      }
+    }
+  }
+
+  // 2. REPORT TUTOR
+  Future<void> reportTutor(String tutorId, String reason) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    await _firestore.collection('reports').add({
+      'targetId': tutorId,
+      'type': 'tutor_profile',
+      'reporterId': user.uid,
+      'reason': reason,
+      'timestamp': FieldValue.serverTimestamp(),
+      'status': 'pending', // for admin review
+    });
+  }
 }

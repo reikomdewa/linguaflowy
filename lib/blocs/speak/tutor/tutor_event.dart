@@ -124,4 +124,17 @@ class BookLessonEvent extends TutorEvent {
 
   @override
   List<Object?> get props => [tutor, lesson, scheduledTime];
+
+  
+}
+
+// Add this new event
+class ReportTutorEvent extends TutorEvent {
+  final String tutorId;
+  final String reason;
+
+  const ReportTutorEvent({required this.tutorId, required this.reason});
+
+  @override
+  List<Object?> get props => [tutorId, reason];
 }

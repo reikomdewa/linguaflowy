@@ -1,13 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Required for input formatters
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:linguaflow/screens/inbox/private_chat_screen.dart';
-import 'package:linguaflow/services/speak/private_chat_service.dart';
 import 'package:livekit_client/livekit_client.dart';
 
-// 1. BLOC & STATE IMPORTS
+// BLOCS
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
@@ -15,13 +13,13 @@ import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
 import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_event.dart';
 
-// 2. MODELS & SERVICES
+// MODELS & SERVICES
 import 'package:linguaflow/models/speak/room_member.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
 import 'package:linguaflow/screens/speak/widgets/active_room_screen.dart';
 import 'package:linguaflow/services/speak/speak_service.dart';
-
-// 3. CHAT IMPORTS (NEW)
+import 'package:linguaflow/services/speak/private_chat_service.dart';
+import 'package:linguaflow/screens/inbox/private_chat_screen.dart';
 
 class TutorCard extends StatelessWidget {
   final Tutor tutor;
@@ -29,11 +27,14 @@ class TutorCard extends StatelessWidget {
   const TutorCard({super.key, required this.tutor});
 
   // ==========================================
-  // 1. OPTIONS MENU
+  // 1. OPTIONS MENU (FIXED LOGIC)
   // ==========================================
   void _showOptionsMenu(BuildContext context, bool isMe) {
     final theme = Theme.of(context);
     final tutorBloc = context.read<TutorBloc>();
+
+    // Check if already favorite (Optional: You can hook this up to real data later)
+    bool isFavorite = false;
 
     showModalBottomSheet(
       context: context,
@@ -55,16 +56,10 @@ class TutorCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.favorite_rounded, color: Colors.red),
-              title: const Text("Add to Favorites"),
-              onTap: () {
-                tutorBloc.add(ToggleFavoriteTutor(tutor.id));
-                Navigator.pop(ctx);
-              },
-            ),
+
+            // --- LOGIC SPLIT ---
             if (isMe) ...[
-              const Divider(),
+              // A. OWNER OPTIONS (Delete Only)
               ListTile(
                 leading: const Icon(
                   Icons.delete_outline_rounded,
@@ -72,32 +67,65 @@ class TutorCard extends StatelessWidget {
                 ),
                 title: const Text(
                   "Delete Tutor Profile",
-                  style: TextStyle(color: Colors.red),
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _showDeleteConfirmation(context, tutorBloc);
                 },
               ),
+            ] else ...[
+              // B. VISITOR OPTIONS (Favorite & Report)
+              ListTile(
+                leading: Icon(
+                  isFavorite ? Icons.favorite : Icons.favorite_border,
+                  color: Colors.red,
+                ),
+                title: Text(
+                  isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                ),
+                onTap: () {
+                  tutorBloc.add(ToggleFavoriteTutor(tutor.id));
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        isFavorite
+                            ? "Removed from favorites"
+                            : "Added to favorites",
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.report_gmailerrorred_rounded),
+                title: const Text("Report Tutor"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showReportDialog(context, tutorBloc);
+                },
+              ),
             ],
-            ListTile(
-              leading: const Icon(Icons.report_gmailerrorred_rounded),
-              title: const Text("Report Tutor"),
-              onTap: () => Navigator.pop(ctx),
-            ),
+            const SizedBox(height: 12),
           ],
         ),
       ),
     );
   }
 
+  // --- DELETE DIALOG ---
   void _showDeleteConfirmation(BuildContext context, TutorBloc bloc) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Delete Profile?"),
         content: const Text(
-          "Are you sure you want to remove your tutor profile?",
+          "Are you sure you want to remove your tutor profile? This action cannot be undone.",
         ),
         actions: [
           TextButton(
@@ -116,8 +144,61 @@ class TutorCard extends StatelessWidget {
     );
   }
 
+  // --- REPORT DIALOG ---
+  void _showReportDialog(BuildContext context, TutorBloc bloc) {
+    final TextEditingController reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Report Tutor"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Please describe why you are reporting this profile."),
+            const SizedBox(height: 10),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: "Reason (e.g., Inappropriate content, Scam...)",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (reasonController.text.trim().isNotEmpty) {
+                // Trigger Report Event (Ensure ReportTutorEvent exists in your bloc)
+                bloc.add(
+                  ReportTutorEvent(
+                    tutorId: tutor.id,
+                    reason: reasonController.text.trim(),
+                  ),
+                );
+
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Report submitted for review.")),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("Report", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ==========================================
-  // 2. MESSAGE LOGIC (NEW)
+  // 2. MESSAGE LOGIC
   // ==========================================
   Future<void> _handleMessagePress(BuildContext context) async {
     final authState = context.read<AuthBloc>().state;
@@ -140,7 +221,6 @@ class TutorCard extends StatelessWidget {
     }
 
     try {
-      // 1. Get or Create Chat ID
       final chatId = await PrivateChatService().startChat(
         currentUserId: myUser.id,
         otherUserId: tutor.userId,
@@ -150,7 +230,6 @@ class TutorCard extends StatelessWidget {
         otherUserPhoto: tutor.imageUrl,
       );
 
-      // 2. Open Chat Screen
       if (context.mounted) {
         Navigator.push(
           context,
@@ -182,6 +261,7 @@ class TutorCard extends StatelessWidget {
       return;
     }
 
+    // Ghost Check
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -231,17 +311,11 @@ class TutorCard extends StatelessWidget {
         Navigator.pop(context);
         _showScheduleDialog(context);
       }
-      debugPrint("Error checking room status: $e");
     }
   }
 
-  // ==========================================
-  // 4. DIALOGS
-  // ==========================================
-
   void _showHostSetupDialog(BuildContext context) {
     final TextEditingController passController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -258,12 +332,10 @@ class TutorCard extends StatelessWidget {
               controller: passController,
               keyboardType: TextInputType.number,
               maxLength: 4,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: "Room Password (Optional)",
                 hintText: "e.g. 1234",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(),
               ),
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
@@ -295,14 +367,12 @@ class TutorCard extends StatelessWidget {
     String correctPassword,
   ) {
     final TextEditingController passController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Private Class"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text("This class is password protected."),
             const SizedBox(height: 16),
@@ -311,12 +381,9 @@ class TutorCard extends StatelessWidget {
               keyboardType: TextInputType.number,
               maxLength: 4,
               obscureText: true,
-              autofocus: true,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: "Enter 4-digit code",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(),
               ),
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
@@ -331,7 +398,7 @@ class TutorCard extends StatelessWidget {
             onPressed: () {
               if (passController.text.trim() == correctPassword) {
                 Navigator.pop(ctx);
-                _joinTutorSession(context); // Success
+                _joinTutorSession(context);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -392,7 +459,7 @@ class TutorCard extends StatelessWidget {
         roomType: 'tutor_session',
       );
 
-      final Future<String> tokenFuture = SpeakService().getLiveKitToken(
+      final tokenFuture = SpeakService().getLiveKitToken(
         tutorRoomWrapper.id,
         currentUser.displayName ?? "Student",
       );
@@ -409,7 +476,6 @@ class TutorCard extends StatelessWidget {
           avatarUrl: currentUser.photoURL,
           joinedAt: DateTime.now(),
         );
-
         FirebaseFirestore.instance
             .collection('rooms')
             .doc(tutorRoomWrapper.id)
@@ -417,13 +483,10 @@ class TutorCard extends StatelessWidget {
               'members': FieldValue.arrayUnion([myMember.toMap()]),
               'memberCount': FieldValue.increment(1),
             })
-            .catchError((e) {
-              debugPrint("Background Firestore update failed: $e");
-            });
+            .catchError((e) => debugPrint("Firestore update failed: $e"));
       }
 
-      final String token = await tokenFuture;
-
+      final token = await tokenFuture;
       final livekitRoom = Room();
       await livekitRoom.connect(
         'wss://linguaflow-7eemmnrq.livekit.cloud',
@@ -433,7 +496,6 @@ class TutorCard extends StatelessWidget {
       if (context.mounted) {
         context.read<RoomBloc>().add(RoomJoined(livekitRoom));
         Navigator.pop(context);
-
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -445,7 +507,6 @@ class TutorCard extends StatelessWidget {
         );
       }
     } catch (e) {
-      debugPrint("❌ JOIN ERROR: $e");
       if (context.mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(
@@ -456,11 +517,16 @@ class TutorCard extends StatelessWidget {
   }
 
   // ==========================================
-  // 5. UI BUILD
+  // 4. UI BUILD
   // ==========================================
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final authState = context.read<AuthBloc>().state;
+    bool isMe = false;
+    if (authState is AuthAuthenticated) {
+      isMe = authState.user.id == tutor.userId;
+    }
 
     return Card(
       elevation: 2,
@@ -532,12 +598,7 @@ class TutorCard extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.more_vert),
                     color: theme.hintColor,
-                    onPressed: () {
-                      final isMe =
-                          FirebaseAuth.instance.currentUser?.uid ==
-                          tutor.userId;
-                      _showOptionsMenu(context, isMe);
-                    },
+                    onPressed: () => _showOptionsMenu(context, isMe),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
@@ -601,7 +662,7 @@ class TutorCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  _buildActionButtons(context, theme),
+                  _buildActionButtons(context, theme, isMe),
                 ],
               ),
             ],
@@ -643,17 +704,17 @@ class TutorCard extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context, ThemeData theme) {
+  Widget _buildActionButtons(BuildContext context, ThemeData theme, bool isMe) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 2. JOIN BUTTON
         ElevatedButton.icon(
           onPressed: () => _handleJoinPress(context),
           icon: const Icon(Icons.video_call_rounded, size: 20),
-          label: const Text("Join Class"),
+          label: Text(isMe ? "Start Class" : "Join Class"),
           style: ElevatedButton.styleFrom(
             backgroundColor: theme.primaryColor,
+            foregroundColor: theme.canvasColor,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
@@ -665,9 +726,6 @@ class TutorCard extends StatelessWidget {
     );
   }
 
-  // ==========================================
-  // 6. SCHEDULE DIALOG (Offline View)
-  // ==========================================
   void _showScheduleDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -677,7 +735,6 @@ class TutorCard extends StatelessWidget {
       ),
       builder: (ctx) {
         final theme = Theme.of(context);
-
         final activeSchedule = tutor.availability
             .where((day) => !day.isDayOff && day.slots.isNotEmpty)
             .toList();
@@ -719,10 +776,9 @@ class TutorCard extends StatelessWidget {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 20),
 
-                // 1. MESSAGE BUTTON (Styled with shared background)
+                // Only show message button if not me
                 GestureDetector(
                   onTap: () {
                     Navigator.pop(ctx);
@@ -732,9 +788,7 @@ class TutorCard extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
-                      color: theme.primaryColor.withOpacity(
-                        0.1,
-                      ), // Background for both
+                      color: theme.primaryColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -760,7 +814,6 @@ class TutorCard extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 24),
-
                 Text(
                   "Weekly Schedule",
                   style: theme.textTheme.titleSmall?.copyWith(
@@ -769,7 +822,6 @@ class TutorCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-
                 if (activeSchedule.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -823,7 +875,7 @@ class TutorCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(

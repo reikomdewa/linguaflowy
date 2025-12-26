@@ -15,7 +15,6 @@ import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart'; // Crucial for Themes
 import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_event.dart';
-import 'package:linguaflow/blocs/speak/speak_bloc.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';

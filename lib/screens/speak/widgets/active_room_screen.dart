@@ -10,8 +10,6 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_event.dart' hide RoomEvent;
-import 'package:linguaflow/blocs/speak/speak_bloc.dart';
-import 'package:linguaflow/blocs/speak/speak_event.dart';
 
 // MODELS & SERVICES
 import 'package:linguaflow/models/speak/speak_models.dart';
