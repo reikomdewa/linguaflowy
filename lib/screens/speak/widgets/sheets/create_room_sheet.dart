@@ -61,7 +61,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
     final theme = Theme.of(context);
     final authState = context.watch<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return const SizedBox();
-
+    final user = authState.user;
     return SafeArea(
       child: Container(
         decoration: BoxDecoration(
@@ -188,20 +188,21 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                 const SizedBox(height: 10),
 
                 // 5. Paid vs Free
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    "Paid Session",
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                if (user.isPremium)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      "Paid Session",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: const Text("Require an access code to join."),
+                    value: _isPaid,
+                    onChanged: (val) => setState(() => _isPaid = val),
+                    secondary: Icon(
+                      FontAwesomeIcons.coins,
+                      color: _isPaid ? Colors.amber : theme.hintColor,
+                    ),
                   ),
-                  subtitle: const Text("Require an access code to join."),
-                  value: _isPaid,
-                  onChanged: (val) => setState(() => _isPaid = val),
-                  secondary: Icon(
-                    FontAwesomeIcons.coins,
-                    color: _isPaid ? Colors.amber : theme.hintColor,
-                  ),
-                ),
 
                 if (_isPaid) ...[
                   const SizedBox(height: 10),

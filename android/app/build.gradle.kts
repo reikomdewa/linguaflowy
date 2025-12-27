@@ -51,6 +51,17 @@ android {
             // so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
             signingConfig = signingConfigs.getByName("release")
+              // 1. ENABLE SHRINKING (R8)
+            isMinifyEnabled = true 
+
+            // 2. ENABLE RESOURCE SHRINKING (Optional but recommended)
+            isShrinkResources = true
+
+            // 3. LOAD PROGUARD RULES
+            proguardFiles(
+                getDefaultProguardFile("proguard-android.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

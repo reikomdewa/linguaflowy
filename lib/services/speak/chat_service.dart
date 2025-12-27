@@ -49,7 +49,7 @@ class ChatService {
     final messageId = const Uuid().v4();
 
     final user = types.User(
-      id: localParticipant.identity ?? 'local', 
+      id: localParticipant.identity, 
       firstName: localParticipant.name.isNotEmpty ? localParticipant.name : 'Me',
     );
 

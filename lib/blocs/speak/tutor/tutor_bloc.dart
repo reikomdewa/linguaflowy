@@ -137,6 +137,9 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
   // =========================================================
   // 3. CRUD (CREATE / DELETE) - WITH OPTIMISTIC UPDATES
   // =========================================================
+  // =========================================================
+  // 3. CRUD (CREATE) - FIXED WITH OPTIMISTIC UPDATE
+  // =========================================================
   Future<void> _onCreateTutorProfile(
     CreateTutorProfileEvent event,
     Emitter<TutorState> emit,
@@ -144,7 +147,8 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
     final user = _auth.currentUser;
     if (user == null) return;
 
-    // 1. Construct the new Model
+    // 1. Construct the new Tutor Model locally
+    // We populate this with the data from the form immediately.
     final newTutor = Tutor(
       id: user.uid,
       userId: user.uid,
@@ -158,47 +162,55 @@ class TutorBloc extends Bloc<TutorEvent, TutorState> {
       specialties: event.specialties,
       otherLanguages: event.otherLanguages,
       pricePerHour: event.pricePerHour,
-
-      // New fields from your updated model
-      availability: event.availability,
-      lessons: event.lessons,
+      
+      // New robust fields
+      availability: event.availability, // List<DaySchedule>
+      lessons: event.lessons,           // List<TutorLesson>
+      
+      // Defaults for fields not in the create form
       currency: 'USD',
       socialLinks: const {},
       introVideoUrl: null,
       videoThumbnailUrl: null,
-
       metadata: event.metadata,
       createdAt: DateTime.now(),
       lastUpdatedAt: DateTime.now(),
-      isOnline: true,
-      rating: 2.0,
+      isOnline: true, // Make them appear online immediately
+      rating: 5.0,    // Default rating so they aren't hidden by filters
       reviews: 0,
       isVerified: false,
       isSuperTutor: false,
-      profileCompletion: 0.8,
+      profileCompletion: 1.0,
     );
 
-    // 2. OPTIMISTIC UPDATE: Update Local State Immediately
-    // Create a new list with the new tutor added to the top
+    // 2. OPTIMISTIC UPDATE: Update the UI List IMMEDIATELY
+    // We take the current list, copy it, and put the new tutor at the very top.
     final updatedList = List<Tutor>.from(state.allTutors)..insert(0, newTutor);
-
-    // Emit state immediately so UI shows the card
+    
+    // We call _applyFilters to update 'filteredTutors' and emit the new state
+    // This makes the card appear on screen in milliseconds.
     _applyFilters(emit, allTutors: updatedList);
 
     try {
-      // 3. Send to Server (Background)
+      // 3. Send to Server (Background Operation)
       await _speakService.createTutorProfile(newTutor);
-      // Success! UI is already updated, no need to do anything else.
+      
+      // CRITICAL: Do NOT call add(LoadTutors()) here.
+      // Calling LoadTutors right now might fetch the OLD list from Firestore 
+      // before the database has finished indexing the new item.
+      // Since we already updated the UI in step 2, we are done.
+      
     } catch (e) {
+      print("Error creating profile: $e");
+      
       // 4. ROLLBACK ON FAILURE
-      // If server fails, remove the item from the list
-      final revertedList = state.allTutors
-          .where((t) => t.id != newTutor.id)
-          .toList();
+      // If the internet request fails, we must remove the fake item from the list
+      // so the user doesn't think it succeeded.
+      final revertedList = state.allTutors.where((t) => t.id != newTutor.id).toList();
       _applyFilters(emit, allTutors: revertedList);
-
-      emit(state.copyWith(status: TutorStatus.failure));
-      // You might want to trigger a snackbar here in the UI via a listener
+      
+      // Optionally trigger a failure status to show a SnackBar
+      // emit(state.copyWith(status: TutorStatus.failure));
     }
   }
 

@@ -40,8 +40,23 @@ class ProfileDataExporter {
         'vocabulary': vocabList,
       };
 
-      // 5. Convert to JSON
-      final jsonString = const JsonEncoder.withIndent('  ').convert(exportData);
+      // ============================================================
+      // 5. Convert to JSON (FIXED)
+      // We pass a custom function to handle Firestore Timestamps
+      // ============================================================
+      final jsonString = JsonEncoder.withIndent('  ', (object) {
+        if (object is Timestamp) {
+          return object.toDate().toIso8601String();
+        }
+        if (object is GeoPoint) {
+          return {'lat': object.latitude, 'lng': object.longitude};
+        }
+        if (object is DocumentReference) {
+          return object.path;
+        }
+        // Return string for unknown objects to prevent crash
+        return object.toString(); 
+      }).convert(exportData);
 
       // 6. Write to Temp File
       final tempDir = await getTemporaryDirectory();
@@ -49,16 +64,19 @@ class ProfileDataExporter {
       await file.writeAsString(jsonString);
 
       // 7. Share File
-
-      // inside async context
       if (context.mounted) {
-        await SharePlus.instance.share(
-          ShareParams(
-            files: [XFile(file.path)],
-            text: 'My LinguaFlow Data Export',
-          ),
+        // Updated to standard Share_plus syntax
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'My LinguaFlow Data Export',
         );
       }
+      
+      // Optional: Clear loading snackbar
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+      }
+
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -8,7 +8,7 @@ import 'package:linguaflow/utils/logger.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   // FIX 1: Use the singleton instance (v7+ requirement)
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
@@ -54,8 +54,6 @@ class AuthService {
   // GOOGLE SIGN IN (HYBRID FIX FOR v7+)
   // ---------------------------------------------------------------------------
   Future<UserModel?> signInWithGoogle() async {
-    print("🚀 SERVICE: signInWithGoogle() started..."); 
-    
     try {
       UserCredential? userCredential;
 
@@ -63,40 +61,38 @@ class AuthService {
         // ===============================================
         // WEB: Use Firebase Auth Popup
         // ===============================================
-        print("🚀 SERVICE: WEB DETECTED. Using signInWithPopup...");
-        
+
         // Use Firebase SDK directly to avoid "UnimplementedError"
         final GoogleAuthProvider googleProvider = GoogleAuthProvider();
         googleProvider.addScope('email');
-        
+
         userCredential = await _auth.signInWithPopup(googleProvider);
-        
       } else {
         // ===============================================
         // MOBILE: Use google_sign_in v7+ Plugin
         // ===============================================
-        print("🚀 SERVICE: MOBILE DETECTED. Using authenticate()...");
-        
+
         // FIX 2: Initialize before use (v7+ requirement)
         // It is safe to call this even if already initialized.
         await _googleSignIn.initialize();
 
         // FIX 3: Use authenticate() instead of signIn()
-        final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate();
-        
+        final GoogleSignInAccount? googleUser = await _googleSignIn
+            .authenticate();
+
         if (googleUser == null) {
-          print("⚠️ SERVICE: User cancelled Google Login.");
           return null;
         }
 
         // Get Tokens
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final GoogleSignInAuthentication googleAuth =
+            await googleUser.authentication;
 
         // FIX 4: Pass null for accessToken
-        // v7 removed .accessToken from the auth object. 
+        // v7 removed .accessToken from the auth object.
         // Firebase only needs idToken for identity verification.
         final OAuthCredential credential = GoogleAuthProvider.credential(
-          accessToken: null, 
+          accessToken: null,
           idToken: googleAuth.idToken,
         );
 
@@ -110,16 +106,12 @@ class AuthService {
       final User? firebaseUser = userCredential.user;
 
       if (firebaseUser != null) {
-        print("✅ SERVICE: Sign In Successful. Checking Firestore...");
-
         final docRef = _firestore.collection('users').doc(firebaseUser.uid);
         final doc = await docRef.get();
 
         if (doc.exists) {
-          print("✅ SERVICE: Existing user found.");
           return UserModel.fromMap(doc.data()!, doc.id);
         } else {
-          print("📝 SERVICE: Creating new user in Firestore...");
           final newUser = UserModel(
             id: firebaseUser.uid,
             email: firebaseUser.email ?? '',
@@ -139,8 +131,6 @@ class AuthService {
         }
       }
     } catch (e, stack) {
-      print("❌ SERVICE ERROR: $e");
-      print(stack);
       String msg = e.toString();
       if (msg.contains("popup_closed_by_user")) {
         msg = "Login cancelled.";
@@ -187,9 +177,7 @@ class AuthService {
     if (!kIsWeb) {
       try {
         await _googleSignIn.signOut();
-      } catch (e) {
-        print("Google sign out ignored: $e");
-      }
+      } catch (e) {}
     }
     await _auth.signOut();
   }
