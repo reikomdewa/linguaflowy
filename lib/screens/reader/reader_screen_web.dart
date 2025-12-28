@@ -1521,6 +1521,10 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
 
   // --- MOBILE BODY (Existing Layout) ---
   Widget _buildMobileBody(LessonModel displayLesson, bool isDark) {
+    const int baseXP = 50;
+    const int bonusPerWord = 10;
+    int currentXp = (baseXP + (_sessionWordsLearned.length * bonusPerWord))
+        .clamp(50, 200);
     return SafeArea(
       child: Stack(
         children: [
@@ -1543,6 +1547,10 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
                         },
                         child: _isSentenceMode
                             ? SentenceModeView(
+                                lessonTitle: widget.lesson.title,
+                                onComplete: _markLessonAsComplete,
+                                wordsLearnedCount: _sessionWordsLearned.length,
+                                xpEarned: currentXp,
                                 chunks: _smartChunks,
                                 activeIndex: _activeSentenceIndex,
                                 vocabulary: _vocabulary,
@@ -1569,6 +1577,9 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
                                 isListeningMode: _isListeningMode,
                               )
                             : ParagraphModeView(
+                                onComplete: _markLessonAsComplete,
+                                wordsLearnedCount: _sessionWordsLearned.length,
+                                xpEarned: currentXp,
                                 lesson: displayLesson,
                                 bookPages: _bookPages,
                                 activeSentenceIndex: _activeSentenceIndex,

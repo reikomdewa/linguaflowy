@@ -352,43 +352,27 @@ class _ReaderScreenState extends State<ReaderScreen>
     _listeningTrackingTimer?.cancel();
   }
 
-  // --- MARK AS COMPLETE & NAVIGATE ---
   void _markLessonAsComplete() {
     if (!_hasMarkedLessonComplete) {
       setState(() => _hasMarkedLessonComplete = true);
 
-      // 1. Pause Media and TTS to avoid background noise
+      // 1. Pause Media
       _pauseMedia();
       if (_isTtsPlaying) _flutterTts.stop();
 
-      // 2. SMART COMPLETION XP CALCULATION
-      // We reward the user based on how many words they interacted with in this session
+      // 2. Calculate XP (Same formula used for display)
       const int baseXP = 50;
       const int bonusPerWord = 10;
-
-      // Final XP = 50 + (words * 10), capped between 50 and 200
       int calculatedXp = (baseXP + (_sessionWordsLearned.length * bonusPerWord))
           .clamp(50, 200);
 
-      // 3. Update the User's stats in Bloc/Firestore
-      // We only call this ONCE with the final calculated value
+      // 3. Update Database
       context.read<AuthBloc>().add(AuthUpdateXP(calculatedXp));
       context.read<AuthBloc>().add(AuthIncrementLessonsCompleted());
-
-      // 4. Log this session in your Activity History (Heatmap)
-      // Passing 0 minutes here because the duration is tracked separately in dispose
       _logActivitySession(0, calculatedXp);
 
-      // 5. Navigate to the Completion Screen with the smart data
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => LessonCompletionScreen(
-            lessonTitle: widget.lesson.title,
-            xpEarned: calculatedXp, // Pass the dynamic value
-            wordsLearnedCount: _sessionWordsLearned.length,
-          ),
-        ),
-      );
+      // 4. EXIT READER (Since stats are now shown inline)
+      Navigator.of(context).pop(); 
     }
   }
 
@@ -1580,11 +1564,15 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   @override
+
   Widget build(BuildContext context) {
     if (_isFullScreen && (_isVideo || _isAudio || _isYoutubeAudio)) {
       return _buildFullscreenMedia();
     }
-
+  const int baseXP = 50;
+    const int bonusPerWord = 10;
+    int currentXp = (baseXP + (_sessionWordsLearned.length * bonusPerWord))
+          .clamp(50, 200);
     final settings = context.watch<SettingsBloc>().state;
     final themeData = Theme.of(context).copyWith(
       scaffoldBackgroundColor: settings.readerTheme == ReaderTheme.dark
@@ -1788,97 +1776,75 @@ class _ReaderScreenState extends State<ReaderScreen>
                     Expanded(
                       child: _isParsingSubtitles
                           ? const Center(child: Text("Loading content..."))
-                          : NotificationListener<ScrollNotification>(
-                              onNotification: (scrollInfo) {
-                                if (_hasMarkedLessonComplete) return false;
-
-                                if (!_isSentenceMode) {
-                                  // 1. Paragraph Mode (Swipe Pages)
-                                  // Detect if user swipes "past" the last page (Overscroll)
-                                  if (scrollInfo is OverscrollNotification &&
-                                      scrollInfo.overscroll > 0) {
-                                    if (_currentPage == _bookPages.length - 1) {
-                                      _markLessonAsComplete();
+                          : _isSentenceMode
+                              ? SentenceModeView(
+                                  chunks: _smartChunks,
+                                  activeIndex: _activeSentenceIndex,
+                                  vocabulary: _vocabulary,
+                                  language: widget.lesson.language,
+                                  isVideo:
+                                      _isVideo ||
+                                      _isAudio ||
+                                      _isYoutubeAudio,
+                                  isPlaying:
+                                      _isPlaying || _isPlayingSingleSentence,
+                                  isTtsPlaying: _isTtsPlaying,
+                                  onTogglePlayback: _togglePlayback,
+                                  onPlayFromStartContinuous:
+                                      _playFromStartContinuous,
+                                  onPlayContinuous: _playNextContinuous,
+                                  onNext: _goToNextSentence,
+                                  onPrev: _goToPrevSentence,
+                                  onWordTap: _handleWordTap,
+                                  onPhraseSelected: _handlePhraseSelected,
+                                  isLoadingTranslation: _isLoadingTranslation,
+                                  googleTranslation: _googleTranslation,
+                                  myMemoryTranslation: _myMemoryTranslation,
+                                  showError: _showError,
+                                  onRetryTranslation: _handleTranslationToggle,
+                                  onTranslateRequest: _handleTranslationToggle,
+                                  isListeningMode: _isListeningMode,
+                                  // Pass the completion handler
+                                  onComplete: _markLessonAsComplete,
+                                   lessonTitle: widget.lesson.title,
+                                  wordsLearnedCount: _sessionWordsLearned.length,
+                                  xpEarned: currentXp,
+                                )
+                              : ParagraphModeView(
+                                  lesson: displayLesson,
+                                  bookPages: _bookPages,
+                                  activeSentenceIndex: _activeSentenceIndex,
+                                  currentPage: _currentPage,
+                                  vocabulary: _vocabulary,
+                                  isVideo:
+                                      _isVideo ||
+                                      _isAudio ||
+                                      _isYoutubeAudio,
+                                  listScrollController: _listScrollController,
+                                  pageController: _pageController,
+                                  onPageChanged: (i) =>
+                                      setState(() => _currentPage = i),
+                                  onSentenceTap: (i) {
+                                    if ((_isVideo ||
+                                            _isAudio ||
+                                            _isYoutubeAudio) &&
+                                        i < _activeTranscript.length) {
+                                      _seekToTime(_activeTranscript[i].start);
+                                      _playMedia();
+                                    } else {
+                                      _speakSentence(_smartChunks[i], i);
                                     }
-                                  }
-                                } else {
-                                  // 2. Sentence Mode (Scroll List)
-                                  // Detect if user scrolls to bottom
-                                  if (scrollInfo.metrics.pixels >=
-                                      scrollInfo.metrics.maxScrollExtent - 50) {
-                                    _markLessonAsComplete();
-                                  }
-                                }
-                                return false;
-                              },
-                              child: _isSentenceMode
-                                  ? SentenceModeView(
-                                      chunks: _smartChunks,
-                                      activeIndex: _activeSentenceIndex,
-                                      vocabulary: _vocabulary,
-                                      language: widget.lesson.language,
-                                      isVideo:
-                                          _isVideo ||
-                                          _isAudio ||
-                                          _isYoutubeAudio,
-                                      isPlaying:
-                                          _isPlaying ||
-                                          _isPlayingSingleSentence,
-                                      isTtsPlaying: _isTtsPlaying,
-                                      onTogglePlayback: _togglePlayback,
-                                      onPlayFromStartContinuous:
-                                          _playFromStartContinuous,
-                                      onPlayContinuous: _playNextContinuous,
-                                      onNext: _goToNextSentence,
-                                      onPrev: _goToPrevSentence,
-                                      onWordTap: _handleWordTap,
-                                      onPhraseSelected: _handlePhraseSelected,
-                                      isLoadingTranslation:
-                                          _isLoadingTranslation,
-                                      googleTranslation: _googleTranslation,
-                                      myMemoryTranslation: _myMemoryTranslation,
-                                      showError: _showError,
-                                      onRetryTranslation:
-                                          _handleTranslationToggle,
-                                      onTranslateRequest:
-                                          _handleTranslationToggle,
-                                      isListeningMode: _isListeningMode,
-                                    )
-                                  : ParagraphModeView(
-                                      lesson: displayLesson,
-                                      bookPages: _bookPages,
-                                      activeSentenceIndex: _activeSentenceIndex,
-                                      currentPage: _currentPage,
-                                      vocabulary: _vocabulary,
-                                      isVideo:
-                                          _isVideo ||
-                                          _isAudio ||
-                                          _isYoutubeAudio,
-                                      listScrollController:
-                                          _listScrollController,
-                                      pageController: _pageController,
-                                      onPageChanged: (i) =>
-                                          setState(() => _currentPage = i),
-                                      onSentenceTap: (i) {
-                                        if ((_isVideo ||
-                                                _isAudio ||
-                                                _isYoutubeAudio) &&
-                                            i < _activeTranscript.length) {
-                                          _seekToTime(
-                                            _activeTranscript[i].start,
-                                          );
-                                          _playMedia();
-                                        } else {
-                                          _speakSentence(_smartChunks[i], i);
-                                        }
-                                      },
-                                      onVideoSeek: (t) => _seekToTime(t),
-                                      onWordTap: _handleWordTap,
-                                      onPhraseSelected: _handlePhraseSelected,
-                                      isListeningMode: _isListeningMode,
-                                      itemKeys: _itemKeys,
-                                    ),
-                            ),
+                                  },
+                                  onVideoSeek: (t) => _seekToTime(t),
+                                  onWordTap: _handleWordTap,
+                                  onPhraseSelected: _handlePhraseSelected,
+                                  isListeningMode: _isListeningMode,
+                                  itemKeys: _itemKeys,
+                                  // Pass the completion handler
+                                  onComplete: _markLessonAsComplete,
+                                  wordsLearnedCount: _sessionWordsLearned.length,
+                                  xpEarned: currentXp,
+                                ),
                     ),
                   ],
                 ),

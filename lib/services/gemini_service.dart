@@ -78,4 +78,48 @@ class GeminiService {
       throw Exception("Failed to generate lesson. Try a different topic.");
     }
   }
+  // ... existing code ...
+
+  /// Rewrites the provided text to a specific CEFR level
+  // ... existing code ...
+
+  Future<String> rewriteContent({
+    required String originalContent,
+    required String targetLevel,
+    required String targetLanguage,
+  }) async {
+    final prompt =
+        """
+      Act as a professional translator and language teacher.
+      Rewrite the following text into **$targetLanguage**.
+      Adjust the complexity to CEFR Level **$targetLevel**.
+      
+      Rules:
+      1. Keep the same meaning and story flow.
+      2. Use vocabulary and grammar appropriate for $targetLevel.
+      3. **STRICTLY PLAIN TEXT ONLY.** Do not use markdown (no asterisks **, no bold, no italics, no headers #).
+      4. Return ONLY the rewritten text.
+      
+      Original Text:
+      "$originalContent"
+    """;
+
+    try {
+      final value = await Gemini.instance.prompt(parts: [Part.text(prompt)]);
+      String? responseText = value?.output;
+
+      if (responseText == null || responseText.isEmpty) {
+        throw Exception("AI returned empty content.");
+      }
+
+      // Basic cleanup (The RewriteService does the heavy lifting now)
+      return responseText
+          .replaceAll(RegExp(r'^```.*$'), '')
+          .replaceAll('```', '')
+          .trim();
+    } catch (e) {
+      printLog("Gemini Rewrite Error: $e");
+      throw Exception("Failed to rewrite text. Please try again.");
+    }
+  }
 }

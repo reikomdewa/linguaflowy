@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/models/lesson_model.dart';
@@ -28,7 +27,13 @@ class SentenceModeView extends StatelessWidget {
   final VoidCallback onRetryTranslation;
   final VoidCallback onTranslateRequest;
   final bool isListeningMode;
-  final String language; // <--- REQUIRED: Passed from Parent
+  final String language;
+
+  // --- NEW PARAMS ---
+  final VoidCallback onComplete;
+  final String lessonTitle;
+  final int wordsLearnedCount;
+  final int xpEarned;
 
   const SentenceModeView({
     super.key,
@@ -51,7 +56,11 @@ class SentenceModeView extends StatelessWidget {
     required this.showError,
     required this.onRetryTranslation,
     required this.onTranslateRequest,
-    required this.language, // <--- Ensure this is passed!
+    required this.language,
+    required this.onComplete,
+    required this.lessonTitle,
+    required this.wordsLearnedCount,
+    required this.xpEarned,
     this.isListeningMode = false,
   });
 
@@ -59,14 +68,16 @@ class SentenceModeView extends StatelessWidget {
   Widget build(BuildContext context) {
     if (chunks.isEmpty) return const Center(child: Text("No content"));
 
-    // Ensure index is valid to prevent crashes
     final safeIndex = activeIndex.clamp(0, chunks.length - 1);
     final currentText = chunks[safeIndex];
+    final bool isLastSentence = safeIndex == chunks.length - 1;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final iconColor = isDark ? Colors.white : Colors.black87;
 
-    return Column(
+    // Use ListView to allow scrolling if completion UI is tall
+    return ListView(
+      padding: EdgeInsets.zero,
       children: [
         const SizedBox(height: 20),
 
@@ -74,7 +85,6 @@ class SentenceModeView extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Restart / Prev
             IconButton(
               icon: const Icon(FontAwesomeIcons.arrowRotateLeft),
               iconSize: 28,
@@ -83,8 +93,6 @@ class SentenceModeView extends StatelessWidget {
               tooltip: "Restart Sentence",
             ),
             const SizedBox(width: 24),
-
-            // Play / Pause
             GestureDetector(
               onTap: onTogglePlayback,
               child: Container(
@@ -106,8 +114,6 @@ class SentenceModeView extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 24),
-
-            // Next
             IconButton(
               icon: const Icon(FontAwesomeIcons.arrowRotateRight),
               iconSize: 28,
@@ -118,44 +124,40 @@ class SentenceModeView extends StatelessWidget {
           ],
         ),
 
-        // --- FLASHCARD CONTENT ---
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onHorizontalDragEnd: (details) {
-              // Swipe LEFT to go NEXT
-              if (details.primaryVelocity! < 0) {
-                onNext();
-              }
-              // Swipe RIGHT to go PREV
-              else if (details.primaryVelocity! > 0) {
-                onPrev();
-              }
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              alignment: Alignment.center,
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    InteractiveTextDisplay(
-                      text: currentText,
-                      sentenceIndex: safeIndex,
-                      vocabulary: vocabulary,
-                      language: language, // <--- CORRECTLY PASSED
-                      isBigMode: true,
-                      onWordTap: onWordTap,
-                      onPhraseSelected: onPhraseSelected,
-                      isListeningMode: isListeningMode,
-                    ),
-                    const SizedBox(height: 24),
-                    _buildTranslationSection(context),
-                    const SizedBox(height: 40),
-                  ],
-                ),
+        // --- CONTENT ---
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          alignment: Alignment.center,
+          child: Column(
+            children: [
+              InteractiveTextDisplay(
+                text: currentText,
+                sentenceIndex: safeIndex,
+                vocabulary: vocabulary,
+                language: language,
+                isBigMode: true,
+                onWordTap: onWordTap,
+                onPhraseSelected: onPhraseSelected,
+                isListeningMode: isListeningMode,
               ),
-            ),
+              const SizedBox(height: 24),
+              _buildTranslationSection(context),
+
+              // --- COMPLETION UI INLINE ---
+              if (isLastSentence) ...[
+                const SizedBox(height: 40),
+                const Divider(),
+                const SizedBox(height: 20),
+                CompletionInfoView(
+                  lessonTitle: lessonTitle,
+                  wordsLearnedCount: wordsLearnedCount,
+                  xpEarned: xpEarned,
+                  onComplete: onComplete,
+                ),
+              ],
+              const SizedBox(height: 100), // Bottom Padding
+            ],
           ),
         ),
       ],
@@ -163,6 +165,7 @@ class SentenceModeView extends StatelessWidget {
   }
 
   Widget _buildTranslationSection(BuildContext context) {
+    // ... (Keep existing implementation) ...
     final bool hasTranslation =
         googleTranslation != null || myMemoryTranslation != null;
 
@@ -244,6 +247,11 @@ class ParagraphModeView extends StatelessWidget {
   final bool isListeningMode;
   final List<GlobalKey> itemKeys;
 
+  // --- NEW PARAMS ---
+  final VoidCallback onComplete;
+  final int wordsLearnedCount;
+  final int xpEarned;
+
   const ParagraphModeView({
     super.key,
     required this.lesson,
@@ -260,49 +268,71 @@ class ParagraphModeView extends StatelessWidget {
     required this.onWordTap,
     required this.onPhraseSelected,
     required this.itemKeys,
+    required this.onComplete,
+    required this.wordsLearnedCount,
+    required this.xpEarned,
     this.isListeningMode = false,
   });
 
   @override
   Widget build(BuildContext context) {
     // 1. TRANSCRIPT VIEW (Scrolling List)
-    // Used if we have parsed transcript data (always true for fixed local import now)
     if (lesson.transcript.isNotEmpty) {
       return ListView.separated(
         controller: listScrollController,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        itemCount: lesson.transcript.length + 1, // +1 for bottom padding
+        itemCount: lesson.transcript.length + 1,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
+          // --- LAST ITEM: COMPLETION UI ---
           if (index == lesson.transcript.length) {
-            return const SizedBox(height: 100);
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: CompletionInfoView(
+                lessonTitle: lesson.title,
+                wordsLearnedCount: wordsLearnedCount,
+                xpEarned: xpEarned,
+                onComplete: onComplete,
+              ),
+            );
           }
 
           final entry = lesson.transcript[index];
-          final bool isActive = index == activeSentenceIndex;
-
           return _buildTranscriptRow(
             context,
             index,
             entry.text,
             entry.start,
-            isActive,
+            index == activeSentenceIndex,
           );
         },
       );
     }
 
     // 2. BOOK VIEW (Pages)
-    // Fallback for text-only content
     if (bookPages.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
     return PageView.builder(
       controller: pageController,
-      itemCount: bookPages.length,
+      itemCount: bookPages.length + 1, // +1 for completion page
       onPageChanged: onPageChanged,
       itemBuilder: (context, pageIndex) {
+        // --- COMPLETION PAGE ---
+        if (pageIndex == bookPages.length) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: CompletionInfoView(
+              lessonTitle: lesson.title,
+              wordsLearnedCount: wordsLearnedCount,
+              xpEarned: xpEarned,
+              onComplete: onComplete,
+            ),
+          );
+        }
+
+        // --- NORMAL PAGE ---
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Column(
@@ -324,6 +354,7 @@ class ParagraphModeView extends StatelessWidget {
     );
   }
 
+  // ... (Keep existing _buildTranscriptRow and _buildBookRow methods exactly as they were) ...
   Widget _buildTranscriptRow(
     BuildContext context,
     int index,
@@ -332,12 +363,10 @@ class ParagraphModeView extends StatelessWidget {
     bool isActive,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // Safety check for keys
     final Key? rowKey = (index < itemKeys.length) ? itemKeys[index] : null;
 
     return Container(
-      key: rowKey, // Essential for Auto-Scroll
+      key: rowKey,
       margin: const EdgeInsets.only(bottom: 12),
       padding: isActive
           ? const EdgeInsets.all(12)
@@ -356,7 +385,6 @@ class ParagraphModeView extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Play Button for this specific line
           if (isVideo)
             GestureDetector(
               onTap: () => onVideoSeek(start),
@@ -370,10 +398,9 @@ class ParagraphModeView extends StatelessWidget {
                 ),
               ),
             ),
-
           Expanded(
             child: InteractiveTextDisplay(
-              language: lesson.language, // <--- CORRECTLY PASSED
+              language: lesson.language,
               text: text,
               sentenceIndex: index,
               vocabulary: vocabulary,
@@ -393,9 +420,7 @@ class ParagraphModeView extends StatelessWidget {
     String text,
     bool isActive,
   ) {
-    // Safety check for keys
     final Key? rowKey = (index < itemKeys.length) ? itemKeys[index] : null;
-
     return GestureDetector(
       onDoubleTap: () => onSentenceTap(index),
       child: Container(
@@ -409,7 +434,7 @@ class ParagraphModeView extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         child: InteractiveTextDisplay(
-          language: lesson.language, // <--- CORRECTLY PASSED
+          language: lesson.language,
           text: text,
           sentenceIndex: index,
           vocabulary: vocabulary,
@@ -418,6 +443,192 @@ class ParagraphModeView extends StatelessWidget {
           isListeningMode: isListeningMode,
         ),
       ),
+    );
+  }
+}
+
+// ----------------------------------------------------------------------
+// --- NEW REUSABLE WIDGET: COMPLETION INFO VIEW (From your snippets) ---
+// ----------------------------------------------------------------------
+class CompletionInfoView extends StatelessWidget {
+  final String lessonTitle;
+  final int wordsLearnedCount;
+  final int xpEarned;
+  final VoidCallback onComplete;
+
+  const CompletionInfoView({
+    super.key,
+    required this.lessonTitle,
+    required this.wordsLearnedCount,
+    required this.xpEarned,
+    required this.onComplete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // 1. Success Icon
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.green.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.check_rounded, color: Colors.green, size: 64),
+        ),
+        const SizedBox(height: 32),
+
+        // 2. Title & Message
+        Text(
+          "Lesson Complete!",
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : Colors.black,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          lessonTitle,
+          style: TextStyle(
+            fontSize: 18,
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+
+        const SizedBox(height: 48),
+
+        // 3. Stats Card
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.grey[100],
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            children: [
+              Text(
+                "SESSION PERFORMANCE",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  color: isDark ? Colors.grey[500] : Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildStatItem(
+                    context,
+                    count: "1",
+                    label: "Lessons",
+                    icon: Icons.menu_book_rounded,
+                    color: Colors.blue,
+                  ),
+                  _buildVerticalDivider(isDark),
+                  _buildStatItem(
+                    context,
+                    count: "$wordsLearnedCount",
+                    label: "Words",
+                    icon: Icons.trending_up_rounded,
+                    color: Colors.orange,
+                  ),
+                  _buildVerticalDivider(isDark),
+                  _buildStatItem(
+                    context,
+                    count: xpEarned.toString(),
+                    label: 'XP',
+                    icon: Icons.bolt,
+                    color: Colors.amber,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 48),
+
+        // 4. Finish Button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: onComplete,
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              backgroundColor: Theme.of(context).primaryColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 4,
+            ),
+            child: const Text(
+              "Finish",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(
+    BuildContext context, {
+    required String count,
+    required String label,
+    required IconData icon,
+    required Color color,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 24),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          count,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : Colors.black,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVerticalDivider(bool isDark) {
+    return Container(
+      height: 40,
+      width: 1,
+      color: isDark ? Colors.white24 : Colors.grey[300],
     );
   }
 }

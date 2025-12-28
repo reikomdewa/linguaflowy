@@ -305,13 +305,13 @@ class _AILessonGeneratorSheetState extends State<AILessonGeneratorSheet> {
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.auto_awesome, color: Colors.white),
+                  children: [
+                    Icon(Icons.auto_awesome, color: theme.canvasColor),
                     SizedBox(width: 8),
                     Text(
                       "Generate Lesson",
                       style: TextStyle(
-                        color: Colors.white,
+                        color: theme.canvasColor,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),

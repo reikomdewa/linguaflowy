@@ -5,12 +5,12 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
+import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/screens/playlist/widgets/playlist_widgets.dart';
 import 'package:linguaflow/screens/library/widgets/dialogs/library_actions.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_text_card.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_video_card.dart';
 import 'package:linguaflow/screens/search/library_search_delegate.dart';
-// Import the button widget you created
 
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
@@ -86,22 +86,41 @@ class LibraryScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (state is LessonLoaded) {
+            // --- 1. FILTERING LOGIC ---
+
+            // A. Imported (Local Files)
             final importedLessons = state.lessons
                 .where((l) => l.isLocal)
                 .toList();
-            final favoriteLessons = state.lessons
-                .where((l) => l.isFavorite)
+
+            // B. Cloud/Saved Lessons (Not Local)
+            final cloudLessons = state.lessons
+                .where((l) => !l.isLocal)
                 .toList();
 
-            // We handle empty state inside the ScrollView now to allow Playlists
-            // to show up even if lessons are empty, or handle fully empty state if needed.
+            // C. Text Stories (Horizontal)
+            // Logic: Must be Text type. 
+            // We Include Non-Favorites here so AI Lessons show up.
+            final textLessons = cloudLessons.where((l) {
+               bool isVideo = l.type == 'video' || (l.videoUrl != null && l.videoUrl!.isNotEmpty);
+               return !isVideo; 
+            }).toList();
+
+            // D. Video Lessons (Vertical)
+            // Logic: Must be Video type AND Must be Favorite.
+            // This prevents "random" history videos from cluttering the list.
+            final videoLessons = cloudLessons.where((l) {
+               bool isVideo = l.type == 'video' || (l.videoUrl != null && l.videoUrl!.isNotEmpty);
+               return isVideo && l.isFavorite; // <--- STRICT FAVORITE CHECK
+            }).toList();
+
 
             return SingleChildScrollView(
               padding: const EdgeInsets.only(bottom: 100),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- 1. IMPORTED (Horizontal) ---
+                  // --- SECTION 1: IMPORTED (Horizontal) ---
                   if (importedLessons.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -136,29 +155,16 @@ class LibraryScreen extends StatelessWidget {
                         separatorBuilder: (_, _) => const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           final lesson = importedLessons[index];
-                          const double cardWidth = 220;
-
-                          if (lesson.type == 'video' ||
-                              (lesson.videoUrl != null &&
-                                  lesson.videoUrl!.isNotEmpty)) {
-                            return LibraryVideoCard(
-                              lesson: lesson,
-                              isDark: isDark,
-                              width: cardWidth,
-                            );
-                          } else {
-                            return LibraryTextCard(
-                              lesson: lesson,
-                              isDark: isDark,
-                              width: cardWidth,
-                            );
+                          if (lesson.type == 'video' || (lesson.videoUrl?.isNotEmpty ?? false)) {
+                            return LibraryVideoCard(lesson: lesson, isDark: isDark, width: 220);
                           }
+                          return LibraryTextCard(lesson: lesson, isDark: isDark, width: 220);
                         },
                       ),
                     ),
                   ],
 
-                  // --- 2. PLAYLISTS (Horizontal Stream) ---
+                  // --- SECTION 2: PLAYLISTS (Horizontal) ---
                   _buildPlaylistsSection(
                     context,
                     user.id,
@@ -167,16 +173,59 @@ class LibraryScreen extends StatelessWidget {
                     user.currentLanguage,
                   ),
 
-                  // --- 3. FAVORITES (Vertical) ---
-                  if (favoriteLessons.isNotEmpty) ...[
+                  // --- SECTION 3: SAVED STORIES (Horizontal) ---
+                  // This includes Favorites AND your new AI Lessons
+                  if (textLessons.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
                       child: Row(
                         children: [
-                          Icon(Icons.star, color: Colors.amber[700], size: 20),
+                          Icon(Icons.library_books, color: Colors.blue[400], size: 20),
                           const SizedBox(width: 8),
                           Text(
-                            "Favorites",
+                            "Saved Stories",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      height: 240,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: textLessons.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 12),
+                        itemBuilder: (context, index) {
+                          final lesson = textLessons[index];
+                          return LibraryTextCard(
+                            lesson: lesson,
+                            isDark: isDark,
+                            width: 220, // Horizontal Card Width
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+
+                  // --- SECTION 4: FAVORITE VIDEOS (Vertical) ---
+                  // Only shows favorited videos now
+                  if (videoLessons.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.video_library, color: Colors.red[400], size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            "Favorite Videos",
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -190,29 +239,21 @@ class LibraryScreen extends StatelessWidget {
                       padding: const EdgeInsets.all(16),
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: favoriteLessons.length,
+                      itemCount: videoLessons.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 16),
                       itemBuilder: (context, index) {
-                        final lesson = favoriteLessons[index];
-                        if (lesson.type == 'video' ||
-                            (lesson.videoUrl != null &&
-                                lesson.videoUrl!.isNotEmpty)) {
-                          return LibraryVideoCard(
-                            lesson: lesson,
-                            isDark: isDark,
-                          );
-                        } else {
-                          return LibraryTextCard(
-                            lesson: lesson,
-                            isDark: isDark,
-                          );
-                        }
+                        final lesson = videoLessons[index];
+                        return LibraryVideoCard(
+                          lesson: lesson,
+                          isDark: isDark,
+                          // Vertical list uses full width automatically
+                        );
                       },
                     ),
                   ],
 
-                  // Empty State Fallback if absolutely nothing exists
-                  if (importedLessons.isEmpty && favoriteLessons.isEmpty)
+                  // Empty State Fallback
+                  if (importedLessons.isEmpty && textLessons.isEmpty && videoLessons.isEmpty)
                     _buildEmptyStateCheck(user.id, user.currentLanguage),
                 ],
               ),
@@ -334,7 +375,6 @@ class LibraryScreen extends StatelessWidget {
                   final id = docs[index].id;
                   final lessonIds = data['lessonIds'] as List<dynamic>? ?? [];
 
-                  // --- ACTION: Functions to handle Edit and Delete ---
                   void handleEdit() {
                     _showEditPlaylistDialog(context, userId, id, name);
                   }
@@ -346,10 +386,8 @@ class LibraryScreen extends StatelessWidget {
                   return Center(
                     child: SizedBox(
                       width: 280,
-                      // Use a Stack to overlay the Menu Icon on top of the button
                       child: Stack(
                         children: [
-                          // 1. The Main Content + Long Press Handler
                           GestureDetector(
                             onLongPress: () {
                               showModalBottomSheet(
@@ -360,7 +398,6 @@ class LibraryScreen extends StatelessWidget {
                                   ),
                                 ),
                                 builder: (ctx) => SafeArea(
-                                  // <--- WRAP IN SAFEAREA
                                   child: Wrap(
                                     children: [
                                       Padding(
@@ -404,7 +441,6 @@ class LibraryScreen extends StatelessWidget {
                             ),
                           ),
 
-                          // 2. The Menu Icon (Top Right)
                           Positioned(
                             top: 4,
                             right: 4,
@@ -475,7 +511,6 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
-  // --- HELPER 1: Edit Dialog ---
   void _showEditPlaylistDialog(
     BuildContext context,
     String userId,
@@ -518,7 +553,6 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
-  // --- HELPER 2: Delete Dialog ---
   void _showDeletePlaylistDialog(
     BuildContext context,
     String userId,
@@ -553,23 +587,19 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
-  // --- EMPTY STATE CHECKER (Async) ---
   Widget _buildEmptyStateCheck(String userId, String currentLanguage) {
-    // <--- Update params
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .collection('playlists')
-          .where('language', isEqualTo: currentLanguage) // <--- Filter here too
+          .where('language', isEqualTo: currentLanguage)
           .limit(1)
           .snapshots(),
       builder: (context, snapshot) {
-        // If loading or we have playlists in this language, show nothing
         if (!snapshot.hasData) return const SizedBox.shrink();
         if (snapshot.data!.docs.isNotEmpty) return const SizedBox.shrink();
 
-        // If NO playlists in this language AND no lessons (parent check), show empty state.
         return Padding(
           padding: const EdgeInsets.only(top: 100),
           child: Center(

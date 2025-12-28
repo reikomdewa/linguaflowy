@@ -11,8 +11,10 @@ import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/constants/constants.dart';
+import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
+import 'package:linguaflow/services/rewrite_service.dart';
 import 'package:linguaflow/utils/playlist_helper_functions.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -223,6 +225,8 @@ List<LessonModel> deduplicateSeries(List<LessonModel> input) {
   return filtered;
 }
 
+// ... existing imports ...
+
 void showLessonOptions(
   BuildContext context,
   LessonModel lesson,
@@ -235,10 +239,12 @@ void showLessonOptions(
   bool canDelete = false;
   bool isOwner = false;
   bool isCreatedByMe = false;
+  bool isPremium = false;
 
   if (authState is AuthAuthenticated) {
     final user = authState.user;
     currentUserId = user.id;
+    isPremium = user.isPremium;
     isOwner = (user.id == lesson.userId);
     isCreatedByMe =
         isOwner &&
@@ -280,7 +286,58 @@ void showLessonOptions(
             ),
           ),
 
-          // --- FAVORITE / SAVE BUTTON ---
+          // --- 1. REWRITE TO MY LEVEL (AI) ---
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.purpleAccent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.auto_fix_high, color: Colors.purpleAccent),
+            ),
+            title: Text(
+              'Rewrite to my Level (AI)',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+            ),
+            subtitle: Text(
+              isPremium
+                  ? 'Simplify or complicate this text (Unlimited)'
+                  : 'Simplify text (2 free/day)',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            trailing: !isPremium
+                ? const Chip(
+                    label: Text(
+                      "PRO",
+                      style: TextStyle(fontSize: 10, color: Colors.white),
+                    ),
+                    backgroundColor: Colors.orange,
+                    padding: EdgeInsets.zero,
+                  )
+                : null,
+            onTap: () {
+              Navigator.pop(builderContext);
+
+              if (authState is! AuthAuthenticated) {
+                ScaffoldMessenger.of(parentContext).showSnackBar(
+                  const SnackBar(
+                    content: Text("Please login to use AI features"),
+                  ),
+                );
+                return;
+              }
+
+              _showLevelSelector(parentContext, lesson, authState.user, isDark);
+            },
+          ),
+
+          Divider(color: Colors.grey[800], indent: 20, endIndent: 20),
+
+          // --- 2. FAVORITE / SAVE BUTTON ---
           ListTile(
             leading: Container(
               padding: const EdgeInsets.all(8),
@@ -305,8 +362,8 @@ void showLessonOptions(
             subtitle: Text(
               isOwner
                   ? (lesson.isFavorite
-                        ? 'Unfavorite (removes from library)'
-                        : 'Add to favorites')
+                      ? 'Unfavorite'
+                      : 'Add to favorites')
                   : 'Create a copy in your cloud library.',
               style: const TextStyle(color: Colors.grey),
             ),
@@ -344,7 +401,7 @@ void showLessonOptions(
 
           Divider(color: Colors.grey[800], indent: 20, endIndent: 20),
 
-          // --- NEW: ADD TO PLAYLIST BUTTON ---
+          // --- 3. ADD TO PLAYLIST ---
           ListTile(
             leading: Container(
               padding: const EdgeInsets.all(8),
@@ -366,17 +423,14 @@ void showLessonOptions(
               style: TextStyle(color: Colors.grey),
             ),
             onTap: () {
-              // Close the bottom sheet first
               Navigator.pop(builderContext);
-
               if (currentUserId.isNotEmpty) {
-                // Open the Playlist Selection Dialog
                 showPlaylistSelector(context, currentUserId, lesson, isDark);
               }
             },
           ),
 
-          // --- DELETE BUTTON ---
+          // --- 4. DELETE BUTTON ---
           if (canDelete) ...[
             Divider(color: Colors.grey[800], indent: 20, endIndent: 20),
             ListTile(
@@ -441,6 +495,125 @@ void showLessonOptions(
   );
 }
 
+// --------------------------------------------------------------------------
+// --- HELPER LOGIC: REWRITE AND NAVIGATE ---
+// --------------------------------------------------------------------------
+
+void _showLevelSelector(
+  BuildContext context,
+  LessonModel lesson,
+  UserModel user,
+  bool isDark,
+) {
+  final levels = ['A1', 'A2', 'B1', 'B2', 'C1'];
+
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      title: Text(
+        "Select Target Level",
+        style: TextStyle(color: isDark ? Colors.white : Colors.black),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            "The AI will rewrite the story to match this difficulty.",
+            style: TextStyle(color: isDark ? Colors.grey : Colors.black87),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: levels.map((level) {
+              return ActionChip(
+                label: Text(level),
+                backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+                labelStyle: TextStyle(
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+                onPressed: () => _performRewrite(context, lesson, user, level),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Future<void> _performRewrite(
+  BuildContext context,
+  LessonModel lesson,
+  UserModel user,
+  String level,
+) async {
+  // 1. Close the Level Selector Dialog
+  Navigator.pop(context);
+
+  // 2. Show Loading Indicator
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(child: CircularProgressIndicator()),
+  );
+
+  try {
+    final rewriteService = RewriteService();
+
+    // 3. Generate the completely NEW lesson
+    // (This Logic already creates a new UUID and clears transcript/sentences)
+    final newLesson = await rewriteService.createRewrittenLesson(
+      user: user,
+      originalLesson: lesson,
+      targetLevel: level,
+    );
+
+    // 4. Save the New Lesson to DB (via Bloc)
+    if (context.mounted) {
+      context.read<LessonBloc>().add(LessonCreateRequested(newLesson));
+    }
+
+    // 5. Close Loading Indicator
+    if (context.mounted) Navigator.pop(context);
+
+    // 6. NAVIGATE TO READER SCREEN with the new lesson
+    if (context.mounted) {
+      // Optional: Show a quick toast before moving
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Rewritten to $level! Opening..."),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+
+      // Navigate
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ReaderScreen(lesson: newLesson),
+        ),
+      );
+    }
+  } catch (e) {
+    // Error Handling
+    if (context.mounted) Navigator.pop(context); // Close loading
+
+    String errorMessage = "Failed to rewrite lesson.";
+    if (e.toString().contains("LIMIT_REACHED")) {
+      errorMessage = "Daily limit reached. Upgrade to Premium for unlimited AI.";
+    } else {
+      errorMessage = "Error: $e";
+    }
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+      );
+    }
+  }
+}
 void showReportBugDialog(
   BuildContext context,
   String userId,
