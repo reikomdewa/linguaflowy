@@ -1,9 +1,12 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
+import 'package:linguaflow/constants/terms_and_policies.dart';
 import 'package:linguaflow/screens/profile/widgets/profile_data_exporter.dart';
 import 'package:linguaflow/services/home_feed_cache_service.dart';
 import 'package:linguaflow/services/lesson_cache_service.dart';
@@ -274,16 +277,85 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          ProfileSectionCard(title: "About", children: []),
           FutureBuilder<PackageInfo>(
             future: _packageInfoFuture,
             builder: (context, snapshot) {
               if (snapshot.hasData) {
                 return Center(
-                  child: Text(
-                    'Version ${snapshot.data!.version}', // Gets "1.0.0"
-                    // Use this if you want build number too:
-                    // 'Version ${snapshot.data!.version} (${snapshot.data!.buildNumber})',
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 30.0),
+                    child: Column(
+                      mainAxisAlignment: .center,
+                      children: [
+                        Text(
+                          'Version ${snapshot.data!.version}', // Gets "1.0.0"
+                          // Use this if you want build number too:
+                          // 'Version ${snapshot.data!.version} (${snapshot.data!.buildNumber})',
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          'Copyright 2025 - A Reikom App ', // Gets "1.0.0"
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        RichText(
+                          text: TextSpan(
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodyMedium?.color,
+                              fontSize: 13,
+                            ),
+                            children: [
+                              const TextSpan(
+                                text: "By using Linguaflow you agree to the ",
+                              ),
+                              TextSpan(
+                                text: "Terms & Conditions",
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold,
+                                  decoration: TextDecoration.underline,
+                                ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    _showLegalDialog(
+                                      context,
+                                      "Terms & Conditions",
+                                      TermsAndPolicies.termsOfService,
+                                    );
+                                  },
+                              ),
+                              const TextSpan(text: " and "),
+                              TextSpan(
+                                text: "Privacy Policy",
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold,
+                                  decoration: TextDecoration.underline,
+                                ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    _showLegalDialog(
+                                      context,
+                                      "Privacy Policy",
+                                      TermsAndPolicies.privacyPolicy,
+                                    );
+                                  },
+                              ),
+                              const TextSpan(text: "."),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }
@@ -296,6 +368,31 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
+  void _showLegalDialog(BuildContext context, String title, String content) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: Markdown(
+            data: content,
+            styleSheet: MarkdownStyleSheet(
+              h1: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              p: const TextStyle(fontSize: 14),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Close"),
+          ),
+        ],
+      ),
+    );
+  }
   // --- HELPERS FOR UI DISPLAY ---
 
   String _getAppThemeName(ThemeMode mode) {

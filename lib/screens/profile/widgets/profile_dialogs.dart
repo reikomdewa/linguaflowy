@@ -8,7 +8,6 @@ import 'package:linguaflow/blocs/settings/settings_bloc.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 
 class ProfileDialogs {
-  
   // --- 1. USER PROFILE DIALOGS ---
 
   static void showEditNameDialog(BuildContext context, String currentName) {
@@ -51,14 +50,23 @@ class ProfileDialogs {
     });
   }
 
-  static void showTargetLanguageDialog(BuildContext context, String current, String userId) {
+  static void showTargetLanguageDialog(
+    BuildContext context,
+    String current,
+    String userId,
+  ) {
     _showLanguageListDialog(context, "Switch Target Language", current, (val) {
       context.read<AuthBloc>().add(AuthTargetLanguageChanged(val));
       context.read<LessonBloc>().add(LessonLoadRequested(userId, val));
     });
   }
 
-  static void _showLanguageListDialog(BuildContext context, String title, String current, Function(String) onSelected) {
+  static void _showLanguageListDialog(
+    BuildContext context,
+    String title,
+    String current,
+    Function(String) onSelected,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -117,9 +125,24 @@ class ProfileDialogs {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildReaderThemeItem(ReaderTheme.light, "Light", Colors.white, Colors.black),
-              _buildReaderThemeItem(ReaderTheme.sepia, "Sepia", const Color(0xFFF4ECD8), const Color(0xFF5D4037)),
-              _buildReaderThemeItem(ReaderTheme.dark, "Dark", const Color(0xFF1E1E1E), Colors.white),
+              _buildReaderThemeItem(
+                ReaderTheme.light,
+                "Light",
+                Colors.white,
+                Colors.black,
+              ),
+              _buildReaderThemeItem(
+                ReaderTheme.sepia,
+                "Sepia",
+                const Color(0xFFF4ECD8),
+                const Color(0xFF5D4037),
+              ),
+              _buildReaderThemeItem(
+                ReaderTheme.dark,
+                "Dark",
+                const Color(0xFF1E1E1E),
+                Colors.white,
+              ),
             ],
           ),
         ),
@@ -127,18 +150,33 @@ class ProfileDialogs {
     );
   }
 
-  static Widget _buildReaderThemeItem(ReaderTheme theme, String label, Color bg, Color text) {
+  static Widget _buildReaderThemeItem(
+    ReaderTheme theme,
+    String label,
+    Color bg,
+    Color text,
+  ) {
     return RadioListTile<ReaderTheme>(
       title: Row(
         children: [
           Container(
-            width: 24, height: 24,
+            width: 24,
+            height: 24,
             decoration: BoxDecoration(
               color: bg,
               shape: BoxShape.circle,
               border: Border.all(color: Colors.grey),
             ),
-            child: Center(child: Text("Aa", style: TextStyle(color: text, fontSize: 10, fontWeight: FontWeight.bold))),
+            child: Center(
+              child: Text(
+                "Aa",
+                style: TextStyle(
+                  color: text,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Text(label),
@@ -175,7 +213,10 @@ class ProfileDialogs {
 
   static Widget _buildFontFamilyRadio(String val, String label) {
     return RadioListTile<String>(
-      title: Text(label, style: TextStyle(fontFamily: val == 'Serif' ? null : val)), 
+      title: Text(
+        label,
+        style: TextStyle(fontFamily: val == 'Serif' ? null : val),
+      ),
       value: val,
     );
   }
@@ -208,10 +249,7 @@ class ProfileDialogs {
   }
 
   static Widget _buildLineHeightRadio(double val, String label) {
-    return RadioListTile<double>(
-      title: Text(label),
-      value: val,
-    );
+    return RadioListTile<double>(title: Text(label), value: val);
   }
 
   static void showFontSizeDialog(BuildContext context, double current) {
@@ -278,15 +316,16 @@ class ProfileDialogs {
   }
 
   static Widget _buildThemeRadio(ThemeMode val, String label) {
-    return RadioListTile<ThemeMode>(
-      title: Text(label),
-      value: val,
-    );
+    return RadioListTile<ThemeMode>(title: Text(label), value: val);
   }
 
   // --- 5. SUPPORT & DATA ---
 
-  static void showReportBugDialog(BuildContext context, String userId, String userEmail) {
+  static void showReportBugDialog(
+    BuildContext context,
+    String userId,
+    String userEmail,
+  ) {
     final titleCtrl = TextEditingController();
     final descCtrl = TextEditingController();
     String severity = 'medium';
@@ -302,20 +341,31 @@ class ProfileDialogs {
               children: [
                 TextField(
                   controller: titleCtrl,
-                  decoration: const InputDecoration(labelText: "Subject", border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: "Subject",
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 15),
                 TextField(
                   controller: descCtrl,
                   maxLines: 4,
-                  decoration: const InputDecoration(labelText: "Description", border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: "Description",
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 15),
                 DropdownButtonFormField<String>(
                   initialValue: severity,
                   decoration: const InputDecoration(labelText: "Impact"),
                   items: ['low', 'medium', 'high', 'critical']
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase())))
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(s.toUpperCase()),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) => setState(() => severity = v!),
                 ),
@@ -323,22 +373,29 @@ class ProfileDialogs {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel"),
+            ),
             ElevatedButton(
               onPressed: () async {
                 if (titleCtrl.text.isNotEmpty) {
-                  await FirebaseFirestore.instance.collection('bug_reports').add({
-                    'title': titleCtrl.text,
-                    'description': descCtrl.text,
-                    'severity': severity,
-                    'status': 'open',
-                    'userId': userId,
-                    'userEmail': userEmail,
-                    'createdAt': FieldValue.serverTimestamp(),
-                  });
+                  await FirebaseFirestore.instance
+                      .collection('bug_reports')
+                      .add({
+                        'title': titleCtrl.text,
+                        'description': descCtrl.text,
+                        'severity': severity,
+                        'status': 'open',
+                        'userId': userId,
+                        'userEmail': userEmail,
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
                   if (ctx.mounted) {
                     Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Report sent!")));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Report sent!")),
+                    );
                   }
                 }
               },
@@ -372,7 +429,10 @@ class ProfileDialogs {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
@@ -381,7 +441,10 @@ class ProfileDialogs {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text("Delete Forever", style: TextStyle(color: Colors.white)),
+            child: const Text(
+              "Delete Forever",
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),

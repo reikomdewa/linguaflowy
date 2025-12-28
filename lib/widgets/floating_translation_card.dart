@@ -117,7 +117,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
         if (myMemoryValid &&
             myMemoryResult.trim().toLowerCase() !=
                 googleResult.trim().toLowerCase()) {
-          combined += "\n\n[Alternative]\n$myMemoryResult";
+          combined += "\n$myMemoryResult";
         }
       } else if (myMemoryValid) {
         combined = myMemoryResult;
