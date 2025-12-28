@@ -7,7 +7,7 @@ import 'package:linguaflow/constants/constants.dart';
 
 // Screens
 import 'package:linguaflow/screens/home/home_screen.dart';
-import 'package:linguaflow/screens/search/search_screen.dart';
+import 'package:linguaflow/screens/discover/discover_screen.dart';
 import 'package:linguaflow/screens/library/library_screen.dart';
 import 'package:linguaflow/screens/profile/profile_screen.dart';
 import 'package:linguaflow/screens/speak/speak_screen.dart';
@@ -114,7 +114,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
 
       _NavItem(
-        screen: const SearchScreen(),
+        screen: const DiscoverScreen(),
         icon: const Padding(
           padding: EdgeInsets.only(bottom: 4.0),
           child: FaIcon(FontAwesomeIcons.magnifyingGlass, size: 20),

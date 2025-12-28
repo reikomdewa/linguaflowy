@@ -11,9 +11,161 @@ import 'package:url_launcher/url_launcher.dart';
 
 export 'logger.dart';
 export '../screens/home/utils/lesson_card_utils.dart';
+import 'package:flutter/material.dart';
+import 'dart:async';
+
+class _ToastWidget extends StatefulWidget {
+  final String message;
+  final bool isError;
+  final Duration duration;
+  final VoidCallback onDismiss;
+
+  const _ToastWidget({
+    required this.message,
+    required this.isError,
+    required this.duration,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_ToastWidget> createState() => _ToastWidgetState();
+}
+
+class _ToastWidgetState extends State<_ToastWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacity;
+  late Animation<Offset> _offset;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+
+    _opacity = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    _offset = Tween<Offset>(
+      begin: const Offset(0, 0.5),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+
+    _controller.forward();
+
+    _timer = Timer(widget.duration, () {
+      _close();
+    });
+  }
+
+  void _close() {
+    if (!mounted) return;
+    _controller.reverse().then((_) {
+      widget.onDismiss();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. Determine Colors
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color backgroundColor = widget.isError
+        ? Colors.redAccent
+        : (isDark ? const Color(0xFF333333) : const Color(0xFF1E1E1E));
+
+    return Positioned(
+      // Position it ABOVE the bottom sheet area usually
+      bottom: MediaQuery.of(context).viewInsets.bottom + 50,
+      left: 20,
+      right: 20,
+      child: Material(
+        color: Colors.transparent,
+        child: FadeTransition(
+          opacity: _opacity,
+          child: SlideTransition(
+            position: _offset,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    widget.isError
+                        ? Icons.error_outline_rounded
+                        : Icons.info_outline_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      widget.message,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class Utils {
-   String? _encodeQueryParameters(Map<String, String> params) {
+  void showCustomSnackBar(
+    BuildContext context,
+    String message, {
+    bool isError = false,
+    Duration duration = const Duration(seconds: 3),
+  }) {
+    late OverlayEntry overlayEntry;
+
+    overlayEntry = OverlayEntry(
+      builder: (context) => _ToastWidget(
+        message: message,
+        isError: isError,
+        duration: duration,
+        onDismiss: () {
+          overlayEntry.remove();
+        },
+      ),
+    );
+
+    Overlay.of(context).insert(overlayEntry);
+  }
+
+  String? _encodeQueryParameters(Map<String, String> params) {
     return params.entries
         .map(
           (e) =>
@@ -21,6 +173,7 @@ class Utils {
         )
         .join('&');
   }
+
   Color getLevelShade(int level, MaterialColor color) {
     if (level == 0) {
       return color.shade300; // Lightest shade
@@ -32,7 +185,8 @@ class Utils {
       return color.shade800; // Darkest shade
     }
   }
-    Future<void> launchEmail() async {
+
+  Future<void> launchEmail() async {
     final Uri emailLaunchUri = Uri(
       scheme: 'mailto',
       path: ADMIN_EMAIL,
@@ -46,11 +200,19 @@ class Utils {
       if (!await launchUrl(emailLaunchUri)) throw 'Could not launch email';
     } catch (_) {}
   }
+
   Future<void> launchWhatsApp() async {
-    final String message = "Hello, I would like to purchase a premium code via bank transfer/other method.";
-    final Uri whatsappUri = Uri.parse("https://wa.me/$ADMIN_PHONE_NUMBER?text=${Uri.encodeComponent(message)}");
-    try { if (!await launchUrl(whatsappUri, mode: LaunchMode.externalApplication)) throw 'Could not launch WhatsApp'; } catch (_) {}
+    final String message =
+        "Hello, I would like to purchase a premium code via bank transfer/other method.";
+    final Uri whatsappUri = Uri.parse(
+      "https://wa.me/$ADMIN_PHONE_NUMBER?text=${Uri.encodeComponent(message)}",
+    );
+    try {
+      if (!await launchUrl(whatsappUri, mode: LaunchMode.externalApplication))
+        throw 'Could not launch WhatsApp';
+    } catch (_) {}
   }
+
   Widget buildTextBadge(String text, Color bgColor, {double fontSize = 10}) {
     return Container(
       margin: const EdgeInsets.only(right: 3.0), // Spacing between badges
@@ -107,8 +269,6 @@ class Utils {
     );
   }
 
-
-
   static void showXpPop(int amount, BuildContext context) {
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
 
@@ -124,7 +284,10 @@ class Utils {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text("+$amount XP! ", style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              "+$amount XP! ",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             const Icon(Icons.bolt, color: Colors.amber, size: 18),
           ],
         ),

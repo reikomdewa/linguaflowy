@@ -10,7 +10,7 @@ import 'package:linguaflow/screens/playlist/widgets/playlist_widgets.dart';
 import 'package:linguaflow/screens/library/widgets/dialogs/library_actions.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_text_card.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_video_card.dart';
-import 'package:linguaflow/screens/search/library_search_delegate.dart';
+import 'package:linguaflow/screens/discover/library_search_delegate.dart';
 
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
@@ -99,19 +99,21 @@ class LibraryScreen extends StatelessWidget {
                 .toList();
 
             // C. Text Stories (Horizontal)
-            // Logic: Must be Text type. 
-            // We Include Non-Favorites here so AI Lessons show up.
+            // Logic: Not Video AND (Is Favorite OR Is AI Generated)
             final textLessons = cloudLessons.where((l) {
                bool isVideo = l.type == 'video' || (l.videoUrl != null && l.videoUrl!.isNotEmpty);
-               return !isVideo; 
+               if (isVideo) return false;
+               
+               // Only show if Favorite OR explicitly AI type
+               // This hides "random history" text lessons
+               return l.isFavorite || l.type == 'ai_story';
             }).toList();
 
-            // D. Video Lessons (Vertical)
-            // Logic: Must be Video type AND Must be Favorite.
-            // This prevents "random" history videos from cluttering the list.
+            // D. Favorite Videos (Vertical)
+            // Logic: Is Video AND Is Favorite
             final videoLessons = cloudLessons.where((l) {
                bool isVideo = l.type == 'video' || (l.videoUrl != null && l.videoUrl!.isNotEmpty);
-               return isVideo && l.isFavorite; // <--- STRICT FAVORITE CHECK
+               return isVideo && l.isFavorite; 
             }).toList();
 
 
@@ -155,8 +157,9 @@ class LibraryScreen extends StatelessWidget {
                         separatorBuilder: (_, _) => const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           final lesson = importedLessons[index];
+                          // Handle corner case where a local file acts as video
                           if (lesson.type == 'video' || (lesson.videoUrl?.isNotEmpty ?? false)) {
-                            return LibraryVideoCard(lesson: lesson, isDark: isDark, width: 220);
+                             return LibraryVideoCard(lesson: lesson, isDark: isDark, width: 220);
                           }
                           return LibraryTextCard(lesson: lesson, isDark: isDark, width: 220);
                         },
@@ -174,7 +177,6 @@ class LibraryScreen extends StatelessWidget {
                   ),
 
                   // --- SECTION 3: SAVED STORIES (Horizontal) ---
-                  // This includes Favorites AND your new AI Lessons
                   if (textLessons.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -208,7 +210,7 @@ class LibraryScreen extends StatelessWidget {
                           return LibraryTextCard(
                             lesson: lesson,
                             isDark: isDark,
-                            width: 220, // Horizontal Card Width
+                            width: 220, // Fixed width for horizontal scrolling
                           );
                         },
                       ),
@@ -216,7 +218,6 @@ class LibraryScreen extends StatelessWidget {
                   ],
 
                   // --- SECTION 4: FAVORITE VIDEOS (Vertical) ---
-                  // Only shows favorited videos now
                   if (videoLessons.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -246,7 +247,7 @@ class LibraryScreen extends StatelessWidget {
                         return LibraryVideoCard(
                           lesson: lesson,
                           isDark: isDark,
-                          // Vertical list uses full width automatically
+                          // No width = Full width vertical
                         );
                       },
                     ),
@@ -313,7 +314,9 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
-  // --- PLAYLIST SECTION WIDGET ---
+  // ... (Playlist Widgets & Empty State remain the same as previous) ...
+  // [INCLUDE THE _buildPlaylistsSection and _buildEmptyStateCheck methods here]
+   // --- PLAYLIST SECTION WIDGET ---
   Widget _buildPlaylistsSection(
     BuildContext context,
     String userId,

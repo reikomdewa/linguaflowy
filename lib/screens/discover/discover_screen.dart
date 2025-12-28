@@ -13,21 +13,23 @@ import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 // MODELS
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
+import 'package:linguaflow/screens/community/community_screen.dart';
 
 // WIDGETS
-import 'package:linguaflow/screens/home/widgets/sections/genre_feed_section.dart'; 
-import 'package:linguaflow/widgets/category_video_section.dart'; 
-import 'package:linguaflow/screens/search/library_search_delegate.dart';
+import 'package:linguaflow/screens/home/widgets/sections/genre_feed_section.dart';
+import 'package:linguaflow/screens/home/widgets/tap_button.dart';
+import 'package:linguaflow/widgets/category_video_section.dart';
+import 'package:linguaflow/screens/discover/library_search_delegate.dart';
 
 // SCREENS
-import 'package:linguaflow/screens/search/category_results_screen.dart'; 
+import 'package:linguaflow/screens/discover/category_results_screen.dart';
 
 // UTILS & CONSTANTS
 import 'package:linguaflow/constants/genre_constants.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 
-class SearchScreen extends StatelessWidget {
-  const SearchScreen({super.key});
+class DiscoverScreen extends StatelessWidget {
+  const DiscoverScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -57,8 +59,9 @@ class SearchScreen extends StatelessWidget {
     }
 
     // 4. Get Categories List
-    final List<String> allUiCategories = GenreConstants.categoryMap.keys.toList();
-    
+    final List<String> allUiCategories = GenreConstants.categoryMap.keys
+        .toList();
+
     // RESPONSIVE CHECK: Is Desktop/Web or Mobile?
     final bool isDesktop = MediaQuery.of(context).size.width >= 800;
 
@@ -91,7 +94,17 @@ class SearchScreen extends StatelessWidget {
                     onTap: () => _openSearch(context, isDark),
                   ),
                 ),
-
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 5, 16, 5),
+                    child: TabButton(
+                      title: "Community",
+                      icon: Icons.people,
+                      destinationScreen:
+                          CommunityScreen(), // The widget you want to go to
+                    ),
+                  ),
+                ),
                 // --- B. CHIPS HEADER ---
                 SliverToBoxAdapter(
                   child: Padding(
@@ -116,9 +129,9 @@ class SearchScreen extends StatelessWidget {
                   sliver: SliverGrid(
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       // RESPONSIVE: 4 columns on Desktop, 2 on Mobile
-                      crossAxisCount: isDesktop ? 4 : 2, 
+                      crossAxisCount: isDesktop ? 4 : 2,
                       // RESPONSIVE: Taller chips on Desktop (using your nice design), wider on Mobile
-                      childAspectRatio: isDesktop ? 4.5 : 3.5, 
+                      childAspectRatio: isDesktop ? 4.5 : 3.5,
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 10,
                     ),
@@ -222,7 +235,7 @@ class SearchScreen extends StatelessWidget {
     // WEB/DESKTOP: Use the nice compact chip
     if (isDesktop && kIsWeb) {
       return _webChipContainer(bgColor, onTap, title, textColor);
-    } 
+    }
     // MOBILE: Use the original larger touch target
     else {
       return _chipContainer(bgColor, onTap, title, textColor);
@@ -282,10 +295,7 @@ class SearchScreen extends StatelessWidget {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(12), // Pill shape
-          border: Border.all(
-            color: textColor.withOpacity(0.15), 
-            width: 0.5
-          ),
+          border: Border.all(color: textColor.withOpacity(0.15), width: 0.5),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.03),
@@ -347,14 +357,17 @@ class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
   ) {
     // RESPONSIVE: Limit search bar width on Desktop
     final bool isDesktop = MediaQuery.of(context).size.width > 800;
-    
+
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       alignment: Alignment.center,
-      child: Center( // Center on desktop
+      child: Center(
+        // Center on desktop
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isDesktop ? 600 : double.infinity),
+          constraints: BoxConstraints(
+            maxWidth: isDesktop ? 600 : double.infinity,
+          ),
           child: GestureDetector(
             onTap: onTap,
             child: Container(

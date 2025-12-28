@@ -387,16 +387,6 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       context.read<AuthBloc>().add(AuthUpdateXP(calculatedXp));
       context.read<AuthBloc>().add(AuthIncrementLessonsCompleted());
       _logActivitySession(0, calculatedXp);
-
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => LessonCompletionScreen(
-            lessonTitle: widget.lesson.title,
-            xpEarned: calculatedXp,
-            wordsLearnedCount: _sessionWordsLearned.length,
-          ),
-        ),
-      );
     }
   }
 

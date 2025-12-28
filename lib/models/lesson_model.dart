@@ -13,25 +13,35 @@ class LessonModel {
   final int progress;
   final String? imageUrl;
   final bool isFavorite;
-  final String type; // 'text', 'video', 'audio'
-  final String difficulty;
+  final String type; // 'text', 'video', 'audio', 'ai_story'
+  final String difficulty; // 'A1', 'B2', etc.
   
-  // --- FILTERS ---
+  // --- FILTERS & METADATA ---
   final String genre; 
+  final List<String> tags; // Future-proof: Better than just genre
 
-  // --- NEW FIELD FOR OWNERSHIP ---
+  // --- OWNERSHIP & COMMUNITY ---
   final String? originalAuthorId;
+  final bool isPublic;      // <--- ADDED: For community sharing
+  final int likes;          // <--- ADDED: For community ranking
+  final int views;          // <--- ADDED: For popularity
+  final String source;      // <--- ADDED: 'youtube', 'ai', 'import', 'system'
 
-  // --- SERIES / PLAYLIST INFO (NEW) ---
-  final String? seriesId;      // The YouTube Playlist ID or Book Series ID
-  final String? seriesTitle;   // The Name of the Playlist (e.g., "Harry Potter")
-  final int? seriesIndex;      // The order (1, 2, 3...)
+  // --- SERIES / PLAYLIST INFO ---
+  final String? seriesId;      
+  final String? seriesTitle;   
+  final int? seriesIndex;      
 
-  // Media Fields
+  // --- MEDIA FIELDS ---
   final String? videoUrl;
   final String? subtitleUrl;
 
-  // Internal State
+  // --- FLEXIBLE STORAGE (The ultimate future-proofer) ---
+  // Store AI prompts, YouTube channel names, specific dialects, etc.
+  // without changing the database schema.
+  final Map<String, dynamic> metadata; 
+
+  // --- INTERNAL STATE (Not saved to DB usually) ---
   final bool isLocal; 
 
   LessonModel({
@@ -51,7 +61,14 @@ class LessonModel {
     this.genre = 'general',
     this.originalAuthorId,
     
-    // --- ADD TO CONSTRUCTOR ---
+    // --- NEW FIELDS (With Defaults) ---
+    this.isPublic = false,
+    this.tags = const [],
+    this.likes = 0,
+    this.views = 0,
+    this.source = 'system', // Default source
+    this.metadata = const {},
+
     this.seriesId,
     this.seriesTitle,
     this.seriesIndex,
@@ -89,17 +106,29 @@ class LessonModel {
       type: map['type']?.toString() ?? 'text',
       difficulty: map['difficulty']?.toString() ?? 'intermediate',
       genre: map['genre']?.toString() ?? 'general', 
-      
       originalAuthorId: map['originalAuthorId']?.toString(),
 
       // --- MAP NEW FIELDS ---
+      isPublic: map['isPublic'] == true,
+      tags: (map['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      likes: int.tryParse(map['likes']?.toString() ?? '0') ?? 0,
+      views: int.tryParse(map['views']?.toString() ?? '0') ?? 0,
+      source: map['source']?.toString() ?? 'system',
+      metadata: map['metadata'] is Map<String, dynamic> 
+          ? map['metadata'] as Map<String, dynamic> 
+          : {},
+
+      // --- SERIES ---
       seriesId: map['seriesId']?.toString(),
       seriesTitle: map['seriesTitle']?.toString(),
-      // Handle parsing safely (string to int)
       seriesIndex: int.tryParse(map['seriesIndex']?.toString() ?? ''),
 
+      // --- MEDIA ---
       videoUrl: map['videoUrl']?.toString(),
       subtitleUrl: map['subtitleUrl']?.toString(),
+      
+      // Note: isLocal is usually NOT mapped from DB, defaults to false for cloud items
+      isLocal: false, 
     );
   }
 
@@ -121,6 +150,13 @@ class LessonModel {
       'originalAuthorId': originalAuthorId, 
 
       // --- SAVE NEW FIELDS ---
+      'isPublic': isPublic,
+      'tags': tags,
+      'likes': likes,
+      'views': views,
+      'source': source,
+      'metadata': metadata,
+
       'seriesId': seriesId,
       'seriesTitle': seriesTitle,
       'seriesIndex': seriesIndex,
@@ -148,6 +184,13 @@ class LessonModel {
     String? originalAuthorId,
     
     // --- ADD COPY PARAMS ---
+    bool? isPublic,
+    List<String>? tags,
+    int? likes,
+    int? views,
+    String? source,
+    Map<String, dynamic>? metadata,
+
     String? seriesId,
     String? seriesTitle,
     int? seriesIndex,
@@ -174,6 +217,13 @@ class LessonModel {
       originalAuthorId: originalAuthorId ?? this.originalAuthorId,
       
       // --- COPY LOGIC ---
+      isPublic: isPublic ?? this.isPublic,
+      tags: tags ?? this.tags,
+      likes: likes ?? this.likes,
+      views: views ?? this.views,
+      source: source ?? this.source,
+      metadata: metadata ?? this.metadata,
+
       seriesId: seriesId ?? this.seriesId,
       seriesTitle: seriesTitle ?? this.seriesTitle,
       seriesIndex: seriesIndex ?? this.seriesIndex,
@@ -183,26 +233,33 @@ class LessonModel {
       isLocal: isLocal ?? this.isLocal, 
     );
   }
+
   /// Merges fresh system data (metadata) into this user lesson (progress)
   LessonModel mergeSystemData(LessonModel systemLesson) {
     return copyWith(
       // Keep User Progress/State
       progress: progress,
       isFavorite: isFavorite,
-      createdAt: createdAt, // Keep user's start date
+      createdAt: createdAt,
       
-      // Update Content/Metadata from System (The fresh stuff)
+      // Update Content/Metadata from System
       title: systemLesson.title,
       content: systemLesson.content,
       imageUrl: systemLesson.imageUrl,
       videoUrl: systemLesson.videoUrl,
       sentences: systemLesson.sentences,
       transcript: systemLesson.transcript,
-      seriesId: systemLesson.seriesId,         // <--- CRITICAL
-      seriesTitle: systemLesson.seriesTitle,   // <--- CRITICAL
-      seriesIndex: systemLesson.seriesIndex,   // <--- CRITICAL
+      seriesId: systemLesson.seriesId,
+      seriesTitle: systemLesson.seriesTitle,
+      seriesIndex: systemLesson.seriesIndex,
       difficulty: systemLesson.difficulty,
       genre: systemLesson.genre,
+      
+      // Merge new fields
+      tags: systemLesson.tags,
+      source: systemLesson.source,
+      metadata: systemLesson.metadata,
+      // Note: We might NOT want to merge isPublic/likes/views if this is a local copy
     );
   }
 }

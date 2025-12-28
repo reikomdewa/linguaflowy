@@ -1,6 +1,5 @@
 library;
 
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -180,7 +179,9 @@ void showPlaylistBottomSheet(
                     await Navigator.push(
                       parentContext,
                       MaterialPageRoute(
-                        builder: (context) => kIsWeb? ReaderScreenWeb(lesson: item) : ReaderScreen(lesson: item),
+                        builder: (context) => kIsWeb
+                            ? ReaderScreenWeb(lesson: item)
+                            : ReaderScreen(lesson: item),
                       ),
                     );
 
@@ -225,8 +226,6 @@ List<LessonModel> deduplicateSeries(List<LessonModel> input) {
   return filtered;
 }
 
-// ... existing imports ...
-
 void showLessonOptions(
   BuildContext context,
   LessonModel lesson,
@@ -245,13 +244,20 @@ void showLessonOptions(
     final user = authState.user;
     currentUserId = user.id;
     isPremium = user.isPremium;
+
+    // Check Ownership
     isOwner = (user.id == lesson.userId);
+
+    // Check if I am the "Original" author
     isCreatedByMe =
         isOwner &&
         (lesson.originalAuthorId == null ||
             lesson.originalAuthorId == lesson.userId);
+
     final bool isAdmin = AppConstants.isAdmin(user.email);
-    canDelete = isAdmin || isCreatedByMe || (isOwner && showDeleteAction);
+
+    // Allow delete if Admin or Owner
+    canDelete = isAdmin || isOwner;
   }
 
   showModalBottomSheet(
@@ -294,7 +300,10 @@ void showLessonOptions(
                 color: Colors.purpleAccent.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.auto_fix_high, color: Colors.purpleAccent),
+              child: const Icon(
+                Icons.auto_fix_high,
+                color: Colors.purpleAccent,
+              ),
             ),
             title: Text(
               'Rewrite to my Level (AI)',
@@ -321,7 +330,6 @@ void showLessonOptions(
                 : null,
             onTap: () {
               Navigator.pop(builderContext);
-
               if (authState is! AuthAuthenticated) {
                 ScaffoldMessenger.of(parentContext).showSnackBar(
                   const SnackBar(
@@ -330,14 +338,143 @@ void showLessonOptions(
                 );
                 return;
               }
-
               _showLevelSelector(parentContext, lesson, authState.user, isDark);
             },
           ),
 
           Divider(color: Colors.grey[800], indent: 20, endIndent: 20),
 
-          // --- 2. FAVORITE / SAVE BUTTON ---
+          // --- 2. PUBLISH TO COMMUNITY (NEW) ---
+          // Only show if I own it
+          if (isOwner)
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: lesson.isPublic
+                      ? Colors.green.withValues(alpha: 0.1)
+                      : Colors.teal.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  lesson.isPublic ? Icons.public : Icons.public_off,
+                  color: lesson.isPublic ? Colors.green : Colors.teal,
+                ),
+              ),
+              title: Text(
+                lesson.isPublic
+                    ? 'Published to Community'
+                    : 'Share to Everyone',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+              subtitle: Text(
+                lesson.isPublic
+                    ? 'Tap to unpublish (Make private)'
+                    : 'Make this lesson available to all users',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              onTap: () {
+                Navigator.pop(builderContext); // Close menu first
+
+                // A. BLOCK LOCAL VIDEO SHARING
+                // If it's a video file AND stored locally on the phone (imported)
+                if (lesson.isLocal &&
+                    (lesson.type == 'video' ||
+                        (lesson.videoUrl != null &&
+                            lesson.videoUrl!.isNotEmpty))) {
+                  ScaffoldMessenger.of(parentContext).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        "Cannot share local videos. Only Cloud/YouTube videos or Texts can be shared.",
+                      ),
+                      backgroundColor: Colors.orange,
+                      duration: Duration(seconds: 4),
+                    ),
+                  );
+                  return;
+                }
+
+                // B. UNPUBLISH LOGIC (Immediate)
+                if (lesson.isPublic) {
+                  parentContext.read<LessonBloc>().add(
+                    LessonUpdateRequested(lesson.copyWith(isPublic: false)),
+                  );
+                  ScaffoldMessenger.of(parentContext).showSnackBar(
+                    const SnackBar(content: Text("Lesson is now Private.")),
+                  );
+                  return;
+                }
+
+                // C. PUBLISH LOGIC (With Warning Dialog)
+                showDialog(
+                  context: parentContext,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text("Share to Everyone?"),
+                    content: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "This will make your lesson visible to all users in the Community tab.",
+                        ),
+                        SizedBox(height: 16),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange,
+                              size: 20,
+                            ),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "Strictly NO copyrighted content (Movies, Books, Netflix rips). Violations will result in an account ban.",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.redAccent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text("Cancel"),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          // Update Firestore to Public
+                          parentContext.read<LessonBloc>().add(
+                            LessonUpdateRequested(
+                              lesson.copyWith(isPublic: true),
+                            ),
+                          );
+                          ScaffoldMessenger.of(parentContext).showSnackBar(
+                            const SnackBar(
+                              content: Text("Lesson Published to Community!"),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        },
+                        child: const Text("Agree & Share"),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+
+          Divider(color: Colors.grey[800], indent: 20, endIndent: 20),
+
+          // --- 3. FAVORITE / SAVE BUTTON ---
           ListTile(
             leading: Container(
               padding: const EdgeInsets.all(8),
@@ -361,9 +498,7 @@ void showLessonOptions(
             ),
             subtitle: Text(
               isOwner
-                  ? (lesson.isFavorite
-                      ? 'Unfavorite'
-                      : 'Add to favorites')
+                  ? (lesson.isFavorite ? 'Unfavorite' : 'Add to favorites')
                   : 'Create a copy in your cloud library.',
               style: const TextStyle(color: Colors.grey),
             ),
@@ -401,7 +536,7 @@ void showLessonOptions(
 
           Divider(color: Colors.grey[800], indent: 20, endIndent: 20),
 
-          // --- 3. ADD TO PLAYLIST ---
+          // --- 4. ADD TO PLAYLIST ---
           ListTile(
             leading: Container(
               padding: const EdgeInsets.all(8),
@@ -430,7 +565,7 @@ void showLessonOptions(
             },
           ),
 
-          // --- 4. DELETE BUTTON ---
+          // --- 5. DELETE BUTTON (Visible if Owner) ---
           if (canDelete) ...[
             Divider(color: Colors.grey[800], indent: 20, endIndent: 20),
             ListTile(
@@ -454,10 +589,13 @@ void showLessonOptions(
                   context: context,
                   builder: (ctx) => AlertDialog(
                     title: const Text("Delete Lesson?"),
+                    // Custom text logic
                     content: Text(
-                      isCreatedByMe
-                          ? "This is your created lesson. Deleting it will remove it permanently for everyone."
-                          : "This will remove the lesson from your library.",
+                      lesson.isPublic
+                          ? "This lesson is currently Public. Deleting it will remove it from the Community as well."
+                          : isCreatedByMe
+                          ? "This will permanently delete this lesson."
+                          : "This will remove this lesson from your library.",
                     ),
                     actions: [
                       TextButton(
@@ -466,11 +604,11 @@ void showLessonOptions(
                       ),
                       TextButton(
                         onPressed: () {
-                          Navigator.pop(ctx);
+                          Navigator.pop(ctx); // Close Dialog
                           parentContext.read<LessonBloc>().add(
                             LessonDeleteRequested(lesson.id),
                           );
-                          Navigator.pop(builderContext);
+                          Navigator.pop(builderContext); // Close BottomSheet
                           ScaffoldMessenger.of(parentContext).showSnackBar(
                             const SnackBar(
                               content: Text("Lesson Deleted"),
@@ -495,10 +633,7 @@ void showLessonOptions(
   );
 }
 
-// --------------------------------------------------------------------------
-// --- HELPER LOGIC: REWRITE AND NAVIGATE ---
-// --------------------------------------------------------------------------
-
+// ... helper methods (_showLevelSelector, _performRewrite) remain unchanged ...
 void _showLevelSelector(
   BuildContext context,
   LessonModel lesson,
@@ -549,10 +684,7 @@ Future<void> _performRewrite(
   UserModel user,
   String level,
 ) async {
-  // 1. Close the Level Selector Dialog
   Navigator.pop(context);
-
-  // 2. Show Loading Indicator
   showDialog(
     context: context,
     barrierDismissible: false,
@@ -561,52 +693,30 @@ Future<void> _performRewrite(
 
   try {
     final rewriteService = RewriteService();
-
-    // 3. Generate the completely NEW lesson
-    // (This Logic already creates a new UUID and clears transcript/sentences)
     final newLesson = await rewriteService.createRewrittenLesson(
       user: user,
       originalLesson: lesson,
       targetLevel: level,
     );
 
-    // 4. Save the New Lesson to DB (via Bloc)
     if (context.mounted) {
       context.read<LessonBloc>().add(LessonCreateRequested(newLesson));
-    }
+      Navigator.pop(context);
 
-    // 5. Close Loading Indicator
-    if (context.mounted) Navigator.pop(context);
-
-    // 6. NAVIGATE TO READER SCREEN with the new lesson
-    if (context.mounted) {
-      // Optional: Show a quick toast before moving
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Rewritten to $level! Opening..."),
-          duration: const Duration(seconds: 1),
-        ),
-      );
-
-      // Navigate
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ReaderScreen(lesson: newLesson),
+          content: Text("Rewritten to $level & saved to Library!"),
+          backgroundColor: Colors.green,
         ),
       );
     }
   } catch (e) {
-    // Error Handling
-    if (context.mounted) Navigator.pop(context); // Close loading
-
+    if (context.mounted) Navigator.pop(context);
     String errorMessage = "Failed to rewrite lesson.";
     if (e.toString().contains("LIMIT_REACHED")) {
-      errorMessage = "Daily limit reached. Upgrade to Premium for unlimited AI.";
-    } else {
-      errorMessage = "Error: $e";
+      errorMessage =
+          "Daily limit reached. Upgrade to Premium for unlimited AI.";
     }
-
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
@@ -614,6 +724,7 @@ Future<void> _performRewrite(
     }
   }
 }
+
 void showReportBugDialog(
   BuildContext context,
   String userId,

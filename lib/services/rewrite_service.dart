@@ -36,39 +36,41 @@ class RewriteService {
         .replaceAll(RegExp(r'`'), '')    
         .trim();
 
-    // 4. CREATE NEW OBJECT (Do NOT use copyWith)
-    // Using the constructor ensures videoUrl is null.
+    // 4. CREATE NEW OBJECT
     final newLesson = LessonModel(
       id: const Uuid().v4(),
-      userId: user.id, // The current user owns this new copy
+      userId: user.id, 
       title: "${originalLesson.title} ($targetLevel)",
       language: originalLesson.language,
       content: newContent,
       
-      // --- CRITICAL FIXES ---
-      type: 'text',       // Explicitly set to text
-      videoUrl: null,     // Explicitly null (Constructor defaults allow this)
-      subtitleUrl: null,  // Explicitly null
-      transcript: [],     // Empty list (removes old video timestamps)
-      sentences: [],      // Empty list (removes old keywords)
-      // ----------------------
-
+      // --- CRITICAL OVERRIDES ---
+      type: 'text',       
+      videoUrl: null,     
+      subtitleUrl: null,  
+      transcript: [],     
+      sentences: [],      
+      
       difficulty: targetLevel,
       createdAt: DateTime.now(),
       progress: 0,
-      isFavorite: false,
+      
+      // --- FIX: Set to TRUE so it shows in Library ---
+      isFavorite: true, 
+      // ----------------------------------------------
+      
       isLocal: false,
       
       // Inherit Metadata
       genre: originalLesson.genre,
-      imageUrl: originalLesson.imageUrl, // Keep the image if it exists
-      originalAuthorId: originalLesson.userId, // Link lineage
+      imageUrl: originalLesson.imageUrl,
+      originalAuthorId: originalLesson.userId,
       seriesId: originalLesson.seriesId,
       seriesTitle: originalLesson.seriesTitle,
       seriesIndex: originalLesson.seriesIndex,
     );
 
-    // 5. Increment Usage
+    // 5. Increment Usage if not premium
     if (!user.isPremium) {
       await _incrementDailyUsage(user.id);
     }
@@ -76,7 +78,7 @@ class RewriteService {
     return newLesson;
   }
 
-  // ... (Keep the existing _checkAndEnforceLimit and _incrementDailyUsage methods)
+  // --- HELPER: CHECK LIMITS ---
   Future<void> _checkAndEnforceLimit(UserModel user) async {
     if (user.isPremium) return; 
 
@@ -115,6 +117,7 @@ class RewriteService {
     }
   }
 
+  // --- HELPER: INCREMENT USAGE ---
   Future<void> _incrementDailyUsage(String userId) async {
     try {
       await _firestore.collection('users').doc(userId).update({

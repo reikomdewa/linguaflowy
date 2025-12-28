@@ -11,6 +11,7 @@ import 'package:linguaflow/screens/home/widgets/sections/genre_feed_section.dart
 import 'package:linguaflow/screens/home/widgets/sections/guided_courses_section.dart';
 import 'package:linguaflow/screens/home/widgets/sections/immersion_section.dart';
 import 'package:linguaflow/screens/home/widgets/sections/library_section.dart';
+import 'package:linguaflow/screens/home/widgets/tap_button.dart';
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:linguaflow/widgets/buttons/build_ai_button.dart';
@@ -299,8 +300,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 );
                               }
 
-                              // ... (Dashboard Code) ...
-
                               // --- DASHBOARD MODE (Horizontal Sections) ---
                               final nativeLessons = processedLessons
                                   .where((l) => l.userId == 'system_native')
@@ -352,7 +351,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
 
                                       if (!isDesktop)
-                                        buildAIStoryButton(context, isDark),
+                                        TabButton(
+                                          title: "Personalized Story Lesson",
+                                          icon: Icons.auto_awesome,
+                                          onCustomTap: () =>
+                                              HomeUtils.showAIStoryGenerator(
+                                                context,
+                                              ),
+                                        ),
 
                                       ImmersionSection(
                                         languageCode: currentLangCode,

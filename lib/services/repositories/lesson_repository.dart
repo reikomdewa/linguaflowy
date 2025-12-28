@@ -223,36 +223,56 @@ Future<List<LessonModel>> fetchMoreUserLessons(
   // ==========================================================
 
   Future<void> saveOrUpdateLesson(LessonModel lesson) async {
-    if (lesson.isLocal) {
+    // FIX: Check if it's public. If so, BYPASS local storage.
+    if (lesson.isLocal && !lesson.isPublic) {
       await _saveLocalImportMetadata(lesson);
       return;
     }
 
     try {
-      if (lesson.id.isEmpty) {
-        final String newId = FirebaseFirestore.instance
-            .collection('lessons')
-            .doc()
-            .id;
-        final newLesson = lesson.copyWith(id: newId);
-        await _firestoreService.createLesson(newLesson);
-      } else {
-        await _firestoreService.updateLesson(lesson);
-      }
-    } catch (e) {
-      final localOverride = lesson.copyWith(isLocal: true);
-      await _saveLocalImportMetadata(localOverride);
-    }
-  }
+      // If we are here, it's either already a Cloud lesson OR a Local lesson being Shared
+      
+      // 1. Prepare the data (Ensure isLocal is false for the database)
+      final lessonToUpload = lesson.copyWith(isLocal: false);
 
-  Future<void> deleteLesson(LessonModel lesson) async {
-    try {
+      // 2. Perform the write
+      if (lesson.id.isEmpty) {
+        await addLesson(lessonToUpload);
+      } else {
+        // Use SetOptions(merge: true) to safely create or update
+        await FirebaseFirestore.instance
+            .collection('lessons')
+            .doc(lesson.id)
+            .set(lessonToUpload.toMap(), SetOptions(merge: true));
+      }
+
+      // 3. CLEANUP: If this WAS a local lesson, remove the local-only file 
+      // so the app now relies on the Cloud version (which is the Source of Truth for public items)
       if (lesson.isLocal) {
         await _deleteLocalImportMetadata(lesson.id);
-      } else {
-        await _firestoreService.deleteLesson(lesson.id);
       }
+
     } catch (e) {
+      printLog("Error saving/updating to cloud: $e");
+      // Fallback: If cloud upload fails, save locally so user doesn't lose progress
+      // But revert isLocal to true for the cache
+      final localOverride = lesson.copyWith(isLocal: true);
+      await _saveLocalImportMetadata(localOverride);
+      rethrow; // Let UI know cloud failed
+    }
+  }
+  Future<void> deleteLesson(LessonModel lesson) async {
+    try {
+      // Try deleting from Cloud
+      if (!lesson.isLocal || lesson.isPublic) {
+         await _firestoreService.deleteLesson(lesson.id);
+      }
+      
+      // ALWAYS Try deleting from Local (Cleanup)
+      await _deleteLocalImportMetadata(lesson.id);
+      
+    } catch (e) {
+      // If cloud delete fails, still ensure local is gone
       await _deleteLocalImportMetadata(lesson.id);
     }
   }
@@ -334,6 +354,41 @@ Future<List<LessonModel>> fetchMoreUserLessons(
       await file.writeAsString(jsonEncode(jsonList));
     } catch (e) {
       // printLog("Error saving local import: $e");
+    }
+  }
+ Future<void> addLesson(LessonModel lesson) async {
+    // FIX: If it is marked Public, we MUST ignore isLocal and send to Cloud
+    if (lesson.isLocal && !lesson.isPublic) {
+      await _saveLocalImportMetadata(lesson);
+      return;
+    }
+
+    try {
+      String docId = lesson.id;
+      if (docId.isEmpty) {
+        docId = FirebaseFirestore.instance.collection('lessons').doc().id;
+      }
+
+      // Ensure we treat this as a cloud lesson now
+      final lessonToSave = lesson.copyWith(
+        id: docId,
+        isLocal: false, // Force false so it saves as cloud data
+      );
+
+      await FirebaseFirestore.instance
+          .collection('lessons')
+          .doc(docId)
+          .set(lessonToSave.toMap());
+          
+      // OPTIONAL: If it was local before, we should delete the local-only copy 
+      // so the app pulls from Cloud next time to avoid duplicates.
+      if (lesson.isLocal) {
+        await _deleteLocalImportMetadata(lesson.id);
+      }
+
+    } catch (e) {
+      printLog("Error adding lesson: $e");
+      throw Exception("Failed to add lesson");
     }
   }
 

@@ -7,12 +7,14 @@ import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
+import 'package:linguaflow/screens/home/utils/home_utils.dart';
 import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
+import 'package:linguaflow/screens/home/widgets/tap_button.dart';
 import 'package:linguaflow/screens/premium/premium_screen.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart'; // Import Reader
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
-import 'package:linguaflow/screens/search/library_search_delegate.dart';
+import 'package:linguaflow/screens/discover/library_search_delegate.dart';
 import 'package:linguaflow/utils/centered_views.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/widgets/buttons/build_ai_button.dart';
@@ -271,7 +273,12 @@ PreferredSizeWidget buildAppBar(
 
     // --- ACTIONS (Stats, Premium, AI) ---
     actions: [
-      if (isDesktop) buildAIStoryButton(context, isDark),
+      if (isDesktop)
+        TabButton(
+          title: "Personalized Story Lesson",
+          icon: Icons.auto_awesome,
+          onCustomTap: () => HomeUtils.showAIStoryGenerator(context),
+        ),
       if (!isDesktop)
         BlocBuilder<LessonBloc, LessonState>(
           builder: (context, state) {
