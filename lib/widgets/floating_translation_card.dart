@@ -6,6 +6,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:linguaflow/widgets/gemini_formatted_text.dart';
 import 'package:linguaflow/utils/language_helper.dart';
+// Add the markdown import
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 class FloatingTranslationCard extends StatefulWidget {
   final String originalText;
@@ -65,7 +67,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     super.initState();
     _initTts();
     _loadCombinedTranslations();
-    _loadRootTranslation(); // <--- Fetch meaning for the root word
+    _loadRootTranslation();
   }
 
   // --- ROOT TRANSLATION LOGIC ---
@@ -74,7 +76,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
       return;
     }
 
-    // Simple fetch for the root word
     final result = await _fetchTranslationApi(widget.baseForm!);
     if (result.isNotEmpty &&
         !result.startsWith("Error") &&
@@ -90,7 +91,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
   // --- MAIN TRANSLATION LOGIC ---
   Future<void> _loadCombinedTranslations() async {
     final googleFuture = widget.translationFuture;
-    // Use the helper for the main text
     final myMemoryFuture = _fetchTranslationApi(widget.originalText);
 
     String googleResult = "";
@@ -103,7 +103,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
       myMemoryResult = await myMemoryFuture;
     } catch (_) {}
 
-    String combined = "";
     bool myMemoryValid =
         myMemoryResult.isNotEmpty &&
         !myMemoryResult.startsWith("Error") &&
@@ -111,36 +110,45 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
 
     bool isPhrase = widget.originalText.trim().contains(' ');
 
+    // Collect unique translations into a list
+    List<String> translationList = [];
+
     if (isPhrase) {
       if (googleResult.isNotEmpty) {
-        combined = googleResult;
-        if (myMemoryValid &&
-            myMemoryResult.trim().toLowerCase() !=
-                googleResult.trim().toLowerCase()) {
-          combined += "\n$myMemoryResult";
+        translationList.add(googleResult);
+      }
+      if (myMemoryValid) {
+        // Only add if it's different from Google result
+        if (googleResult.isEmpty || 
+            myMemoryResult.trim().toLowerCase() != googleResult.trim().toLowerCase()) {
+          translationList.add(myMemoryResult);
         }
-      } else if (myMemoryValid) {
-        combined = myMemoryResult;
       }
     } else {
+      // For single words, prioritize MyMemory usually, or combine logic
       if (myMemoryValid) {
-        combined = myMemoryResult;
+        translationList.add(myMemoryResult);
       }
       if (googleResult.isNotEmpty) {
-        if (combined.isEmpty) {
-          combined = googleResult;
-        } else if (combined.trim().toLowerCase() !=
-            googleResult.trim().toLowerCase()) {
-          combined += "\n$googleResult";
+        // Only add if different
+        if (translationList.isEmpty || 
+            translationList.first.trim().toLowerCase() != googleResult.trim().toLowerCase()) {
+          translationList.add(googleResult);
         }
       }
     }
 
+    String finalOutput;
+    if (translationList.isEmpty) {
+      finalOutput = "Translation not found.";
+    } else {
+      // Format as Markdown bullets: "- Translation"
+      finalOutput = translationList.map((t) => "- $t").join("\n");
+    }
+
     if (mounted) {
       setState(() {
-        _translationText = combined.isNotEmpty
-            ? combined
-            : "Translation not found.";
+        _translationText = finalOutput;
       });
     }
   }
@@ -172,7 +180,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     return code;
   }
 
-  // Helper method to fetch translation for ANY text (Main or Root)
   Future<String> _fetchTranslationApi(String textToTranslate) async {
     try {
       final src = _sanitizeLangCode(widget.targetLanguage);
@@ -441,12 +448,21 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  _translationText,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    color: Colors.white70,
-                    height: 1.4,
+                // REPLACED Text with MarkdownBody
+                child: MarkdownBody(
+                  data: _translationText,
+                  styleSheet: MarkdownStyleSheet(
+                    p: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.white70,
+                      height: 1.4,
+                    ),
+                    listBullet: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.white70, // Matches text color
+                    ),
+                    // Optional: remove margin for compact look
+                    listIndent: 20.0, 
                   ),
                 ),
               ),
@@ -455,7 +471,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
             ],
           ),
 
-          // --- UPDATED: ROOT + MEANING DISPLAY ---
+          // --- ROOT + MEANING DISPLAY ---
           if (widget.baseForm != null) ...[
             const SizedBox(height: 8),
             Container(
@@ -483,7 +499,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    // If we have fetched the meaning, show it
                     if (_rootTranslation != null)
                       TextSpan(
                         text: " ($_rootTranslation)",
@@ -499,7 +514,6 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
             ),
           ],
 
-          // ----------------------------------------
           const SizedBox(height: 16),
           const Text(
             "RANK WORD KNOWLEDGE",

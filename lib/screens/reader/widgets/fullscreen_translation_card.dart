@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:async'; // Added missing explicit async import usually needed for Future
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/widgets/gemini_formatted_text.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+// Add the markdown import
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 class FullscreenTranslationCard extends StatefulWidget {
   final String originalText;
@@ -68,8 +71,9 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
 
   // --- ROOT TRANSLATION LOGIC ---
   Future<void> _loadRootTranslation() async {
-    if (widget.baseForm == null || widget.baseForm == widget.originalText)
+    if (widget.baseForm == null || widget.baseForm == widget.originalText) {
       return;
+    }
 
     // Simple fetch for the root word
     final result = await _fetchTranslationApi(widget.baseForm!);
@@ -99,40 +103,52 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
       myMemoryResult = await myMemoryFuture;
     } catch (_) {}
 
-    String combined = "";
     bool myMemoryValid =
         myMemoryResult.isNotEmpty &&
         !myMemoryResult.startsWith("Error") &&
         !myMemoryResult.startsWith("No results");
+    
     bool isPhrase = widget.originalText.trim().contains(' ');
+
+    // Collect unique translations into a list
+    List<String> translationList = [];
 
     if (isPhrase) {
       if (googleResult.isNotEmpty) {
-        combined = googleResult;
-        if (myMemoryValid &&
-            myMemoryResult.trim().toLowerCase() !=
-                googleResult.trim().toLowerCase()) {
-          combined += "\n\n[Alternative]\n$myMemoryResult";
+        translationList.add(googleResult);
+      }
+      if (myMemoryValid) {
+        // Only add if it's different from Google result
+        if (googleResult.isEmpty || 
+            myMemoryResult.trim().toLowerCase() != googleResult.trim().toLowerCase()) {
+          translationList.add(myMemoryResult);
         }
-      } else if (myMemoryValid) {
-        combined = myMemoryResult;
       }
     } else {
-      if (myMemoryValid) combined = myMemoryResult;
+      // For single words
+      if (myMemoryValid) {
+        translationList.add(myMemoryResult);
+      }
       if (googleResult.isNotEmpty) {
-        if (combined.isEmpty) {
-          combined = googleResult;
-        } else if (combined.trim().toLowerCase() !=
-            googleResult.trim().toLowerCase()) {
-          combined += "\n$googleResult";
+        // Only add if different
+        if (translationList.isEmpty || 
+            translationList.first.trim().toLowerCase() != googleResult.trim().toLowerCase()) {
+          translationList.add(googleResult);
         }
       }
     }
+
+    String finalOutput;
+    if (translationList.isEmpty) {
+      finalOutput = "Translation not found.";
+    } else {
+      // Format as Markdown bullets: "- Translation"
+      finalOutput = translationList.map((t) => "- $t").join("\n");
+    }
+
     if (mounted) {
       setState(() {
-        _translationText = combined.isNotEmpty
-            ? combined
-            : "Translation not found.";
+        _translationText = finalOutput;
       });
     }
   }
@@ -328,12 +344,20 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Text(
-                        _translationText,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          color: Colors.white70,
-                          height: 1.4,
+                      // REPLACED Text with MarkdownBody
+                      child: MarkdownBody(
+                        data: _translationText,
+                        styleSheet: MarkdownStyleSheet(
+                          p: const TextStyle(
+                            fontSize: 18,
+                            color: Colors.white70,
+                            height: 1.4,
+                          ),
+                          listBullet: const TextStyle(
+                            fontSize: 18,
+                            color: Colors.white70,
+                          ),
+                          listIndent: 20.0,
                         ),
                       ),
                     ),
@@ -342,7 +366,7 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
                   ],
                 ),
 
-                // --- UPDATED: ROOT + MEANING DISPLAY ---
+                // --- ROOT + MEANING DISPLAY ---
                 if (widget.baseForm != null) ...[
                   const SizedBox(height: 8),
                   Container(
