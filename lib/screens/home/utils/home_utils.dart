@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
+import 'package:linguaflow/screens/community/community_screen.dart';
 import 'package:linguaflow/screens/story_mode/widgets/ai_lesson_generator_sheet.dart';
 import 'package:linguaflow/screens/learn/learn_screen.dart';
 
@@ -14,6 +15,13 @@ class HomeUtils {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => LearnScreen()),
+    );
+  }
+
+  static void navigateToCommunityScreen(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => CommunityScreen()),
     );
   }
 
@@ -40,7 +48,7 @@ class HomeUtils {
   // --- Reusable Floating Button Style ---
   static Widget buildFloatingButton({
     required VoidCallback onTap,
-    required IconData icon,
+     IconData? icon,
     required String label,
   }) {
     return Material(
@@ -64,7 +72,7 @@ class HomeUtils {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: Colors.white, size: 22),
+              if (icon != null) Icon(icon, color: Colors.white, size: 22),
               const SizedBox(width: 8),
               Text(
                 label,

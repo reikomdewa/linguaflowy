@@ -6,11 +6,14 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
+import 'package:linguaflow/screens/home/utils/home_utils.dart';
 import 'package:linguaflow/screens/playlist/widgets/playlist_widgets.dart';
 import 'package:linguaflow/screens/library/widgets/dialogs/library_actions.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_text_card.dart';
 import 'package:linguaflow/screens/library/widgets/cards/library_video_card.dart';
 import 'package:linguaflow/screens/discover/library_search_delegate.dart';
+import 'package:linguaflow/utils/language_helper.dart';
+import 'package:linguaflow/widgets/lesson_import_dialog.dart';
 
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
@@ -101,21 +104,24 @@ class LibraryScreen extends StatelessWidget {
             // C. Text Stories (Horizontal)
             // Logic: Not Video AND (Is Favorite OR Is AI Generated)
             final textLessons = cloudLessons.where((l) {
-               bool isVideo = l.type == 'video' || (l.videoUrl != null && l.videoUrl!.isNotEmpty);
-               if (isVideo) return false;
-               
-               // Only show if Favorite OR explicitly AI type
-               // This hides "random history" text lessons
-               return l.isFavorite || l.type == 'ai_story';
+              bool isVideo =
+                  l.type == 'video' ||
+                  (l.videoUrl != null && l.videoUrl!.isNotEmpty);
+              if (isVideo) return false;
+
+              // Only show if Favorite OR explicitly AI type
+              // This hides "random history" text lessons
+              return l.isFavorite || l.type == 'ai_story';
             }).toList();
 
             // D. Favorite Videos (Vertical)
             // Logic: Is Video AND Is Favorite
             final videoLessons = cloudLessons.where((l) {
-               bool isVideo = l.type == 'video' || (l.videoUrl != null && l.videoUrl!.isNotEmpty);
-               return isVideo && l.isFavorite; 
+              bool isVideo =
+                  l.type == 'video' ||
+                  (l.videoUrl != null && l.videoUrl!.isNotEmpty);
+              return isVideo && l.isFavorite;
             }).toList();
-
 
             return SingleChildScrollView(
               padding: const EdgeInsets.only(bottom: 100),
@@ -158,10 +164,19 @@ class LibraryScreen extends StatelessWidget {
                         itemBuilder: (context, index) {
                           final lesson = importedLessons[index];
                           // Handle corner case where a local file acts as video
-                          if (lesson.type == 'video' || (lesson.videoUrl?.isNotEmpty ?? false)) {
-                             return LibraryVideoCard(lesson: lesson, isDark: isDark, width: 220);
+                          if (lesson.type == 'video' ||
+                              (lesson.videoUrl?.isNotEmpty ?? false)) {
+                            return LibraryVideoCard(
+                              lesson: lesson,
+                              isDark: isDark,
+                              width: 220,
+                            );
                           }
-                          return LibraryTextCard(lesson: lesson, isDark: isDark, width: 220);
+                          return LibraryTextCard(
+                            lesson: lesson,
+                            isDark: isDark,
+                            width: 220,
+                          );
                         },
                       ),
                     ),
@@ -182,7 +197,11 @@ class LibraryScreen extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
                       child: Row(
                         children: [
-                          Icon(Icons.library_books, color: Colors.blue[400], size: 20),
+                          Icon(
+                            Icons.library_books,
+                            color: Colors.blue[400],
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             "Saved Stories",
@@ -223,7 +242,11 @@ class LibraryScreen extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
                       child: Row(
                         children: [
-                          Icon(Icons.video_library, color: Colors.red[400], size: 20),
+                          Icon(
+                            Icons.video_library,
+                            color: Colors.red[400],
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             "Favorite Videos",
@@ -254,7 +277,9 @@ class LibraryScreen extends StatelessWidget {
                   ],
 
                   // Empty State Fallback
-                  if (importedLessons.isEmpty && textLessons.isEmpty && videoLessons.isEmpty)
+                  if (importedLessons.isEmpty &&
+                      textLessons.isEmpty &&
+                      videoLessons.isEmpty)
                     _buildEmptyStateCheck(user.id, user.currentLanguage),
                 ],
               ),
@@ -265,50 +290,29 @@ class LibraryScreen extends StatelessWidget {
       ),
 
       // --- FAB ---
-      floatingActionButton: Material(
-        color: Colors.transparent,
-        elevation: 10,
-        shadowColor: Colors.black.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(30),
-        child: InkWell(
-          onTap: () {
-            showCreateLessonDialog(
-              context,
-              user.id,
-              user.currentLanguage,
-              isFavoriteByDefault: false,
-            );
-          },
-          borderRadius: BorderRadius.circular(30),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF2C2C2C).withValues(alpha: 0.9)
-                  : const Color(0xFF1E1E1E).withValues(alpha: 0.9),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.15),
-                width: 1,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            HomeUtils.buildFloatingButton(
+              label: "Community",
+              // icon: Icons.school_rounded,
+              onTap: () => HomeUtils.navigateToCommunityScreen(context),
+            ),
+            HomeUtils.buildFloatingButton(
+              label: "Import",
+              icon: Icons.add_rounded,
+              onTap: () => LessonImportDialog.show(
+                context,
+                user.id,
+                user.currentLanguage,
+                LanguageHelper.availableLanguages,
+                isFavoriteByDefault: false,
               ),
             ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.add_rounded, color: Colors.white, size: 22),
-                SizedBox(width: 8),
-                Text(
-                  'Import',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ],
         ),
       ),
     );
@@ -316,7 +320,7 @@ class LibraryScreen extends StatelessWidget {
 
   // ... (Playlist Widgets & Empty State remain the same as previous) ...
   // [INCLUDE THE _buildPlaylistsSection and _buildEmptyStateCheck methods here]
-   // --- PLAYLIST SECTION WIDGET ---
+  // --- PLAYLIST SECTION WIDGET ---
   Widget _buildPlaylistsSection(
     BuildContext context,
     String userId,

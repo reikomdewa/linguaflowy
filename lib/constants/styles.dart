@@ -2,141 +2,184 @@ import 'package:flutter/material.dart';
 import 'package:linguaflow/theme/colors.dart';
 import 'package:flutter_html/flutter_html.dart';
 
-final lessonTextStyle = Style(
-  fontSize: FontSize(16.0),
-  color: const Color.fromARGB(255, 87, 87, 87),
-);
-final listTextStyle = Style(
-  lineHeight: LineHeight.number(1.2),
-  //padding: EdgeInsets.symmetric(vertical: 5),
-  fontSize: FontSize(16.0),
-  color: const Color.fromARGB(255, 87, 87, 87),
-);
-final listInstructionTextStyle = Style(
-  lineHeight: LineHeight.number(1.2),
-  //padding: EdgeInsets.symmetric(vertical: 5),
-  fontSize: FontSize(16.0),
-  color: Colors.white,
-);
-const kSendButtonTextStyle = TextStyle(
-  color: Color.fromARGB(255, 26, 67, 95),
-  fontWeight: FontWeight.bold,
-  fontSize: 18.0,
-);
-const textMsgStyle = TextStyle(fontSize: 16, color: Colors.black87);
-const textFadeStyle = TextStyle(fontSize: 12, color: Colors.black45);
-const decoTextStyle = TextStyle(
-  color: Colors.black,
-  fontWeight: FontWeight.bold,
-  fontSize: 14,
-);
-const textNameStyle = TextStyle(
-  fontSize: 16,
-  color: Colors.black87,
-  fontWeight: FontWeight.w700,
-);
+class AppStyles {
+  // ===========================================================================
+  // HTML STYLES (flutter_html)
+  // ===========================================================================
+  
+  static Style lessonTextStyle(BuildContext context) => Style(
+    fontSize: FontSize(16.0),
+    // Maps to dynamic dark/light text color
+    color: AppColor.homePageContainerTextSmall(context), 
+  );
 
-const kTitleStyle = TextStyle(
-  color: kFontColor,
-  fontSize: 20,
-  fontWeight: FontWeight.bold,
-);
-final smallSubtitleStyle = TextStyle(
-  fontSize: 16,
-  color: AppColor.homePageContainerTextSmall,
-  fontWeight: FontWeight.w700,
-);
-const subtitleStyle = TextStyle(
-  fontSize: 18,
-  color: Colors.black,
-  fontWeight: FontWeight.w700,
-);
-const subtitleStyleBlack = TextStyle(
-  fontSize: 16,
-  color: Colors.black54,
-  fontWeight: FontWeight.w700,
-);
-const titleStyleBlack = TextStyle(
-  fontSize: 18,
-  color: Colors.black54,
-  fontWeight: FontWeight.w700,
-);
-final smallText = TextStyle(
-  fontSize: 16,
-  color: AppColor.homePageContainerTextSmall,
-  fontWeight: FontWeight.w500,
-);
-final smallTextBlack = TextStyle(
-  fontSize: 15,
-  color: Colors.grey[600],
-  fontWeight: FontWeight.w400,
-);
-final titleStyleBig = TextStyle(
-  fontSize: 28,
-  color: AppColor.homePageContainerTextSmall,
-  fontWeight: FontWeight.w700,
-);
-final titleStyleBigPro = TextStyle(
-  fontSize: 28,
-  color: AppColor.homePageContainerTextSmallPro,
-  fontWeight: FontWeight.w700,
-);
-const promoTextStyle = TextStyle(
-  fontSize: 15.0,
-  color: textWhite,
-  fontWeight: FontWeight.w500,
-);
-final youtubeVideoTitleStyle = TextStyle(
-  fontSize: 16,
-  color: AppColor.homePageContainerTextSmall,
-  fontWeight: FontWeight.w500,
-);
-const videoTitle = TextStyle(
-  color: secondary,
-  fontSize: 17.0,
-  fontWeight: FontWeight.w700,
-);
-const videoTitleStyle = TextStyle(
-  fontSize: 20,
-  color: Colors.black54,
-  fontWeight: FontWeight.w700,
-);
-const videoTitleStyleSmall = TextStyle(
-  fontSize: 18,
-  color: Colors.black54,
-  fontWeight: FontWeight.w700,
-);
-final courseTitleStyle = TextStyle(
-  fontWeight: FontWeight.bold,
-  fontSize: 18,
-  color: kFontColor.withOpacity(0.7),
-);
-final courseDescriptionStyle = TextStyle(
-  fontWeight: FontWeight.bold,
-  fontSize: 17,
-  color: kFontColor.withOpacity(0.7),
-);
-final courseTimeStyle = TextStyle(
-  fontSize: 16,
-  color: kFontColor.withOpacity(0.7),
-);
-final courseTimeSmallStyle = TextStyle(
-  fontSize: 16,
-  color: kFontColor.withOpacity(0.7),
-);
-const nextButtonStyle = TextStyle(
-  fontWeight: FontWeight.bold,
-  fontSize: 17,
-  color: Color(0xFF2F3B4C),
-);
-const lessonContentTitleStyle = TextStyle(
-  fontWeight: FontWeight.bold,
-  fontSize: 25,
-  color: Color(0xFF2F3B4C),
-);
+  static Style listTextStyle(BuildContext context) => Style(
+    lineHeight: LineHeight.number(1.2),
+    fontSize: FontSize(16.0),
+    color: AppColor.homePageContainerTextSmall(context),
+  );
 
-const scoreTitleStyleBig = TextStyle(
-  fontSize: 28,
-  color: Colors.black54,
-  fontWeight: FontWeight.w700,
-);
+  static Style listInstructionTextStyle(BuildContext context) => Style(
+    lineHeight: LineHeight.number(1.2),
+    fontSize: FontSize(16.0),
+    // Instructions usually need to stand out or be white on dark backgrounds
+    color: AppColor.homePageTitle(context), 
+  );
+
+  // ===========================================================================
+  // TEXT STYLES
+  // ===========================================================================
+
+  static TextStyle kSendButtonTextStyle(BuildContext context) => TextStyle(
+    color: AppColor.gradientFirst, // Use the primary HyperBlue
+    fontWeight: FontWeight.bold,
+    fontSize: 18.0,
+  );
+
+  static TextStyle textMsgStyle(BuildContext context) => TextStyle(
+    fontSize: 16, 
+    color: AppColor.homePageTitle(context) // Adapts to Black/White
+  );
+
+  static TextStyle textFadeStyle(BuildContext context) => TextStyle(
+    fontSize: 12, 
+    color: AppColor.homePageSubtitle(context) // Adapts to Grey
+  );
+
+  static TextStyle decoTextStyle(BuildContext context) => TextStyle(
+    color: AppColor.homePageTitle(context),
+    fontWeight: FontWeight.bold,
+    fontSize: 14,
+  );
+
+  static TextStyle textNameStyle(BuildContext context) => TextStyle(
+    fontSize: 16,
+    color: AppColor.homePageTitle(context),
+    fontWeight: FontWeight.w700,
+  );
+
+  static TextStyle kTitleStyle(BuildContext context) => TextStyle(
+    color: AppColor.homePageTitle(context),
+    fontSize: 20,
+    fontWeight: FontWeight.bold,
+  );
+
+  static TextStyle smallSubtitleStyle(BuildContext context) => TextStyle(
+    fontSize: 16,
+    color: AppColor.homePageContainerTextSmall(context),
+    fontWeight: FontWeight.w700,
+  );
+
+  static TextStyle subtitleStyle(BuildContext context) => TextStyle(
+    fontSize: 18,
+    color: AppColor.homePageTitle(context),
+    fontWeight: FontWeight.w700,
+  );
+
+  static TextStyle subtitleStyleBlack(BuildContext context) => TextStyle(
+    fontSize: 16,
+    color: AppColor.homePageSubtitle(context), // Use dynamic grey
+    fontWeight: FontWeight.w700,
+  );
+
+  static TextStyle titleStyleBlack(BuildContext context) => TextStyle(
+    fontSize: 18,
+    color: AppColor.homePageSubtitle(context),
+    fontWeight: FontWeight.w700,
+  );
+
+  static TextStyle smallText(BuildContext context) => TextStyle(
+    fontSize: 16,
+    color: AppColor.homePageContainerTextSmall(context),
+    fontWeight: FontWeight.w500,
+  );
+
+  static TextStyle smallTextBlack(BuildContext context) => TextStyle(
+    fontSize: 15,
+    color: AppColor.homePageSubtitle(context),
+    fontWeight: FontWeight.w400,
+  );
+
+  static TextStyle titleStyleBig(BuildContext context) => TextStyle(
+    fontSize: 28,
+    color: AppColor.homePageTitle(context),
+    fontWeight: FontWeight.w700,
+  );
+
+  static TextStyle titleStyleBigPro(BuildContext context) => TextStyle(
+    fontSize: 28,
+    // Keep the "Pro" color (Amber) consistent across themes
+    color: AppColor.homePageContainerTextSmallPro, 
+    fontWeight: FontWeight.w700,
+  );
+
+  static TextStyle promoTextStyle(BuildContext context) => const TextStyle(
+    fontSize: 15.0,
+    color: Colors.white, // Promo text usually on colored bg, keep white
+    fontWeight: FontWeight.w500,
+  );
+
+  static TextStyle youtubeVideoTitleStyle(BuildContext context) => TextStyle(
+    fontSize: 16,
+    color: AppColor.homePageContainerTextSmall(context),
+    fontWeight: FontWeight.w500,
+  );
+
+  static TextStyle videoTitle(BuildContext context) => TextStyle(
+    color: AppColor.secondary, // Maps to Charcoal (Dark) or standard Secondary
+    fontSize: 17.0,
+    fontWeight: FontWeight.w700,
+  );
+
+  static TextStyle videoTitleStyle(BuildContext context) => TextStyle(
+    fontSize: 20,
+    color: AppColor.homePageTitle(context),
+    fontWeight: FontWeight.w700,
+  );
+
+  static TextStyle videoTitleStyleSmall(BuildContext context) => TextStyle(
+    fontSize: 18,
+    color: AppColor.homePageTitle(context),
+    fontWeight: FontWeight.w700,
+  );
+
+  static TextStyle courseTitleStyle(BuildContext context) => TextStyle(
+    fontWeight: FontWeight.bold,
+    fontSize: 18,
+    color: AppColor.homePageTitle(context).withOpacity(0.8),
+  );
+
+  static TextStyle courseDescriptionStyle(BuildContext context) => TextStyle(
+    fontWeight: FontWeight.bold,
+    fontSize: 17,
+    color: AppColor.homePageSubtitle(context),
+  );
+
+  static TextStyle courseTimeStyle(BuildContext context) => TextStyle(
+    fontSize: 16,
+    color: AppColor.homePageSubtitle(context),
+  );
+
+  static TextStyle courseTimeSmallStyle(BuildContext context) => TextStyle(
+    fontSize: 16,
+    color: AppColor.homePageSubtitle(context),
+  );
+
+  static TextStyle nextButtonStyle(BuildContext context) => TextStyle(
+    fontWeight: FontWeight.bold,
+    fontSize: 17,
+    color: AppColor.homePageTitle(context),
+  );
+
+  static TextStyle lessonContentTitleStyle(BuildContext context) => TextStyle(
+    fontWeight: FontWeight.bold,
+    fontSize: 25,
+    color: AppColor.homePageTitle(context),
+  );
+
+  static TextStyle scoreTitleStyleBig(BuildContext context) => TextStyle(
+    fontSize: 28,
+    color: AppColor.homePageTitle(context),
+    fontWeight: FontWeight.w700,
+  );
+}

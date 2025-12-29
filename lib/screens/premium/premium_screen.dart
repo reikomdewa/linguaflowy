@@ -104,15 +104,18 @@ class _PremiumScreenState extends State<PremiumScreen> {
   Widget build(BuildContext context) {
     //  final prices = FirebaseConstants.appData['prices'];
     final size = MediaQuery.of(context).size;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color;
     return ClipRRect(
       borderRadius: (MediaQuery.of(context).size.width > 640)
           ? BorderRadius.circular(15)
           : BorderRadius.circular(0),
       child: Scaffold(
-        backgroundColor: secondary,
+        backgroundColor: bgColor,
         appBar: (kIsWeb)
             ? null
-            : AppBar(toolbarHeight: 0, backgroundColor: secondary),
+            : AppBar(toolbarHeight: 0, backgroundColor: bgColor),
         body: SafeArea(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
@@ -130,7 +133,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                       margin: const EdgeInsets.only(top: 20),
                       child: Text(
                         ' Linguaflow Pro prices',
-                        style: titleStyleBig,
+                        style: AppStyles.titleStyleBig(context),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -171,7 +174,12 @@ class _PremiumScreenState extends State<PremiumScreen> {
                             height: 60,
                             width: size.width,
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.white, width: 2),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white
+                                    : AppColor.mobileBackgroundColor,
+                                width: 2,
+                              ),
                               color: Colors.transparent,
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -186,7 +194,9 @@ class _PremiumScreenState extends State<PremiumScreen> {
                                   children: [
                                     Text(
                                       prices[index]['duration'],
-                                      style: smallSubtitleStyle,
+                                      style: AppStyles.smallSubtitleStyle(
+                                        context,
+                                      ),
                                     ),
                                     Column(
                                       crossAxisAlignment:
@@ -196,11 +206,15 @@ class _PremiumScreenState extends State<PremiumScreen> {
                                       children: [
                                         Text(
                                           '\$' + prices[index]['price'],
-                                          style: smallSubtitleStyle,
+                                          style: AppStyles.smallSubtitleStyle(
+                                            context,
+                                          ),
                                         ),
                                         Text(
                                           prices[index]['per'],
-                                          style: smallSubtitleStyle,
+                                          style: AppStyles.smallSubtitleStyle(
+                                            context,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -268,9 +282,9 @@ class _PremiumScreenState extends State<PremiumScreen> {
                         children: [
                           Text(
                             "You are a Pro Member",
-                            style: titleStyleBig.copyWith(
-                              color: Colors.greenAccent,
-                            ),
+                            style: AppStyles.titleStyleBig(
+                              context,
+                            ).copyWith(color: Colors.greenAccent),
                           ),
                         ],
                       ),
@@ -303,11 +317,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                           children: [
                             Text(
                               proBenefits[index]['note'],
-                              style: const TextStyle(
-                                fontSize: 18,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: AppStyles.kTitleStyle(context),
                             ),
                             Padding(
                               padding: const EdgeInsets.only(
@@ -316,11 +326,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                               ),
                               child: Text(
                                 proBenefits[index]['description'],
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                                style: AppStyles.smallSubtitleStyle(context),
                               ),
                             ),
                           ],
