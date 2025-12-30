@@ -371,17 +371,69 @@ class TextLessonCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0, top: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // FIXED: Replaced Expanded with a constrained Column
+                      Expanded(
+                        // Finite width for horizontal list safety
+                        child: Text(
+                          lesson.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            height: 1.2,
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          ),
+                        ),
+                      ),
+                      // Pushes the button to the end
+                      IconButton(
+                        icon: const Icon(
+                          Icons.more_vert,
+                          color: Colors.grey,
+                          size: 14,
+                        ),
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                        onPressed: onOptionTap,
+                      ),
+                    ],
+                  ),
+                ),
                 Stack(
                   children: [
                     Container(
                       width: double.infinity,
-
                       height: 110,
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.article, color: Colors.blue),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 16, right: 16),
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Text(
+                            // FIX 1: Replace newlines with spaces so the text flows compactly
+                            lesson.content.replaceAll('\n', ' '),
+                            maxLines: 5,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.grey[300]
+                                  : Colors.grey[700],
+                              // FIX 2: Reduce height from 1.4 to 1.1 or 1.2
+                              height: 1.4,
+                              fontSize:
+                                  14, // Optional: Ensure font size is explicit
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                     if (lesson.genre == 'short_story')
                       Positioned(
@@ -409,44 +461,7 @@ class TextLessonCard extends StatelessWidget {
                       ),
                   ],
                 ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // FIXED: Replaced Expanded with a constrained Column
-                    Expanded(
-                      // Finite width for horizontal list safety
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            lesson.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              height: 1.2,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Pushes the button to the end
-                    IconButton(
-                      icon: const Icon(
-                        Icons.more_vert,
-                        color: Colors.grey,
-                        size: 14,
-                      ),
-                      constraints: const BoxConstraints(),
-                      padding: EdgeInsets.zero,
-                      onPressed: onOptionTap,
-                    ),
-                  ],
-                ),
+
                 const SizedBox(height: 12),
 
                 // --- STATS ROW (FIXED) ---
