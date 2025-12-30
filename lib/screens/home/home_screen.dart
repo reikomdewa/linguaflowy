@@ -15,6 +15,7 @@ import 'package:linguaflow/screens/home/widgets/tap_button.dart';
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:linguaflow/widgets/buttons/build_ai_button.dart';
+import 'package:linguaflow/widgets/live_notification_banner.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 // BLOCS
@@ -240,7 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Column(
                     children: [
                       _buildGlobalFilterChips(isDark, isDesktop),
-
+  const LiveNotificationBanner(),
                       Expanded(
                         child: BlocBuilder<LessonBloc, LessonState>(
                           builder: (context, lessonState) {

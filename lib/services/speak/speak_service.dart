@@ -120,4 +120,19 @@ class SpeakService {
       'status': 'pending', // for admin review
     });
   }
+
+  // ... existing code ...
+
+  /// Listen to live rooms in real-time
+  Stream<List<ChatRoom>> getPublicRoomsStream() {
+    return _firestore
+        .collection('rooms')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => ChatRoom.fromMap(doc.data(), doc.id))
+          .toList();
+    });
+  }
 }
