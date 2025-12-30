@@ -55,9 +55,13 @@ class RewriteService {
       createdAt: DateTime.now(),
       progress: 0,
       
-      // --- FIX: Set to TRUE so it shows in Library ---
+      // --- UPDATED: Mark as AI Story ---
+      originality: 'ai_story', 
+      source: 'ai', 
+      // --------------------------------
+      
+      // Set to TRUE so it shows in Library
       isFavorite: true, 
-      // ----------------------------------------------
       
       isLocal: false,
       

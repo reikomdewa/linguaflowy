@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:linguaflow/widgets/user_follow_button.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:linguaflow/models/community_models.dart';
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/community_service.dart';
 import 'package:linguaflow/screens/community/post_details_screen.dart';
-import 'community_utils.dart'; 
+// Ensure you import the FollowButton if it's in a different file
+// import 'package:linguaflow/widgets/user_follow_button.dart';
 
 class ForumPostCard extends StatefulWidget {
   final ForumPost post;
@@ -35,11 +37,11 @@ class _ForumPostCardState extends State<ForumPostCard> {
 
   void _checkIfLiked() async {
     bool liked = await widget.service.hasUserLiked(
-      'forum_posts', 
-      widget.post.id, 
-      widget.currentUser.id
+      'forum_posts',
+      widget.post.id,
+      widget.currentUser.id,
     );
-    if(mounted) {
+    if (mounted) {
       setState(() => _isLiked = liked);
     }
   }
@@ -49,83 +51,126 @@ class _ForumPostCardState extends State<ForumPostCard> {
       _isLiked = !_isLiked;
       _currentLikes += _isLiked ? 1 : -1;
     });
-    widget.service.toggleLike('forum_posts', widget.post.id, widget.currentUser.id);
+    widget.service.toggleLike(
+      'forum_posts',
+      widget.post.id,
+      widget.currentUser.id,
+    );
+  }
+
+  void _navigateToDetails() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PostDetailsScreen(
+          post: widget.post, // FIXED: use widget.post
+          currentUser: widget.currentUser, // FIXED: use widget.currentUser
+          service: widget.service, // FIXED: use widget.service
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    // ... (Your existing UI structure mostly same, just updating the Like Button) ...
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PostDetailsScreen(
-            post: widget.post,
-            currentUser: widget.currentUser,
-            service: widget.service,
-          ),
-        ),
-      ),
+      onTap: _navigateToDetails,
       child: Container(
+        margin: const EdgeInsets.only(bottom: 12), // Added margin for spacing
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isDark ? Colors.white10 : Colors.grey[200]!),
+          border: Border.all(
+            color: isDark ? Colors.white10 : Colors.grey[200]!,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // HEADER
+            // --- HEADER ---
             Row(
               children: [
                 CircleAvatar(
-                  radius: 16,
+                  radius: 18,
                   backgroundImage: widget.post.authorPhoto != null
                       ? NetworkImage(widget.post.authorPhoto!)
                       : null,
                   child: widget.post.authorPhoto == null
-                      ? Text(widget.post.authorName[0])
+                      ? Text(widget.post.authorName[0].toUpperCase())
                       : null,
                 ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.post.authorName,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      timeago.format(widget.post.createdAt),
-                      style: const TextStyle(fontSize: 10, color: Colors.grey),
-                    ),
-                  ],
+                const SizedBox(width: 10),
+                Expanded(
+                  // Use Expanded to prevent overflow
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.post.authorName,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        timeago.format(widget.post.createdAt),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const Spacer(),
-                // Menu Logic...
+
+                // NEW: Follow Button
+                UserFollowButton(
+                  targetUserId: widget.post.authorId,
+                  activeColor: theme.primaryColor,
+                ),
+
+                // Menu Logic
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.grey),
                   onSelected: (val) {
-                     // ... Handle report/delete
+                    // Handle report/delete
                   },
                   itemBuilder: (context) => [
-                     const PopupMenuItem(value: 'report', child: Text('Report')),
-                     // Add delete if owner
+                    const PopupMenuItem(value: 'report', child: Text('Report')),
+                    if (widget.post.authorId == widget.currentUser.id)
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
                   ],
-                )
+                ),
               ],
             ),
-            
+
             const SizedBox(height: 12),
-            Text(widget.post.content, maxLines: 4, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87)),
+
+            // --- CONTENT ---
+            Text(
+              widget.post.content,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                height: 1.4,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
 
             const SizedBox(height: 12),
             const Divider(),
-            
+
+            // --- ACTIONS ---
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -133,20 +178,30 @@ class _ForumPostCardState extends State<ForumPostCard> {
                 TextButton.icon(
                   onPressed: _handleLike,
                   icon: Icon(
-                    _isLiked ? Icons.thumb_up_alt : Icons.thumb_up_alt_outlined, 
-                    size: 18,
+                    _isLiked ? Icons.thumb_up_alt : Icons.thumb_up_alt_outlined,
+                    size: 20,
                     color: _isLiked ? Colors.blue : Colors.grey,
                   ),
-                  label: Text("$_currentLikes", style: TextStyle(color: _isLiked ? Colors.blue : Colors.grey)),
+                  label: Text(
+                    "$_currentLikes",
+                    style: TextStyle(
+                      color: _isLiked ? Colors.blue : Colors.grey,
+                    ),
+                  ),
                 ),
-                
+
                 // COMMENT BUTTON
                 TextButton.icon(
-                  onPressed: () {
-                     // Navigate
-                  },
-                  icon: const Icon(Icons.comment_outlined, size: 18, color: Colors.grey),
-                  label: Text("${widget.post.commentCount}", style: const TextStyle(color: Colors.grey)),
+                  onPressed: _navigateToDetails, // FIXED: Uses helper method
+                  icon: const Icon(
+                    Icons.comment_outlined,
+                    size: 20,
+                    color: Colors.grey,
+                  ),
+                  label: Text(
+                    "${widget.post.commentCount}",
+                    style: const TextStyle(color: Colors.grey),
+                  ),
                 ),
               ],
             ),

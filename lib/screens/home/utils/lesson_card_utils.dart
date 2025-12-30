@@ -709,6 +709,12 @@ Future<void> _performRewrite(
           backgroundColor: Colors.green,
         ),
       );
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ReaderScreen(lesson: newLesson),
+        ),
+      );
     }
   } catch (e) {
     if (context.mounted) Navigator.pop(context);

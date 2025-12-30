@@ -9,6 +9,8 @@ import 'package:http/http.dart' as http;
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/auth_service.dart';
 import 'package:linguaflow/utils/logger.dart';
+import 'package:linguaflow/utils/firebase_utils.dart'; // Assuming this is correct
+import 'package:linguaflow/services/user_service.dart'; 
 // ADD THIS IMPORT
 import 'package:linguaflow/utils/firebase_utils.dart';
 
@@ -17,11 +19,12 @@ import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthService authService;
+   final UserService _userService; 
   DateTime? _lastEmailSentTime;
   final _storage = const FlutterSecureStorage(); // 1. Init Storage
   static const String _gumroadProductId = "uIq5F1GwaxHuVmADcfcbIw==";
 
-  AuthBloc(this.authService) : super(AuthInitial()) {
+  AuthBloc(this.authService, this._userService) : super(AuthInitial()) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<AuthLoginRequested>(_onAuthLoginRequested);
     on<AuthGoogleLoginRequested>(_onAuthGoogleLoginRequested);
@@ -36,6 +39,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthUpdateListeningTime>(_onAuthUpdateListeningTime);
     on<AuthIncrementLessonsCompleted>(_onAuthIncrementLessonsCompleted);
     on<AuthUpdateXP>(_onAuthUpdateXP);
+    //Social helpers
+      on<AuthAddFriend>(_onAuthAddFriend);
+    on<AuthRemoveFriend>(_onAuthRemoveFriend);
+    on<AuthFollowUser>(_onAuthFollowUser);
+    on<AuthUnfollowUser>(_onAuthUnfollowUser);
+    on<AuthBlockUser>(_onAuthBlockUser);
+    on<AuthUnblockUser>(_onAuthUnblockUser);
   }
 
   // --- HELPER: Fetch Premium Data Once ---
@@ -328,15 +338,12 @@ Future<void> _onAuthLoginRequested(
     AuthGoogleLoginRequested event,
     Emitter<AuthState> emit,
   ) async {
-    print("🔹 BLOC: Received Google Login Request!");
     emit(AuthLoading());
 
     try {
-      print("🔹 BLOC: Calling AuthService...");
       UserModel? user = await authService.signInWithGoogle();
 
       if (user != null) {
-        print("🔹 BLOC: User found: ${user.email}");
 
         user = await _checkAndUpateStreak(
           user,
@@ -346,11 +353,9 @@ Future<void> _onAuthLoginRequested(
 
         emit(AuthAuthenticated(user));
       } else {
-        print("🔹 BLOC: User cancelled or null");
         emit(AuthUnauthenticated());
       }
     } catch (e) {
-      print("🔴 BLOC ERROR: $e");
       emit(AuthError("Google Sign In Failed: $e"));
     }
   }
@@ -665,5 +670,166 @@ Future<void> _onAuthLoginRequested(
       }
     }
     return updatedUser;
+  }
+
+
+
+  ///social
+  // --- SOCIAL HANDLERS ---
+
+  Future<void> _onAuthAddFriend(
+    AuthAddFriend event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
+      
+      // 1. Update Local State (Optimistic UI)
+      final updatedFriends = List<String>.from(currentUser.friends);
+      if (!updatedFriends.contains(event.friendId)) {
+        updatedFriends.add(event.friendId);
+      }
+      
+      final updatedUser = currentUser.copyWith(friends: updatedFriends);
+      emit(AuthAuthenticated(updatedUser));
+
+      // 2. Persist to Firestore
+      try {
+        await _userService.addFriend(event.friendId);
+      } catch (e) {
+        printLog("Error adding friend: $e");
+        // Optional: Revert state here if persistence fails
+      }
+    }
+  }
+
+  Future<void> _onAuthRemoveFriend(
+    AuthRemoveFriend event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
+
+      // 1. Update Local State
+      final updatedFriends = List<String>.from(currentUser.friends)
+        ..remove(event.friendId);
+
+      final updatedUser = currentUser.copyWith(friends: updatedFriends);
+      emit(AuthAuthenticated(updatedUser));
+
+      // 2. Persist to Firestore
+      try {
+        await _userService.removeFriend(event.friendId);
+      } catch (e) {
+        printLog("Error removing friend: $e");
+      }
+    }
+  }
+
+  Future<void> _onAuthFollowUser(
+    AuthFollowUser event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
+
+      // 1. Update Local State
+      final updatedFollowing = List<String>.from(currentUser.following);
+      if (!updatedFollowing.contains(event.targetUserId)) {
+        updatedFollowing.add(event.targetUserId);
+      }
+
+      final updatedUser = currentUser.copyWith(following: updatedFollowing);
+      emit(AuthAuthenticated(updatedUser));
+
+      // 2. Persist to Firestore
+      try {
+        await _userService.followUser(event.targetUserId);
+      } catch (e) {
+        printLog("Error following user: $e");
+      }
+    }
+  }
+
+  Future<void> _onAuthUnfollowUser(
+    AuthUnfollowUser event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
+
+      // 1. Update Local State
+      final updatedFollowing = List<String>.from(currentUser.following)
+        ..remove(event.targetUserId);
+
+      final updatedUser = currentUser.copyWith(following: updatedFollowing);
+      emit(AuthAuthenticated(updatedUser));
+
+      // 2. Persist to Firestore
+      try {
+        await _userService.unfollowUser(event.targetUserId);
+      } catch (e) {
+        printLog("Error unfollowing user: $e");
+      }
+    }
+  }
+
+  Future<void> _onAuthBlockUser(
+    AuthBlockUser event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
+
+      // 1. Update Local State
+      // Add to blocked list
+      final updatedBlocked = List<String>.from(currentUser.blockedUsers);
+      if (!updatedBlocked.contains(event.targetUserId)) {
+        updatedBlocked.add(event.targetUserId);
+      }
+
+      // Also remove from friends and following locally to keep UI consistent
+      final updatedFriends = List<String>.from(currentUser.friends)
+        ..remove(event.targetUserId);
+      final updatedFollowing = List<String>.from(currentUser.following)
+        ..remove(event.targetUserId);
+
+      final updatedUser = currentUser.copyWith(
+        blockedUsers: updatedBlocked,
+        friends: updatedFriends,
+        following: updatedFollowing,
+      );
+      emit(AuthAuthenticated(updatedUser));
+
+      // 2. Persist to Firestore
+      try {
+        await _userService.blockUser(event.targetUserId);
+      } catch (e) {
+        printLog("Error blocking user: $e");
+      }
+    }
+  }
+
+  Future<void> _onAuthUnblockUser(
+    AuthUnblockUser event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state is AuthAuthenticated) {
+      final currentUser = (state as AuthAuthenticated).user;
+
+      // 1. Update Local State
+      final updatedBlocked = List<String>.from(currentUser.blockedUsers)
+        ..remove(event.targetUserId);
+
+      final updatedUser = currentUser.copyWith(blockedUsers: updatedBlocked);
+      emit(AuthAuthenticated(updatedUser));
+
+      // 2. Persist to Firestore
+      try {
+        await _userService.unblockUser(event.targetUserId);
+      } catch (e) {
+        printLog("Error unblocking user: $e");
+      }
+    }
   }
 }

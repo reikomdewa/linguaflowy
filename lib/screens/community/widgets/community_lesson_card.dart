@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:linguaflow/screens/community/widgets/community_utils.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:timeago/timeago.dart' as timeago;
+
+// BLOCS
+import 'package:linguaflow/blocs/auth/auth_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_state.dart';
+import 'package:linguaflow/blocs/auth/auth_event.dart';
+
+// MODELS & SERVICES
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/community_service.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
+import 'package:linguaflow/screens/community/widgets/community_utils.dart'; // Assuming StatBadge is here
 
 class CommunityLessonCard extends StatefulWidget {
   final LessonModel lesson;
@@ -25,7 +33,6 @@ class CommunityLessonCard extends StatefulWidget {
 class _CommunityLessonCardState extends State<CommunityLessonCard> {
   bool _isLiked = false;
   int _currentLikes = 0;
-  // REMOVED: bool _isLoadingLike = true; <--- We don't want to block the UI
 
   @override
   void initState() {
@@ -35,18 +42,13 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
   }
 
   void _checkIfLiked() async {
-    // This runs in background. The UI shows the heart immediately.
     bool liked = await widget.service.hasUserLiked(
       'lessons',
       widget.lesson.id,
       widget.currentUser.id,
     );
-
-    // Only update if the widget is still on screen
     if (mounted) {
-      setState(() {
-        _isLiked = liked;
-      });
+      setState(() => _isLiked = liked);
     }
   }
 
@@ -63,7 +65,6 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
     );
   }
 
-  // ... (Keep _getYoutubeThumbnail helper unchanged) ...
   String? _getYoutubeThumbnail(String url) {
     if (url.isEmpty) return null;
     final uri = Uri.tryParse(url);
@@ -82,8 +83,21 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
+    // 1. WATCH AUTH STATE
+    // This ensures the menu updates immediately (Follow -> Unfollow) without needing a page refresh
+    final authState = context.watch<AuthBloc>().state;
+    final user = authState.user;
+    bool isFollowing = false;
+    bool isMe = widget.lesson.userId == widget.currentUser.id;
+
+    if (authState is AuthAuthenticated) {
+      isFollowing = authState.user.following.contains(widget.lesson.userId);
+    }
+
+    // 2. Video Logic
     final bool isVideo =
         widget.lesson.type == 'video' ||
         (widget.lesson.videoUrl != null && widget.lesson.videoUrl!.isNotEmpty);
@@ -92,8 +106,9 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
     if (isVideo && widget.lesson.videoUrl != null) {
       thumbnailUrl = _getYoutubeThumbnail(widget.lesson.videoUrl!);
     }
-
+    final bool isAiGenerated = widget.lesson.originality == 'ai_story';
     return Container(
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -108,10 +123,11 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // HEADER (Unchanged)
+          // --- HEADER (Clean, no button here) ---
           ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 12),
             leading: CircleAvatar(
+              radius: 20,
               backgroundColor: Colors.grey[300],
               child: const Icon(Icons.person, color: Colors.grey),
             ),
@@ -121,10 +137,13 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Text("Shared ${timeago.format(widget.lesson.createdAt)}"),
+            subtitle: Text(
+              "Shared ${timeago.format(widget.lesson.createdAt)} by ${user?.displayName} ",
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
           ),
 
-          // BODY (Unchanged)
+          // --- BODY ---
           GestureDetector(
             onTap: () {
               widget.service.incrementLessonViews(widget.lesson.id);
@@ -138,9 +157,7 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
             child: Container(
               height: 140,
               width: double.infinity,
-              color: isVideo
-                  ? Colors.black
-                  : Colors.grey.withValues(alpha: 0.1),
+              color: isVideo ? Colors.black : Colors.grey.withOpacity(0.1),
               alignment: Alignment.center,
               child: isVideo
                   ? Stack(
@@ -151,11 +168,11 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                           Image.network(
                             thumbnailUrl,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
+                            errorBuilder: (_, __, ___) =>
                                 const SizedBox.shrink(),
                           ),
                         if (thumbnailUrl != null)
-                          Container(color: Colors.black.withValues(alpha: 0.3)),
+                          Container(color: Colors.black.withOpacity(0.3)),
                         const Center(
                           child: Icon(
                             Icons.play_circle_fill,
@@ -183,12 +200,13 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
             ),
           ),
 
-          // --- FOOTER (FIXED) ---
+          // --- FOOTER ---
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // LIKE BUTTON (No Spinner)
+                // LIKE
                 InkWell(
                   onTap: _handleLike,
                   borderRadius: BorderRadius.circular(20),
@@ -196,8 +214,6 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                     padding: const EdgeInsets.all(8.0),
                     child: Row(
                       children: [
-                        // Directly show the Icon. It defaults to border (grey)
-                        // until _checkIfLiked completes or user taps it.
                         Icon(
                           _isLiked ? Icons.favorite : Icons.favorite_border,
                           size: 20,
@@ -226,14 +242,68 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                 ),
 
                 const Spacer(),
-
-                // MENU
+                isAiGenerated
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.purple.withOpacity(0.3),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              size: 12,
+                              color: Colors.purple,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              "AI graded",
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.purple,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : SizedBox.shrink(),
+                // --- MENU WITH FOLLOW LOGIC ---
                 PopupMenuButton(
                   icon: Icon(
                     Icons.more_vert,
                     color: isDark ? Colors.white70 : Colors.grey[700],
                   ),
                   itemBuilder: (context) => [
+                    // 1. Follow / Unfollow (Only if not me)
+                    if (!isMe)
+                      PopupMenuItem(
+                        value: 'toggle_follow',
+                        child: Row(
+                          children: [
+                            Icon(
+                              isFollowing
+                                  ? Icons.person_remove
+                                  : Icons.person_add,
+                              color: theme.primaryColor,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              isFollowing ? "Unfollow Author" : "Follow Author",
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // 2. Save
                     const PopupMenuItem(
                       value: 'save',
                       child: Row(
@@ -244,17 +314,21 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                         ],
                       ),
                     ),
+
+                    // 3. Report
                     const PopupMenuItem(
                       value: 'report',
                       child: Row(
                         children: [
                           Icon(Icons.flag_outlined, color: Colors.grey),
                           SizedBox(width: 12),
-                          Text("Report Content"),
+                          Text("Report"),
                         ],
                       ),
                     ),
-                    if (widget.lesson.userId == widget.currentUser.id)
+
+                    // 4. Delete (Only if me)
+                    if (isMe)
                       const PopupMenuItem(
                         value: 'delete',
                         child: Row(
@@ -267,7 +341,23 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                       ),
                   ],
                   onSelected: (val) async {
-                    if (val == 'save') {
+                    if (val == 'toggle_follow') {
+                      if (isFollowing) {
+                        context.read<AuthBloc>().add(
+                          AuthUnfollowUser(widget.lesson.userId),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Unfollowed author")),
+                        );
+                      } else {
+                        context.read<AuthBloc>().add(
+                          AuthFollowUser(widget.lesson.userId),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Followed author!")),
+                        );
+                      }
+                    } else if (val == 'save') {
                       await widget.service.saveLessonToLibrary(
                         widget.lesson,
                         widget.currentUser.id,
@@ -275,7 +365,7 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text("Saved to your Library!"),
+                            content: Text("Saved to Library!"),
                             backgroundColor: Colors.green,
                           ),
                         );

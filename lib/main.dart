@@ -29,6 +29,7 @@ import 'package:linguaflow/services/lesson_service.dart'; // Firestore Service
 import 'package:linguaflow/services/hybrid_lesson_service.dart'; // Local Service
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/services/translation_service.dart';
+import 'package:linguaflow/services/user_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
 import 'package:linguaflow/utils/centered_views.dart';
 import 'package:media_kit/media_kit.dart';
@@ -83,6 +84,7 @@ class LinguaflowApp extends StatelessWidget {
       providers: [
         RepositoryProvider.value(value: lessonRepository),
         RepositoryProvider(create: (context) => AuthService()),
+        RepositoryProvider(create: (context) => UserService()),
         RepositoryProvider(create: (context) => LessonService()),
         RepositoryProvider(create: (context) => VocabularyService()),
         RepositoryProvider(create: (context) => TranslationService()),
@@ -97,9 +99,10 @@ class LinguaflowApp extends StatelessWidget {
           ),
           // 2. AUTH BLOC
           BlocProvider(
-            create: (context) =>
-                AuthBloc(context.read<AuthService>())
-                  ..add(AuthCheckRequested()),
+            create: (context) => AuthBloc(
+              context.read<AuthService>(),
+              context.read<UserService>(),
+            )..add(AuthCheckRequested()),
           ),
           // 3. LESSON BLOC
           BlocProvider<LessonBloc>(

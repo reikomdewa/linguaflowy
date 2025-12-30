@@ -1,7 +1,6 @@
 import 'package:linguaflow/models/transcript_line.dart';
 
 class LessonModel {
-  
   final String id;
   final String userId;
   final String title;
@@ -13,36 +12,35 @@ class LessonModel {
   final int progress;
   final String? imageUrl;
   final bool isFavorite;
-  final String type; // 'text', 'video', 'audio', 'ai_story'
-  final String difficulty; // 'A1', 'B2', etc.
   
-  // --- FILTERS & METADATA ---
-  final String genre; 
-  final List<String> tags; // Future-proof: Better than just genre
+  // --- CORE TYPES ---
+  final String type; // 'text', 'video', 'audio'
+  final String originality; // 'ai_story', 'original', 'graded'
+  final String difficulty; // 'A1', 'B2', etc.
+  final String genre;
+  
+  // --- METADATA ---
+  final List<String> tags;
+  final String source; // 'youtube', 'ai', 'import', 'system'
+  final Map<String, dynamic> metadata;
 
   // --- OWNERSHIP & COMMUNITY ---
   final String? originalAuthorId;
-  final bool isPublic;      // <--- ADDED: For community sharing
-  final int likes;          // <--- ADDED: For community ranking
-  final int views;          // <--- ADDED: For popularity
-  final String source;      // <--- ADDED: 'youtube', 'ai', 'import', 'system'
+  final bool isPublic;
+  final int likes;
+  final int views;
 
-  // --- SERIES / PLAYLIST INFO ---
-  final String? seriesId;      
-  final String? seriesTitle;   
-  final int? seriesIndex;      
+  // --- SERIES INFO ---
+  final String? seriesId;
+  final String? seriesTitle;
+  final int? seriesIndex;
 
-  // --- MEDIA FIELDS ---
+  // --- MEDIA ---
   final String? videoUrl;
   final String? subtitleUrl;
 
-  // --- FLEXIBLE STORAGE (The ultimate future-proofer) ---
-  // Store AI prompts, YouTube channel names, specific dialects, etc.
-  // without changing the database schema.
-  final Map<String, dynamic> metadata; 
-
-  // --- INTERNAL STATE (Not saved to DB usually) ---
-  final bool isLocal; 
+  // --- INTERNAL STATE ---
+  final bool isLocal;
 
   LessonModel({
     required this.id,
@@ -57,31 +55,37 @@ class LessonModel {
     this.imageUrl,
     this.isFavorite = false,
     this.type = 'text',
+    
+    // Default to 'original' if not specified
+    this.originality = 'original', 
+    
     this.difficulty = 'intermediate',
     this.genre = 'general',
     this.originalAuthorId,
-    
-    // --- NEW FIELDS (With Defaults) ---
+
+    // --- NEW FIELDS ---
     this.isPublic = false,
     this.tags = const [],
     this.likes = 0,
     this.views = 0,
-    this.source = 'system', // Default source
+    
+    // Default to 'system' ONLY if not specified
+    this.source = 'system', 
+    
     this.metadata = const {},
-
     this.seriesId,
     this.seriesTitle,
     this.seriesIndex,
-
     this.videoUrl,
     this.subtitleUrl,
-    this.isLocal = false, 
+    this.isLocal = false,
   });
 
-  String? get mediaUrl => videoUrl; 
+  String? get mediaUrl => videoUrl;
 
   bool get isOriginal => originalAuthorId == null || userId == originalAuthorId;
 
+  // --- FROM MAP (Firestore -> App) ---
   factory LessonModel.fromMap(Map<String, dynamic> map, String id) {
     return LessonModel(
       id: id,
@@ -89,49 +93,54 @@ class LessonModel {
       title: map['title']?.toString() ?? '',
       language: map['language']?.toString() ?? 'en',
       content: map['content']?.toString() ?? '',
+      
+      // Lists
       sentences: (map['sentences'] as List<dynamic>?)
               ?.map((e) => e.toString())
-              .toList() ??
-          [],
+              .toList() ?? [],
       transcript: (map['transcript'] as List<dynamic>?)
               ?.map((e) => TranscriptLine.fromMap(e))
-              .toList() ??
-          [],
+              .toList() ?? [],
+      tags: (map['tags'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ?? [],
+
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
+          
       progress: int.tryParse(map['progress'].toString()) ?? 0,
       imageUrl: map['imageUrl']?.toString(),
       isFavorite: map['isFavorite'] == true,
+      
+      // Core fields
       type: map['type']?.toString() ?? 'text',
+      originality: map['originality']?.toString() ?? 'original', // <--- LOAD IT
       difficulty: map['difficulty']?.toString() ?? 'intermediate',
-      genre: map['genre']?.toString() ?? 'general', 
+      genre: map['genre']?.toString() ?? 'general',
+      source: map['source']?.toString() ?? 'system', // <--- LOAD IT
+      
       originalAuthorId: map['originalAuthorId']?.toString(),
-
-      // --- MAP NEW FIELDS ---
       isPublic: map['isPublic'] == true,
-      tags: (map['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
       likes: int.tryParse(map['likes']?.toString() ?? '0') ?? 0,
       views: int.tryParse(map['views']?.toString() ?? '0') ?? 0,
-      source: map['source']?.toString() ?? 'system',
-      metadata: map['metadata'] is Map<String, dynamic> 
-          ? map['metadata'] as Map<String, dynamic> 
+      
+      metadata: map['metadata'] is Map<String, dynamic>
+          ? map['metadata'] as Map<String, dynamic>
           : {},
 
-      // --- SERIES ---
       seriesId: map['seriesId']?.toString(),
       seriesTitle: map['seriesTitle']?.toString(),
       seriesIndex: int.tryParse(map['seriesIndex']?.toString() ?? ''),
 
-      // --- MEDIA ---
       videoUrl: map['videoUrl']?.toString(),
       subtitleUrl: map['subtitleUrl']?.toString(),
       
-      // Note: isLocal is usually NOT mapped from DB, defaults to false for cloud items
-      isLocal: false, 
+      isLocal: false,
     );
   }
 
+  // --- TO MAP (App -> Firestore) ---
   Map<String, dynamic> toMap() {
     return {
       'userId': userId,
@@ -144,28 +153,30 @@ class LessonModel {
       'progress': progress,
       'imageUrl': imageUrl,
       'isFavorite': isFavorite,
+      
+      // Critical Fields
       'type': type,
+      'originality': originality, // <--- SAVE IT
       'difficulty': difficulty,
       'genre': genre,
-      'originalAuthorId': originalAuthorId, 
-
-      // --- SAVE NEW FIELDS ---
+      'source': source, // <--- SAVE IT
+      
+      'originalAuthorId': originalAuthorId,
       'isPublic': isPublic,
       'tags': tags,
       'likes': likes,
       'views': views,
-      'source': source,
       'metadata': metadata,
 
       'seriesId': seriesId,
       'seriesTitle': seriesTitle,
       'seriesIndex': seriesIndex,
-
       'videoUrl': videoUrl,
       'subtitleUrl': subtitleUrl,
     };
   }
 
+  // --- COPY WITH (For Updates) ---
   LessonModel copyWith({
     String? id,
     String? userId,
@@ -179,25 +190,22 @@ class LessonModel {
     String? imageUrl,
     bool? isFavorite,
     String? type,
+    String? originality, // <--- ALLOW UPDATE
     String? difficulty,
     String? genre,
     String? originalAuthorId,
-    
-    // --- ADD COPY PARAMS ---
     bool? isPublic,
     List<String>? tags,
     int? likes,
     int? views,
-    String? source,
+    String? source, // <--- ALLOW UPDATE
     Map<String, dynamic>? metadata,
-
     String? seriesId,
     String? seriesTitle,
     int? seriesIndex,
-
     String? videoUrl,
     String? subtitleUrl,
-    bool? isLocal, 
+    bool? isLocal,
   }) {
     return LessonModel(
       id: id ?? this.id,
@@ -212,37 +220,38 @@ class LessonModel {
       imageUrl: imageUrl ?? this.imageUrl,
       isFavorite: isFavorite ?? this.isFavorite,
       type: type ?? this.type,
+      
+      // Ensure these propagate correctly
+      originality: originality ?? this.originality, 
       difficulty: difficulty ?? this.difficulty,
       genre: genre ?? this.genre,
-      originalAuthorId: originalAuthorId ?? this.originalAuthorId,
+      source: source ?? this.source,
       
-      // --- COPY LOGIC ---
+      originalAuthorId: originalAuthorId ?? this.originalAuthorId,
       isPublic: isPublic ?? this.isPublic,
       tags: tags ?? this.tags,
       likes: likes ?? this.likes,
       views: views ?? this.views,
-      source: source ?? this.source,
       metadata: metadata ?? this.metadata,
-
+      
       seriesId: seriesId ?? this.seriesId,
       seriesTitle: seriesTitle ?? this.seriesTitle,
       seriesIndex: seriesIndex ?? this.seriesIndex,
-
       videoUrl: videoUrl ?? this.videoUrl,
       subtitleUrl: subtitleUrl ?? this.subtitleUrl,
-      isLocal: isLocal ?? this.isLocal, 
+      isLocal: isLocal ?? this.isLocal,
     );
   }
 
-  /// Merges fresh system data (metadata) into this user lesson (progress)
+  /// Merges fresh system data into user progress
   LessonModel mergeSystemData(LessonModel systemLesson) {
     return copyWith(
-      // Keep User Progress/State
+      // Keep User Progress
       progress: progress,
       isFavorite: isFavorite,
       createdAt: createdAt,
-      
-      // Update Content/Metadata from System
+
+      // Update System Data
       title: systemLesson.title,
       content: systemLesson.content,
       imageUrl: systemLesson.imageUrl,
@@ -255,11 +264,11 @@ class LessonModel {
       difficulty: systemLesson.difficulty,
       genre: systemLesson.genre,
       
-      // Merge new fields
+      // Ensure these update too
+      originality: systemLesson.originality, 
       tags: systemLesson.tags,
       source: systemLesson.source,
       metadata: systemLesson.metadata,
-      // Note: We might NOT want to merge isPublic/likes/views if this is a local copy
     );
   }
 }
