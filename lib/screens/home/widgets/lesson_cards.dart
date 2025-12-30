@@ -375,6 +375,7 @@ class TextLessonCard extends StatelessWidget {
                   padding: const EdgeInsets.only(left: 8.0, top: 8),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
+
                     children: [
                       // FIXED: Replaced Expanded with a constrained Column
                       Expanded(
@@ -435,35 +436,34 @@ class TextLessonCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (lesson.genre == 'short_story')
-                      Positioned(
-                        bottom: 8,
-                        left: 8,
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 4),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withValues(alpha: .2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            "Short Story",
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.orange[800],
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
 
                 const SizedBox(height: 12),
-
+                if (lesson.genre == 'short_story')
+                  Positioned(
+                    bottom: 0,
+                    left: 8,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: .2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        "Short Story",
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.orange[800],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
                 // --- STATS ROW (FIXED) ---
                 Row(
                   children: [

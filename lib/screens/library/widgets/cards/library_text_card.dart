@@ -22,22 +22,19 @@ class LibraryTextCard extends StatelessWidget {
     // Logic to detect AI content:
     // 1. Explicit type 'ai_story'
     // 2. OR it's a Text lesson with a title containing parenthesis like "(A1)", indicating a rewrite
-    final bool isAI = lesson.type == 'ai_story' || 
-                      (lesson.type == 'text' && lesson.title.contains('(') && lesson.title.contains(')'));
+    final bool isAI =
+        lesson.type == 'ai_story' ||
+        (lesson.type == 'text' &&
+            lesson.title.contains('(') &&
+            lesson.title.contains(')'));
 
     // Styling constants for AI vs Normal
-    final Color iconBgColor = isAI 
-        ? Colors.purpleAccent.withValues(alpha: 0.15) 
+    final Color iconBgColor = isAI
+        ? Colors.purpleAccent.withValues(alpha: 0.15)
         : Colors.amber.withValues(alpha: 0.1);
-    final Color iconColor = isAI 
-        ? Colors.purpleAccent 
-        : Colors.amber[800]!;
-    final IconData iconData = isAI 
-        ? Icons.auto_awesome 
-        : Icons.article;
-    final String labelText = isAI 
-        ? "AI Story" 
-        : "Imported Text";
+    final Color iconColor = isAI ? Colors.purpleAccent : Colors.amber[800]!;
+    final IconData iconData = isAI ? Icons.auto_awesome : Icons.article;
+    final String labelText = isAI ? "AI Story(simplified)" : "Imported Text";
 
     // --- HORIZONTAL CARD STYLE ---
     if (width != null) {
@@ -107,12 +104,35 @@ class LibraryTextCard extends StatelessWidget {
                   ),
                   GestureDetector(
                     onTap: () => showLessonOptions(context, lesson, isDark),
-                    child: const Icon(Icons.more_vert,
-                        color: Colors.grey, size: 20),
+                    child: const Icon(
+                      Icons.more_vert,
+                      color: Colors.grey,
+                      size: 20,
+                    ),
                   ),
                 ],
               ),
-              const Spacer(),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 8, top: 8),
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: Text(
+                      // FIX 1: Replace newlines with spaces so the text flows compactly
+                      lesson.content.replaceAll('\n', ' '),
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark ? Colors.grey[300] : Colors.grey[700],
+                        // FIX 2: Reduce height from 1.4 to 1.1 or 1.2
+                        height: 1.4,
+                        fontSize: 14, // Optional: Ensure font size is explicit
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 10),
               Text(
                 lesson.title,
                 maxLines: 2,
