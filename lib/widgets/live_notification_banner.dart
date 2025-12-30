@@ -34,8 +34,8 @@ class LiveNotificationBanner extends StatefulWidget {
 class _LiveNotificationBannerState extends State<LiveNotificationBanner>
     with SingleTickerProviderStateMixin {
   // --- CONSTANTS ---
-  static const Duration kBannerDisplayDuration = Duration(seconds: 10);
-  static const Duration kBannerHiddenDuration = Duration(seconds: 60);
+  static const Duration kBannerDisplayDuration = Duration(seconds: 20);
+  static const Duration kBannerHiddenDuration = Duration(seconds: 90);
 
   // State Variables
   List<ChatRoom> _currentAvailableRooms = [];
