@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:linguaflow/screens/speak/widgets/participant_tile.dart';
+import 'package:linguaflow/screens/speak/active_screen/widgets/participant_tile.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 class FullScreenParticipantScreen extends StatelessWidget {

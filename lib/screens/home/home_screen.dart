@@ -15,6 +15,7 @@ import 'package:linguaflow/screens/home/widgets/tap_button.dart';
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:linguaflow/widgets/buttons/build_ai_button.dart';
+import 'package:linguaflow/widgets/buttons/download_app_button.dart';
 import 'package:linguaflow/widgets/live_notification_banner.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
@@ -241,7 +242,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Column(
                     children: [
                       _buildGlobalFilterChips(isDark, isDesktop),
-  const LiveNotificationBanner(),
+
+                      const LiveNotificationBanner(),
                       Expanded(
                         child: BlocBuilder<LessonBloc, LessonState>(
                           builder: (context, lessonState) {
@@ -343,6 +345,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
+                                      if (!isDesktop)
+                                        buildAppDownloadButton(
+                                          isDark,
+                                          isDesktop,
+                                          context,
+                                        ),
                                       GuidedCoursesSection(
                                         languageCode: currentLangCode,
                                         guidedLessons: guidedLessons,

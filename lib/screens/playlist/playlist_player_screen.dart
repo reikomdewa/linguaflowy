@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
@@ -79,7 +78,6 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _currentIndex = widget.initialIndex;
-    _initGemini();
     _configureAudioSession();
 
     // Start First Lesson
@@ -430,10 +428,6 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
 
   // --- TRACKING & HELPERS ---
 
-  void _initGemini() {
-    final envKey = dotenv.env['GEMINI_API_KEY'];
-    if (envKey != null && envKey.isNotEmpty) Gemini.init(apiKey: envKey);
-  }
 
   void _startListeningTracker() {
     _listeningTrackingTimer?.cancel();

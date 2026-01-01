@@ -89,4 +89,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'lingua-flowy.firebasestorage.app',
     measurementId: 'G-V8Y42136Z7',
   );
+
 }

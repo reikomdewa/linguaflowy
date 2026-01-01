@@ -6,8 +6,14 @@ import 'package:linguaflow/services/speak/chat_service.dart';
 
 class RoomChatSheet extends StatefulWidget {
   final Room room;
+  // FIX: Add this callback to handle closing without Navigator
+  final VoidCallback? onClose; 
 
-  const RoomChatSheet({super.key, required this.room});
+  const RoomChatSheet({
+    super.key, 
+    required this.room,
+    this.onClose, // Optional parameter
+  });
 
   @override
   State<RoomChatSheet> createState() => _RoomChatSheetState();
@@ -22,8 +28,6 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
   void initState() {
     super.initState();
     _currentUserId = widget.room.localParticipant?.identity ?? 'local';
-    
-    // Connects (keeps history if same room)
     _chatService.connect(widget.room);
   }
 
@@ -48,7 +52,7 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
     final backgroundColor = theme.scaffoldBackgroundColor;
     final inputColor = isDark ? Colors.grey[900] : Colors.grey[100];
 
-    return SafeArea( // Added SafeArea to avoid bottom notch issues
+    return SafeArea(
       child: Container(
         height: MediaQuery.of(context).size.height * 0.85,
         decoration: BoxDecoration(
@@ -69,7 +73,16 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
+                    // --- FIX: HYBRID CLOSE LOGIC ---
+                    onPressed: () {
+                      if (widget.onClose != null) {
+                        // Manual Mode (Overlay)
+                        widget.onClose!();
+                      } else {
+                        // Modal Mode (Navigator)
+                        Navigator.of(context).pop();
+                      }
+                    },
                   ),
                 ],
               ),
@@ -80,11 +93,7 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
             Expanded(
               child: StreamBuilder<List<types.Message>>(
                 stream: _chatService.messagesStream,
-                
-                // --- FIX: USE SAVED MESSAGES AS INITIAL DATA ---
-                // If you use const [], it flashes empty until the stream emits.
                 initialData: _chatService.currentMessages, 
-                
                 builder: (context, snapshot) {
                   final messages = snapshot.data ?? [];
       
@@ -122,7 +131,7 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
                 left: 16, 
                 right: 16, 
                 top: 10, 
-                bottom: 10 // Bottom padding handled by SafeArea now
+                bottom: 10 
               ),
               decoration: BoxDecoration(
                 color: backgroundColor,
@@ -164,7 +173,6 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
   }
 }
 
-// BUBBLE WIDGET (Kept in same file is fine)
 class _MessageBubble extends StatelessWidget {
   final types.Message message;
   final bool isMe;

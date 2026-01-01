@@ -16,7 +16,7 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Lingua flow, learning language the natural way"">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -105,14 +105,148 @@
   </script>
 </head>
 <body>
-  <picture id="splash">
-      <source srcset="splash/img/light-1x.png 1x, splash/img/light-2x.png 2x, splash/img/light-3x.png 3x, splash/img/light-4x.png 4x" media="(prefers-color-scheme: light)">
-      <source srcset="splash/img/dark-1x.png 1x, splash/img/dark-2x.png 2x, splash/img/dark-3x.png 3x, splash/img/dark-4x.png 4x" media="(prefers-color-scheme: dark)">
-      <img class="center" aria-hidden="true" src="splash/img/light-1x.png" alt="">
-  </picture>
   
   
+  <!-- Loading indicator -->
+   <div id="loading">
+ <style>
+    /* 1. Define Default Colors (Light Mode) */
+    :root {
+      --bg-color: #ffffff;
+      --text-color: #333333;
+      --spinner-color: #333333;
+    }
+
+    /* 2. Define Dark Mode Colors (Automatically activates if phone is Dark) */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-color: #121212;
+        --text-color: #ffffff;
+        --spinner-color: #ffffff;
+      }
+    }
+
+    /* 3. Apply the variables */
+    body {
+      inset: 0;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+      position: fixed;
+      background-color: var(--bg-color); /* Adapts automatically */
+      transition: background-color 0.3s; /* Smooth transition */
+    }
+
+    .flutter-loader::before {
+      display: none !important;
+    }
+
+    #loading {
+      align-items: center;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .loading {
+      --dim: 3rem;
+      width: var(--dim);
+      height: var(--dim);
+      position: relative;
+      animation: spin988 2s linear infinite;
+    }
+
+    .loading .circle {
+      --dim: 1.2rem;
+      width: var(--dim);
+      height: var(--dim);
+      background-color: var(--spinner-color); /* Uses variable */
+      border-radius: 50%;
+      position: absolute;
+    }
+
+    .loading .circle:nth-child(1) { top: 0; left: 0; }
+    .loading .circle:nth-child(2) { top: 0; right: 0; }
+    .loading .circle:nth-child(3) { bottom: 0; left: 0; }
+    .loading .circle:nth-child(4) { bottom: 0; right: 0; }
+
+    @keyframes spin988 {
+      0% { transform: scale(1) rotate(0); }
+      20%, 25% { transform: scale(1.3) rotate(90deg); }
+      45%, 50% { transform: scale(1) rotate(180deg); }
+      70%, 75% { transform: scale(1.3) rotate(270deg); }
+      95%, 100% { transform: scale(1) rotate(360deg); }
+    }
+    
+    .loading-text {
+      font-family: 'Arial', sans-serif;
+      font-size: clamp(1rem, 5vw, 1.5rem);
+      color: var(--text-color); /* Uses variable */
+      margin-top: 2rem;
+      font-weight: 500;
+      text-align: center;
+      max-width: 90%;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .loading { --dim: 2.5rem; }
+      .loading .circle { --dim: 1rem; }
+      .loading-text { margin-top: 1.5rem; }
+    }
+    
+    @media (max-width: 480px) {
+      .loading { --dim: 2rem; }
+      .loading .circle { --dim: 0.8rem; }
+      .loading-text { margin-top: 1.2rem; }
+    }
+  </style>
   
+  <div class="loading">
+    <div class="circle"></div>
+    <div class="circle"></div>
+    <div class="circle"></div>
+    <div class="circle"></div>
+  </div>
+  <p class="loading-text">Learn language the natural way</p>
+</div>
+
+<script>
+  window.addEventListener('load', function () {
+    var loading = document.querySelector('#loading');
+    
+    // Hide Flutter's default loading indicator
+    document.addEventListener('DOMContentLoaded', function() {
+      var style = document.createElement('style');
+      style.innerHTML = `
+        .flutter-loader::before {
+          display: none !important;
+        }
+      `;
+      document.head.appendChild(style);
+    });
+    
+    _flutter.loader.load({
+      serviceWorker: {
+        serviceWorkerVersion: serviceWorkerVersion,
+      }
+    }).then(function (engineInitializer) {
+      loading.classList.add('main_done');
+      return engineInitializer.initializeEngine();
+    }).then(function (appRunner) {
+      loading.classList.add('init_done');
+      return appRunner.runApp();
+    }).then(function (app) {
+      // Wait a few milliseconds so users can see the "zoooom" animation
+      // before getting rid of the "loading" div.
+      window.setTimeout(function () {
+        loading.remove();
+      }, 200);
+    });
+  });
+</script>
   
   <script src="flutter_bootstrap.js" async=""></script>
 

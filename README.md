@@ -1,6 +1,6 @@
 k# linguaflow
 
-A new Flutter project.
+Lingua flow, learning language the natural way"
 
 ## Getting Started
 

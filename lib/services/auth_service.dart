@@ -148,11 +148,23 @@ class AuthService {
     String password,
     String displayName,
   ) async {
+    // 1. Create the user in Firebase Auth
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
 
+    // --- FIX START ---
+    // 2. Update the "Hidden" Auth Profile to match
+    // This ensures FirebaseAuth.instance.currentUser.displayName is NOT null
+    if (credential.user != null) {
+      await credential.user!.updateDisplayName(displayName);
+      // Optional: Update photoURL if you have a default avatar
+      // await credential.user!.reload();
+    }
+    // --- FIX END ---
+
+    // 3. Create the User Model for Firestore
     final user = UserModel(
       id: credential.user!.uid,
       email: email,
@@ -166,7 +178,9 @@ class AuthService {
       lastLoginDate: DateTime.now(),
     );
 
+    // 4. Save to Database
     await _firestore.collection('users').doc(user.id).set(user.toMap());
+
     return user;
   }
 

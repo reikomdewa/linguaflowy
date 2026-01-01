@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:linguaflow/core/env.dart';
 import 'package:linguaflow/models/quiz_model.dart';
 import 'package:linguaflow/utils/logger.dart';
 
@@ -89,10 +90,7 @@ class QuizService {
 
   // --- RETRY HELPER ---
   Future<String?> _generateWithRetry(String promptText) async {
-    final apiKey = dotenv.env['GEMINI_API_KEY'];
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception("GEMINI_API_KEY is missing");
-    }
+    final apiKey = Env.geminiApiKey;
 
     int attempts = 0;
 

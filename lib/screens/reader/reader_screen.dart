@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
@@ -147,7 +146,6 @@ class _ReaderScreenState extends State<ReaderScreen>
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     LocalLemmatizer().load(widget.lesson.language);
-    _initGemini();
     _startVocabularyStream();
     _loadUserPreferences();
     _determineMediaType();
@@ -276,10 +274,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  void _initGemini() {
-    final envKey = dotenv.env['GEMINI_API_KEY'];
-    if (envKey != null && envKey.isNotEmpty) Gemini.init(apiKey: envKey);
-  }
+ 
 
   @override
   void dispose() {

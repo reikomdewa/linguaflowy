@@ -25,109 +25,101 @@ class _CommunityScreenState extends State<CommunityScreen>
   final CommunityService _service = CommunityService();
 
   @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
+void initState() {
+  super.initState();
+  _tabController = TabController(length: 2, vsync: this);
+  // Remove the listener - we'll use ListenableBuilder instead
+}
 
-  @override
-  Widget build(BuildContext context) {
-    final userState = context.watch<AuthBloc>().state;
-    if (userState is! AuthAuthenticated) return const SizedBox.shrink();
-    final user = userState.user;
+@override
+Widget build(BuildContext context) {
+  final userState = context.watch<AuthBloc>().state;
+  if (userState is! AuthAuthenticated) return const SizedBox.shrink();
+  final user = userState.user;
 
-    final bgColor = Theme.of(context).scaffoldBackgroundColor;
+  final bgColor = Theme.of(context).scaffoldBackgroundColor;
 
-    return Scaffold(
-      backgroundColor: bgColor,
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            SliverAppBar(
-              title: Row(
-                children: [
-                  const Text("Community"),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blueAccent.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      user.currentLanguage.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueAccent,
-                      ),
+  return Scaffold(
+    backgroundColor: bgColor,
+    body: NestedScrollView(
+      headerSliverBuilder: (context, innerBoxIsScrolled) {
+        return [
+          SliverAppBar(
+            title: Row(
+              children: [
+                const Text("Community"),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    user.currentLanguage.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueAccent,
                     ),
                   ),
-                ],
-              ),
-              centerTitle: false,
-              floating: true,
-              pinned: true,
-              backgroundColor: bgColor,
-              bottom: TabBar(
-                controller: _tabController,
-                indicatorColor: Colors.blueAccent,
-                labelColor: Colors.blueAccent,
-                unselectedLabelColor: Colors.grey,
-                tabs: const [
-                  Tab(text: "Community Lessons"),
-                  Tab(text: "Q&A Forum"),
-                ],
-              ),
-              actions: [
-                // --- SEARCH ICON ---
-                IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: () {
-                    showSearch(
-                      context: context,
-                      delegate: CommunitySearchDelegate(
-                        currentUser: user,
-                        service: _service,
-                      ),
-                    );
-                  },
                 ),
               ],
             ),
-          ];
-        },
-        body: TabBarView(
-          controller: _tabController,
-          children: [_buildLessonFeed(user), _buildForumFeed(user)],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          if (_tabController.index == 0) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  "To share a lesson, go to your Library, open options, and select 'Share to Everyone'.",
-                ),
+            centerTitle: false,
+            floating: true,
+            pinned: true,
+            backgroundColor: bgColor,
+            bottom: TabBar(
+              controller: _tabController,
+              indicatorColor: Colors.blueAccent,
+              labelColor: Colors.blueAccent,
+              unselectedLabelColor: Colors.grey,
+              tabs: const [
+                Tab(text: "Community Lessons"),
+                Tab(text: "Q&A Forum"),
+              ],
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: () {
+                  showSearch(
+                    context: context,
+                    delegate: CommunitySearchDelegate(
+                      currentUser: user,
+                      service: _service,
+                    ),
+                  );
+                },
               ),
-            );
-          } else {
-            _showCreatePostDialog(context, user);
-          }
-        },
-        label: Text(
-          _tabController.index == 0 ? "Share Lesson" : "Ask Question",
-        ),
-        icon: Icon(
-          _tabController.index == 0 ? Icons.share : Icons.question_answer,
-        ),
+            ],
+          ),
+        ];
+      },
+      body: TabBarView(
+        controller: _tabController,
+        children: [_buildLessonFeed(user), _buildForumFeed(user)],
       ),
-    );
-  }
+    ),
+    // Use ListenableBuilder to only rebuild the FAB
+    floatingActionButton: ListenableBuilder(
+      listenable: _tabController,
+      builder: (context, child) {
+        return _tabController.index == 1
+            ? FloatingActionButton.extended(
+                onPressed: () => _showCreatePostDialog(context, user),
+                label: const Text("Ask Question"),
+                icon: const Icon(Icons.question_answer),
+              )
+            : const SizedBox.shrink(); // Return empty widget instead of null
+      },
+    ),
+  );
+}
 
   // --- TAB 1: SHARED LESSONS ---
   Widget _buildLessonFeed(UserModel user) {

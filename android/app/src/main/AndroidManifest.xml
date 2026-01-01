@@ -1,12 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"  xmlns:tools="http://schemas.android.com/tools">
    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-<!-- For Android 14+ -->
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
 <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
+    <uses-permission android:name="android.permission.BLUETOOTH"/>
 <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
 
 <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -46,6 +47,10 @@
         android:label="Linguaflow"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+          <!-- 2. LiveKit Foreground Service (KEEPS APP ALIVE) -->
+       <service android:name="com.livekit.flutter.LiveKitService"
+                android:foregroundServiceType="microphone|camera"
+                android:exported="false" />
         <activity
             android:name="com.ryanheise.audioservice.AudioServiceActivity"
             android:exported="true"

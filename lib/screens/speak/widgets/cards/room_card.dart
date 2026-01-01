@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:dotted_border/dotted_border.dart'; 
+import 'package:dotted_border/dotted_border.dart';
+import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart'; 
 import 'package:livekit_client/livekit_client.dart';
 
 // 1. UPDATED BLOC IMPORTS
@@ -15,7 +16,6 @@ import 'package:linguaflow/blocs/speak/room/room_event.dart';
 // Models & Services
 import 'package:linguaflow/models/speak/room_member.dart';
 import 'package:linguaflow/models/speak/speak_models.dart'; // Barrel file
-import 'package:linguaflow/screens/speak/widgets/active_room_screen.dart';
 import 'package:linguaflow/services/speak/speak_service.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 
@@ -392,44 +392,53 @@ class RoomCard extends StatelessWidget {
     );
   }
 
-  // --- 4. LOGIC UPDATED TO USE RoomBloc ---
-  Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
+ Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
+    // 1. Show Loading Indicator
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
+
     try {
+      // 2. Get Token & Connect to LiveKit
       final token = await SpeakService().getLiveKitToken(
         roomData.id,
         FirebaseAuth.instance.currentUser?.displayName ?? "Guest",
       );
+
       final livekitRoom = Room();
+      
+      // Note: Ideally, store this URL in a constant/env file
       await livekitRoom.connect(
         'wss://linguaflow-7eemmnrq.livekit.cloud',
         token,
       );
-      if (context.mounted) {
-        // USE RoomBloc
-        context.read<RoomBloc>().add(RoomJoined(livekitRoom));
-        // Optional: Trigger JoinRoomEvent to update Firestore (if not handled by RoomJoined)
-        context.read<RoomBloc>().add(JoinRoomEvent(roomData));
 
+      if (context.mounted) {
+        // --- 3. ACTIVATE THE GLOBAL OVERLAY ---
+        // This makes the room appear instantly on top of everything
+        RoomGlobalManager().joinRoom(livekitRoom, roomData);
+
+        // --- 4. SYNC WITH FIRESTORE (BLOC) ---
+        // This tells the backend "User X has joined Room Y"
+        context.read<RoomBloc>().add(JoinRoomEvent(roomData));
+        
+        // (Optional) If your Bloc needs the LiveKit object for internal logic:
+        // context.read<RoomBloc>().add(RoomJoined(livekitRoom));
+
+        // 5. Hide Loading Dialog
         Navigator.pop(context);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                ActiveRoomScreen(roomData: roomData, livekitRoom: livekitRoom),
-          ),
-        );
+        
+        // REMOVED: Navigator.push(...) 
+        // We no longer navigate to a new screen. The Overlay handles the UI now.
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error joining room: $e")),
+        );
       }
     }
   }

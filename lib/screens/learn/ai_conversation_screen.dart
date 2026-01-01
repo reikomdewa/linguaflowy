@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io'; // Required for SocketException
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_gemini/flutter_gemini.dart' as gem;
 // CHANGED: Imported flutter_markdown_plus instead of flutter_markdown
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:linguaflow/core/env.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 
 class AiConversationScreen extends StatefulWidget {
@@ -30,13 +30,12 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
   }
 
   void _initializeGemini() {
-    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    final apiKey = Env.geminiApiKey;
 
-    if (apiKey != null && apiKey.isNotEmpty) {
-      gem.Gemini.init(apiKey: apiKey);
-    }
+    gem.Gemini.init(apiKey: apiKey);
 
-    final systemPrompt = '''
+    final systemPrompt =
+        '''
 You are a language tutor.
 Context: User just learned "${widget.lesson.title}" (${widget.lesson.type}).
 Goal: Roleplay a scenario related to this topic.
@@ -48,10 +47,9 @@ INSTRUCTIONS:
 ''';
 
     setState(() {
-      _chats.add(gem.Content(
-        role: 'user',
-        parts: [gem.Part.text(systemPrompt)],
-      ));
+      _chats.add(
+        gem.Content(role: 'user', parts: [gem.Part.text(systemPrompt)]),
+      );
     });
 
     // Send the initial trigger using the robust function
@@ -65,18 +63,23 @@ INSTRUCTIONS:
 
     try {
       // 1. Set a Timeout
-      final response = await gem.Gemini.instance.chat(_chats)
+      final response = await gem.Gemini.instance
+          .chat(_chats)
           .timeout(const Duration(seconds: 20));
 
       if (!mounted) return;
 
       // 2. Validate Response Content
-      if (response != null && response.output != null && response.output!.isNotEmpty) {
+      if (response != null &&
+          response.output != null &&
+          response.output!.isNotEmpty) {
         setState(() {
-          _chats.add(gem.Content(
-            role: 'model',
-            parts: [gem.Part.text(response.output!)],
-          ));
+          _chats.add(
+            gem.Content(
+              role: 'model',
+              parts: [gem.Part.text(response.output!)],
+            ),
+          );
           _isLoading = false;
         });
         _scrollToBottom();
@@ -84,7 +87,6 @@ INSTRUCTIONS:
         // 3. Handle Empty Response (AI returned OK but no text)
         throw Exception("Empty response from AI");
       }
-
     } on TimeoutException {
       _handleError("The AI took too long to respond. Please try again.");
     } on SocketException {
@@ -104,13 +106,10 @@ INSTRUCTIONS:
     if (message.isEmpty) return;
 
     setState(() {
-      _chats.add(gem.Content(
-        role: 'user',
-        parts: [gem.Part.text(message)],
-      ));
+      _chats.add(gem.Content(role: 'user', parts: [gem.Part.text(message)]));
       _textController.clear();
     });
-    
+
     // Call the robust function
     await _submitToGemini();
   }
@@ -124,7 +123,8 @@ INSTRUCTIONS:
     debugPrint("Gemini Error: $errorString");
 
     if (errorString.contains('429')) {
-      userMessage = "High traffic limit reached. Please wait a minute before sending another message.";
+      userMessage =
+          "High traffic limit reached. Please wait a minute before sending another message.";
     } else if (errorString.contains('400') || errorString.contains('403')) {
       userMessage = "Configuration error (API Key). Please contact support.";
     } else if (errorString.contains('500') || errorString.contains('503')) {
@@ -138,7 +138,7 @@ INSTRUCTIONS:
 
   void _handleError(String msg) {
     if (!mounted) return;
-    
+
     ScaffoldMessenger.of(context).hideCurrentSnackBar(); // Hide previous errors
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -156,7 +156,7 @@ INSTRUCTIONS:
           textColor: Colors.white,
           onPressed: () {
             // Logic to retry the last request
-            _submitToGemini(); 
+            _submitToGemini();
           },
         ),
       ),
@@ -181,7 +181,9 @@ INSTRUCTIONS:
     final bgColor = isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5);
     final cardColor = isDark ? const Color(0xFF1E272E) : Colors.white;
 
-    final visibleChats = _chats.length > 1 ? _chats.sublist(1) : <gem.Content>[];
+    final visibleChats = _chats.length > 1
+        ? _chats.sublist(1)
+        : <gem.Content>[];
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -213,7 +215,10 @@ INSTRUCTIONS:
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF263238) : Colors.grey[300],
                     borderRadius: BorderRadius.circular(12),
@@ -222,8 +227,12 @@ INSTRUCTIONS:
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
-                        width: 10, height: 10, 
-                        child: CircularProgressIndicator(strokeWidth: 2, color: isDark ? Colors.white : Colors.black)
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: isDark ? Colors.white : Colors.black,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       const Text("Thinking...", style: TextStyle(fontSize: 12)),
@@ -243,7 +252,7 @@ INSTRUCTIONS:
                     child: TextField(
                       controller: _textController,
                       textCapitalization: TextCapitalization.sentences,
-                      enabled: !_isLoading, 
+                      enabled: !_isLoading,
                       decoration: InputDecoration(
                         hintText: "Type in target language...",
                         filled: true,
@@ -252,14 +261,20 @@ INSTRUCTIONS:
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
                       ),
                       onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: Icon(Icons.send, color: _isLoading ? Colors.grey : const Color(0xFF42A5F5)),
+                    icon: Icon(
+                      Icons.send,
+                      color: _isLoading ? Colors.grey : const Color(0xFF42A5F5),
+                    ),
                     onPressed: _isLoading ? null : _sendMessage,
                   ),
                 ],
@@ -272,10 +287,12 @@ INSTRUCTIONS:
   }
 
   Widget _buildMessageBubble(gem.Content content, bool isUser, bool isDark) {
-    final text = content.parts
+    final text =
+        content.parts
             ?.whereType<gem.TextPart>()
             .map((part) => part.text)
-            .join(" ") ?? "";
+            .join(" ") ??
+        "";
 
     final textColor = isUser
         ? Colors.white
@@ -286,7 +303,9 @@ INSTRUCTIONS:
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+        ),
         decoration: BoxDecoration(
           color: isUser
               ? const Color(0xFF42A5F5)
@@ -296,7 +315,7 @@ INSTRUCTIONS:
         // NOTE: This widget now comes from flutter_markdown_plus
         child: MarkdownBody(
           data: text,
-          selectable: true, 
+          selectable: true,
           styleSheet: MarkdownStyleSheet(
             p: TextStyle(color: textColor, fontSize: 16, height: 1.4),
             strong: TextStyle(color: textColor, fontWeight: FontWeight.bold),

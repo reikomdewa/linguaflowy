@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 // BLOCS
@@ -18,7 +19,6 @@ import 'package:linguaflow/blocs/speak/room/room_event.dart';
 // MODELS & SERVICES
 import 'package:linguaflow/models/speak/room_member.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
-import 'package:linguaflow/screens/speak/widgets/active_room_screen.dart';
 import 'package:linguaflow/services/speak/speak_service.dart';
 import 'package:linguaflow/services/speak/private_chat_service.dart';
 import 'package:linguaflow/screens/inbox/private_chat_screen.dart';
@@ -423,15 +423,20 @@ class TutorCard extends StatelessWidget {
     BuildContext context, {
     String? sessionPassword,
   }) async {
+    // 1. Show Loading
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
+
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) throw Exception("User not logged in");
+
       final bool isHost = currentUser.uid == tutor.userId;
+
+      // 2. Create the Room Wrapper (Preserved your logic)
       final tutorRoomWrapper = ChatRoom(
         id: tutor.id,
         hostId: tutor.userId,
@@ -459,10 +464,14 @@ class TutorCard extends StatelessWidget {
         tags: tutor.specialties,
         roomType: 'tutor_session',
       );
+
+      // 3. Get Token
       final token = await SpeakService().getLiveKitToken(
         tutorRoomWrapper.id,
         currentUser.displayName ?? "Student",
       );
+
+      // 4. Sync with Firestore (Preserved your logic)
       if (isHost) {
         await FirebaseFirestore.instance
             .collection('rooms')
@@ -483,23 +492,26 @@ class TutorCard extends StatelessWidget {
               'memberCount': FieldValue.increment(1),
             });
       }
+
+      // 5. Connect to LiveKit
       final livekitRoom = Room();
       await livekitRoom.connect(
         'wss://linguaflow-7eemmnrq.livekit.cloud',
         token,
       );
+
       if (context.mounted) {
+        // --- 6. ACTIVATE GLOBAL OVERLAY ---
+        // Pass the LiveKit connection and the Tutor Room data to the manager
+        RoomGlobalManager().joinRoom(livekitRoom, tutorRoomWrapper);
+
+        // Update Bloc state (optional, but good for internal tracking)
         context.read<RoomBloc>().add(RoomJoined(livekitRoom));
+
+        // 7. Hide Loading Dialog
         Navigator.pop(context);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ActiveRoomScreen(
-              roomData: tutorRoomWrapper,
-              livekitRoom: livekitRoom,
-            ),
-          ),
-        );
+
+        // Removed: Navigator.push(...) -> The Overlay handles the UI now.
       }
     } catch (e) {
       if (context.mounted) {

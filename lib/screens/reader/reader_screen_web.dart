@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
@@ -146,7 +145,6 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     LocalLemmatizer().load(widget.lesson.language);
-    _initGemini();
     _startVocabularyStream();
     _loadUserPreferences();
     _determineMediaType();
@@ -306,10 +304,6 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     }
   }
 
-  void _initGemini() {
-    final envKey = dotenv.env['GEMINI_API_KEY'];
-    if (envKey != null && envKey.isNotEmpty) Gemini.init(apiKey: envKey);
-  }
 
   // --- HELPER: START/STOP TRACKING ---
   void _startListeningTracker() {
@@ -485,7 +479,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     if (currentPageIndices.isNotEmpty) _bookPages.add(currentPageIndices);
   }
 
-  void _initializeYoutubePlayer(String url) {
+void _initializeYoutubePlayer(String url) {
     String? videoId;
     if (widget.lesson.id.startsWith('yt_audio_')) {
       videoId = widget.lesson.id.replaceAll('yt_audio_', '');
@@ -499,17 +493,17 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
 
     if (videoId != null) {
       if (kIsWeb) {
-        // --- WEB INIT ---
+        // --- WEB STRICT CONFIGURATION ---
         _webYoutubeController = web.YoutubePlayerController.fromVideoId(
           videoId: videoId,
           params: const web.YoutubePlayerParams(
-            showControls: false,
-            showFullscreenButton: false,
-            mute: false,
-            playsInline: true,
+            showControls: false, // Hides bottom bar
+            showFullscreenButton: false, // Hides FS button
+            playsInline: true, // <--- CRITICAL: Prevents native player override
+            showVideoAnnotations: false, // Hides info cards
             strictRelatedVideos: true,
-            showVideoAnnotations: false,
-            // modestBranding: true,  <-- REMOVED (Not supported in v5+)
+            mute: false,
+            // 'color': 'white' // Sometimes helps force "Modest" mode
           ),
         );
 
@@ -519,7 +513,8 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
             setState(() {
               _isPlaying = isPlaying;
               if (isPlaying) {
-                _showControls = true;
+                // When playing starts, we can show OUR controls
+                _showControls = true; 
                 _resetControlsTimer();
               }
             });
@@ -529,20 +524,18 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
           }
         });
       } else {
-        // --- MOBILE INIT ---
+        // --- MOBILE APP CONFIGURATION ---
         _mobileYoutubeController = mobile.YoutubePlayerController(
           initialVideoId: videoId,
           flags: const mobile.YoutubePlayerFlags(
             autoPlay: false,
             mute: false,
             enableCaption: false,
-            hideControls: true,
+            hideControls: true, 
             controlsVisibleAtStart: false,
             disableDragSeek: true,
-            loop: false,
-            isLive: false,
+      
             forceHD: false,
-            // modestBranding: true, <-- REMOVED (Not supported in mobile package)
           ),
         );
       }
@@ -1945,8 +1938,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       ],
     );
   }
-
-  Widget _buildMobilePlayerContainer() {
+Widget _buildMobilePlayerContainer() {
     return Container(
       width: double.infinity,
       color: Colors.black,
@@ -1980,35 +1972,37 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
           : AspectRatio(
               aspectRatio: 16 / 9,
               child: Stack(
+                fit: StackFit.expand, // Ensures video fills the box
                 children: [
-                  // 1. VIDEO PLAYER (Wrapped in IgnorePointer)
-                  // This is the "Nuclear Option". It prevents the WebView from EVER receiving a touch.
-                  // This ensures the YouTube Title Bar / Channel Icon NEVER appears.
+                  // 1. VIDEO PLAYER
                   Visibility(
                     visible: !_isLimitDialogOpen,
                     maintainState: true,
                     maintainAnimation: true,
                     maintainSize: true,
                     child: IgnorePointer(
-                      ignoring: true, // <--- BLOCKS ALL TOUCHES TO YOUTUBE
+                      // WEB LOGIC:
+                      // If Playing: Shield UP (true). User taps YOUR controls.
+                      // If Paused: Shield DOWN (false). User taps YouTube Play Button.
+                      ignoring: !kIsWeb || _isPlaying, 
                       child: _buildSharedPlayer(),
                     ),
                   ),
 
-                  // 2. TAP & SWIPE DETECTOR (The Controller)
-                  // Since the player ignores touches, this layer catches EVERYTHING.
-                  Positioned.fill(
-                    child: GestureDetector(
-                      onTap: _toggleControls, // Taps toggle our controls
-                      onVerticalDragEnd:
-                          _handleVerticalSwipe, // Swipes handle fullscreen
-                      behavior: HitTestBehavior
-                          .translucent, // Catches clicks on transparent areas
-                      child: Container(color: Colors.transparent),
+                  // 2. TAP DETECTOR (Mobile Native Only)
+                  // On Web, we let the IFrame handle the "Start" tap.
+                  if (!kIsWeb)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        onTap: _toggleControls,
+                        onVerticalDragEnd: _handleVerticalSwipe,
+                        behavior: HitTestBehavior.translucent,
+                        child: Container(color: Colors.transparent),
+                      ),
                     ),
-                  ),
 
-                  // 3. CONTROLS OVERLAY
+                  // 3. YOUR CUSTOM CONTROLS
+                  // We show these ON TOP of the YouTube player.
                   if (!_isLimitDialogOpen)
                     IgnorePointer(
                       ignoring: !_showControls,
@@ -2062,14 +2056,15 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
             ),
 
             // 2. OPAQUE SHIELD (The Fix for Title/Recommendations)
-            // 'opaque' blocks the mouse from reaching the iframe.
-            // This prevents the YouTube Title bar from showing on hover.
-            if (!kIsWeb || (kIsWeb && !_isLimitDialogOpen))
+            // FIX: Only enable this shield on Native Mobile (!kIsWeb).
+            // On Web, enabling this shield blocks the "Click to Play" event required
+            // by mobile browsers (Safari/Chrome).
+            if (!kIsWeb)
               Positioned.fill(
                 child: GestureDetector(
                   onTap: _toggleControls,
                   onVerticalDragEnd: _handleVerticalSwipe,
-                  behavior: HitTestBehavior.opaque, // <--- CRITICAL FIX
+                  behavior: HitTestBehavior.opaque,
                   child: Container(color: Colors.transparent),
                 ),
               ),
@@ -2123,8 +2118,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
                 ),
               ),
 
-            // 5. REPLAY BUTTON (Floating Left - Single Button)
-            // Sits ON TOP of the shield and controls
+            // 5. REPLAY BUTTON
             if (_showControls && !_isLimitDialogOpen)
               Positioned(
                 left: 30,
@@ -2194,8 +2188,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     }
   }
 
-  // ... [Keep existing _buildSharedPlayer, _buildYoutubeAudioControls, _formatDuration, _replayPreviousSentence, _buildInteractiveSubtitleOverlay] ...
-  Widget _buildSharedPlayer() {
+Widget _buildSharedPlayer() {
     Widget playerWidget;
 
     if (_isLocalMedia && _localVideoController != null) {
@@ -2204,10 +2197,16 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
         controls: NoVideoControls,
       );
     } else if (kIsWeb && _webYoutubeController != null) {
-      // --- WEB PLAYER WIDGET ---
-      playerWidget = web.YoutubePlayer(
-        controller: _webYoutubeController!,
-        aspectRatio: 16 / 9,
+      // --- WEB PLAYER WIDGET FIX ---
+      playerWidget = SizedBox(
+        width: double.infinity,  // Force full width
+        height: double.infinity, // Force full height
+        child: web.YoutubePlayer(
+          controller: _webYoutubeController!,
+          // We don't strictly need aspectRatio here because the parent defines it,
+          // but keeping it ensures the iframe internal calculation is correct.
+          aspectRatio: 16 / 9, 
+        ),
       );
     } else if (!kIsWeb && _mobileYoutubeController != null) {
       // --- MOBILE PLAYER WIDGET ---

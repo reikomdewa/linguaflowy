@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "171340794740-ukebf9pi3p3dcdp1pd7daju8gtldsnmp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.reikom.linguaflow",
+            "certificate_hash": "915c6b820cf9bd0df286cfc396c54f3a0040d9d8"
+          }
+        },
+        {
           "client_id": "171340794740-cf60kh5rrv16eukghhf4560eg2tkmf6e.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -37,6 +45,13 @@
             {
               "client_id": "171340794740-cf60kh5rrv16eukghhf4560eg2tkmf6e.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "171340794740-ar15ji16fnekohhhulunjgjc3net1a3m.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.reikom.linguaflow"
+              }
             }
           ]
         }

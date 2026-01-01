@@ -10,6 +10,7 @@ import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/utils/utils.dart';
+import 'package:linguaflow/widgets/buttons/download_app_button.dart';
 
 class GuidedCoursesSection extends StatefulWidget {
   final List<LessonModel> guidedLessons;
@@ -142,7 +143,7 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
     }
 
     final displayLessons = deduplicateSeries(rawLessons);
-
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return LayoutBuilder(
       builder: (context, constraints) {
         final bool isDesktop = constraints.maxWidth > 800;
@@ -162,6 +163,7 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
                     ),
                   ),
                 ),
+                isDesktop ?  buildAppDownloadButton(isDark, isDesktop, context) : SizedBox.shrink(),
                 isDesktop ? SizedBox.shrink() : PracticeBannerButton(),
               ],
             ),

@@ -4,7 +4,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:just_audio_background/just_audio_background.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // --- BLOCS ---
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -18,8 +17,11 @@ import 'package:linguaflow/blocs/speak/room/room_event.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
+import 'package:linguaflow/core/globals.dart';
 import 'package:linguaflow/firebase_options.dart';
+import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/login/web_login_layout.dart';
+import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/live_room_overlay.dart';
 
 // --- SERVICES & REPOSITORIES ---
 import 'package:linguaflow/services/auth_service.dart';
@@ -31,7 +33,6 @@ import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/services/translation_service.dart';
 import 'package:linguaflow/services/user_service.dart';
 import 'package:linguaflow/services/vocabulary_service.dart';
-import 'package:linguaflow/utils/centered_views.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:upgrader/upgrader.dart';
 
@@ -39,20 +40,19 @@ import 'package:upgrader/upgrader.dart';
 import 'package:linguaflow/screens/login/login_screen.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'core/env.dart';
 
 void main() async {
+  Env.validate();
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform, // <--- Add this line
   );
   MediaKit.ensureInitialized();
 
-  // 1. Load Env & Init Gemini
-  await dotenv.load(fileName: ".env");
-  final apiKey = dotenv.env['GEMINI_API_KEY'];
-  if (apiKey != null) {
-    Gemini.init(apiKey: apiKey);
-  }
+  final apiKey = Env.geminiApiKey;
+
+  Gemini.init(apiKey: apiKey);
 
   // 2. Init Firebase
   await Firebase.initializeApp();
@@ -135,6 +135,7 @@ class LinguaflowApp extends StatelessWidget {
             const Color darkGreyBorder = Color(0xFF262626);
             return MaterialApp(
               title: 'LinguaFlow',
+               navigatorKey: navigatorKey,
               debugShowCheckedModeBanner: false,
               themeMode: settings.themeMode,
 
@@ -232,6 +233,21 @@ class LinguaflowApp extends StatelessWidget {
                 ),
               ),
               // home: const AuthGate(),
+               builder: (context, child) {
+                return Stack(
+                  children: [
+                    // A. The Main App Navigation (The Screens)
+                    // We wrap 'child' which represents the Navigator
+                    if (child != null) child,
+
+                    // B. Global Audio Player 
+                    const AudioPlayerOverlay(),
+
+                    // C. Global Live Room 
+                    const LiveRoomOverlay(),
+                  ],
+                );
+              },
               initialRoute: '',
 
               routes: {
@@ -268,9 +284,6 @@ class AuthGate extends StatelessWidget {
           );
         }
 
-        // 3. Unauthenticated OR Error -> Show Login
-        // We include AuthError here so the Login Screen stays visible
-        // and allows the SnackBar to show the specific error message.
         if (state is AuthUnauthenticated ||
             state is AuthError ||
             state is AuthMessage) {
@@ -282,10 +295,11 @@ class AuthGate extends StatelessWidget {
           }
         }
 
-        // 4. Initial State -> Show Spinner (Fixes blank screen on startup)
-        // If the app is just starting and hasn't checked auth yet.
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       },
     );
   }
 }
+
+// flutter build web --dart-define-from-file=config.json
+// flutter run -d chrome --dart-define-from-file=config.json

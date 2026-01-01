@@ -10,16 +10,15 @@ import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/auth_service.dart';
 import 'package:linguaflow/utils/logger.dart';
 import 'package:linguaflow/utils/firebase_utils.dart'; // Assuming this is correct
-import 'package:linguaflow/services/user_service.dart'; 
+import 'package:linguaflow/services/user_service.dart';
 // ADD THIS IMPORT
-import 'package:linguaflow/utils/firebase_utils.dart';
 
 import 'auth_event.dart';
 import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthService authService;
-   final UserService _userService; 
+  final UserService _userService;
   DateTime? _lastEmailSentTime;
   final _storage = const FlutterSecureStorage(); // 1. Init Storage
   static const String _gumroadProductId = "uIq5F1GwaxHuVmADcfcbIw==";
@@ -40,7 +39,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthIncrementLessonsCompleted>(_onAuthIncrementLessonsCompleted);
     on<AuthUpdateXP>(_onAuthUpdateXP);
     //Social helpers
-      on<AuthAddFriend>(_onAuthAddFriend);
+    on<AuthAddFriend>(_onAuthAddFriend);
     on<AuthRemoveFriend>(_onAuthRemoveFriend);
     on<AuthFollowUser>(_onAuthFollowUser);
     on<AuthUnfollowUser>(_onAuthUnfollowUser);
@@ -282,7 +281,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
     emit(AuthUnauthenticated());
   }
-Future<void> _onAuthLoginRequested(
+
+  Future<void> _onAuthLoginRequested(
     AuthLoginRequested event,
     Emitter<AuthState> emit,
   ) async {
@@ -314,8 +314,8 @@ Future<void> _onAuthLoginRequested(
     } on FirebaseAuthException catch (e) {
       // Handle specific Firebase errors
       // 'invalid-credential' is the new standard error for Email Enumeration Protection
-      if (e.code == 'invalid-credential' || 
-          e.code == 'user-not-found' || 
+      if (e.code == 'invalid-credential' ||
+          e.code == 'user-not-found' ||
           e.code == 'wrong-password') {
         emit(const AuthError("Invalid email or password."));
       } else if (e.code == 'invalid-email') {
@@ -344,7 +344,6 @@ Future<void> _onAuthLoginRequested(
       UserModel? user = await authService.signInWithGoogle();
 
       if (user != null) {
-
         user = await _checkAndUpateStreak(
           user,
         ); // Good to update streak here too
@@ -672,8 +671,6 @@ Future<void> _onAuthLoginRequested(
     return updatedUser;
   }
 
-
-
   ///social
   // --- SOCIAL HANDLERS ---
 
@@ -683,13 +680,13 @@ Future<void> _onAuthLoginRequested(
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
-      
+
       // 1. Update Local State (Optimistic UI)
       final updatedFriends = List<String>.from(currentUser.friends);
       if (!updatedFriends.contains(event.friendId)) {
         updatedFriends.add(event.friendId);
       }
-      
+
       final updatedUser = currentUser.copyWith(friends: updatedFriends);
       emit(AuthAuthenticated(updatedUser));
 

@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_event.dart';
+import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 // --- BLOC IMPORTS ---
@@ -18,7 +19,6 @@ import 'package:linguaflow/blocs/speak/speak_event.dart';
 // --- MODEL & SERVICE IMPORTS ---
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/models/speak/chat_room.dart';
-import 'package:linguaflow/screens/speak/widgets/active_room_screen.dart';
 import 'package:linguaflow/services/speak/speak_service.dart';
 
 // --- HELPER IMPORT ---
@@ -337,8 +337,8 @@ class _LiveNotificationBannerState extends State<LiveNotificationBanner>
       ),
     );
   }
-
-  Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
+Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
+    // 1. Show Loading Indicator
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -346,35 +346,37 @@ class _LiveNotificationBannerState extends State<LiveNotificationBanner>
     );
 
     try {
-      // REPLACE WITH REAL LIVEKIT URL
       const liveKitUrl = 'wss://linguaflow-7eemmnrq.livekit.cloud';
 
       final currentUser = firebase_auth.FirebaseAuth.instance.currentUser;
       final username = currentUser?.displayName ?? "Guest";
 
+      // 2. Get Token
       final token = await SpeakService().getLiveKitToken(roomData.id, username);
 
+      // 3. Connect LiveKit
       final room = Room();
       final options = const RoomOptions(adaptiveStream: true, dynacast: true);
 
       await room.connect(liveKitUrl, token, roomOptions: options);
 
       if (context.mounted) {
-        Navigator.pop(context);
-        // Using SpeakBloc (Global) instead of RoomBloc
+        // --- 4. ACTIVATE GLOBAL OVERLAY ---
+        // Pass the connected room to the manager to show the TikTok-style overlay
+        RoomGlobalManager().joinRoom(room, roomData);
+
+        // 5. Update Bloc (Keep state in sync)
         context.read<RoomBloc>().add(RoomJoined(room));
 
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                ActiveRoomScreen(roomData: roomData, livekitRoom: room),
-          ),
-        );
+        // 6. Hide Loading Dialog
+        Navigator.pop(context);
+
+        // REMOVED: Navigator.push(...) 
+        // The Overlay now handles the UI.
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context); // Dismiss loading
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Failed to join: $e")));
