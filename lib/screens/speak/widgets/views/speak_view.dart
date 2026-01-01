@@ -12,10 +12,10 @@ import 'package:linguaflow/blocs/speak/tutor/tutor_state.dart';
 import 'package:linguaflow/models/private_chat_models.dart';
 import 'package:linguaflow/screens/inbox/inbox_screen.dart';
 import 'package:linguaflow/services/speak/private_chat_service.dart';
-import 'package:livekit_client/livekit_client.dart'; // <--- 1. ADDED THIS IMPORT
+import 'package:livekit_client/livekit_client.dart';
 
 // Model and Utils imports
-import 'package:linguaflow/models/speak/speak_models.dart'; // Barrel file
+import 'package:linguaflow/models/speak/speak_models.dart';
 import 'package:linguaflow/screens/speak/create_tutor_profile_screen.dart';
 import 'package:linguaflow/screens/speak/widgets/filter_bottom_sheet.dart';
 import 'package:linguaflow/screens/speak/widgets/speak_header.dart';
@@ -55,6 +55,20 @@ class _SpeakViewState extends State<SpeakView> {
       context.read<RoomBloc>().add(const FilterRooms(null));
       context.read<TutorBloc>().add(const FilterTutors(null));
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // NEW: Refresh Handler
+  // ---------------------------------------------------------------------------
+  Future<void> _onRefresh() async {
+    // 1. Trigger events to reload data.
+    // CHECK YOUR EVENT NAMES: Ensure 'FetchRooms' and 'FetchTutors' exist in your event files.
+    // If you use 'LoadRooms' or 'GetRooms', change them here.
+    context.read<RoomBloc>().add(const LoadRooms());
+    context.read<TutorBloc>().add(const LoadTutors());
+
+    // Optional: Add a small delay for better UI feel if your bloc events are fire-and-forget
+    await Future.delayed(const Duration(milliseconds: 800));
   }
 
   @override
@@ -236,6 +250,7 @@ class _SpeakViewState extends State<SpeakView> {
       builder: (context, roomState) {
         return BlocBuilder<TutorBloc, TutorState>(
           builder: (context, tutorState) {
+            // Keep loading separate so it doesn't show an empty list immediately
             if (roomState.status == RoomStatus.loading &&
                 tutorState.status == TutorStatus.loading &&
                 roomState.allRooms.isEmpty) {
@@ -257,20 +272,35 @@ class _SpeakViewState extends State<SpeakView> {
               return dateB.compareTo(dateA);
             });
 
+            // Make empty state scrollable to allow refreshing
             if (feedItems.isEmpty) {
-              return const Center(child: Text("No suggestions found."));
+              return RefreshIndicator(
+                onRefresh: _onRefresh,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.7,
+                    child: const Center(child: Text("No suggestions found.")),
+                  ),
+                ),
+              );
             }
 
-            return ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-              itemCount: feedItems.length + 1,
-              itemBuilder: (context, index) {
-                if (index == 0) return _buildSuggestedHeader(context, user);
-                final item = feedItems[index - 1];
+            return RefreshIndicator(
+              onRefresh: _onRefresh,
+              child: ListView.builder(
+                // Ensure list is always scrollable for pull-to-refresh
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+                itemCount: feedItems.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) return _buildSuggestedHeader(context, user);
+                  final item = feedItems[index - 1];
 
-                if (item is ChatRoom) return RoomCard(room: item);
-                return TutorCard(tutor: item as Tutor);
-              },
+                  if (item is ChatRoom) return RoomCard(room: item);
+                  return TutorCard(tutor: item as Tutor);
+                },
+              ),
             );
           },
         );
@@ -284,14 +314,30 @@ class _SpeakViewState extends State<SpeakView> {
         if (state.status == TutorStatus.loading && state.allTutors.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
+
+        // Make empty state scrollable to allow refreshing
         if (state.filteredTutors.isEmpty) {
-          return const Center(child: Text("No tutors found"));
+          return RefreshIndicator(
+            onRefresh: _onRefresh,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.7,
+                child: const Center(child: Text("No tutors found")),
+              ),
+            ),
+          );
         }
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-          itemCount: state.filteredTutors.length,
-          itemBuilder: (context, index) =>
-              TutorCard(tutor: state.filteredTutors[index]),
+
+        return RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+            itemCount: state.filteredTutors.length,
+            itemBuilder: (context, index) =>
+                TutorCard(tutor: state.filteredTutors[index]),
+          ),
         );
       },
     );
@@ -303,14 +349,30 @@ class _SpeakViewState extends State<SpeakView> {
         if (state.status == RoomStatus.loading && state.allRooms.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
+
+        // Make empty state scrollable to allow refreshing
         if (state.filteredRooms.isEmpty) {
-          return const Center(child: Text("No active rooms"));
+          return RefreshIndicator(
+            onRefresh: _onRefresh,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.7,
+                child: const Center(child: Text("No active rooms")),
+              ),
+            ),
+          );
         }
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-          itemCount: state.filteredRooms.length,
-          itemBuilder: (context, index) =>
-              RoomCard(room: state.filteredRooms[index]),
+
+        return RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+            itemCount: state.filteredRooms.length,
+            itemBuilder: (context, index) =>
+                RoomCard(room: state.filteredRooms[index]),
+          ),
         );
       },
     );
@@ -382,11 +444,12 @@ class _SpeakViewState extends State<SpeakView> {
 
                   if (snapshot.hasData) {
                     final chats = snapshot.data!;
-                    
+
                     for (var chat in chats) {
                       // Check if I am the recipient (not the sender)
-                      bool isLastMsgFromMe = chat.lastSenderId == currentUser.id;
-                      
+                      bool isLastMsgFromMe =
+                          chat.lastSenderId == currentUser.id;
+
                       // If the message is NOT from me, add its unread count to total
                       if (!isLastMsgFromMe) {
                         totalUnreadMessages += chat.unreadCount;
@@ -396,7 +459,9 @@ class _SpeakViewState extends State<SpeakView> {
 
                   return Badge(
                     isLabelVisible: totalUnreadMessages > 0,
-                    label: Text(totalUnreadMessages > 99 ? '99+' : '$totalUnreadMessages'),
+                    label: Text(
+                      totalUnreadMessages > 99 ? '99+' : '$totalUnreadMessages',
+                    ),
                     backgroundColor: Colors.red,
                     offset: const Offset(4, -4),
                     child: Icon(
@@ -485,7 +550,6 @@ class _SpeakViewState extends State<SpeakView> {
     );
   }
 
-  // 3. UPDATED SIGNATURE: Accepts LiveKit Room
   void _showRoomChat(BuildContext context, Room room) {
     showModalBottomSheet(
       context: context,

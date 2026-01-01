@@ -49,25 +49,26 @@ exports.handler = async function(event, context) {
     if (!roomName) return { statusCode: 200, body: 'No room name' };
 
     const roomRef = db.collection('rooms').doc(roomName);
-
-    // LOGGING TO CONFIRM FIX
-    // This variable "numParticipants" is the most important part
     const numParticipants = webhookEvent.room.numParticipants || 0;
 
     console.log(`Event: ${webhookEvent.event} | Room: ${roomName} | Count: ${numParticipants}`);
 
     if (webhookEvent.event === 'room_finished') {
-      console.log(`🗑️ Room ${roomName} finished. Deleting...`);
-      await roomRef.delete();
-      console.log(`✅ Room ${roomName} deleted.`);
+      // 🛑 CHANGED: Do NOT delete. Just mark as empty/inactive.
+      console.log(`🏁 Room ${roomName} finished. Marking as inactive...`);
+      await roomRef.update({
+        memberCount: 0,
+        isActive: false, // Optional: helpful flag for your frontend filtering
+        endedAt: admin.firestore.FieldValue.serverTimestamp()
+      }).catch(err => {
+         console.error(`⚠️ Update failed: ${err.message}`);
+      });
     } 
     else if (webhookEvent.event === 'participant_joined' || webhookEvent.event === 'participant_left') {
-      // SAFE UPDATE
       await roomRef.update({
         memberCount: numParticipants,
         lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
       }).catch(err => {
-         // Ignore if room is already deleted
          if (err.code !== 5) console.error(`⚠️ Update failed: ${err.message}`);
       });
     }

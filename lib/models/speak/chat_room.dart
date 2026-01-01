@@ -1,7 +1,6 @@
 import 'package:equatable/equatable.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <--- 1. ADD THIS IMPORT
-
-import 'room_member.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'room_member.dart';
 
 class ChatRoom extends Equatable {
   final String id;
@@ -20,8 +19,8 @@ class ChatRoom extends Equatable {
   final String? hostAvatarUrl;
   final List<RoomMember> members;
   final DateTime createdAt;
-  final DateTime? expireAt;       
-  final DateTime? lastUpdatedAt; 
+  final DateTime? expireAt;
+  final DateTime? lastUpdatedAt;
   final String? liveKitRoomId;
   final List<String> tags;
   final String roomType;
@@ -54,6 +53,7 @@ class ChatRoom extends Equatable {
     this.spotlightedUserId,
   });
 
+  // Helper getters for UI
   List<RoomMember> get displayMembers => members.take(10).toList();
   int get othersCount => memberCount > 10 ? memberCount - 10 : 0;
 
@@ -74,12 +74,9 @@ class ChatRoom extends Equatable {
       'hostName': hostName,
       'hostAvatarUrl': hostAvatarUrl,
       'liveKitRoomId': liveKitRoomId ?? id,
-      
-      // We still save as Int from Flutter side, but handle reading differently below
       'createdAt': createdAt.millisecondsSinceEpoch,
-      'expireAt': expireAt?.millisecondsSinceEpoch,       
+      'expireAt': expireAt?.millisecondsSinceEpoch,
       'lastUpdatedAt': lastUpdatedAt?.millisecondsSinceEpoch,
-
       'members': members.map((m) => m.toMap()).toList(),
       'tags': tags,
       'roomType': roomType,
@@ -89,11 +86,20 @@ class ChatRoom extends Equatable {
   }
 
   factory ChatRoom.fromMap(Map<String, dynamic> map, String id) {
-    // --- 2. ROBUST DATE PARSER HELPER ---
+    // --------------------------------------------------------
+    // DEBUGGING START
+    // --------------------------------------------------------
+    if (map['members'] != null) {
+      print('🔍 [ChatRoom Model] Parsing Room: "${map['title']}" ($id)');
+      print('   -> Raw members type: ${map['members'].runtimeType}');
+      print('   -> Raw members data: ${map['members']}');
+    }
+    // --------------------------------------------------------
+
     DateTime parseDate(dynamic val) {
-      if (val is Timestamp) return val.toDate(); // Handle Firestore Timestamp
-      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val); // Handle Legacy Int
-      return DateTime.now(); // Fallback
+      if (val is Timestamp) return val.toDate();
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+      return DateTime.now();
     }
 
     DateTime? parseNullableDate(dynamic val) {
@@ -102,7 +108,34 @@ class ChatRoom extends Equatable {
       if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
       return null;
     }
-    // ------------------------------------
+
+    List<RoomMember> parsedMembers = [];
+    if (map['members'] != null && map['members'] is List) {
+      try {
+        parsedMembers = (map['members'] as List).map((m) {
+          if (m == null) return null;
+          try {
+            if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
+            if (m is Map) return RoomMember.fromMap(Map<String, dynamic>.from(m));
+          } catch (e) {
+            print("⚠️ [ChatRoom Model] Skipping malformed member: $m | Error: $e");
+          }
+          return null;
+        })
+        .where((m) => m != null)
+        .cast<RoomMember>()
+        .toList();
+      } catch (e) {
+        print("❌ [ChatRoom Model] CRITICAL ERROR parsing members list: $e");
+        parsedMembers = [];
+      }
+    }
+
+    // --------------------------------------------------------
+    // DEBUGGING RESULT
+    // --------------------------------------------------------
+    print('   -> ✅ Successfully parsed ${parsedMembers.length} members.');
+    // --------------------------------------------------------
 
     return ChatRoom(
       id: id,
@@ -120,18 +153,10 @@ class ChatRoom extends Equatable {
       hostName: map['hostName'],
       hostAvatarUrl: map['hostAvatarUrl'],
       liveKitRoomId: map['liveKitRoomId'],
-      
-      // --- 3. USE THE HELPERS HERE ---
       createdAt: parseDate(map['createdAt']),
       expireAt: parseNullableDate(map['expireAt']),
       lastUpdatedAt: parseNullableDate(map['lastUpdatedAt']),
-      // -------------------------------
-
-      members: map['members'] != null
-          ? List<RoomMember>.from(
-              (map['members'] as List).map((m) => RoomMember.fromMap(m)),
-            )
-          : [],
+      members: parsedMembers,
       tags: List<String>.from(map['tags'] ?? []),
       roomType: map['roomType'] ?? 'audio',
       isActive: map['isActive'] ?? true,
@@ -140,48 +165,52 @@ class ChatRoom extends Equatable {
   }
 
   ChatRoom copyWith({
-    int? memberCount,
-    List<RoomMember>? members,
     String? title,
+    String? description,
+    String? language,
     String? level,
+    int? memberCount,
+    int? maxMembers,
+    List<RoomMember>? members,
     bool? isActive,
     String? spotlightedUserId,
     DateTime? lastUpdatedAt,
     DateTime? expireAt,
+    bool? isPaid,
+    bool? isPrivate,
+    String? hostName,
+    String? hostAvatarUrl,
+    String? liveKitRoomId,
   }) {
     return ChatRoom(
       id: id,
       hostId: hostId,
-      language: language,
       createdAt: createdAt,
       title: title ?? this.title,
+      description: description ?? this.description,
+      language: language ?? this.language,
       level: level ?? this.level,
       memberCount: memberCount ?? this.memberCount,
+      maxMembers: maxMembers ?? this.maxMembers,
       members: members ?? this.members,
       isActive: isActive ?? this.isActive,
       spotlightedUserId: spotlightedUserId ?? this.spotlightedUserId,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       expireAt: expireAt ?? this.expireAt,
-      maxMembers: maxMembers,
-      isPaid: isPaid,
-      isPrivate: isPrivate,
-      hostName: hostName,
-      hostAvatarUrl: hostAvatarUrl,
-      liveKitRoomId: liveKitRoomId,
+      isPaid: isPaid ?? this.isPaid,
+      entryPrice: entryPrice,
+      isPrivate: isPrivate ?? this.isPrivate,
+      password: password,
+      hostName: hostName ?? this.hostName,
+      hostAvatarUrl: hostAvatarUrl ?? this.hostAvatarUrl,
+      liveKitRoomId: liveKitRoomId ?? this.liveKitRoomId,
+      tags: tags,
+      roomType: roomType,
     );
   }
 
   @override
   List<Object?> get props => [
-    id,
-    title,
-    memberCount,
-    members,
-    hostId,
-    level,
-    isActive,
-    spotlightedUserId,
-    lastUpdatedAt,
-    expireAt,
+    id, hostId, title, memberCount, members, level, isActive, spotlightedUserId, lastUpdatedAt, expireAt, liveKitRoomId,
   ];
 }

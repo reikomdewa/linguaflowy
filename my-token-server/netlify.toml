@@ -1,0 +1,9 @@
+[build]
+  # Overrides the "hugo" command with a dummy command
+  command = "echo 'No build step required'"
+  
+  # Tells Netlify where your functions live
+  functions = "netlify/functions"
+  
+  # (Optional) prevents publishing your entire source code as a static site
+  publish = "."

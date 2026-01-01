@@ -135,8 +135,8 @@ class _ReviewSessionViewState extends State<ReviewSessionView> {
         newStatus: newStatus,
         userLevel: authState.user.currentLevel,
       );
-      if (rating == 3) xpGained += 3;
-      if (rating == 4) xpGained += 7;
+      if (rating == 3) xpGained += 2;
+      if (rating == 4) xpGained += 3;
     }
 
     final sessionDuration = DateTime.now().difference(_cardStartTime);

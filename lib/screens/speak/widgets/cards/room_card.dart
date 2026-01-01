@@ -1,148 +1,54 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:dotted_border/dotted_border.dart';
-import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart'; 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:livekit_client/livekit_client.dart';
 
-// 1. UPDATED BLOC IMPORTS
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_event.dart';
-
-// Models & Services
 import 'package:linguaflow/models/speak/room_member.dart';
-import 'package:linguaflow/models/speak/speak_models.dart'; // Barrel file
+import 'package:linguaflow/models/speak/speak_models.dart';
 import 'package:linguaflow/services/speak/speak_service.dart';
 import 'package:linguaflow/utils/language_helper.dart';
+import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
 
 class RoomCard extends StatelessWidget {
   final ChatRoom room;
 
   const RoomCard({super.key, required this.room});
 
-  // --- OPTIONS MENU LOGIC ---
-  void _showOptionsMenu(BuildContext context, bool isMe) {
-    final theme = Theme.of(context);
-    // 2. GET ROOM BLOC
-    final roomBloc = context.read<RoomBloc>();
-
-    showModalBottomSheet(
-      context: context,
-      useSafeArea: true,
-      backgroundColor: theme.cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Drag Handle
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            if (isMe) ...[
-              ListTile(
-                leading: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: Colors.red,
-                ),
-                title: const Text(
-                  "End Session & Delete Room",
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                subtitle: const Text("This will remove the room for everyone"),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showDeleteConfirmation(context, roomBloc);
-                },
-              ),
-              const Divider(),
-            ],
-            ListTile(
-              leading: const Icon(Icons.report_gmailerrorred_rounded),
-              title: const Text("Report Room"),
-              onTap: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Report submitted")),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.share_outlined),
-              title: const Text("Share Invite Link"),
-              onTap: () => Navigator.pop(ctx),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // 3. ACCEPT ROOM BLOC
-  void _showDeleteConfirmation(BuildContext context, RoomBloc bloc) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("End Session?"),
-        content: const Text(
-          "Are you sure you want to delete this room? This action is permanent.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () {
-              bloc.add(DeleteRoomEvent(room.id));
-              Navigator.pop(ctx);
-            },
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    // Check ownership
     final authState = context.read<AuthBloc>().state;
-    final bool isMe =
-        authState is AuthAuthenticated && authState.user.id == room.hostId;
+    final bool isMe = authState is AuthAuthenticated && authState.user.id == room.hostId;
 
     final List<RoomMember> allMembers = List<RoomMember>.from(room.members);
-    // Sort host to first position
+
+    // --------------------------------------------------------
+    // DEBUGGING START
+    // --------------------------------------------------------
+    print("🎨 [RoomCard Build] Room: ${room.title}");
+    print("   -> Members List Length: ${allMembers.length}");
+    print("   -> Firestore 'memberCount': ${room.memberCount}");
+    print("   -> Names: ${allMembers.map((m) => m.displayName).join(', ')}");
+    // --------------------------------------------------------
+
     allMembers.sort((a, b) {
       if (a.uid == room.hostId) return -1;
       if (b.uid == room.hostId) return 1;
       return 0;
     });
 
-    int displayItemCount;
-    bool showOthersBubble = room.memberCount > 10;
-    if (showOthersBubble) {
-      displayItemCount = 10;
-    } else {
-      displayItemCount = room.maxMembers > 10 ? 10 : room.maxMembers;
-    }
+    final int realListCount = allMembers.length;
+    final int displayCount = math.max(realListCount, room.memberCount);
+
+    final int gridSlots = room.maxMembers > 10 ? 10 : room.maxMembers;
+    final bool showOthersBubble = displayCount > 10;
 
     return Card(
       elevation: 2,
@@ -155,7 +61,7 @@ class RoomCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // HEADER ROW
+            // HEADER
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -176,15 +82,11 @@ class RoomCard extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    _buildMemberCounter(room),
+                    _buildMemberCounter(displayCount, room.maxMembers),
                     const SizedBox(width: 4),
                     IconButton(
                       onPressed: () => _showOptionsMenu(context, isMe),
-                      icon: Icon(
-                        Icons.more_vert,
-                        color: theme.hintColor,
-                        size: 20,
-                      ),
+                      icon: Icon(Icons.more_vert, color: theme.hintColor, size: 20),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -195,9 +97,7 @@ class RoomCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               room.title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
 
@@ -205,7 +105,7 @@ class RoomCard extends StatelessWidget {
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: displayItemCount,
+              itemCount: gridSlots,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 5,
                 crossAxisSpacing: 12,
@@ -214,16 +114,13 @@ class RoomCard extends StatelessWidget {
               ),
               itemBuilder: (context, index) {
                 if (showOthersBubble && index == 9) {
-                  int remaining = room.memberCount - 9;
-                  return _buildOthersIndicator(remaining, theme);
+                  return _buildOthersIndicator(displayCount - 9, theme);
                 }
-                if (index < allMembers.length) {
-                  return _buildMemberItem(
-                    allMembers[index],
-                    room.hostId,
-                    theme,
-                  );
+
+                if (index < realListCount) {
+                  return _buildMemberItem(allMembers[index], room.hostId, theme);
                 }
+
                 return _buildPlaceholder(theme);
               },
             ),
@@ -235,27 +132,20 @@ class RoomCard extends StatelessWidget {
     );
   }
 
-  Widget _buildMemberCounter(ChatRoom room) {
-    final bool isFull = room.memberCount >= room.maxMembers;
+  // ... [Keep helper widgets like _buildMemberCounter, etc.] ...
+
+  Widget _buildMemberCounter(int current, int max) {
+    final displayCurrent = current > max ? max : current;
+    final bool isFull = displayCurrent >= max;
     final color = isFull ? Colors.red : Colors.blue;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
       child: Row(
         children: [
           Icon(Icons.mic, size: 14, color: color),
           const SizedBox(width: 4),
-          Text(
-            "${room.memberCount}/${room.maxMembers}",
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
+          Text("$displayCurrent/$max", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
         ],
       ),
     );
@@ -263,8 +153,17 @@ class RoomCard extends StatelessWidget {
 
   Widget _buildMemberItem(RoomMember member, String hostId, ThemeData theme) {
     final bool isHost = member.uid == hostId;
+    final String initial = (member.displayName != null && member.displayName!.isNotEmpty)
+        ? member.displayName![0].toUpperCase()
+        : "?";
+
+    ImageProvider? imageProvider;
+    if (member.avatarUrl != null && member.avatarUrl!.isNotEmpty) {
+      imageProvider = NetworkImage(member.avatarUrl!);
+    }
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 50,
@@ -281,28 +180,35 @@ class RoomCard extends StatelessWidget {
             backgroundColor: theme.brightness == Brightness.dark
                 ? Colors.grey[800]
                 : Colors.grey[200],
-            backgroundImage:
-                (member.avatarUrl != null && member.avatarUrl!.isNotEmpty)
-                ? NetworkImage(member.avatarUrl!)
+            backgroundImage: imageProvider,
+            onBackgroundImageError: imageProvider != null 
+                ? (_, __) { print("🖼️ Avatar load failed for ${member.displayName}"); } 
                 : null,
-            child: (member.avatarUrl == null || member.avatarUrl!.isEmpty)
-                ? Text((member.displayName ?? "U")[0].toUpperCase())
+            child: imageProvider == null
+                ? Text(
+                    initial,
+                    style: TextStyle(
+                      color: theme.primaryColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
                 : null,
           ),
         ),
         const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              isHost ? 'Host' : '${member.xp ?? 0} XP',
-              style: TextStyle(
-                fontSize: 10,
-                color: theme.primaryColor,
-                fontWeight: FontWeight.bold,
-              ),
+        SizedBox(
+          width: 50,
+          child: Text(
+            isHost ? 'Host' : '${member.xp ?? 0} XP',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 10,
+              color: theme.primaryColor,
+              fontWeight: FontWeight.bold,
             ),
-          ],
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -311,7 +217,6 @@ class RoomCard extends StatelessWidget {
   Widget _buildPlaceholder(ThemeData theme) {
     return Column(
       children: [
-        // KEEPING YOUR EXACT UI HERE
         DottedBorder(
           options: RoundedRectDottedBorderOptions(
             color: theme.hintColor.withOpacity(0.3),
@@ -356,7 +261,6 @@ class RoomCard extends StatelessWidget {
 
   Widget _buildJoinButton(BuildContext context, ThemeData theme) {
     return DottedBorder(
-      // KEEPING YOUR EXACT UI HERE
       options: RoundedRectDottedBorderOptions(
         color: theme.dividerColor,
         strokeWidth: 1.2,
@@ -392,8 +296,77 @@ class RoomCard extends StatelessWidget {
     );
   }
 
- Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
-    // 1. Show Loading Indicator
+  void _showOptionsMenu(BuildContext context, bool isMe) {
+    final theme = Theme.of(context);
+    final roomBloc = context.read<RoomBloc>();
+
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: theme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            if (isMe) ...[
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                title: const Text("End Session & Delete Room", style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+                subtitle: const Text("This will remove the room for everyone"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showDeleteConfirmation(context, roomBloc);
+                },
+              ),
+              const Divider(),
+            ],
+            ListTile(
+              leading: const Icon(Icons.report_gmailerrorred_rounded),
+              title: const Text("Report Room"),
+              onTap: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Report submitted")));
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context, RoomBloc bloc) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("End Session?"),
+        content: const Text("Are you sure you want to delete this room? This action is permanent."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () {
+              bloc.add(DeleteRoomEvent(room.id));
+              Navigator.pop(ctx);
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -401,51 +374,29 @@ class RoomCard extends StatelessWidget {
     );
 
     try {
-      // 2. Get Token & Connect to LiveKit
       final token = await SpeakService().getLiveKitToken(
         roomData.id,
         FirebaseAuth.instance.currentUser?.displayName ?? "Guest",
       );
 
       final livekitRoom = Room();
-      
-      // Note: Ideally, store this URL in a constant/env file
-      await livekitRoom.connect(
-        'wss://linguaflow-7eemmnrq.livekit.cloud',
-        token,
-      );
+      await livekitRoom.connect('wss://linguaflow-7eemmnrq.livekit.cloud', token);
 
       if (context.mounted) {
-        // --- 3. ACTIVATE THE GLOBAL OVERLAY ---
-        // This makes the room appear instantly on top of everything
         RoomGlobalManager().joinRoom(livekitRoom, roomData);
-
-        // --- 4. SYNC WITH FIRESTORE (BLOC) ---
-        // This tells the backend "User X has joined Room Y"
         context.read<RoomBloc>().add(JoinRoomEvent(roomData));
-        
-        // (Optional) If your Bloc needs the LiveKit object for internal logic:
-        // context.read<RoomBloc>().add(RoomJoined(livekitRoom));
-
-        // 5. Hide Loading Dialog
         Navigator.pop(context);
-        
-        // REMOVED: Navigator.push(...) 
-        // We no longer navigate to a new screen. The Overlay handles the UI now.
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error joining room: $e")),
-        );
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error joining room: $e")));
       }
     }
   }
 
   void _showPaymentDialog(BuildContext context) {
     final TextEditingController passwordController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -460,55 +411,29 @@ class RoomCard extends StatelessWidget {
               controller: passwordController,
               keyboardType: TextInputType.number,
               maxLength: 4,
-              obscureText: true, // Hide the numbers like a password
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-              ],
+              obscureText: true,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(
                 hintText: "0000",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
+            style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
             onPressed: () {
-              final inputCode = passwordController.text.trim();
-
-              // 1. Verify Code
-              // We compare the input against the password stored in the room object
-              if (inputCode == room.password) {
-                Navigator.pop(ctx); // Close dialog
-                _joinRoom(context, room); // Proceed to join
+              if (passwordController.text.trim() == room.password) {
+                Navigator.pop(ctx);
+                _joinRoom(context, room);
               } else {
-                // 2. Show Error
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Incorrect access code."),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Incorrect access code."), backgroundColor: Colors.red));
               }
             },
-            child: const Text(
-              "Join",
-            ),
+            child: const Text("Join"),
           ),
         ],
       ),

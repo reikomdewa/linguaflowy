@@ -160,8 +160,22 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     );
   }
 
-  // =========================================================
-  // 3. CRUD OPERATIONS
+  
+
+  Future<void> _onDeleteRoom(
+    DeleteRoomEvent event,
+    Emitter<RoomState> emit,
+  ) async {
+    // Optimistic Remove
+    final updatedList = state.allRooms
+        .where((r) => r.id != event.roomId)
+        .toList();
+    _applyFilters(emit, allRooms: updatedList);
+
+    await _speakService.deleteRoom(event.roomId);
+  }
+// =========================================================
+  // FIX 1: CREATE ROOM (With XP Fetching)
   // =========================================================
   Future<void> _onCreateRoom(
     CreateRoomEvent event,
@@ -169,6 +183,17 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
   ) async {
     final user = _auth.currentUser;
     if (user == null) return;
+
+    // 1. Fetch Host's XP from 'users' collection
+    int userXp = 0;
+    try {
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        userXp = (userDoc.data()?['xp'] as num?)?.toInt() ?? 0;
+      }
+    } catch (e) {
+      print("⚠️ [RoomBloc] Could not fetch host XP: $e");
+    }
 
     final newRoom = ChatRoom(
       id: _uuid.v4(),
@@ -190,16 +215,17 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
           avatarUrl: user.photoURL,
           joinedAt: DateTime.now(),
           isHost: true,
+          xp: userXp, // <--- Pass the fetched XP here
         ),
       ],
       createdAt: DateTime.now(),
-      // Auto-expire in 24h for Firebase Policy (Optional, but good practice)
+      // Auto-expire in 24h for Firebase Policy
       expireAt: DateTime.now().add(const Duration(hours: 24)),
       roomType: event.roomType,
       tags: event.tags,
     );
 
-    // Optimistic Update: Add to list immediately
+    // Optimistic Update
     final updatedList = List<ChatRoom>.from(state.allRooms)..insert(0, newRoom);
     _applyFilters(emit, allRooms: updatedList);
 
@@ -210,21 +236,10 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     }
   }
 
-  Future<void> _onDeleteRoom(
-    DeleteRoomEvent event,
-    Emitter<RoomState> emit,
-  ) async {
-    // Optimistic Remove
-    final updatedList = state.allRooms
-        .where((r) => r.id != event.roomId)
-        .toList();
-    _applyFilters(emit, allRooms: updatedList);
-
-    await _speakService.deleteRoom(event.roomId);
-  }
+  // (Delete room logic remains the same...)
 
   // =========================================================
-  // 4. LIVEKIT & INTERACTION
+  // FIX 2: JOIN ROOM (With XP Fetching & Robust Parsing)
   // =========================================================
   Future<void> _onJoinRoom(JoinRoomEvent event, Emitter<RoomState> emit) async {
     final user = _auth.currentUser;
@@ -233,9 +248,18 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     // We set this immediately so UI can show "Connecting..."
     emit(state.copyWith(activeChatRoom: event.room));
 
+    // 1. Fetch Guest's XP from 'users' collection
+    int userXp = 0;
     try {
-      // Logic to update Firestore members
-      // (Your original logic for updating members list)
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        userXp = (userDoc.data()?['xp'] as num?)?.toInt() ?? 0;
+      }
+    } catch (e) {
+      print("⚠️ [RoomBloc] Could not fetch guest XP: $e");
+    }
+
+    try {
       final roomRef = _firestore.collection('rooms').doc(event.room.id);
 
       await _firestore.runTransaction((transaction) async {
@@ -243,20 +267,30 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
         if (!snapshot.exists) return;
 
         final currentData = snapshot.data()!;
-        final members = (currentData['members'] as List<dynamic>)
-            .map((m) => RoomMember.fromMap(m))
-            .toList();
+        
+        // 2. Robust List Parsing (Safe against nulls or wrong types)
+        final rawList = currentData['members'] as List<dynamic>? ?? [];
+        
+        final members = rawList.map((m) {
+           if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
+           if (m is Map) return RoomMember.fromMap(Map<String, dynamic>.from(m));
+           return null;
+        }).where((m) => m != null).cast<RoomMember>().toList();
 
+        // 3. Add user if not present
         if (!members.any((m) => m.uid == user.uid)) {
           members.add(
             RoomMember(
               uid: user.uid,
-              displayName: user.displayName,
+              displayName: user.displayName ?? "Guest",
               avatarUrl: user.photoURL,
               joinedAt: DateTime.now(),
+              isHost: false,
+              xp: userXp, // <--- Pass the fetched XP here
             ),
           );
 
+          // 4. Update Firestore
           transaction.update(roomRef, {
             'members': members.map((m) => m.toMap()).toList(),
             'memberCount': members.length,

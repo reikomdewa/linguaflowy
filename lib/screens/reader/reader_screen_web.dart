@@ -129,8 +129,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
   String? _selectedBaseForm;
   StreamSubscription? _vocabSubscription;
 
-  static const int xpPerWordLookup = 5;
-  static const int xpPerWordLearned = 20;
+
   static const int xpPerMinuteRead = 2;
   // --- ADD THESE NEW VARIABLES ---
   Duration _currentPosition = Duration.zero;
@@ -311,8 +310,8 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     _listeningTrackingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _secondsListenedInSession++;
       if (_secondsListenedInSession % 300 == 0) {
-        context.read<AuthBloc>().add(AuthUpdateXP(xpPerMinuteRead * 5));
-        _logActivitySession(5, xpPerMinuteRead * 5);
+        context.read<AuthBloc>().add(AuthUpdateXP(xpPerMinuteRead * 2));
+        _logActivitySession(5, xpPerMinuteRead * 2);
       }
     });
   }
@@ -373,8 +372,8 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       _pauseMedia();
       if (_isTtsPlaying) _flutterTts.stop();
 
-      const int baseXP = 50;
-      const int bonusPerWord = 10;
+      const int baseXP = 5;
+      const int bonusPerWord = 3;
       int calculatedXp = (baseXP + (_sessionWordsLearned.length * bonusPerWord))
           .clamp(50, 200);
 

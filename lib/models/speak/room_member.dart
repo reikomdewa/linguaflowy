@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Add Import
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RoomMember extends Equatable {
   final String uid;
@@ -30,23 +30,29 @@ class RoomMember extends Equatable {
   }
 
   factory RoomMember.fromMap(Map<String, dynamic> map) {
-    // Robust Date Parser
+    // Helper to safely parse dates from either Firestore Timestamp or integer
     DateTime parseDate(dynamic val) {
       if (val is Timestamp) return val.toDate();
+      // Handle cases where timestamp might be null, default to now
       if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
       return DateTime.now();
     }
 
     return RoomMember(
-      uid: map['uid'] ?? '',
-      displayName: map['displayName'],
-      avatarUrl: map['avatarUrl'],
-      joinedAt: parseDate(map['joinedAt']), // <--- FIXED
-      isHost: map['isHost'] ?? false,
-      xp: map['xp'],
+      uid: map['uid'] as String? ?? '',
+      displayName: map['displayName'] as String?,
+      avatarUrl: map['avatarUrl'] as String?,
+      joinedAt: parseDate(map['joinedAt']),
+      isHost: map['isHost'] as bool? ?? false,
+
+      // --- CRITICAL FIX FOR XP ---
+      // This safely handles null, int, and double values from Firestore.
+      // 1. Casts the value to a generic 'num' (or null).
+      // 2. If it's not null, converts it to an integer.
+      xp: (map['xp'] as num?)?.toInt(),
     );
   }
 
   @override
-  List<Object?> get props => [uid, displayName, isHost, xp];
+  List<Object?> get props => [uid, displayName, avatarUrl, joinedAt, isHost, xp];
 }
