@@ -20,15 +20,52 @@ import 'package:linguaflow/blocs/speak/room/room_event.dart' hide RoomEvent;
 // GLOBAL
 
 // --- MENU SHEET ---
+// --- MENU SHEET ---
 class RoomMenuSheet extends StatelessWidget {
   final RoomGlobalManager manager;
+  final ChatRoom roomData; // <--- ADDED: We need room data to know if Host/Guest
   final VoidCallback onClose;
 
   const RoomMenuSheet({
     super.key,
     required this.manager,
+    required this.roomData, // <--- ADDED
     required this.onClose,
   });
+
+  void _handleLeave(BuildContext context) {
+    // 1. Close the Menu Sheet first
+    onClose(); 
+
+    // 2. Show the Confirmation Dialog
+    showDialog(
+      context: context,
+      builder: (ctx) => LeaveConfirmDialog(
+        roomData: roomData,
+        onCancel: () => Navigator.pop(ctx), // Just close dialog
+        
+        // --- THIS IS WHERE THE UPDATE LOGIC GOES ---
+        onConfirm: () {
+          Navigator.pop(ctx); // Close dialog
+          
+          final bloc = context.read<RoomBloc>();
+          final currentUid = FirebaseAuth.instance.currentUser?.uid;
+          final isHost = roomData.hostId == currentUid;
+
+          if (isHost) {
+            // If Host: Delete the room entirely
+            bloc.add(DeleteRoomEvent(roomData.id));
+          } else {
+            // If Guest: Update Firestore to remove ONLY this user
+            bloc.add(LeaveRoomEvent());
+          }
+
+          // 3. Disconnect LiveKit & Close Overlay
+          manager.leaveRoom(); 
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +97,8 @@ class RoomMenuSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+            
+            // 1. MINIMIZE
             ListTile(
               leading: const Icon(
                 Icons.close_fullscreen,
@@ -74,6 +113,20 @@ class RoomMenuSheet extends StatelessWidget {
                 onClose();
               },
             ),
+
+            // 2. LEAVE ROOM (New)
+            ListTile(
+              leading: const Icon(
+                Icons.logout_rounded,
+                color: Colors.redAccent,
+              ),
+              title: const Text(
+                "Leave Room",
+                style: TextStyle(color: Colors.redAccent),
+              ),
+              onTap: () => _handleLeave(context),
+            ),
+
             const SizedBox(height: 10),
             const Divider(color: Colors.white24),
             ListTile(

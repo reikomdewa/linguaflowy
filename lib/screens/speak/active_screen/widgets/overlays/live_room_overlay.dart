@@ -260,7 +260,9 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           Positioned.fill(
             child: GestureDetector(
               onTap: manager.collapse,
-              child: Container(color: Colors.black.withOpacity(0.8)),
+              child: Container(
+                // color: Colors.black.withOpacity(0.8)
+              ),
             ),
           ),
 
@@ -315,7 +317,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
                   child: IconButton(
                     icon: const Icon(
                       Icons.close,
-                      color: Colors.white,
+                      // color: Colors.white,
                       size: 30,
                     ),
                     onPressed: () =>
@@ -342,7 +344,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
                 child: Container(
                   height: MediaQuery.of(context).size.height * 0.75,
                   decoration: const BoxDecoration(
-                    color: Color(0xFF1E1E1E),
+                    // color: Color(0xFF1E1E1E),
                     borderRadius: BorderRadius.vertical(
                       top: Radius.circular(20),
                     ),
@@ -376,6 +378,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
               child: RoomMenuSheet(
                 manager: manager,
                 onClose: () => setState(() => _isMenuOpen = false),
+                roomData: manager.roomData!,
               ),
             ),
           ),

@@ -100,7 +100,7 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     _applyFilters(emit, filters: {}, query: "");
   }
 
- void _applyFilters(
+  void _applyFilters(
     Emitter<RoomState> emit, {
     List<ChatRoom>? allRooms,
     Map<String, String>? filters,
@@ -113,7 +113,7 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     // --- GHOST ROOM LOGIC ---
     // Hide rooms that are empty (0 members) AND older than 5 minutes.
     final DateTime staleCutoff = DateTime.now().subtract(
-      const Duration(minutes: 5),
+      const Duration(minutes: 30),
     );
 
     final _filtered = _all.where((room) {
@@ -123,7 +123,7 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
       }
 
       // 2. [NEW] HIDE TUTOR SESSIONS
-      // This ensures the specific room created by the TutorCard 
+      // This ensures the specific room created by the TutorCard
       // does not appear in the public social feed.
       if (room.isPrivate || room.roomType == 'tutor_session') {
         return false;
@@ -160,8 +160,6 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     );
   }
 
-  
-
   Future<void> _onDeleteRoom(
     DeleteRoomEvent event,
     Emitter<RoomState> emit,
@@ -174,7 +172,8 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
 
     await _speakService.deleteRoom(event.roomId);
   }
-// =========================================================
+
+  // =========================================================
   // FIX 1: CREATE ROOM (With XP Fetching)
   // =========================================================
   Future<void> _onCreateRoom(
@@ -236,10 +235,10 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     }
   }
 
-  // (Delete room logic remains the same...)
+  // In RoomBloc class
 
   // =========================================================
-  // FIX 2: JOIN ROOM (With XP Fetching & Robust Parsing)
+  // FIX 2: JOIN ROOM (With "Ghost" Cleanup & XP Fetching)
   // =========================================================
   Future<void> _onJoinRoom(JoinRoomEvent event, Emitter<RoomState> emit) async {
     final user = _auth.currentUser;
@@ -248,7 +247,23 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     // We set this immediately so UI can show "Connecting..."
     emit(state.copyWith(activeChatRoom: event.room));
 
-    // 1. Fetch Guest's XP from 'users' collection
+    // --- STEP A: CLEANUP (Remove user from ANY other rooms first) ---
+    // We iterate through the locally loaded rooms to find where the user currently is.
+    final roomsWithUser = state.allRooms.where((r) {
+      // Check if user is in this room AND it's not the room we are trying to join
+      return r.id != event.room.id && r.members.any((m) => m.uid == user.uid);
+    }).toList();
+
+    for (final oldRoom in roomsWithUser) {
+      print("🧹 [RoomBloc] Removing user from old room: ${oldRoom.title}");
+      try {
+        await _removeUserFromRoomFirestore(oldRoom.id, user.uid);
+      } catch (e) {
+        print("⚠️ Failed to clean up old room ${oldRoom.id}: $e");
+      }
+    }
+
+    // --- STEP B: PREPARE DATA (XP) ---
     int userXp = 0;
     try {
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
@@ -259,6 +274,7 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
       print("⚠️ [RoomBloc] Could not fetch guest XP: $e");
     }
 
+    // --- STEP C: JOIN NEW ROOM ---
     try {
       final roomRef = _firestore.collection('rooms').doc(event.room.id);
 
@@ -267,17 +283,21 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
         if (!snapshot.exists) return;
 
         final currentData = snapshot.data()!;
-        
-        // 2. Robust List Parsing (Safe against nulls or wrong types)
-        final rawList = currentData['members'] as List<dynamic>? ?? [];
-        
-        final members = rawList.map((m) {
-           if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
-           if (m is Map) return RoomMember.fromMap(Map<String, dynamic>.from(m));
-           return null;
-        }).where((m) => m != null).cast<RoomMember>().toList();
 
-        // 3. Add user if not present
+        // Robust List Parsing
+        final rawList = currentData['members'] as List<dynamic>? ?? [];
+        final members = rawList
+            .map((m) {
+              if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
+              if (m is Map)
+                return RoomMember.fromMap(Map<String, dynamic>.from(m));
+              return null;
+            })
+            .where((m) => m != null)
+            .cast<RoomMember>()
+            .toList();
+
+        // Add user if not present
         if (!members.any((m) => m.uid == user.uid)) {
           members.add(
             RoomMember(
@@ -286,11 +306,10 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
               avatarUrl: user.photoURL,
               joinedAt: DateTime.now(),
               isHost: false,
-              xp: userXp, // <--- Pass the fetched XP here
+              xp: userXp,
             ),
           );
 
-          // 4. Update Firestore
           transaction.update(roomRef, {
             'members': members.map((m) => m.toMap()).toList(),
             'memberCount': members.length,
@@ -300,18 +319,114 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
       });
     } catch (e) {
       print("Join Error: $e");
+      // If join fails, you might want to reset the activeChatRoom in state
+      emit(state.copyWith(clearActiveChatRoom: true));
     }
   }
 
+  /// Helper to remove a user from a specific room ID in Firestore
+  Future<void> _removeUserFromRoomFirestore(
+    String roomId,
+    String userId,
+  ) async {
+    final roomRef = _firestore.collection('rooms').doc(roomId);
+
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(roomRef);
+      if (!snapshot.exists) return;
+
+      final currentData = snapshot.data()!;
+      final rawList = currentData['members'] as List<dynamic>? ?? [];
+
+      final members = rawList
+          .map((m) {
+            if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
+            if (m is Map)
+              return RoomMember.fromMap(Map<String, dynamic>.from(m));
+            return null;
+          })
+          .where((m) => m != null)
+          .cast<RoomMember>()
+          .toList();
+
+      final int initialLength = members.length;
+      members.removeWhere((m) => m.uid == userId);
+
+      if (members.length < initialLength) {
+        transaction.update(roomRef, {
+          'members': members.map((m) => m.toMap()).toList(),
+          'memberCount': members.length,
+          'lastUpdatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    });
+  }
+
+  // =========================================================
+  // FIX: LEAVE ROOM (Remove Member from DB)
+  // =========================================================
   Future<void> _onLeaveRoom(
     LeaveRoomEvent event,
     Emitter<RoomState> emit,
   ) async {
-    // Clear the active room state
+    final user = _auth.currentUser;
+    // Capture the room BEFORE we clear the state
+    final activeRoom = state.activeChatRoom;
+
+    // 1. Clear State immediately so UI updates (user sees they left)
     emit(
       state.copyWith(clearActiveChatRoom: true, clearActiveLivekitRoom: true),
     );
-    // Note: The actual Firestore member removal happens in SpeakService or via Webhook
+
+    if (user == null || activeRoom == null) {
+      print("⚠️ [RoomBloc] Leave skipped: User or ActiveRoom is null.");
+      return;
+    }
+
+    try {
+      print(
+        "🚪 [RoomBloc] Removing user ${user.uid} from room ${activeRoom.id}...",
+      );
+      final roomRef = _firestore.collection('rooms').doc(activeRoom.id);
+
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(roomRef);
+        if (!snapshot.exists) return;
+
+        final currentData = snapshot.data()!;
+        final rawList = currentData['members'] as List<dynamic>? ?? [];
+
+        // 2. Parse List Safe & Sound
+        final members = rawList
+            .map((m) {
+              if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
+              if (m is Map)
+                return RoomMember.fromMap(Map<String, dynamic>.from(m));
+              return null;
+            })
+            .where((m) => m != null)
+            .cast<RoomMember>()
+            .toList();
+
+        // 3. Find and Remove the User
+        final int initialLength = members.length;
+        members.removeWhere((m) => m.uid == user.uid);
+
+        if (members.length < initialLength) {
+          // Only update if we actually removed someone
+          transaction.update(roomRef, {
+            'members': members.map((m) => m.toMap()).toList(),
+            'memberCount': members.length, // Sync count
+            'lastUpdatedAt': FieldValue.serverTimestamp(),
+          });
+          print("✅ [RoomBloc] User removed from Firestore.");
+        } else {
+          print("ℹ️ [RoomBloc] User was not in the list to begin with.");
+        }
+      });
+    } catch (e) {
+      print("❌ [RoomBloc] Failed to leave room in DB: $e");
+    }
   }
 
   // =========================================================

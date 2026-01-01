@@ -21,19 +21,6 @@ class FullScreenParticipantScreen extends StatelessWidget {
               isFullScreen: true, // Tell tile to render differently
             ),
           ),
-
-          // 2. Close Button
-          Positioned(
-            top: 40,
-            left: 16,
-            child: CircleAvatar(
-              backgroundColor: Colors.black54,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-          ),
         ],
       ),
     );

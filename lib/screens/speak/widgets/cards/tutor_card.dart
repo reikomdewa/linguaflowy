@@ -419,7 +419,7 @@ class TutorCard extends StatelessWidget {
     );
   }
 
-  Future<void> _joinTutorSession(
+Future<void> _joinTutorSession(
     BuildContext context, {
     String? sessionPassword,
   }) async {
@@ -434,9 +434,65 @@ class TutorCard extends StatelessWidget {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) throw Exception("User not logged in");
 
+      final firestore = FirebaseFirestore.instance;
+      final roomBloc = context.read<RoomBloc>();
+
+      // ============================================================
+      // STEP A: CLEANUP - Remove user from ANY other rooms first
+      // ============================================================
+      
+      // 1. Identify rooms the user is currently in (excluding the one they are trying to join)
+      final roomsToLeave = roomBloc.state.allRooms.where((r) {
+        final isDifferentRoom = r.id != tutor.id;
+        final isInRoom = r.members.any((m) => m.uid == currentUser.uid);
+        return isDifferentRoom && isInRoom;
+      }).toList();
+
+      // 2. Remove user from those rooms in Firestore
+      for (final oldRoom in roomsToLeave) {
+        try {
+          final oldRoomRef = firestore.collection('rooms').doc(oldRoom.id);
+          
+          await firestore.runTransaction((transaction) async {
+            final snapshot = await transaction.get(oldRoomRef);
+            if (!snapshot.exists) return;
+
+            final currentData = snapshot.data()!;
+            final rawList = currentData['members'] as List<dynamic>? ?? [];
+
+            // Parse members safely
+            final members = rawList.map((m) {
+              if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
+              if (m is Map) return RoomMember.fromMap(Map<String, dynamic>.from(m));
+              return null;
+            }).where((m) => m != null).cast<RoomMember>().toList();
+
+            // Remove the current user
+            final initialCount = members.length;
+            members.removeWhere((m) => m.uid == currentUser.uid);
+
+            // Only update if changes were made
+            if (members.length < initialCount) {
+              transaction.update(oldRoomRef, {
+                'members': members.map((m) => m.toMap()).toList(),
+                'memberCount': members.length,
+                'lastUpdatedAt': FieldValue.serverTimestamp(),
+              });
+            }
+          });
+          debugPrint("🧹 Automatically removed user from old room: ${oldRoom.title}");
+        } catch (e) {
+          debugPrint("⚠️ Failed to leave old room ${oldRoom.id}: $e");
+        }
+      }
+
+      // ============================================================
+      // STEP B: JOIN NEW SESSION
+      // ============================================================
+
       final bool isHost = currentUser.uid == tutor.userId;
 
-      // 2. Create the Room Wrapper (Preserved your logic)
+      // 1. Create the Room Wrapper
       final tutorRoomWrapper = ChatRoom(
         id: tutor.id,
         hostId: tutor.userId,
@@ -444,7 +500,7 @@ class TutorCard extends StatelessWidget {
         description: tutor.description,
         language: tutor.language,
         level: tutor.level,
-        memberCount: 1,
+        memberCount: 1, // Will be updated via Firestore logic below
         maxMembers: 10,
         isPaid: true,
         password: sessionPassword,
@@ -453,6 +509,7 @@ class TutorCard extends StatelessWidget {
         hostAvatarUrl: tutor.imageUrl,
         createdAt: DateTime.now(),
         members: [
+          // We initialize with just the Host, logic below handles appending student
           RoomMember(
             uid: tutor.userId,
             displayName: tutor.name,
@@ -465,35 +522,61 @@ class TutorCard extends StatelessWidget {
         roomType: 'tutor_session',
       );
 
-      // 3. Get Token
+      // 2. Get LiveKit Token
       final token = await SpeakService().getLiveKitToken(
         tutorRoomWrapper.id,
         currentUser.displayName ?? "Student",
       );
 
-      // 4. Sync with Firestore (Preserved your logic)
+      // 3. Sync with Firestore
       if (isHost) {
-        await FirebaseFirestore.instance
+        // If Host, ensure room exists/updates
+        await firestore
             .collection('rooms')
             .doc(tutorRoomWrapper.id)
             .set(tutorRoomWrapper.toMap(), SetOptions(merge: true));
       } else {
-        final myMember = RoomMember(
-          uid: currentUser.uid,
-          displayName: currentUser.displayName,
-          avatarUrl: currentUser.photoURL,
-          joinedAt: DateTime.now(),
-        );
-        FirebaseFirestore.instance
-            .collection('rooms')
-            .doc(tutorRoomWrapper.id)
-            .update({
-              'members': FieldValue.arrayUnion([myMember.toMap()]),
-              'memberCount': FieldValue.increment(1),
-            });
+        // If Student, Add to list safely (Transaction ensures we don't overwrite others)
+        final roomRef = firestore.collection('rooms').doc(tutorRoomWrapper.id);
+        
+        await firestore.runTransaction((transaction) async {
+          final snapshot = await transaction.get(roomRef);
+          List<RoomMember> currentMembers = [];
+          
+          if (snapshot.exists) {
+            final data = snapshot.data()!;
+             final rawList = data['members'] as List<dynamic>? ?? [];
+             currentMembers = rawList.map((m) {
+                if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
+                if (m is Map) return RoomMember.fromMap(Map<String, dynamic>.from(m));
+                return null;
+             }).where((m) => m != null).cast<RoomMember>().toList();
+          } else {
+            // If room doesn't exist yet (Host hasn't joined), create basic structure
+            currentMembers = List.from(tutorRoomWrapper.members);
+          }
+
+          // Add student if not present
+          if (!currentMembers.any((m) => m.uid == currentUser.uid)) {
+            final myMember = RoomMember(
+              uid: currentUser.uid,
+              displayName: currentUser.displayName,
+              avatarUrl: currentUser.photoURL,
+              joinedAt: DateTime.now(),
+              isHost: false,
+            );
+            currentMembers.add(myMember);
+            
+            transaction.set(roomRef, {
+              ...tutorRoomWrapper.toMap(), // Ensures base fields exist
+              'members': currentMembers.map((m) => m.toMap()).toList(),
+              'memberCount': currentMembers.length,
+            }, SetOptions(merge: true));
+          }
+        });
       }
 
-      // 5. Connect to LiveKit
+      // 4. Connect to LiveKit
       final livekitRoom = Room();
       await livekitRoom.connect(
         'wss://linguaflow-7eemmnrq.livekit.cloud',
@@ -501,24 +584,21 @@ class TutorCard extends StatelessWidget {
       );
 
       if (context.mounted) {
-        // --- 6. ACTIVATE GLOBAL OVERLAY ---
-        // Pass the LiveKit connection and the Tutor Room data to the manager
+        // --- 5. ACTIVATE GLOBAL OVERLAY ---
         RoomGlobalManager().joinRoom(livekitRoom, tutorRoomWrapper);
 
-        // Update Bloc state (optional, but good for internal tracking)
+        // Update Bloc state to reflect "Active" status in UI
         context.read<RoomBloc>().add(RoomJoined(livekitRoom));
 
-        // 7. Hide Loading Dialog
+        // 6. Hide Loading Dialog
         Navigator.pop(context);
-
-        // Removed: Navigator.push(...) -> The Overlay handles the UI now.
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error joining class: $e")));
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error joining class: $e")),
+        );
       }
     }
   }

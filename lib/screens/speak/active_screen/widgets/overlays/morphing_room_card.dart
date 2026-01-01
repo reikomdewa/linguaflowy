@@ -73,7 +73,13 @@ class MorphingRoomCard extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           if (participants.isNotEmpty)
-            Opacity(opacity: 0.6, child: ParticipantTile(participant: participants.first, fit: BoxFit.cover))
+            Opacity(
+              opacity: 0.6,
+              child: ParticipantTile(
+                participant: participants.first,
+                fit: BoxFit.cover,
+              ),
+            )
           else
             Container(color: Colors.grey[900]),
           Container(
@@ -93,9 +99,23 @@ class MorphingRoomCard extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: Colors.green,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                     const SizedBox(width: 4),
-                    const Text("LIVE", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                    const Text(
+                      "LIVE",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -103,14 +123,30 @@ class MorphingRoomCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  MiniIconButton(icon: isMicOn ? Icons.mic : Icons.mic_off, color: isMicOn ? Colors.white : Colors.red, onTap: manager.toggleMic),
-                  MiniIconButton(icon: isCamOn ? Icons.videocam : Icons.videocam_off, color: isCamOn ? Colors.white : Colors.grey, onTap: manager.toggleCamera),
+                  MiniIconButton(
+                    icon: isMicOn ? Icons.mic : Icons.mic_off,
+                    color: isMicOn ? Colors.white : Colors.red,
+                    onTap: manager.toggleMic,
+                  ),
+                  MiniIconButton(
+                    icon: isCamOn ? Icons.videocam : Icons.videocam_off,
+                    color: isCamOn ? Colors.white : Colors.grey,
+                    onTap: manager.toggleCamera,
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
             ],
           ),
-          Positioned(top: 4, right: 4, child: Icon(Icons.open_in_full_rounded, color: Colors.white.withOpacity(0.7), size: 16)),
+          Positioned(
+            top: 4,
+            right: 4,
+            child: Icon(
+              Icons.open_in_full_rounded,
+              color: Colors.white.withOpacity(0.7),
+              size: 16,
+            ),
+          ),
         ],
       ),
     );
@@ -130,39 +166,85 @@ class MorphingRoomCard extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   child: Row(
                     children: [
                       CircleAvatar(
                         radius: 14,
-                        backgroundImage: manager.roomData?.hostAvatarUrl != null ? NetworkImage(manager.roomData!.hostAvatarUrl!) : null,
-                        child: manager.roomData?.hostAvatarUrl == null ? const Icon(Icons.person, size: 16) : null,
+                        backgroundImage: manager.roomData?.hostAvatarUrl != null
+                            ? NetworkImage(manager.roomData!.hostAvatarUrl!)
+                            : null,
+                        child: manager.roomData?.hostAvatarUrl == null
+                            ? const Icon(Icons.person, size: 16)
+                            : null,
                       ),
                       const SizedBox(width: 8),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(manager.roomData?.title ?? "Live Room", style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          Text("${participants.length} in live", style: const TextStyle(color: Colors.white70, fontSize: 10)),
+                          Text(
+                            manager.roomData?.title ?? "Live Room",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            "${participants.length} in live",
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
-                        child: const Text("LIVE", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          "LIVE",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
                 const Spacer(),
-                IconButton(icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 30), onPressed: manager.collapse),
-                IconButton(icon: const Icon(Icons.close, color: Colors.white, size: 30), onPressed: onClosePress),
+                IconButton(
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                  onPressed: manager.collapse,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                  onPressed: onClosePress,
+                ),
               ],
             ),
           ),
-          
+
           // GRID
           Expanded(
             child: Padding(
@@ -171,7 +253,10 @@ class MorphingRoomCard extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 physics: const BouncingScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 0.8,
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.8,
                 ),
                 itemCount: participants.length,
                 itemBuilder: (context, index) {
@@ -180,8 +265,13 @@ class MorphingRoomCard extends StatelessWidget {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        decoration: BoxDecoration(color: Colors.grey[900], border: Border.all(color: Colors.white10, width: 1)),
-                        child: ParticipantTile(participant: participants[index]),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[900],
+                          border: Border.all(color: Colors.white10, width: 1),
+                        ),
+                        child: ParticipantTile(
+                          participant: participants[index],
+                        ),
                       ),
                     ),
                   );
@@ -201,16 +291,38 @@ class MorphingRoomCard extends StatelessWidget {
                     child: Container(
                       height: 44,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(22)),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(22),
+                      ),
                       child: Row(
                         children: [
-                          Text("Say something...", style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14)),
+                          Text(
+                            "Say something...",
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 14,
+                            ),
+                          ),
                           const Spacer(),
                           if (unreadCount > 0)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
-                              child: Text("$unreadCount", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                "$unreadCount",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                         ],
                       ),
@@ -218,9 +330,16 @@ class MorphingRoomCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                GlassButton(icon: isMicOn ? Icons.mic : Icons.mic_off, isRed: !isMicOn, onTap: manager.toggleMic),
+                GlassButton(
+                  icon: isMicOn ? Icons.mic : Icons.mic_off,
+                  isRed: !isMicOn,
+                  onTap: manager.toggleMic,
+                ),
                 const SizedBox(width: 8),
-                GlassButton(icon: isCamOn ? Icons.videocam : Icons.videocam_off, onTap: manager.toggleCamera),
+                GlassButton(
+                  icon: isCamOn ? Icons.videocam : Icons.videocam_off,
+                  onTap: manager.toggleCamera,
+                ),
                 const SizedBox(width: 8),
                 GlassButton(icon: Icons.more_horiz, onTap: onOpenMenu),
               ],

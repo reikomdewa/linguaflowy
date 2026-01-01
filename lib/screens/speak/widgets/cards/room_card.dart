@@ -25,19 +25,14 @@ class RoomCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = context.read<AuthBloc>().state;
-    final bool isMe = authState is AuthAuthenticated && authState.user.id == room.hostId;
+    
+    // Get current User ID safely
+    final String currentUserId = (authState is AuthAuthenticated) ? authState.user.id : '';
+    final bool isMe = currentUserId == room.hostId;
 
     final List<RoomMember> allMembers = List<RoomMember>.from(room.members);
 
-    // --------------------------------------------------------
-    // DEBUGGING START
-    // --------------------------------------------------------
-    print("🎨 [RoomCard Build] Room: ${room.title}");
-    print("   -> Members List Length: ${allMembers.length}");
-    print("   -> Firestore 'memberCount': ${room.memberCount}");
-    print("   -> Names: ${allMembers.map((m) => m.displayName).join(', ')}");
-    // --------------------------------------------------------
-
+    // Sort members: Host first
     allMembers.sort((a, b) {
       if (a.uid == room.hostId) return -1;
       if (b.uid == room.hostId) return 1;
@@ -45,10 +40,21 @@ class RoomCard extends StatelessWidget {
     });
 
     final int realListCount = allMembers.length;
+    // Ensure display count never drops below reported count (handles lagging lists)
     final int displayCount = math.max(realListCount, room.memberCount);
 
     final int gridSlots = room.maxMembers > 10 ? 10 : room.maxMembers;
     final bool showOthersBubble = displayCount > 10;
+
+    // --- CHECK IF FULL ---
+    final bool isFull = displayCount >= room.maxMembers;
+    final bool isAlreadyMember = allMembers.any((m) => m.uid == currentUserId);
+    
+    // You can enter if: 
+    // 1. The room is NOT full
+    // 2. OR You are the Host
+    // 3. OR You are already on the list (rejoining)
+    final bool canEnter = !isFull || isMe || isAlreadyMember;
 
     return Card(
       elevation: 2,
@@ -125,14 +131,18 @@ class RoomCard extends StatelessWidget {
               },
             ),
             const SizedBox(height: 20),
-            _buildJoinButton(context, theme),
+            
+            // --- ACTION BUTTON ---
+            _buildJoinButton(context, theme, canEnter),
           ],
         ),
       ),
     );
   }
 
-  // ... [Keep helper widgets like _buildMemberCounter, etc.] ...
+  // ========================================================
+  // HELPER WIDGETS
+  // ========================================================
 
   Widget _buildMemberCounter(int current, int max) {
     final displayCurrent = current > max ? max : current;
@@ -182,7 +192,7 @@ class RoomCard extends StatelessWidget {
                 : Colors.grey[200],
             backgroundImage: imageProvider,
             onBackgroundImageError: imageProvider != null 
-                ? (_, __) { print("🖼️ Avatar load failed for ${member.displayName}"); } 
+                ? (_, __) {} 
                 : null,
             child: imageProvider == null
                 ? Text(
@@ -259,32 +269,49 @@ class RoomCard extends StatelessWidget {
     );
   }
 
-  Widget _buildJoinButton(BuildContext context, ThemeData theme) {
+  Widget _buildJoinButton(BuildContext context, ThemeData theme, bool canEnter) {
+    final color = canEnter ? Colors.blue : Colors.grey;
+    final text = canEnter ? "Join and talk" : "Room Full";
+    final icon = canEnter ? Icons.call_outlined : Icons.lock_outline;
+
     return DottedBorder(
       options: RoundedRectDottedBorderOptions(
-        color: theme.dividerColor,
+        color: canEnter ? theme.dividerColor : Colors.transparent,
         strokeWidth: 1.2,
         dashPattern: const [6, 3],
         radius: const Radius.circular(12),
       ),
-      child: SizedBox(
+      child: Container(
+        decoration: !canEnter ? BoxDecoration(
+          color: theme.disabledColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ) : null,
         width: double.infinity,
         child: TextButton(
-          onPressed: () => room.isPaid
-              ? _showPaymentDialog(context)
-              : _joinRoom(context, room),
+          onPressed: canEnter
+              ? () => room.isPaid
+                  ? _showPaymentDialog(context)
+                  : _joinRoom(context, room)
+              : () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("This room has reached its participant limit."),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                },
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14),
           ),
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.call_outlined, color: Colors.blue, size: 20),
-              SizedBox(width: 8),
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
               Text(
-                "Join and talk",
+                text,
                 style: TextStyle(
-                  color: Colors.blue,
+                  color: color,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -295,6 +322,10 @@ class RoomCard extends StatelessWidget {
       ),
     );
   }
+
+  // ========================================================
+  // LOGIC & ACTIONS
+  // ========================================================
 
   void _showOptionsMenu(BuildContext context, bool isMe) {
     final theme = Theme.of(context);
@@ -366,6 +397,10 @@ class RoomCard extends StatelessWidget {
     );
   }
 
+  // -----------------------------------------------------------------------
+  // [IMPORTANT] OPTIMIZED JOIN METHOD
+  // This relies on RoomBloc.on(JoinRoomEvent) having the cleanup logic.
+  // -----------------------------------------------------------------------
   Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
     showDialog(
       context: context,
@@ -374,23 +409,37 @@ class RoomCard extends StatelessWidget {
     );
 
     try {
-      final token = await SpeakService().getLiveKitToken(
+      final speakService = SpeakService();
+      final roomBloc = context.read<RoomBloc>();
+
+      // 1. Get Token (Validate we can join LiveKit first)
+      final token = await speakService.getLiveKitToken(
         roomData.id,
         FirebaseAuth.instance.currentUser?.displayName ?? "Guest",
       );
 
+      // 2. Dispatch Bloc Event
+      // This triggers the Firestore logic:
+      // - Removes user from any OLD rooms
+      // - Adds user to THIS room
+      roomBloc.add(JoinRoomEvent(roomData));
+
+      // 3. Connect LiveKit
+      // We do this concurrently or immediately after the bloc dispatch
       final livekitRoom = Room();
       await livekitRoom.connect('wss://linguaflow-7eemmnrq.livekit.cloud', token);
 
       if (context.mounted) {
+        // 4. Activate Global Overlay
         RoomGlobalManager().joinRoom(livekitRoom, roomData);
-        context.read<RoomBloc>().add(JoinRoomEvent(roomData));
-        Navigator.pop(context);
+        Navigator.pop(context); // Close loading dialog
       }
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error joining room: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error joining room: $e")),
+        );
       }
     }
   }
