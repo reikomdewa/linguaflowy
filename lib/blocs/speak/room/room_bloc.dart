@@ -111,9 +111,9 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     final _query = (query ?? state.searchQuery).toLowerCase();
 
     // --- GHOST ROOM LOGIC ---
-    // Hide rooms that are empty (0 members) AND older than 5 minutes.
+    // Hide rooms that are empty (0 members) AND older than 10 minutes.
     final DateTime staleCutoff = DateTime.now().subtract(
-      const Duration(minutes: 30),
+      const Duration(minutes: 10),
     );
 
     final _filtered = _all.where((room) {
