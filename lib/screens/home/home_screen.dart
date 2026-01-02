@@ -27,6 +27,7 @@ import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 // MODELS
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
+import 'package:linguaflow/models/user_model.dart'; // Added explicitly
 
 // WIDGETS & SECTIONS
 import 'package:linguaflow/screens/home/widgets/sections/home_sections.dart';
@@ -58,8 +59,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- DESKTOP SPECIFIC FILTERS ---
   String _selectedDifficulty = 'All';
-  String _selectedGenre = 'All'; // This stores the VALUE (e.g. "science")
+  String _selectedGenre = 'All';
   String _selectedSort = 'Newest';
+
+  // --- GUEST STATE ---
+  String _guestLanguage = ''; // Stores language for unauthenticated users
 
   // --- SHARE LISTENER SUBSCRIPTION ---
   late StreamSubscription _intentDataStreamSubscription;
@@ -68,10 +72,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _initShareListener();
+    if (!kIsWeb) {
+      _initShareListener();
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authState = context.read<AuthBloc>().state;
+
+      // Only run User-Specific setup if actually authenticated
       if (authState is AuthAuthenticated) {
         final user = authState.user;
 
@@ -94,8 +102,42 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _intentDataStreamSubscription.cancel();
+    if (!kIsWeb) {
+      _intentDataStreamSubscription.cancel();
+    }
     super.dispose();
+  }
+
+  // --- HELPER: PROTECT ROUTES ---
+  void _handleAuthAction(BuildContext context, VoidCallback onSuccess) {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      onSuccess();
+    } else {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Account Required"),
+          content: const Text("Please login to access this feature."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(
+                  context,
+                  '/login',
+                ); // Adjust route as needed
+              },
+              child: const Text("Login"),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   // --- SHARE LISTENER LOGIC ---
@@ -124,8 +166,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _handleSharedContent(String sharedText) async {
     if (!mounted) return;
+
+    // Check Auth for imports
     final authState = context.read<AuthBloc>().state;
-    if (authState is! AuthAuthenticated) return;
+    if (authState is! AuthAuthenticated) {
+      // Prompt login if sharing content
+      if (mounted) _handleAuthAction(context, () {});
+      return;
+    }
+
     final user = authState.user;
 
     final uri = Uri.tryParse(sharedText);
@@ -186,40 +235,95 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
 
-    if (authState is! AuthAuthenticated) {
+    // 1. Show Loading only if actually Initializing
+    if (authState is AuthInitial || authState is AuthLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final user = authState.user;
+    // 2. Determine User Status
+    final bool isGuest = authState is! AuthAuthenticated;
+    final UserModel? user = isGuest
+        ? null
+        : (authState as AuthAuthenticated).user;
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
-    final String currentLangCode = LanguageHelper.getLangCode(
-      user.currentLanguage,
-    );
 
-    if (user.currentLanguage.isEmpty) {
+    // 3. Determine Language
+    String currentLanguageName = "";
+    if (isGuest) {
+      currentLanguageName = _guestLanguage;
+    } else {
+      currentLanguageName = user!.currentLanguage;
+    }
+
+    // 4. If No Language Selected (Guest or New User), Show Selection Screen
+    if (currentLanguageName.isEmpty) {
       return Scaffold(
         backgroundColor: bgColor,
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.translate,
-                size: 64,
-                color: Colors.grey.withValues(alpha: 0.5),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                "Welcome! Setting up...",
-                style: TextStyle(fontSize: 16),
-              ),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.translate, size: 64, color: Colors.blue),
+                const SizedBox(height: 20),
+                Text(
+                  isGuest
+                      ? "Choose a language to explore"
+                      : "Welcome! Setting up...",
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 30),
+
+                // Show grid for guests
+                // Show grid for guests
+                if (isGuest)
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 12,
+
+                    children: LanguageHelper.availableLanguages.keys.map((
+                      lang,
+                    ) {
+                      return ActionChip(
+                        avatar: Text(LanguageHelper.getFlagEmoji(lang)),
+                        label: Text(LanguageHelper.getLanguageName(lang)),
+                        onPressed: () {
+                          setState(() {
+                            _guestLanguage = lang;
+                          });
+                          // Trigger load immediately
+                          context.read<LessonBloc>().add(
+                            LessonLoadRequested('guest', lang),
+                          );
+                        },
+                      );
+                    }).toList(),
+                  ),
+                if (isGuest)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 30.0),
+                    child: TextButton(
+                      onPressed: () => Navigator.pushNamed(context, '/login'),
+                      child: const Text("Already have an account? Login"),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       );
     }
+
+    final String currentLangCode = LanguageHelper.getLangCode(
+      currentLanguageName,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -244,18 +348,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       _buildGlobalFilterChips(isDark, isDesktop),
 
                       const LiveNotificationBanner(),
+
                       Expanded(
                         child: BlocBuilder<LessonBloc, LessonState>(
                           builder: (context, lessonState) {
                             if (lessonState is LessonInitial) {
-                              if (user.currentLanguage.isNotEmpty) {
-                                context.read<LessonBloc>().add(
-                                  LessonLoadRequested(
-                                    user.id,
-                                    user.currentLanguage,
-                                  ),
-                                );
-                              }
+                              context.read<LessonBloc>().add(
+                                LessonLoadRequested(
+                                  isGuest ? 'guest' : user!.id,
+                                  currentLanguageName,
+                                ),
+                              );
                               return const Center(
                                 child: CircularProgressIndicator(),
                               );
@@ -271,7 +374,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               var processedLessons = lessonState.lessons;
 
                               // --- 1. SPECIAL CASE: GENRE FILTER ---
-                              // --- 1. SPECIAL CASE: GENRE FILTER ---
                               if (_selectedGenre != 'All') {
                                 return FilteredGenreList(
                                   genreKey: _selectedGenre,
@@ -280,19 +382,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                   isDark: isDark,
                                   isDesktop: isDesktop,
                                   sortOrder: _selectedSort,
-                                  filterDifficulty:
-                                      _selectedDifficulty, // <--- PASS IT HERE
+                                  filterDifficulty: _selectedDifficulty,
                                 );
                               }
 
                               // --- 2. LOCAL FILTERING ---
-                              // We MUST include _selectedSort != 'Newest' here.
-                              // If user sorts by "Oldest", we must switch to the vertical list view.
                               bool isFiltering =
                                   _selectedGlobalFilter != 'All' ||
                                   _selectedDifficulty != 'All' ||
-                                  _selectedSort !=
-                                      'Newest'; // <--- ADD THIS CHECK
+                                  _selectedSort != 'Newest';
 
                               if (isFiltering) {
                                 return _buildFilteredList(
@@ -303,7 +401,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 );
                               }
 
-                              // --- DASHBOARD MODE (Horizontal Sections) ---
+                              // --- DASHBOARD MODE ---
                               final nativeLessons = processedLessons
                                   .where((l) => l.userId == 'system_native')
                                   .toList();
@@ -330,14 +428,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onRefresh: () async {
                                   context.read<LessonBloc>().add(
                                     LessonLoadRequested(
-                                      user.id,
-                                      user.currentLanguage,
+                                      isGuest ? 'guest' : user!.id,
+                                      currentLanguageName,
                                       forceRefresh: true,
                                     ),
                                   );
-                                  context.read<VocabularyBloc>().add(
-                                    VocabularyLoadRequested(user.id),
-                                  );
+                                  if (!isGuest) {
+                                    context.read<VocabularyBloc>().add(
+                                      VocabularyLoadRequested(user!.id),
+                                    );
+                                  }
                                 },
                                 child: SingleChildScrollView(
                                   padding: const EdgeInsets.only(bottom: 120),
@@ -351,6 +451,31 @@ class _HomeScreenState extends State<HomeScreen> {
                                           isDesktop,
                                           context,
                                         ),
+
+                                      // If guest, show "Choose different language" banner
+                                      if (isGuest)
+                                        Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Card(
+                                            color: Colors.orange.shade100,
+                                            child: ListTile(
+                                              leading: const Icon(
+                                                Icons.info_outline,
+                                                color: Colors.brown,
+                                              ),
+                                              title: Text(
+                                                "You are viewing $currentLanguageName content as a guest.",
+                                              ),
+                                              trailing: TextButton(
+                                                onPressed: () => setState(
+                                                  () => _guestLanguage = "",
+                                                ),
+                                                child: const Text("Change"),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+
                                       GuidedCoursesSection(
                                         languageCode: currentLangCode,
                                         guidedLessons: guidedLessons,
@@ -363,10 +488,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                         TabButton(
                                           title: "Personalized Story Lesson",
                                           icon: Icons.auto_awesome,
-                                          onCustomTap: () =>
-                                              HomeUtils.showAIStoryGenerator(
-                                                context,
-                                              ),
+                                          onCustomTap: () => _handleAuthAction(
+                                            context,
+                                            () =>
+                                                HomeUtils.showAIStoryGenerator(
+                                                  context,
+                                                ),
+                                          ),
                                         ),
 
                                       ImmersionSection(
@@ -388,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         vocabMap: vocabMap,
                                         isDark: isDark,
                                       ),
-                                      // Dynamic Genre Feeds from Constants
+
                                       ...GenreConstants.categoryMap.entries.map(
                                         (entry) {
                                           return GenreFeedSection(
@@ -406,8 +534,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               );
                             }
-                            return const Center(
-                              child: Text('Something went wrong'),
+                            return Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('Something went wrong'),
+                                  TextButton(
+                                    onPressed: () =>
+                                        context.read<LessonBloc>().add(
+                                          LessonLoadRequested(
+                                            isGuest ? 'guest' : user!.id,
+                                            currentLanguageName,
+                                          ),
+                                        ),
+                                    child: const Text("Retry"),
+                                  ),
+                                ],
+                              ),
                             );
                           },
                         ),
@@ -429,17 +572,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 HomeUtils.buildFloatingButton(
                   label: "Learn",
                   icon: Icons.school_rounded,
-                  onTap: () => HomeUtils.navigateToLearnScreen(context),
+                  onTap: () => _handleAuthAction(
+                    context,
+                    () => HomeUtils.navigateToLearnScreen(context),
+                  ),
                 ),
                 HomeUtils.buildFloatingButton(
                   label: "Import",
                   icon: Icons.add_rounded,
-                  onTap: () => LessonImportDialog.show(
+                  onTap: () => _handleAuthAction(
                     context,
-                    user.id,
-                    user.currentLanguage,
-                    LanguageHelper.availableLanguages,
-                    isFavoriteByDefault: false,
+                    () => LessonImportDialog.show(
+                      context,
+                      user!.id,
+                      user.currentLanguage,
+                      LanguageHelper.availableLanguages,
+                      isFavoriteByDefault: false,
+                    ),
                   ),
                 ),
               ],
@@ -757,8 +906,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final filtered = lessons.where((l) {
       // Type Filter
       if (_selectedGlobalFilter == 'Videos' &&
-          !(l.type == 'video' || l.type == 'video_native'))
+          !(l.type == 'video' || l.type == 'video_native')) {
         return false;
+      }
       if (_selectedGlobalFilter == 'Audio' && l.type != 'audio') return false;
       if (_selectedGlobalFilter == 'Text' && l.type != 'text') return false;
 

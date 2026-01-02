@@ -19,6 +19,7 @@ import 'package:linguaflow/blocs/speak/tutor/tutor_event.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/core/globals.dart';
 import 'package:linguaflow/firebase_options.dart';
+import 'package:linguaflow/screens/home/home_screen.dart';
 import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
 import 'package:linguaflow/screens/login/web_login_layout.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/live_room_overlay.dart';
@@ -41,8 +42,11 @@ import 'package:linguaflow/screens/login/login_screen.dart';
 import 'package:linguaflow/screens/main_navigation_screen.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'core/env.dart';
+import 'package:flutter_web_plugins/url_strategy.dart'; // Import this
+import 'package:linguaflow/app_router.dart'; 
 
 void main() async {
+   usePathUrlStrategy(); 
   Env.validate();
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -133,9 +137,8 @@ class LinguaflowApp extends StatelessWidget {
             const Color charcoal = Color(0xFF101010); // Threads dark background
             const Color lightGreyBorder = Color(0xFFE5E5E5);
             const Color darkGreyBorder = Color(0xFF262626);
-            return MaterialApp(
+            return MaterialApp.router(
               title: 'LinguaFlow',
-               navigatorKey: navigatorKey,
               debugShowCheckedModeBanner: false,
               themeMode: settings.themeMode,
 
@@ -233,29 +236,23 @@ class LinguaflowApp extends StatelessWidget {
                 ),
               ),
               // home: const AuthGate(),
-               builder: (context, child) {
+              builder: (context, child) {
                 return Stack(
                   children: [
                     // A. The Main App Navigation (The Screens)
                     // We wrap 'child' which represents the Navigator
                     if (child != null) child,
 
-                    // B. Global Audio Player 
+                    // B. Global Audio Player
                     const AudioPlayerOverlay(),
 
-                    // C. Global Live Room 
+                    // C. Global Live Room
                     const LiveRoomOverlay(),
                   ],
                 );
               },
-              initialRoute: '',
-
-              routes: {
-                '': (context) => UpgradeAlert(child: AuthGate()),
-
-                LoginScreen.routeName: (context) => const LoginScreen(),
-                // PremiumScreen.routeName: (context) =>  PremiumScreen(user: false),
-              },
+               routerConfig: AppRouter.router, 
+            
             );
           },
         ),
@@ -289,7 +286,7 @@ class AuthGate extends StatelessWidget {
             state is AuthMessage) {
           FlutterNativeSplash.remove();
           if (kIsWeb) {
-            return const Scaffold(body: WebLoginLayout());
+            return HomeScreen();
           } else {
             return const LoginScreen();
           }

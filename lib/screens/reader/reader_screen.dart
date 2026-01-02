@@ -38,7 +38,7 @@ import 'widgets/fullscreen_translation_card.dart';
 
 class ReaderScreen extends StatefulWidget {
   final LessonModel lesson;
-  const ReaderScreen({super.key, required this.lesson});
+  const ReaderScreen({super.key, required this.lesson, required String lessonId});
 
   @override
   _ReaderScreenState createState() => _ReaderScreenState();

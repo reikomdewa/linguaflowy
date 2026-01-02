@@ -93,6 +93,7 @@ class _LiveNotificationBannerState extends State<LiveNotificationBanner>
   }
 
   /// SMART PICK LOGIC
+ /// SMART PICK LOGIC
   void _pickSmartRoom() {
     if (!mounted) return;
 
@@ -100,16 +101,22 @@ class _LiveNotificationBannerState extends State<LiveNotificationBanner>
     final authState = context.read<AuthBloc>().state;
     final UserModel? user = authState.user;
 
-    // 2. Filter valid rooms (exclude own rooms)
+    // 2. Filter valid rooms (exclude own rooms AND inactive rooms)
     final currentFirebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
-    List<ChatRoom> candidates = _currentAvailableRooms;
 
-    if (currentFirebaseUser != null) {
-      candidates = candidates
-          .where((r) => r.hostId != currentFirebaseUser.uid)
-          .toList();
-    }
+    List<ChatRoom> candidates = _currentAvailableRooms.where((r) {
+      // Fix: Strictly check if room is active
+      if (r.isActive == false) return false;
 
+      // Fix: Don't show the user's own room
+      if (currentFirebaseUser != null && r.hostId == currentFirebaseUser.uid) {
+        return false;
+      }
+
+      return true;
+    }).toList();
+
+    // If no candidates remain after filtering, hide the banner
     if (candidates.isEmpty) {
       if (_isVisible) setState(() => _isVisible = false);
       return;
@@ -129,6 +136,7 @@ class _LiveNotificationBannerState extends State<LiveNotificationBanner>
       if (topScore > 0) {
         _roomToShow = candidates.first;
       } else {
+        // If all scores are 0, pick random so we don't always show the same one
         final randomIndex = _random.nextInt(candidates.length);
         _roomToShow = candidates[randomIndex];
       }
