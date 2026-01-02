@@ -548,7 +548,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     color: Colors.brown,
                                                   ),
                                                   title: Text(
-                                                    "You are viewing ${LanguageHelper.getLanguageName(currentLanguageName)} content as a guest.",
+                                                    "You are viewing ${LanguageHelper.getLanguageName(currentLanguageName)} content as a guest. By the way, the app is better.",
                                                     style: TextStyle(
                                                       color: AppColor.primary,
                                                     ),

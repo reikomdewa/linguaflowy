@@ -419,7 +419,7 @@ class TutorCard extends StatelessWidget {
     );
   }
 
-Future<void> _joinTutorSession(
+  Future<void> _joinTutorSession(
     BuildContext context, {
     String? sessionPassword,
   }) async {
@@ -440,7 +440,7 @@ Future<void> _joinTutorSession(
       // ============================================================
       // STEP A: CLEANUP - Remove user from ANY other rooms first
       // ============================================================
-      
+
       // 1. Identify rooms the user is currently in (excluding the one they are trying to join)
       final roomsToLeave = roomBloc.state.allRooms.where((r) {
         final isDifferentRoom = r.id != tutor.id;
@@ -452,7 +452,7 @@ Future<void> _joinTutorSession(
       for (final oldRoom in roomsToLeave) {
         try {
           final oldRoomRef = firestore.collection('rooms').doc(oldRoom.id);
-          
+
           await firestore.runTransaction((transaction) async {
             final snapshot = await transaction.get(oldRoomRef);
             if (!snapshot.exists) return;
@@ -461,11 +461,16 @@ Future<void> _joinTutorSession(
             final rawList = currentData['members'] as List<dynamic>? ?? [];
 
             // Parse members safely
-            final members = rawList.map((m) {
-              if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
-              if (m is Map) return RoomMember.fromMap(Map<String, dynamic>.from(m));
-              return null;
-            }).where((m) => m != null).cast<RoomMember>().toList();
+            final members = rawList
+                .map((m) {
+                  if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
+                  if (m is Map)
+                    return RoomMember.fromMap(Map<String, dynamic>.from(m));
+                  return null;
+                })
+                .where((m) => m != null)
+                .cast<RoomMember>()
+                .toList();
 
             // Remove the current user
             final initialCount = members.length;
@@ -480,7 +485,9 @@ Future<void> _joinTutorSession(
               });
             }
           });
-          debugPrint("🧹 Automatically removed user from old room: ${oldRoom.title}");
+          debugPrint(
+            "🧹 Automatically removed user from old room: ${oldRoom.title}",
+          );
         } catch (e) {
           debugPrint("⚠️ Failed to leave old room ${oldRoom.id}: $e");
         }
@@ -538,19 +545,24 @@ Future<void> _joinTutorSession(
       } else {
         // If Student, Add to list safely (Transaction ensures we don't overwrite others)
         final roomRef = firestore.collection('rooms').doc(tutorRoomWrapper.id);
-        
+
         await firestore.runTransaction((transaction) async {
           final snapshot = await transaction.get(roomRef);
           List<RoomMember> currentMembers = [];
-          
+
           if (snapshot.exists) {
             final data = snapshot.data()!;
-             final rawList = data['members'] as List<dynamic>? ?? [];
-             currentMembers = rawList.map((m) {
-                if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
-                if (m is Map) return RoomMember.fromMap(Map<String, dynamic>.from(m));
-                return null;
-             }).where((m) => m != null).cast<RoomMember>().toList();
+            final rawList = data['members'] as List<dynamic>? ?? [];
+            currentMembers = rawList
+                .map((m) {
+                  if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
+                  if (m is Map)
+                    return RoomMember.fromMap(Map<String, dynamic>.from(m));
+                  return null;
+                })
+                .where((m) => m != null)
+                .cast<RoomMember>()
+                .toList();
           } else {
             // If room doesn't exist yet (Host hasn't joined), create basic structure
             currentMembers = List.from(tutorRoomWrapper.members);
@@ -566,7 +578,7 @@ Future<void> _joinTutorSession(
               isHost: false,
             );
             currentMembers.add(myMember);
-            
+
             transaction.set(roomRef, {
               ...tutorRoomWrapper.toMap(), // Ensures base fields exist
               'members': currentMembers.map((m) => m.toMap()).toList(),
@@ -596,9 +608,9 @@ Future<void> _joinTutorSession(
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error joining class: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error joining class: $e")));
       }
     }
   }

@@ -28,6 +28,9 @@ import 'package:linguaflow/screens/speak/widgets/cards/room_card.dart';
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
 import 'package:linguaflow/screens/speak/widgets/cards/tutor_card.dart';
 
+// Import your AuthGuard
+import 'package:linguaflow/utils/auth_guard.dart';
+
 class SpeakView extends StatefulWidget {
   const SpeakView({super.key});
 
@@ -51,23 +54,14 @@ class _SpeakViewState extends State<SpeakView> {
     setState(() => _isSearching = !_isSearching);
     if (!_isSearching) {
       _searchController.clear();
-      // Clear filters on BOTH blocs
       context.read<RoomBloc>().add(const FilterRooms(null));
       context.read<TutorBloc>().add(const FilterTutors(null));
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // NEW: Refresh Handler
-  // ---------------------------------------------------------------------------
   Future<void> _onRefresh() async {
-    // 1. Trigger events to reload data.
-    // CHECK YOUR EVENT NAMES: Ensure 'FetchRooms' and 'FetchTutors' exist in your event files.
-    // If you use 'LoadRooms' or 'GetRooms', change them here.
     context.read<RoomBloc>().add(const LoadRooms());
     context.read<TutorBloc>().add(const LoadTutors());
-
-    // Optional: Add a small delay for better UI feel if your bloc events are fire-and-forget
     await Future.delayed(const Duration(milliseconds: 800));
   }
 
@@ -75,13 +69,13 @@ class _SpeakViewState extends State<SpeakView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = context.watch<AuthBloc>().state;
-
-    if (authState is! AuthAuthenticated)
-      return const Scaffold(body: SizedBox());
+    final currentUser = (authState is AuthAuthenticated)
+        ? authState.user
+        : null;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      floatingActionButton: _buildFab(context),
+      floatingActionButton: _buildFab(context, currentUser),
       body: SafeArea(
         child: Column(
           children: [
@@ -93,7 +87,7 @@ class _SpeakViewState extends State<SpeakView> {
             const SizedBox(height: 10),
             _buildTabSelector(context),
             const SizedBox(height: 10),
-            Expanded(child: _buildBody(context, authState.user)),
+            Expanded(child: _buildBody(context, currentUser)),
           ],
         ),
       ),
@@ -105,17 +99,224 @@ class _SpeakViewState extends State<SpeakView> {
       case 0:
         return _buildMixedList(user);
       case 1:
-        return _buildTutorList();
+        return _buildTutorList(user);
       case 2:
-        return _buildRoomList();
+        return _buildRoomList(user);
       default:
         return const SizedBox();
     }
   }
 
   // ===========================================================================
-  // TABS & FILTERS
+  // RESPONSIVE LIST BUILDER (CORE LOGIC)
   // ===========================================================================
+
+  /// A reusable builder that decides between List (Mobile) and Grid (Desktop)
+  /// and handles the Header + RefreshIndicator logic.
+  Widget _buildResponsiveList({
+    required BuildContext context,
+    required List<dynamic> items,
+    required dynamic user,
+    required String emptyMessage,
+  }) {
+    // Empty State
+    if (items.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _onRefresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.7,
+            child: Center(child: Text(emptyMessage)),
+          ),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Define breakpoints
+        final width = constraints.maxWidth;
+        bool isDesktop = width > 700; // Breakpoint for switching to grid
+
+        // Calculate Grid Columns based on width
+        int crossAxisCount = 1;
+        if (width > 1300) {
+          crossAxisCount = 4;
+        } else if (width > 1000) {
+          crossAxisCount = 3;
+        } else if (width > 700) {
+          crossAxisCount = 2;
+        }
+
+        return RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              // 1. The Header (Suggestions) - Spans full width
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: _buildSuggestedHeader(context, user),
+                ),
+              ),
+
+              // 2. The Content (Grid or List)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 140),
+                sliver: isDesktop
+                    ? SliverGrid(
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                          // Adjust ratio based on your Card design.
+                          // 1.4 looks like the screenshot (wider than tall)
+                          childAspectRatio: 1.2,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => _buildItem(items[index]),
+                          childCount: items.length,
+                        ),
+                      )
+                    : SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: _buildItem(items[index]),
+                          ),
+                          childCount: items.length,
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Helper to render individual items safely
+  Widget _buildItem(dynamic item) {
+    if (item is ChatRoom) return RoomCard(room: item);
+    if (item is Tutor) return TutorCard(tutor: item);
+    return const SizedBox.shrink();
+  }
+
+  // ===========================================================================
+  // DATA FETCHING WRAPPERS
+  // ===========================================================================
+
+  Widget _buildMixedList(dynamic user) {
+    return BlocBuilder<RoomBloc, RoomState>(
+      builder: (context, roomState) {
+        return BlocBuilder<TutorBloc, TutorState>(
+          builder: (context, tutorState) {
+            // Loading State
+            if (roomState.status == RoomStatus.loading &&
+                tutorState.status == TutorStatus.loading &&
+                roomState.allRooms.isEmpty) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            // Merge & Sort
+            final List<dynamic> feedItems = [
+              ...roomState.filteredRooms,
+              ...tutorState.filteredTutors,
+            ];
+
+            feedItems.sort((a, b) {
+              DateTime dateA = (a is ChatRoom)
+                  ? a.createdAt
+                  : (a as Tutor).createdAt;
+              DateTime dateB = (b is ChatRoom)
+                  ? b.createdAt
+                  : (b as Tutor).createdAt;
+              return dateB.compareTo(dateA);
+            });
+
+            return _buildResponsiveList(
+              context: context,
+              items: feedItems,
+              user: user,
+              emptyMessage: "No suggestions found.",
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildTutorList(dynamic user) {
+    return BlocBuilder<TutorBloc, TutorState>(
+      builder: (context, state) {
+        if (state.status == TutorStatus.loading && state.allTutors.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        return _buildResponsiveList(
+          context: context,
+          items: state.filteredTutors,
+          user: user,
+          emptyMessage: "No tutors found.",
+        );
+      },
+    );
+  }
+
+  Widget _buildRoomList(dynamic user) {
+    return BlocBuilder<RoomBloc, RoomState>(
+      builder: (context, state) {
+        if (state.status == RoomStatus.loading && state.allRooms.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        return _buildResponsiveList(
+          context: context,
+          items: state.filteredRooms,
+          user: user,
+          emptyMessage: "No active rooms.",
+        );
+      },
+    );
+  }
+
+  // ===========================================================================
+  // REST OF UI (Tabs, FAB, Header, etc.)
+  // ===========================================================================
+
+  Widget _buildSuggestedHeader(BuildContext context, dynamic user) {
+    String titleText = "Popular suggestions";
+    if (user != null) {
+      titleText =
+          "${LanguageHelper.getLanguageName(user.currentLanguage)} suggestions";
+    }
+
+    return Row(
+      children: [
+        Icon(
+          Icons.auto_awesome,
+          size: 18,
+          color: Theme.of(context).primaryColor,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          titleText,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  // ... (Keep existing _buildTabSelector, _showFilterSheet, _buildFab, etc.)
+  // Included purely to ensure context validity, copy your existing versions if unchanged.
+
   Widget _buildTabSelector(BuildContext context) {
     return Builder(
       builder: (context) {
@@ -241,178 +442,9 @@ class _SpeakViewState extends State<SpeakView> {
     );
   }
 
-  // ===========================================================================
-  // LIST BUILDERS
-  // ===========================================================================
-
-  Widget _buildMixedList(dynamic user) {
-    return BlocBuilder<RoomBloc, RoomState>(
-      builder: (context, roomState) {
-        return BlocBuilder<TutorBloc, TutorState>(
-          builder: (context, tutorState) {
-            // Keep loading separate so it doesn't show an empty list immediately
-            if (roomState.status == RoomStatus.loading &&
-                tutorState.status == TutorStatus.loading &&
-                roomState.allRooms.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final List<dynamic> feedItems = [
-              ...roomState.filteredRooms,
-              ...tutorState.filteredTutors,
-            ];
-
-            feedItems.sort((a, b) {
-              DateTime dateA = (a is ChatRoom)
-                  ? a.createdAt
-                  : (a as Tutor).createdAt;
-              DateTime dateB = (b is ChatRoom)
-                  ? b.createdAt
-                  : (b as Tutor).createdAt;
-              return dateB.compareTo(dateA);
-            });
-
-            // Make empty state scrollable to allow refreshing
-            if (feedItems.isEmpty) {
-              return RefreshIndicator(
-                onRefresh: _onRefresh,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.7,
-                    child: const Center(child: Text("No suggestions found.")),
-                  ),
-                ),
-              );
-            }
-
-            return RefreshIndicator(
-              onRefresh: _onRefresh,
-              child: ListView.builder(
-                // Ensure list is always scrollable for pull-to-refresh
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-                itemCount: feedItems.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == 0) return _buildSuggestedHeader(context, user);
-                  final item = feedItems[index - 1];
-
-                  if (item is ChatRoom) return RoomCard(room: item);
-                  return TutorCard(tutor: item as Tutor);
-                },
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildTutorList() {
-    return BlocBuilder<TutorBloc, TutorState>(
-      builder: (context, state) {
-        if (state.status == TutorStatus.loading && state.allTutors.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        // Make empty state scrollable to allow refreshing
-        if (state.filteredTutors.isEmpty) {
-          return RefreshIndicator(
-            onRefresh: _onRefresh,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height * 0.7,
-                child: const Center(child: Text("No tutors found")),
-              ),
-            ),
-          );
-        }
-
-        return RefreshIndicator(
-          onRefresh: _onRefresh,
-          child: ListView.builder(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-            itemCount: state.filteredTutors.length,
-            itemBuilder: (context, index) =>
-                TutorCard(tutor: state.filteredTutors[index]),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildRoomList() {
-    return BlocBuilder<RoomBloc, RoomState>(
-      builder: (context, state) {
-        if (state.status == RoomStatus.loading && state.allRooms.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        // Make empty state scrollable to allow refreshing
-        if (state.filteredRooms.isEmpty) {
-          return RefreshIndicator(
-            onRefresh: _onRefresh,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height * 0.7,
-                child: const Center(child: Text("No active rooms")),
-              ),
-            ),
-          );
-        }
-
-        return RefreshIndicator(
-          onRefresh: _onRefresh,
-          child: ListView.builder(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-            itemCount: state.filteredRooms.length,
-            itemBuilder: (context, index) =>
-                RoomCard(room: state.filteredRooms[index]),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSuggestedHeader(BuildContext context, dynamic user) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16, left: 4),
-      child: Row(
-        children: [
-          Icon(
-            Icons.auto_awesome,
-            size: 18,
-            color: Theme.of(context).primaryColor,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            "${LanguageHelper.getLanguageName(user.currentLanguage)} suggestions",
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ===========================================================================
-  // FAB & ACTIONS
-  // ===========================================================================
-  Widget _buildFab(BuildContext context) {
+  Widget _buildFab(BuildContext context, dynamic currentUser) {
     final theme = Theme.of(context);
-    final authState = context.read<AuthBloc>().state;
 
-    // Guard: If not authenticated, return empty or standard fab
-    if (authState is! AuthAuthenticated) return const SizedBox();
-
-    final currentUser = authState.user;
-
-    // Listen to RoomBloc to see if we are in a room
     return BlocBuilder<RoomBloc, RoomState>(
       builder: (context, state) {
         final isInRoom = state.activeChatRoom != null;
@@ -424,55 +456,64 @@ class _SpeakViewState extends State<SpeakView> {
             FloatingActionButton(
               heroTag: 'create',
               backgroundColor: theme.cardColor.withOpacity(0.9),
-              onPressed: () => _showCreateOptions(context),
-              child: const Icon(Icons.add_rounded, size: 32),
-            ),
-            const SizedBox(height: 16),
-
-            FloatingActionButton(
-              heroTag: 'msg',
               onPressed: () {
-                Navigator.push(
+                AuthGuard.run(
                   context,
-                  MaterialPageRoute(builder: (context) => const InboxScreen()),
+                  onAuthenticated: () {
+                    _showCreateOptions(context);
+                  },
                 );
               },
-              child: StreamBuilder<List<PrivateConversation>>(
-                stream: PrivateChatService().getInbox(currentUser.id),
-                builder: (context, snapshot) {
-                  int totalUnreadMessages = 0;
+              child: const Icon(Icons.add_rounded, size: 32),
+            ),
 
-                  if (snapshot.hasData) {
-                    final chats = snapshot.data!;
-
-                    for (var chat in chats) {
-                      // Check if I am the recipient (not the sender)
-                      bool isLastMsgFromMe =
-                          chat.lastSenderId == currentUser.id;
-
-                      // If the message is NOT from me, add its unread count to total
-                      if (!isLastMsgFromMe) {
-                        totalUnreadMessages += chat.unreadCount;
-                      }
-                    }
-                  }
-
-                  return Badge(
-                    isLabelVisible: totalUnreadMessages > 0,
-                    label: Text(
-                      totalUnreadMessages > 99 ? '99+' : '$totalUnreadMessages',
-                    ),
-                    backgroundColor: Colors.red,
-                    offset: const Offset(4, -4),
-                    child: Icon(
-                      isInRoom
-                          ? Icons.chat_bubble_outline_rounded
-                          : Icons.message_rounded,
+            if (currentUser != null) ...[
+              const SizedBox(height: 16),
+              FloatingActionButton(
+                heroTag: 'msg',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const InboxScreen(),
                     ),
                   );
                 },
+                child: StreamBuilder<List<PrivateConversation>>(
+                  stream: PrivateChatService().getInbox(currentUser.id),
+                  builder: (context, snapshot) {
+                    int totalUnreadMessages = 0;
+
+                    if (snapshot.hasData) {
+                      final chats = snapshot.data!;
+                      for (var chat in chats) {
+                        bool isLastMsgFromMe =
+                            chat.lastSenderId == currentUser.id;
+                        if (!isLastMsgFromMe) {
+                          totalUnreadMessages += chat.unreadCount;
+                        }
+                      }
+                    }
+
+                    return Badge(
+                      isLabelVisible: totalUnreadMessages > 0,
+                      label: Text(
+                        totalUnreadMessages > 99
+                            ? '99+'
+                            : '$totalUnreadMessages',
+                      ),
+                      backgroundColor: Colors.red,
+                      offset: const Offset(4, -4),
+                      child: Icon(
+                        isInRoom
+                            ? Icons.chat_bubble_outline_rounded
+                            : Icons.message_rounded,
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
+            ],
           ],
         );
       },
@@ -547,16 +588,6 @@ class _SpeakViewState extends State<SpeakView> {
           ),
         ),
       ),
-    );
-  }
-
-  void _showRoomChat(BuildContext context, Room room) {
-    showModalBottomSheet(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => RoomChatSheet(room: room),
     );
   }
 }

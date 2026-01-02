@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/participant_tile.dart';
-import 'room_controls.dart'; // Import controls
+import 'room_controls.dart';
 
 class MorphingRoomCard extends StatelessWidget {
   final RoomGlobalManager manager;
@@ -59,6 +59,7 @@ class MorphingRoomCard extends StatelessWidget {
     );
   }
 
+  // ... (Keep _buildMiniView exactly as it was) ...
   Widget _buildMiniView(BuildContext context) {
     final localP = manager.livekitRoom?.localParticipant;
     final isMicOn = localP?.isMicrophoneEnabled() ?? false;
@@ -245,38 +246,62 @@ class MorphingRoomCard extends StatelessWidget {
             ),
           ),
 
-          // GRID
+          // -----------------------------------------------------------------
+          // RESPONSIVE GRID (UPDATED SECTION)
+          // -----------------------------------------------------------------
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: GridView.builder(
-                padding: EdgeInsets.zero,
-                physics: const BouncingScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 0.8,
-                ),
-                itemCount: participants.length,
-                itemBuilder: (context, index) {
-                  return GestureDetector(
-                    onTap: () => onParticipantTap(participants[index]),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          border: Border.all(color: Colors.white10, width: 1),
-                        ),
-                        child: ParticipantTile(
-                          participant: participants[index],
-                        ),
-                      ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+
+                // 1. Calculate Columns based on width
+                int crossAxisCount = 3; // Mobile default
+                if (width > 600) crossAxisCount = 4; // Tablet Portrait
+                if (width > 900)
+                  crossAxisCount = 5; // Tablet Landscape / Small Desktop
+                if (width > 1200) crossAxisCount = 6; // Desktop
+                if (width > 1500) crossAxisCount = 8; // Ultra Wide
+
+                // 2. Adjust Aspect Ratio based on device type
+                // Mobile (Portrait) looks better with taller cards (0.8).
+                // Desktop (Landscape) looks better with squarer cards (1.0 or 1.1) to fill space nicely.
+                double childAspectRatio = width > 900 ? 1.0 : 0.8;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: GridView.builder(
+                    padding: EdgeInsets.zero,
+                    physics: const BouncingScrollPhysics(),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                      childAspectRatio: childAspectRatio,
                     ),
-                  );
-                },
-              ),
+                    itemCount: participants.length,
+                    itemBuilder: (context, index) {
+                      return GestureDetector(
+                        onTap: () => onParticipantTap(participants[index]),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              border: Border.all(
+                                color: Colors.white10,
+                                width: 1,
+                              ),
+                            ),
+                            child: ParticipantTile(
+                              participant: participants[index],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
             ),
           ),
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Required for Autofill
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:go_router/go_router.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
@@ -141,12 +142,27 @@ class _LoginFormContentState extends State<LoginFormContent> {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         // ---------------------------------------------------------------------
-        // 1. SUCCESS STATE
+        // 1. LOGIN SUCCESS (The missing part)
+        // ---------------------------------------------------------------------
+        if (state is AuthAuthenticated) {
+          FocusScope.of(context).unfocus(); // Hide keyboard
+
+          // Logic: If we came from another screen (via AuthGuard), go back.
+          // If we opened this directly (e.g. from URL), go Home.
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/');
+          }
+        }
+
+        // ---------------------------------------------------------------------
+        // 2. REGISTRATION SUCCESS / MESSAGES
         // ---------------------------------------------------------------------
         if (state is AuthMessage) {
           FocusScope.of(context).unfocus();
 
-          // If registered, switch to Login but keep data
+          // If registered successfully, switch UI to Login mode
           if (!_isLogin) {
             setState(() {
               _isLogin = true;
@@ -164,7 +180,7 @@ class _LoginFormContentState extends State<LoginFormContent> {
         }
 
         // ---------------------------------------------------------------------
-        // 2. ERROR STATE
+        // 3. ERROR STATE
         // ---------------------------------------------------------------------
         if (state is AuthError) {
           _showErrorSnackBar(context, state);

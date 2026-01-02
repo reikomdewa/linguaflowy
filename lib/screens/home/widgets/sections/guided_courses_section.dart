@@ -204,7 +204,7 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
                             widget.isDark,
                             context,
                           )
-                        : context.push('/lesson/${lesson.id}', extra: lesson),
+                        : context.go('/lesson/${lesson.id}', extra: lesson),
                     onOptionTap: () =>
                         showLessonOptions(context, lesson, widget.isDark),
                     onPlaylistTap: isSeries
@@ -386,7 +386,7 @@ class _ImmersionSectionState extends State<ImmersionSection> {
                           widget.isDark,
                           context,
                         )
-                      : context.push('/lesson/${l.id}', extra: l);
+                      : context.go('/lesson/${l.id}', extra: l);
                 },
                 onOptionTap: () => showLessonOptions(context, l, widget.isDark),
               );

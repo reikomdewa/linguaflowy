@@ -32,7 +32,7 @@ class AuthGuard {
             FilledButton(
               onPressed: () {
                 Navigator.pop(ctx); // Close dialog
-                context.push('/web_login'); // Go to login
+                context.push('/login'); // Go to login
               },
               child: const Text("Login / Sign Up"),
             ),
