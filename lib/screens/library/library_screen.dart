@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:go_router/go_router.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
@@ -20,6 +21,28 @@ class LibraryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authState = (context.watch<AuthBloc>().state);
+    if (authState.isGuest) {
+      return Material(
+        child: Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.person_off, size: 64, color: Colors.grey),
+                const SizedBox(height: 16),
+                const Text("You are browsing as a Guest"),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => context.push('/login'),
+                  child: const Text("Create Account to Save Progress"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final user = (context.watch<AuthBloc>().state as AuthAuthenticated).user;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;

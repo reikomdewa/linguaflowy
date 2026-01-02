@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 // 1. IMPORT YOUR CONSTANTS
 import 'package:linguaflow/constants/genre_constants.dart';
@@ -12,7 +13,9 @@ import 'package:linguaflow/screens/home/widgets/sections/guided_courses_section.
 import 'package:linguaflow/screens/home/widgets/sections/immersion_section.dart';
 import 'package:linguaflow/screens/home/widgets/sections/library_section.dart';
 import 'package:linguaflow/screens/home/widgets/tap_button.dart';
+import 'package:linguaflow/screens/login/web_login_layout.dart';
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
+import 'package:linguaflow/theme/colors.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:linguaflow/widgets/buttons/build_ai_button.dart';
 import 'package:linguaflow/widgets/buttons/download_app_button.dart';
@@ -30,7 +33,6 @@ import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/models/user_model.dart'; // Added explicitly
 
 // WIDGETS & SECTIONS
-import 'package:linguaflow/screens/home/widgets/sections/home_sections.dart';
 import 'package:linguaflow/screens/home/widgets/audio_section.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
 import 'package:linguaflow/screens/home/widgets/audio_player_overlay.dart';
@@ -237,14 +239,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 1. Show Loading only if actually Initializing
     if (authState is AuthInitial || authState is AuthLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: Text('Loading')));
     }
 
     // 2. Determine User Status
     final bool isGuest = authState is! AuthAuthenticated;
-    final UserModel? user = isGuest
-        ? null
-        : (authState as AuthAuthenticated).user;
+    final UserModel? user = isGuest ? null : (authState).user;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
@@ -262,61 +262,132 @@ class _HomeScreenState extends State<HomeScreen> {
     if (currentLanguageName.isEmpty) {
       return Scaffold(
         backgroundColor: bgColor,
-        body: Center(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.translate, size: 64, color: Colors.blue),
-                const SizedBox(height: 20),
-                Text(
-                  isGuest
-                      ? "Choose a language to explore"
-                      : "Welcome! Setting up...",
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final bool isDesktop = constraints.maxWidth > 800;
+
+            return Center(
+              child: SingleChildScrollView(
+                child: SafeArea(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: .center,
+                    children: [
+                      if (isGuest & !isDesktop)
+                        Column(
+                          children: [
+                            Image.asset(
+                              'assets/images/linguaflow_logo_transparent.png',
+                              width: 180,
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                right: 16.0,
+                                left: 16,
+                                bottom: 16,
+                              ),
+                              child: Text(
+                                isGuest
+                                    ? "Fluency Through Immersion,  Absorb Languages Like a Native - Select Your Language."
+                                    : "Welcome! Setting up...",
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      if (isGuest & isDesktop)
+                        Row(
+                          mainAxisAlignment: .center,
+                          children: [
+                            Image.asset(
+                              'assets/images/linguaflow_logo_transparent.png',
+                              width: 120,
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                right: 16.0,
+                                left: 16,
+                              ),
+                              child: Text(
+                                isGuest
+                                    ? "LinguaFlow - Fluency Through Immersion,  Absorb Languages Like a Native "
+                                    : "Welcome! Setting up...",
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      // const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: .center,
+                        children: [
+                          Text(
+                            isGuest
+                                ? "Choose a language to learn"
+                                : "Welcome! Setting up...",
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            'Or',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (isGuest & isDesktop)
+                            buildAppDownloadButton(isDark, context),
+                        ],
+                      ),
+
+                      // const SizedBox(height: 30),
+                      if (isGuest & !isDesktop)
+                        buildAppDownloadButton(isDark, context),
+                      // Show grid for guests
+                      // Show grid for guests
+                      if (isGuest)
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 12,
+                          runSpacing: 12,
+
+                          children: LanguageHelper.availableLanguages.keys.map((
+                            lang,
+                          ) {
+                            return ActionChip(
+                              avatar: Text(LanguageHelper.getFlagEmoji(lang)),
+                              label: Text(LanguageHelper.getLanguageName(lang)),
+                              onPressed: () {
+                                setState(() {
+                                  _guestLanguage = lang;
+                                });
+                                // Trigger load immediately
+                                context.read<LessonBloc>().add(
+                                  LessonLoadRequested('guest', lang),
+                                );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      if (isGuest)
+                        Column(
+                          children: [SizedBox(height: 10), WebLoginLayout()],
+                        ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 30),
-
-                // Show grid for guests
-                // Show grid for guests
-                if (isGuest)
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 12,
-                    runSpacing: 12,
-
-                    children: LanguageHelper.availableLanguages.keys.map((
-                      lang,
-                    ) {
-                      return ActionChip(
-                        avatar: Text(LanguageHelper.getFlagEmoji(lang)),
-                        label: Text(LanguageHelper.getLanguageName(lang)),
-                        onPressed: () {
-                          setState(() {
-                            _guestLanguage = lang;
-                          });
-                          // Trigger load immediately
-                          context.read<LessonBloc>().add(
-                            LessonLoadRequested('guest', lang),
-                          );
-                        },
-                      );
-                    }).toList(),
-                  ),
-                if (isGuest)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 30.0),
-                    child: TextButton(
-                      onPressed: () => Navigator.pushNamed(context, '/login'),
-                      child: const Text("Already have an account? Login"),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       );
     }
@@ -330,7 +401,14 @@ class _HomeScreenState extends State<HomeScreen> {
         final bool isDesktop = constraints.maxWidth > 800;
         return Scaffold(
           backgroundColor: bgColor,
-          appBar: buildAppBar(context, user, isDark, textColor, isDesktop),
+          appBar: buildAppBar(
+            context,
+            user,
+            isDark,
+            textColor,
+            isDesktop,
+            guestLanguage: _guestLanguage,
+          ),
           body: Stack(
             children: [
               BlocBuilder<VocabularyBloc, VocabularyState>(
@@ -360,13 +438,19 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               );
                               return const Center(
-                                child: CircularProgressIndicator(),
+                                child: Text('Joing as Guest'),
                               );
                             }
 
                             if (lessonState is LessonLoading) {
                               return const Center(
-                                child: CircularProgressIndicator(),
+                                child: Column(
+                                  mainAxisAlignment: .center,
+                                  children: [
+                                    CircularProgressIndicator(),
+                                    Text('Loading lesson'),
+                                  ],
+                                ),
                               );
                             }
 
@@ -446,34 +530,44 @@ class _HomeScreenState extends State<HomeScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       if (!isDesktop)
-                                        buildAppDownloadButton(
-                                          isDark,
-                                          isDesktop,
-                                          context,
-                                        ),
+                                        buildAppDownloadButton(isDark, context),
 
                                       // If guest, show "Choose different language" banner
                                       if (isGuest)
-                                        Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Card(
-                                            color: Colors.orange.shade100,
-                                            child: ListTile(
-                                              leading: const Icon(
-                                                Icons.info_outline,
-                                                color: Colors.brown,
+                                        Column(
+                                          children: [
+                                            Padding(
+                                              padding: const EdgeInsets.all(
+                                                8.0,
                                               ),
-                                              title: Text(
-                                                "You are viewing $currentLanguageName content as a guest.",
-                                              ),
-                                              trailing: TextButton(
-                                                onPressed: () => setState(
-                                                  () => _guestLanguage = "",
+                                              child: Card(
+                                                color: Colors.orange.shade100,
+                                                child: ListTile(
+                                                  leading: const Icon(
+                                                    Icons.info_outline,
+                                                    color: Colors.brown,
+                                                  ),
+                                                  title: Text(
+                                                    "You are viewing ${LanguageHelper.getLanguageName(currentLanguageName)} content as a guest.",
+                                                    style: TextStyle(
+                                                      color: AppColor.primary,
+                                                    ),
+                                                  ),
+                                                  trailing: TextButton(
+                                                    onPressed: () => setState(
+                                                      () => _guestLanguage = "",
+                                                    ),
+                                                    child: const Text(
+                                                      "Change",
+                                                      style: TextStyle(
+                                                        color: AppColor.primary,
+                                                      ),
+                                                    ),
+                                                  ),
                                                 ),
-                                                child: const Text("Change"),
                                               ),
                                             ),
-                                          ),
+                                          ],
                                         ),
 
                                       GuidedCoursesSection(
@@ -1017,14 +1111,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (audioManager.isPlaying || audioManager.currentLesson != null) {
         audioManager.stopAndClose();
       }
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => kIsWeb
-              ? ReaderScreenWeb(lesson: lesson)
-              : ReaderScreen(lesson: lesson),
-        ),
-      );
+      context.push('/lesson/${lesson.id}', extra: lesson);
     }
   }
 }

@@ -13,76 +13,81 @@ class WebLoginLayout extends StatelessWidget {
     final surfaceColor = theme.cardColor;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Breakpoint
-        final isNarrow = constraints.maxWidth < 900;
+    return Material(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Breakpoint
+          final isNarrow = constraints.maxWidth < 900;
 
-        if (isNarrow) {
-          // -----------------------------------------------------------
-          // MOBILE / TABLET WEB LAYOUT
-          // -----------------------------------------------------------
-          return SingleChildScrollView(
-            child: Column(
-              children: [
-                // SECTION 1: Login Form
-                // We give this a minimum height of the full screen (or 700px).
-                // This prevents the "Infinite Size" crash while making it look full-screen.
-                Container(
-                  constraints: BoxConstraints(
-                    // Ensure it's at least as tall as the screen, 
-                    // but enforce a minimum of 650px so the form isn't squashed on small landscape phones.
-                    minHeight: screenHeight > 650 ? screenHeight : 650,
+          if (isNarrow) {
+            // -----------------------------------------------------------
+            // MOBILE / TABLET WEB LAYOUT
+            // -----------------------------------------------------------
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  // SECTION 1: Login Form
+                  // We give this a minimum height of the full screen (or 700px).
+                  // This prevents the "Infinite Size" crash while making it look full-screen.
+                  Container(
+                    constraints: BoxConstraints(
+                      // Ensure it's at least as tall as the screen,
+                      // but enforce a minimum of 650px so the form isn't squashed on small landscape phones.
+                      minHeight: screenHeight > 650 ? screenHeight : 650,
+                    ),
+                    // LoginFormContent uses Center(), so it will center itself within this massive box
+                    child: const LoginFormContent(),
                   ),
-                  // LoginFormContent uses Center(), so it will center itself within this massive box
-                  child: const LoginFormContent(),
-                ),
 
-                // SECTION 2: Marketing Info (Below the fold)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 60),
-                  // Optional: Slight background color difference to separate sections?
-                  // color: theme.colorScheme.surfaceContainerLow, 
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 500),
-                      child: _buildMarketingPanel(
-                        context, 
-                        theme, 
-                        hyperBlue, 
-                        isCentered: true
+                  // SECTION 2: Marketing Info (Below the fold)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 60,
+                    ),
+                    // Optional: Slight background color difference to separate sections?
+                    // color: theme.colorScheme.surfaceContainerLow,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 500),
+                        child: _buildMarketingPanel(
+                          context,
+                          theme,
+                          hyperBlue,
+                          isCentered: true,
+                        ),
                       ),
                     ),
                   ),
+                ],
+              ),
+            );
+          } else {
+            // -----------------------------------------------------------
+            // DESKTOP WEB LAYOUT
+            // -----------------------------------------------------------
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Left Side: Login Form
+                Expanded(
+                  flex: 4,
+                  child: _buildLoginPanel(surfaceColor, borderColor),
+                ),
+
+                const SizedBox(width: 80),
+
+                // Right Side: Marketing Info
+                Expanded(
+                  flex: 6,
+                  child: _buildMarketingPanel(context, theme, hyperBlue),
                 ),
               ],
-            ),
-          );
-        } else {
-          // -----------------------------------------------------------
-          // DESKTOP WEB LAYOUT
-          // -----------------------------------------------------------
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Left Side: Login Form
-              Expanded(
-                flex: 4,
-                child: _buildLoginPanel(surfaceColor, borderColor),
-              ),
-
-              const SizedBox(width: 80),
-
-              // Right Side: Marketing Info
-              Expanded(
-                flex: 6,
-                child: _buildMarketingPanel(context, theme, hyperBlue),
-              ),
-            ],
-          );
-        }
-      },
+            );
+          }
+        },
+      ),
     );
   }
 
@@ -92,8 +97,8 @@ class WebLoginLayout extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(40.0),
       decoration: BoxDecoration(
-        color: surfaceColor,
-        border: Border.all(color: borderColor, width: 1.5),
+        // color: surfaceColor,
+        // border: Border.all(color: borderColor, width: 1.5),
         borderRadius: BorderRadius.circular(16),
       ),
       child: const LoginFormContent(),

@@ -8,7 +8,6 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
-import 'package:linguaflow/screens/completion/completion_screen.dart';
 import 'package:linguaflow/services/local_lemmatizer.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/utils/utils.dart';
@@ -38,7 +37,7 @@ import 'widgets/fullscreen_translation_card.dart';
 
 class ReaderScreen extends StatefulWidget {
   final LessonModel lesson;
-  const ReaderScreen({super.key, required this.lesson, required String lessonId});
+  const ReaderScreen({super.key, required this.lesson});
 
   @override
   _ReaderScreenState createState() => _ReaderScreenState();

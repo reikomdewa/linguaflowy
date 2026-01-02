@@ -86,16 +86,7 @@ class ChatRoom extends Equatable {
   }
 
   factory ChatRoom.fromMap(Map<String, dynamic> map, String id) {
-    // --------------------------------------------------------
-    // DEBUGGING START
-    // --------------------------------------------------------
-    if (map['members'] != null) {
-      print('🔍 [ChatRoom Model] Parsing Room: "${map['title']}" ($id)');
-      print('   -> Raw members type: ${map['members'].runtimeType}');
-      print('   -> Raw members data: ${map['members']}');
-    }
-    // --------------------------------------------------------
-
+    if (map['members'] != null) {}
     DateTime parseDate(dynamic val) {
       if (val is Timestamp) return val.toDate();
       if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
@@ -112,30 +103,23 @@ class ChatRoom extends Equatable {
     List<RoomMember> parsedMembers = [];
     if (map['members'] != null && map['members'] is List) {
       try {
-        parsedMembers = (map['members'] as List).map((m) {
-          if (m == null) return null;
-          try {
-            if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
-            if (m is Map) return RoomMember.fromMap(Map<String, dynamic>.from(m));
-          } catch (e) {
-            print("⚠️ [ChatRoom Model] Skipping malformed member: $m | Error: $e");
-          }
-          return null;
-        })
-        .where((m) => m != null)
-        .cast<RoomMember>()
-        .toList();
+        parsedMembers = (map['members'] as List)
+            .map((m) {
+              if (m == null) return null;
+              try {
+                if (m is Map<String, dynamic>) return RoomMember.fromMap(m);
+                if (m is Map)
+                  return RoomMember.fromMap(Map<String, dynamic>.from(m));
+              } catch (e) {}
+              return null;
+            })
+            .where((m) => m != null)
+            .cast<RoomMember>()
+            .toList();
       } catch (e) {
-        print("❌ [ChatRoom Model] CRITICAL ERROR parsing members list: $e");
         parsedMembers = [];
       }
     }
-
-    // --------------------------------------------------------
-    // DEBUGGING RESULT
-    // --------------------------------------------------------
-    print('   -> ✅ Successfully parsed ${parsedMembers.length} members.');
-    // --------------------------------------------------------
 
     return ChatRoom(
       id: id,
@@ -211,6 +195,16 @@ class ChatRoom extends Equatable {
 
   @override
   List<Object?> get props => [
-    id, hostId, title, memberCount, members, level, isActive, spotlightedUserId, lastUpdatedAt, expireAt, liveKitRoomId,
+    id,
+    hostId,
+    title,
+    memberCount,
+    members,
+    level,
+    isActive,
+    spotlightedUserId,
+    lastUpdatedAt,
+    expireAt,
+    liveKitRoomId,
   ];
 }

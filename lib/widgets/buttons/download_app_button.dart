@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-Widget buildAppDownloadButton(bool isDark, bool isDesktop, context) {
+Widget buildAppDownloadButton(bool isDark, context) {
   // The button should only be visible on Web and not in Desktop mode.
   if (kIsWeb) {
     return Padding(

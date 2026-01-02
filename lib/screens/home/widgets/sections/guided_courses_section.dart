@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
 import 'package:linguaflow/screens/home/widgets/lesson_cards.dart';
@@ -163,7 +164,9 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
                     ),
                   ),
                 ),
-                isDesktop ?  buildAppDownloadButton(isDark, isDesktop, context) : SizedBox.shrink(),
+                isDesktop
+                    ? buildAppDownloadButton(isDark, context)
+                    : SizedBox.shrink(),
                 isDesktop ? SizedBox.shrink() : PracticeBannerButton(),
               ],
             ),
@@ -183,8 +186,9 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
                 itemCount: displayLessons.length + (_isLoadingMore ? 1 : 0),
                 separatorBuilder: (ctx, i) => const SizedBox(width: 16),
                 itemBuilder: (context, index) {
-                  if (index >= displayLessons.length)
+                  if (index >= displayLessons.length) {
                     return const Center(child: CircularProgressIndicator());
+                  }
                   final lesson = displayLessons[index];
                   final bool isSeries =
                       lesson.seriesId != null && lesson.seriesId!.isNotEmpty;
@@ -198,14 +202,9 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
                             lesson,
                             rawLessons,
                             widget.isDark,
-                          )
-                        : Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  kIsWeb? ReaderScreenWeb(lesson: lesson) :  ReaderScreen(lesson: lesson),
-                            ),
-                          ),
+                          )
+                        : context.push('/lesson/${lesson.id}', extra: lesson),
                     onOptionTap: () =>
                         showLessonOptions(context, lesson, widget.isDark),
                     onPlaylistTap: isSeries
@@ -214,6 +213,7 @@ class _GuidedCoursesSectionState extends State<GuidedCoursesSection> {
                             lesson,
                             rawLessons,
                             widget.isDark,
+                            context,
                           )
                         : null,
                   );
@@ -369,61 +369,31 @@ class _ImmersionSectionState extends State<ImmersionSection> {
             itemCount: display.length + (_loading ? 1 : 0),
             separatorBuilder: (ctx, i) => const SizedBox(width: 16),
             itemBuilder: (context, index) {
-              if (index >= display.length)
+              if (index >= display.length) {
                 return const Center(child: CircularProgressIndicator());
+              }
               final l = display[index];
               return VideoLessonCard(
                 lesson: l,
                 vocabMap: widget.vocabMap,
                 isDark: widget.isDark,
-                onTap: () => (l.seriesId != null && l.seriesId!.isNotEmpty)
-                    ? showPlaylistBottomSheet(context, l, raw, widget.isDark)
-                    : Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (c) => kIsWeb? ReaderScreenWeb(lesson: l) : ReaderScreen(lesson: l),
-                        ),
-                      ),
+                onTap: () {
+                  (l.seriesId != null && l.seriesId!.isNotEmpty)
+                      ? showPlaylistBottomSheet(
+                          context,
+                          l,
+                          raw,
+                          widget.isDark,
+                          context,
+                        )
+                      : context.push('/lesson/${l.id}', extra: l);
+                },
                 onOptionTap: () => showLessonOptions(context, l, widget.isDark),
               );
             },
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildTab(String tab) {
-    final isSelected = _tab == tab;
-    return Padding(
-      padding: const EdgeInsets.only(right: 24.0, bottom: 12),
-      child: InkWell(
-        onTap: () => setState(() {
-          _tab = tab;
-          _hasReachedMax = false;
-        }),
-        child: Column(
-          children: [
-            Text(
-              tab,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected
-                    ? (widget.isDark ? Colors.white : Colors.black)
-                    : Colors.grey[500],
-              ),
-            ),
-            if (isSelected)
-              Container(
-                margin: const EdgeInsets.only(top: 4),
-                height: 2,
-                width: 20,
-                color: Colors.red,
-              ),
-          ],
-        ),
-      ),
     );
   }
 }

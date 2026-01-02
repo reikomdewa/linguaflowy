@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
-import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
@@ -12,22 +11,29 @@ import 'package:linguaflow/screens/home/widgets/home_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/home_language_dialogs.dart';
 import 'package:linguaflow/screens/home/widgets/tap_button.dart';
 import 'package:linguaflow/screens/premium/premium_screen.dart';
-import 'package:linguaflow/screens/reader/reader_screen.dart'; // Import Reader
+import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/screens/discover/library_search_delegate.dart';
-import 'package:linguaflow/utils/centered_views.dart';
+import 'package:linguaflow/utils/auth_guard.dart';
 import 'package:linguaflow/utils/language_helper.dart';
-import 'package:linguaflow/widgets/buttons/build_ai_button.dart';
-import 'package:linguaflow/widgets/premium_lock_dialog.dart';
 
 PreferredSizeWidget buildAppBar(
   BuildContext context,
   dynamic user,
   bool isDark,
   Color? textColor,
-  bool isDesktop,
-) {
-  final bool isPremium = user.isPremium;
+  bool isDesktop, {
+  // NEW PARAMETER: Pass the local guest language from HomeScreen
+  String guestLanguage = 'English',
+}) {
+  // 1. Determine Guest Status
+  final bool isGuest = user == null;
+  final bool isPremium = !isGuest && (user.isPremium == true);
+
+  // 2. Determine Language & Level
+  // If guest, use the passed string. If user, use their profile data.
+  final String currentLanguage = isGuest ? guestLanguage : user.currentLanguage;
+  final String currentLevel = isGuest ? 'Beginner' : user.currentLevel;
 
   return AppBar(
     scrolledUnderElevation: 0,
@@ -40,24 +46,33 @@ PreferredSizeWidget buildAppBar(
     title: BlocBuilder<VocabularyBloc, VocabularyState>(
       builder: (context, vocabState) {
         int knownCount = 0;
-        if (vocabState is VocabularyLoaded) {
+        // Only calculate known count for logged-in users
+        if (!isGuest && vocabState is VocabularyLoaded) {
           knownCount = vocabState.items
-              .where((v) => v.status > 0 && v.language == user.currentLanguage)
+              .where((v) => v.status > 0 && v.language == currentLanguage)
               .length;
         }
+
         final levelStats = HomeDialogs.getLevelDetails(knownCount);
         final String displayLevel = knownCount > 0
             ? levelStats['fullLabel']
-            : user.currentLevel;
+            : currentLevel;
         final int nextGoal = levelStats['nextGoal'];
 
         return Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Flag Icon
+            // --- FLAG ICON (LANGUAGE SELECTOR) ---
             GestureDetector(
-              onTap: () =>
-                  HomeLanguageDialogs.showTargetLanguageSelector(context),
+              // FIX: Allow everyone (Guest & User) to open the selector
+              onTap: () {
+                AuthGuard.run(
+                  context,
+                  onAuthenticated: () {
+                    HomeLanguageDialogs.showTargetLanguageSelector(context);
+                  },
+                );
+              },
               child: Container(
                 width: 40,
                 height: 40,
@@ -71,19 +86,20 @@ PreferredSizeWidget buildAppBar(
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  LanguageHelper.getFlagEmoji(user.currentLanguage),
+                  LanguageHelper.getFlagEmoji(currentLanguage),
                   style: const TextStyle(fontSize: 24),
                 ),
               ),
             ),
             const SizedBox(width: 8),
-            // Level Text
+
+            // --- LEVEL TEXT ---
             Flexible(
               child: InkWell(
                 onTap: () => HomeLanguageDialogs.showLevelSelector(
                   context,
                   displayLevel,
-                  user.currentLanguage,
+                  currentLanguage,
                 ),
                 borderRadius: BorderRadius.circular(8),
                 child: Column(
@@ -115,7 +131,9 @@ PreferredSizeWidget buildAppBar(
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      "$knownCount / $nextGoal words",
+                      isGuest
+                          ? "Start learning"
+                          : "$knownCount / $nextGoal words",
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -129,23 +147,19 @@ PreferredSizeWidget buildAppBar(
               ),
             ),
 
-            // --- SPACER & SEARCH BAR (Moved nside Title Row for centering alignment) ---
+            // --- SEARCH BAR (Desktop) ---
             if (isDesktop) ...[
               BlocBuilder<LessonBloc, LessonState>(
                 builder: (context, state) {
-                  final isLoaded = state is LessonLoaded;
-
-                  // If not loaded, show a disabled placeholder
-                  if (!isLoaded) return const SizedBox();
+                  // Only show search if we have lessons loaded
+                  if (state is! LessonLoaded) return const SizedBox();
 
                   final lessons = state.lessons;
 
-                  // SEARCH ANCHOR: The modern "Type here to search" widget
                   return SizedBox(
-                    width: isDesktop ? 700 : 180, // Control width
+                    width: 700,
                     height: 42,
                     child: SearchAnchor(
-                      // 1. Configure the "Bar" (The input field)
                       builder:
                           (BuildContext context, SearchController controller) {
                             return SearchBar(
@@ -170,7 +184,6 @@ PreferredSizeWidget buildAppBar(
                                   fontSize: 14,
                                 ),
                               ),
-                              // YouTube Style Styling
                               backgroundColor: MaterialStatePropertyAll(
                                 isDark
                                     ? Colors.white.withValues(alpha: 0.1)
@@ -195,18 +208,14 @@ PreferredSizeWidget buildAppBar(
                               ),
                             );
                           },
-
-                      // 2. Configure the "View" (The dropdown results)
                       suggestionsBuilder:
                           (BuildContext context, SearchController controller) {
                             final keyword = controller.text.toLowerCase();
-
-                            // Filter Logic (Same as your Delegate)
                             final results = lessons.where((lesson) {
-                              final title = lesson.title.toLowerCase();
-                              final genre = lesson.genre.toLowerCase();
-                              return title.contains(keyword) ||
-                                  genre.contains(keyword);
+                              return lesson.title.toLowerCase().contains(
+                                    keyword,
+                                  ) ||
+                                  lesson.genre.toLowerCase().contains(keyword);
                             }).toList();
 
                             return results.map((lesson) {
@@ -227,17 +236,7 @@ PreferredSizeWidget buildAppBar(
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                subtitle: Text(
-                                  lesson.genre,
-                                  style: TextStyle(
-                                    color: isDark
-                                        ? Colors.grey
-                                        : Colors.grey[600],
-                                    fontSize: 12,
-                                  ),
-                                ),
                                 onTap: () {
-                                  // Close search and navigate
                                   controller.closeView(lesson.title);
                                   Navigator.push(
                                     context,
@@ -251,27 +250,22 @@ PreferredSizeWidget buildAppBar(
                               );
                             });
                           },
-                      // Style the Dropdown View
                       viewBackgroundColor: isDark
                           ? const Color(0xFF1E1E1E)
                           : Colors.white,
                       dividerColor: isDark ? Colors.white10 : Colors.grey[200],
-                      viewConstraints: const BoxConstraints(
-                        maxHeight: 400, // Limit dropdown height
-                      ),
+                      viewConstraints: const BoxConstraints(maxHeight: 400),
                     ),
                   );
                 },
               ),
             ],
-
-            // This is the Search Bar Area
           ],
         );
       },
     ),
 
-    // --- ACTIONS (Stats, Premium, AI) ---
+    // --- ACTIONS ---
     actions: [
       if (isDesktop)
         TabButton(
@@ -279,6 +273,8 @@ PreferredSizeWidget buildAppBar(
           icon: Icons.auto_awesome,
           onCustomTap: () => HomeUtils.showAIStoryGenerator(context),
         ),
+
+      // Mobile Search Button
       if (!isDesktop)
         BlocBuilder<LessonBloc, LessonState>(
           builder: (context, state) {
@@ -318,7 +314,8 @@ PreferredSizeWidget buildAppBar(
             );
           },
         ),
-      // --- STATS BUTTON ---
+
+      // Stats Button
       Padding(
         padding: isDesktop
             ? const EdgeInsets.only(right: 8.0, left: 8.0)
@@ -356,8 +353,8 @@ PreferredSizeWidget buildAppBar(
                   size: 20,
                   color: isDark ? Colors.white70 : Colors.black54,
                 ),
-                if (isDesktop) const SizedBox(width: 6),
-                if (isDesktop)
+                if (isDesktop) ...[
+                  const SizedBox(width: 6),
                   Text(
                     "Stats",
                     style: TextStyle(
@@ -366,13 +363,14 @@ PreferredSizeWidget buildAppBar(
                       fontSize: 13,
                     ),
                   ),
+                ],
               ],
             ),
           ),
         ),
       ),
 
-      // --- PRO / PREMIUM BUTTON ---
+      // Premium Button
       Padding(
         padding: const EdgeInsets.only(right: 12, top: 12, bottom: 12, left: 4),
         child: Center(
@@ -384,18 +382,6 @@ PreferredSizeWidget buildAppBar(
                   builder: (context) => PremiumScreen(isPremium: isPremium),
                 ),
               );
-              if (isPremium) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      "You are a PRO member!",
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    backgroundColor: Colors.amber,
-                    duration: Duration(seconds: 5), // Changed to 5 seconds
-                  ),
-                );
-              }
             },
             borderRadius: BorderRadius.circular(20),
             child: Container(
@@ -415,7 +401,6 @@ PreferredSizeWidget buildAppBar(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // const SizedBox(width: 4),
                   Padding(
                     padding: const EdgeInsets.only(left: 2.0, right: 2),
                     child: Icon(

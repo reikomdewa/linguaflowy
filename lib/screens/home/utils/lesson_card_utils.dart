@@ -5,6 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
@@ -22,6 +23,7 @@ void showPlaylistBottomSheet(
   LessonModel currentLesson,
   List<LessonModel> allLessons,
   bool isDark,
+  BuildContext context,
 ) {
   if (currentLesson.seriesId == null) return;
 
@@ -175,16 +177,8 @@ void showPlaylistBottomSheet(
 
                     // REMOVE: if (!isCurrent)
                     // We want to navigate regardless of whether it's highlighted in the list
-
-                    await Navigator.push(
-                      parentContext,
-                      MaterialPageRoute(
-                        builder: (context) => kIsWeb
-                            ? ReaderScreenWeb(lesson: item)
-                            : ReaderScreen(lesson: item),
-                      ),
-                    );
-
+                    context.push('/lesson/${item.id}', extra: item);
+              
                     // When returning from the ReaderScreen, re-show the bottom sheet
                     // with the newly "active" lesson.
                     if (parentContext.mounted) {
@@ -193,6 +187,7 @@ void showPlaylistBottomSheet(
                         item, // The lesson that was just played
                         allLessons,
                         isDark,
+                        context,
                       );
                     }
                   },

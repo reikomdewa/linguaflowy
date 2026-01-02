@@ -238,47 +238,66 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       }
     }
   }
-
-  Future<void> _onAuthCheckRequested(
+Future<void> _onAuthCheckRequested(
     AuthCheckRequested event,
     Emitter<AuthState> emit,
   ) async {
-    if (kIsWeb) {
-      try {
-        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-      } catch (e) {
-        printLog("Error setting web persistence: $e");
-      }
-    }
-
-    final firebaseUser = FirebaseAuth.instance.currentUser;
-    if (firebaseUser != null) {
-      try {
-        await firebaseUser.reload();
-      } catch (e) {
-        printLog("Error reloading user: $e");
-      }
-
-      if (firebaseUser.emailVerified) {
-        UserModel? user = await authService.getCurrentUser();
-        if (user != null) {
-          if ((user.photoUrl == null || user.photoUrl!.isEmpty) &&
-              firebaseUser.photoURL != null) {
-            user = user.copyWith(photoUrl: firebaseUser.photoURL);
-            FirebaseFirestore.instance.collection('users').doc(user.id).update({
-              'photoUrl': user.photoUrl,
-            });
-          }
-
-          user = await _checkAndUpateStreak(user);
-          // NEW: Load premium data into memory
-          user = await _attachPremiumData(user);
-
-          emit(AuthAuthenticated(user));
-          return;
+    // Wrap EVERYTHING in try-catch to prevent getting stuck in "AuthInitial"
+    try {
+      // 1. Web Persistence Fix
+      if (kIsWeb) {
+        try {
+          await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+        } catch (e) {
+          printLog("Error setting web persistence: $e");
+          // Continue execution even if this fails
         }
       }
+
+      // 2. Check Firebase User
+      final firebaseUser = FirebaseAuth.instance.currentUser;
+
+      if (firebaseUser != null) {
+        // A. Reload user to get latest status (e.g. email verified)
+        try {
+          await firebaseUser.reload();
+        } catch (e) {
+          printLog("Error reloading user: $e");
+          // If reload fails (network), we might still want to try loading the cached user
+        }
+
+        // B. Check Verification & Load Data
+        if (firebaseUser.emailVerified) {
+          UserModel? user = await authService.getCurrentUser();
+          
+          if (user != null) {
+            // C. Sync Google Photo if missing
+            if ((user.photoUrl == null || user.photoUrl!.isEmpty) &&
+                firebaseUser.photoURL != null) {
+              user = user.copyWith(photoUrl: firebaseUser.photoURL);
+              // Fire & Forget update
+              FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.id)
+                  .update({'photoUrl': user.photoUrl});
+            }
+
+            // D. Update Streak & Premium
+            user = await _checkAndUpateStreak(user);
+            user = await _attachPremiumData(user);
+
+            emit(AuthAuthenticated(user));
+            return; // EXIT HERE if successful
+          }
+        }
+      }
+    } catch (e) {
+      printLog("CRITICAL AUTH CHECK ERROR: $e");
+      // Fallthrough to Unauthenticated so the app loads for guests
     }
+
+    // 3. Fallback: If user is null, email not verified, db error, or any exception:
+    // We treat them as a Guest.
     emit(AuthUnauthenticated());
   }
 

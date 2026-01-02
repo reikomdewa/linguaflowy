@@ -7,13 +7,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:go_router/go_router.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
-import 'package:linguaflow/screens/completion/completion_screen.dart';
 import 'package:linguaflow/services/local_lemmatizer.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart'; // Needed for playlist fetch
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/utils/utils.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart' as mobile;
 import 'package:youtube_player_iframe/youtube_player_iframe.dart' as web;
 import 'package:media_kit/media_kit.dart';
@@ -129,23 +130,31 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
   String? _selectedBaseForm;
   StreamSubscription? _vocabSubscription;
 
-
   static const int xpPerMinuteRead = 2;
   // --- ADD THESE NEW VARIABLES ---
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
   bool _isLimitDialogOpen = false;
 
-  @override
+ @override
   void initState() {
     super.initState();
 
     _authBloc = context.read<AuthBloc>();
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    
+    // --- 1. CHECK GUEST ACCESS LIMITS ---
+    _checkGuestAccess(); 
+
     LocalLemmatizer().load(widget.lesson.language);
-    _startVocabularyStream();
-    _loadUserPreferences();
+    
+    // Only start stream if NOT guest (Guests don't have Firestore vocab)
+    if (!_authBloc.state.isGuest) {
+      _startVocabularyStream();
+      _loadUserPreferences();
+    }
+    
     _determineMediaType();
 
     // Fetch Playlist if needed
@@ -163,6 +172,51 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     } else {
       _finalizeContentInitialization();
     }
+  }
+  Future<void> _checkGuestAccess() async {
+    final state = context.read<AuthBloc>().state;
+    if (!state.isGuest) return; // Users are fine
+
+    final prefs = await SharedPreferences.getInstance();
+    List<String> viewedLessons = prefs.getStringList('guest_viewed_ids') ?? [];
+
+    // If this lesson is new to the guest
+    if (!viewedLessons.contains(widget.lesson.id)) {
+      if (viewedLessons.length >= 2) {
+        // LIMIT REACHED: Show blocking dialog immediately
+        if (mounted) {
+           // Delay slightly to ensure context is ready
+           Future.delayed(Duration.zero, () => _showGuestBlockingDialog());
+        }
+      } else {
+        // Allow, but track it
+        viewedLessons.add(widget.lesson.id);
+        await prefs.setStringList('guest_viewed_ids', viewedLessons);
+      }
+    }
+  }
+
+  void _showGuestBlockingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Cannot click away
+      builder: (context) => AlertDialog(
+        title: const Text("Guest Limit Reached"),
+        content: const Text(
+          "You have viewed your 2 free preview lessons.\n\nPlease login or create an account to continue learning freely!",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => context.go('/'), // Go Home
+            child: const Text("Go Home"),
+          ),
+          FilledButton(
+            onPressed: () => context.push('/login'),
+            child: const Text("Login / Sign Up"),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fetchSeriesData() async {
@@ -302,7 +356,6 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       _initializeTts();
     }
   }
-
 
   // --- HELPER: START/STOP TRACKING ---
   void _startListeningTracker() {
@@ -478,7 +531,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     if (currentPageIndices.isNotEmpty) _bookPages.add(currentPageIndices);
   }
 
-void _initializeYoutubePlayer(String url) {
+  void _initializeYoutubePlayer(String url) {
     String? videoId;
     if (widget.lesson.id.startsWith('yt_audio_')) {
       videoId = widget.lesson.id.replaceAll('yt_audio_', '');
@@ -513,7 +566,7 @@ void _initializeYoutubePlayer(String url) {
               _isPlaying = isPlaying;
               if (isPlaying) {
                 // When playing starts, we can show OUR controls
-                _showControls = true; 
+                _showControls = true;
                 _resetControlsTimer();
               }
             });
@@ -530,10 +583,10 @@ void _initializeYoutubePlayer(String url) {
             autoPlay: false,
             mute: false,
             enableCaption: false,
-            hideControls: true, 
+            hideControls: true,
             controlsVisibleAtStart: false,
             disableDragSeek: true,
-      
+
             forceHD: false,
           ),
         );
@@ -816,7 +869,6 @@ void _initializeYoutubePlayer(String url) {
     });
   }
 
-  // ... [Other navigation/playback/TTS methods as in original code] ...
   void _goToNextSentence() {
     if (_activeSentenceIndex < _smartChunks.length - 1) {
       _handleSwipeMarking(_activeSentenceIndex);
@@ -969,16 +1021,27 @@ void _initializeYoutubePlayer(String url) {
     }
   }
 
-  // ... [Logic for Word Tapping, Phrases, Card Activation same as original] ...
   void _handleWordTap(String word, String cleanId, Offset pos) async {
     if (cleanId.trim().isEmpty) return;
     _activeSelectionClearer?.call();
     _activeSelectionClearer = null;
     if (_isCheckingLimit) return;
-    final auth = context.read<AuthBloc>().state;
-    if (auth is! AuthAuthenticated) return;
+
+    final authState = context.read<AuthBloc>().state;
+    
+    // --- GUEST LOGIC START ---
+    if (authState.isGuest) {
+      _checkGuestTapLimit(word, cleanId, pos, isPhrase: false);
+      return;
+    }
+    // --- GUEST LOGIC END ---
+
+    final user = authState.user; // Safe because we checked isGuest
+    
+    // Existing Logic for Users...
     final existing = _vocabulary[cleanId];
     final status = _calculateSmartStatus(existing);
+    
     if (existing == null || existing.status != status) {
       _updateWordStatus(
         cleanId,
@@ -988,13 +1051,12 @@ void _initializeYoutubePlayer(String url) {
         showDialog: false,
       );
     }
-    if (auth.user.isPremium) {
+    if (user!.isPremium) {
       _activateCard(word, cleanId, pos, isPhrase: false);
     } else {
-      _checkLimitAndActivate(auth.user.id, cleanId, word, pos, false);
+      _checkLimitAndActivate(user.id, cleanId, word, pos, false);
     }
   }
-
   String _restoreSpaces(String compressedPhrase) {
     if (_activeSentenceIndex >= 0 &&
         _activeSentenceIndex < _smartChunks.length) {
@@ -1029,13 +1091,28 @@ void _initializeYoutubePlayer(String url) {
     return compressedPhrase;
   }
 
-  void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
+void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
     final restoredPhrase = _restoreSpaces(phrase);
     _activeSelectionClearer?.call();
     _activeSelectionClearer = clear;
+    
     final authState = context.read<AuthBloc>().state;
-    if (authState is! AuthAuthenticated) return;
-    if (authState.user.isPremium) {
+    
+    // --- GUEST LOGIC START ---
+    if (authState.isGuest) {
+       _checkGuestTapLimit(
+         restoredPhrase, 
+         ReaderUtils.generateCleanId(restoredPhrase), 
+         pos, 
+         isPhrase: true
+       );
+       return;
+    }
+    // --- GUEST LOGIC END ---
+
+    final user = authState.user;
+    
+    if (user!.isPremium) {
       _activateCard(
         restoredPhrase,
         ReaderUtils.generateCleanId(restoredPhrase),
@@ -1044,12 +1121,48 @@ void _initializeYoutubePlayer(String url) {
       );
     } else {
       _checkLimitAndActivate(
-        authState.user.id,
+        user.id,
         ReaderUtils.generateCleanId(restoredPhrase),
         restoredPhrase,
         pos,
         true,
       );
+    }
+  }
+  Future<void> _checkGuestTapLimit(
+    String text,
+    String cleanId,
+    Offset pos, {
+    required bool isPhrase,
+  }) async {
+    setState(() => _isCheckingLimit = true);
+    
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Get today's usage for guest
+    final todayStr = DateTime.now().toIso8601String().split('T').first;
+    final lastDate = prefs.getString('guest_tap_date') ?? '';
+    int currentCount = prefs.getInt('guest_tap_count') ?? 0;
+
+    // Reset if new day
+    if (lastDate != todayStr) {
+      currentCount = 0;
+      await prefs.setString('guest_tap_date', todayStr);
+    }
+
+    setState(() => _isCheckingLimit = false);
+
+    const int guestLimit = 5; // Allow 5 clicks
+
+    if (currentCount < guestLimit) {
+      // Increment and Allow
+      await prefs.setInt('guest_tap_count', currentCount + 1);
+      
+      // Activate card directly (No saving to Firestore for guests)
+      _activateCard(text, cleanId, pos, isPhrase: isPhrase);
+    } else {
+      // Block
+      _showLimitDialog(isGuest: true);
     }
   }
 
@@ -1197,9 +1310,34 @@ void _initializeYoutubePlayer(String url) {
   }
 
   // Simple toggle now
-  void _showLimitDialog() {
-    _pauseMedia(); // Pause video so audio stops
-    setState(() => _isLimitDialogOpen = true);
+void _showLimitDialog({bool isGuest = false}) {
+    _pauseMedia();
+    
+    if (isGuest) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("Guest Limit Reached"),
+          content: const Text("You have used your 5 free translations for today.\n\nPlease login to get more!"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel"),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.push('/login');
+              },
+              child: const Text("Login"),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Original Premium Lock Dialog logic
+      setState(() => _isLimitDialogOpen = true);
+    }
   }
 
   // The Manual Stack Overlay
@@ -1923,12 +2061,7 @@ void _initializeYoutubePlayer(String url) {
                 ),
                 onTap: () {
                   if (isCurrent) return;
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ReaderScreenWeb(lesson: item),
-                    ),
-                  );
+                  context.push('/lesson/${item.id}', extra: item);
                 },
               );
             },
@@ -1937,7 +2070,8 @@ void _initializeYoutubePlayer(String url) {
       ],
     );
   }
-Widget _buildMobilePlayerContainer() {
+
+  Widget _buildMobilePlayerContainer() {
     return Container(
       width: double.infinity,
       color: Colors.black,
@@ -1983,7 +2117,7 @@ Widget _buildMobilePlayerContainer() {
                       // WEB LOGIC:
                       // If Playing: Shield UP (true). User taps YOUR controls.
                       // If Paused: Shield DOWN (false). User taps YouTube Play Button.
-                      ignoring: !kIsWeb || _isPlaying, 
+                      ignoring: !kIsWeb || _isPlaying,
                       child: _buildSharedPlayer(),
                     ),
                   ),
@@ -2187,7 +2321,7 @@ Widget _buildMobilePlayerContainer() {
     }
   }
 
-Widget _buildSharedPlayer() {
+  Widget _buildSharedPlayer() {
     Widget playerWidget;
 
     if (_isLocalMedia && _localVideoController != null) {
@@ -2198,13 +2332,13 @@ Widget _buildSharedPlayer() {
     } else if (kIsWeb && _webYoutubeController != null) {
       // --- WEB PLAYER WIDGET FIX ---
       playerWidget = SizedBox(
-        width: double.infinity,  // Force full width
+        width: double.infinity, // Force full width
         height: double.infinity, // Force full height
         child: web.YoutubePlayer(
           controller: _webYoutubeController!,
           // We don't strictly need aspectRatio here because the parent defines it,
           // but keeping it ensures the iframe internal calculation is correct.
-          aspectRatio: 16 / 9, 
+          aspectRatio: 16 / 9,
         ),
       );
     } else if (!kIsWeb && _mobileYoutubeController != null) {

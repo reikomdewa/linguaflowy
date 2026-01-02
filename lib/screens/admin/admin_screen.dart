@@ -7,14 +7,14 @@ import 'tabs/leaderboard_tab.dart';
 import 'tabs/bug_view_tab.dart';
 import 'tabs/reports_tab.dart';
 
-class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({super.key});
+class AdminScreen extends StatefulWidget {
+  const AdminScreen({super.key});
 
   @override
-  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+  State<AdminScreen> createState() => _AdminScreenState();
 }
 
-class _AdminDashboardScreenState extends State<AdminDashboardScreen>
+class _AdminScreenState extends State<AdminScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 

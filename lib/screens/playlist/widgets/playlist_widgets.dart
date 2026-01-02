@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/lesson_cache_service.dart';
-import 'package:linguaflow/screens/playlist/playlist_player_screen.dart';
+import 'package:linguaflow/screens/playlist/playlist_screen.dart';
 
 class PlaylistOpenButton extends StatelessWidget {
   final String playlistName;
@@ -305,7 +305,7 @@ class _PlaylistContentSheetState extends State<_PlaylistContentSheet> {
     // Open the Player Screen
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => PlaylistPlayerScreen(
+        builder: (context) => PlaylistScreen(
           playlist: _loadedLessons,
           initialIndex: initialIndex,
         ),

@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/constants/constants.dart';
+import 'package:linguaflow/models/user_model.dart'; // Ensure UserModel is imported
 
 // Screens
 import 'package:linguaflow/screens/home/home_screen.dart';
@@ -12,7 +13,7 @@ import 'package:linguaflow/screens/library/library_screen.dart';
 import 'package:linguaflow/screens/profile/profile_screen.dart';
 import 'package:linguaflow/screens/speak/speak_screen.dart';
 import 'package:linguaflow/screens/vocabulary/vocabulary_screen.dart';
-import 'package:linguaflow/screens/admin/admin_dashboard_screen.dart';
+import 'package:linguaflow/screens/admin/admin_screen.dart';
 
 // --- INHERITED WIDGET ---
 class ActiveTabNotifier extends InheritedWidget {
@@ -65,29 +66,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
 
-    // 1. Loading / Auth Check
-    if (authState is! AuthAuthenticated) {
+    // 1. FIX: Only block if strictly Loading or Initial
+    // Allow 'AuthUnauthenticated' (Guests) to pass through
+    if (authState is AuthInitial || authState is AuthLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // 2. Setup Theme & User Data
-    final user = authState.user;
-    final bool isAdmin = AppConstants.isAdmin(user.email);
+    // 2. FIX: Handle Null User for Guests
+    final UserModel? user = (authState is AuthAuthenticated) ? authState.user : null;
+    
+    // Only check admin if user exists
+    final bool isAdmin = user != null && AppConstants.isAdmin(user.email);
 
     // --- THEME AWARE COLORS ---
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-
-    // Use the theme's background (White or Charcoal)
     final navBarColor = theme.scaffoldBackgroundColor;
-
-    // Use the theme's primary color (Black or White) for selected items
     final selectedColor = colorScheme.primary;
-
-    // Use the theme's text color with opacity for unselected items
     final unselectedColor = colorScheme.onSurface.withOpacity(0.5);
-
-    // Use the theme's defined divider color
     final borderColor = theme.dividerColor;
 
     // ----------------------------------------------------------------------
@@ -128,11 +124,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
     ];
 
-    // Admin Tab
+    // Admin Tab (Only if Admin)
     if (isAdmin) {
       navItems.add(
         _NavItem(
-          screen: const AdminDashboardScreen(),
+          screen: const AdminScreen(),
           icon: const Icon(Icons.admin_panel_settings_outlined),
           activeIcon: const Icon(Icons.admin_panel_settings_rounded),
           label: 'Admin',
@@ -140,7 +136,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       );
     }
 
-    // Profile Tab
+    // Profile Tab (Always show - ProfileScreen handles Guest view internally)
     navItems.add(
       _NavItem(
         screen: ProfileScreen(),
@@ -162,13 +158,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
           if (isDesktop) {
             // ============================================================
-            // DESKTOP LAYOUT (Left Sidebar / NavigationRail)
+            // DESKTOP LAYOUT
             // ============================================================
             return Scaffold(
               backgroundColor: navBarColor,
               body: Row(
                 children: [
-                  // LEFT SIDEBAR
                   NavigationRail(
                     backgroundColor: navBarColor,
                     selectedIndex: _currentIndex,
@@ -177,15 +172,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     },
                     labelType: NavigationRailLabelType.all,
                     groupAlignment: 0.0,
-
-                    // Use a very subtle wash of the secondary color (HyperBlue) or transparent
                     indicatorColor: colorScheme.secondary.withOpacity(0.08),
-
-                    // Theme Aware Icons
                     selectedIconTheme: IconThemeData(color: selectedColor),
                     unselectedIconTheme: IconThemeData(color: unselectedColor),
-
-                    // Theme Aware Text
                     selectedLabelTextStyle: TextStyle(
                       color: selectedColor,
                       fontWeight: FontWeight.w700,
@@ -196,8 +185,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       fontWeight: FontWeight.w500,
                       fontSize: 11,
                     ),
-
-                    // Leading Logo
                     leading: Padding(
                       padding: const EdgeInsets.only(bottom: 32.0, top: 16.0),
                       child: Image.asset(
@@ -211,8 +198,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                         ),
                       ),
                     ),
-
-                    // Vertical Line Border (Using Theme Divider Color)
                     trailing: Expanded(
                       child: Align(
                         alignment: Alignment.centerRight,
@@ -231,8 +216,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       );
                     }).toList(),
                   ),
-
-                  // MAIN CONTENT
                   Expanded(
                     child: IndexedStack(
                       index: _currentIndex,
@@ -244,7 +227,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             );
           } else {
             // ============================================================
-            // MOBILE LAYOUT (Bottom Navigation Bar)
+            // MOBILE LAYOUT
             // ============================================================
             return Scaffold(
               body: IndexedStack(
@@ -267,12 +250,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     currentIndex: _currentIndex,
                     onTap: (index) => setState(() => _currentIndex = index),
                     type: BottomNavigationBarType.fixed,
-
-                    // Theme Aware Colors
                     backgroundColor: navBarColor,
                     selectedItemColor: selectedColor,
                     unselectedItemColor: unselectedColor,
-
                     selectedLabelStyle: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 11,

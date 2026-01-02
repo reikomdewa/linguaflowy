@@ -19,21 +19,21 @@ import 'package:linguaflow/utils/subtitle_parser.dart';
 import 'package:linguaflow/screens/reader/reader_utils.dart';
 import 'package:linguaflow/screens/reader/widgets/interactive_text_display.dart';
 
-class PlaylistPlayerScreen extends StatefulWidget {
+class PlaylistScreen extends StatefulWidget {
   final List<LessonModel> playlist;
   final int initialIndex;
 
-  const PlaylistPlayerScreen({
+  const PlaylistScreen({
     super.key,
     required this.playlist,
     this.initialIndex = 0,
   });
 
   @override
-  State<PlaylistPlayerScreen> createState() => _PlaylistPlayerScreenState();
+  State<PlaylistScreen> createState() => _PlaylistScreenState();
 }
 
-class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
+class _PlaylistScreenState extends State<PlaylistScreen>
     with WidgetsBindingObserver {
   // --- Playlist State ---
   late int _currentIndex;
@@ -427,7 +427,6 @@ class _PlaylistPlayerScreenState extends State<PlaylistPlayerScreen>
   }
 
   // --- TRACKING & HELPERS ---
-
 
   void _startListeningTracker() {
     _listeningTrackingTimer?.cancel();
