@@ -38,7 +38,9 @@ class ProfileScreen extends StatelessWidget {
             children: [
               const Icon(Icons.person_off, size: 64, color: Colors.grey),
               const SizedBox(height: 16),
-              const Text("You are browsing as a Guest"),
+              const Text(
+                "You are browsing as a Guest. We haven't saved your profile",
+              ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () => context.push('/login'),

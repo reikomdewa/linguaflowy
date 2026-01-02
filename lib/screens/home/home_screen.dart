@@ -46,6 +46,7 @@ import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/screens/home/utils/home_utils.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/services/web_scraper_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -366,11 +367,20 @@ class _HomeScreenState extends State<HomeScreen> {
                             return ActionChip(
                               avatar: Text(LanguageHelper.getFlagEmoji(lang)),
                               label: Text(LanguageHelper.getLanguageName(lang)),
-                              onPressed: () {
+                              onPressed: () async {
+                                // Make async
                                 setState(() {
                                   _guestLanguage = lang;
                                 });
-                                // Trigger load immediately
+
+                                // ADD THIS: Save to shared prefs
+                                final prefs =
+                                    await SharedPreferences.getInstance();
+                                await prefs.setString(
+                                  'guest_language_code',
+                                  lang,
+                                );
+
                                 context.read<LessonBloc>().add(
                                   LessonLoadRequested('guest', lang),
                                 );

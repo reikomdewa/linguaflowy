@@ -9,7 +9,9 @@ import 'package:linguaflow/screens/community/widgets/community_search_delegate.d
 import 'package:linguaflow/services/community_service.dart';
 import 'package:linguaflow/screens/community/widgets/community_lesson_card.dart';
 import 'package:linguaflow/screens/community/widgets/forum_post_card.dart';
-import 'package:linguaflow/utils/utils.dart'; // Ensure you have this for showCustomSnackBar
+import 'package:linguaflow/utils/auth_guard.dart';
+import 'package:linguaflow/utils/utils.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 class CommunityScreen extends StatefulWidget {
@@ -24,107 +26,135 @@ class _CommunityScreenState extends State<CommunityScreen>
   late TabController _tabController;
   final CommunityService _service = CommunityService();
 
+  // Default language for guests if no preference is saved locally
+  String _guestLanguage = 'en';
+
   @override
-void initState() {
-  super.initState();
-  _tabController = TabController(length: 2, vsync: this);
-  // Remove the listener - we'll use ListenableBuilder instead
-}
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadGuestLanguage();
+  }
 
-@override
-Widget build(BuildContext context) {
-  final userState = context.watch<AuthBloc>().state;
-  if (userState is! AuthAuthenticated) return const SizedBox.shrink();
-  final user = userState.user;
+  Future<void> _loadGuestLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedLang = prefs.getString('guest_language_code');
+    if (savedLang != null && mounted) {
+      setState(() {
+        _guestLanguage = savedLang;
+      });
+    }
+  }
 
-  final bgColor = Theme.of(context).scaffoldBackgroundColor;
+  @override
+  Widget build(BuildContext context) {
+    final authState = context.watch<AuthBloc>().state;
 
-  return Scaffold(
-    backgroundColor: bgColor,
-    body: NestedScrollView(
-      headerSliverBuilder: (context, innerBoxIsScrolled) {
-        return [
-          SliverAppBar(
-            title: Row(
-              children: [
-                const Text("Community"),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    user.currentLanguage.toUpperCase(),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blueAccent,
+    final UserModel? user = (authState is AuthAuthenticated)
+        ? authState.user
+        : null;
+
+    final String currentLanguage = user?.currentLanguage ?? _guestLanguage;
+
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
+
+    return Scaffold(
+      backgroundColor: bgColor,
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            SliverAppBar(
+              title: Row(
+                children: [
+                  const Text("Community"),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      currentLanguage.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueAccent,
+                      ),
                     ),
                   ),
+                ],
+              ),
+              centerTitle: false,
+              floating: true,
+              pinned: true,
+              backgroundColor: bgColor,
+              bottom: TabBar(
+                controller: _tabController,
+                indicatorColor: Colors.blueAccent,
+                labelColor: Colors.blueAccent,
+                unselectedLabelColor: Colors.grey,
+                tabs: const [
+                  Tab(text: "Community Lessons"),
+                  Tab(text: "Q&A Forum"),
+                ],
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () {
+                    showSearch(
+                      context: context,
+                      delegate: CommunitySearchDelegate(
+                        currentUser: user,
+                        service: _service,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
-            centerTitle: false,
-            floating: true,
-            pinned: true,
-            backgroundColor: bgColor,
-            bottom: TabBar(
-              controller: _tabController,
-              indicatorColor: Colors.blueAccent,
-              labelColor: Colors.blueAccent,
-              unselectedLabelColor: Colors.grey,
-              tabs: const [
-                Tab(text: "Community Lessons"),
-                Tab(text: "Q&A Forum"),
-              ],
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.search),
-                onPressed: () {
-                  showSearch(
-                    context: context,
-                    delegate: CommunitySearchDelegate(
-                      currentUser: user,
-                      service: _service,
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ];
-      },
-      body: TabBarView(
-        controller: _tabController,
-        children: [_buildLessonFeed(user), _buildForumFeed(user)],
+          ];
+        },
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildLessonFeed(user, currentLanguage),
+            _buildForumFeed(user, currentLanguage),
+          ],
+        ),
       ),
-    ),
-    // Use ListenableBuilder to only rebuild the FAB
-    floatingActionButton: ListenableBuilder(
-      listenable: _tabController,
-      builder: (context, child) {
-        return _tabController.index == 1
-            ? FloatingActionButton.extended(
-                onPressed: () => _showCreatePostDialog(context, user),
-                label: const Text("Ask Question"),
-                icon: const Icon(Icons.question_answer),
-              )
-            : const SizedBox.shrink(); // Return empty widget instead of null
-      },
-    ),
-  );
-}
+      floatingActionButton: ListenableBuilder(
+        listenable: _tabController,
+        builder: (context, child) {
+          return _tabController.index == 1
+              ? FloatingActionButton.extended(
+                  onPressed: () {
+                    AuthGuard.run(
+                      context,
+                      onAuthenticated: () {
+                        if (user != null) {
+                          _showCreatePostDialog(context, user);
+                        }
+                      },
+                    );
+                  },
+                  label: const Text("Ask Question"),
+                  icon: const Icon(Icons.question_answer),
+                )
+              : const SizedBox.shrink();
+        },
+      ),
+    );
+  }
 
-  // --- TAB 1: SHARED LESSONS ---
-  Widget _buildLessonFeed(UserModel user) {
+  // --- TAB 1: SHARED LESSONS (RESPONSIVE) ---
+  Widget _buildLessonFeed(UserModel? user, String language) {
     return StreamBuilder<List<LessonModel>>(
-      stream: _service.getPublicLessons(user.currentLanguage),
+      stream: _service.getPublicLessons(language),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -137,15 +167,44 @@ Widget build(BuildContext context) {
         }
 
         final lessons = snapshot.data!;
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: lessons.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 16),
-          itemBuilder: (context, index) {
-            return CommunityLessonCard(
-              lesson: lessons[index],
-              currentUser: user,
-              service: _service,
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            // Check for Desktop width
+            final bool isDesktop = constraints.maxWidth > 750;
+
+            if (isDesktop) {
+              return GridView.builder(
+                padding: const EdgeInsets.all(24),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 450, // Card max width
+                  mainAxisExtent: 320, // Fixed height for consistency
+                  crossAxisSpacing: 20,
+                  mainAxisSpacing: 20,
+                ),
+                itemCount: lessons.length,
+                itemBuilder: (context, index) {
+                  return CommunityLessonCard(
+                    lesson: lessons[index],
+                    currentUser: user,
+                    service: _service,
+                  );
+                },
+              );
+            }
+
+            // Mobile View (List)
+            return ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: lessons.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 16),
+              itemBuilder: (context, index) {
+                return CommunityLessonCard(
+                  lesson: lessons[index],
+                  currentUser: user,
+                  service: _service,
+                );
+              },
             );
           },
         );
@@ -153,10 +212,10 @@ Widget build(BuildContext context) {
     );
   }
 
-  // --- TAB 2: FORUM / Q&A ---
-  Widget _buildForumFeed(UserModel user) {
+  // --- TAB 2: FORUM / Q&A (RESPONSIVE) ---
+  Widget _buildForumFeed(UserModel? user, String language) {
     return StreamBuilder<List<ForumPost>>(
-      stream: _service.getForumPosts(user.currentLanguage),
+      stream: _service.getForumPosts(language),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -169,15 +228,44 @@ Widget build(BuildContext context) {
         }
 
         final posts = snapshot.data!;
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: posts.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 16),
-          itemBuilder: (context, index) {
-            return ForumPostCard(
-              post: posts[index],
-              currentUser: user,
-              service: _service,
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final bool isDesktop = constraints.maxWidth > 750;
+
+            if (isDesktop) {
+              return GridView.builder(
+                padding: const EdgeInsets.all(24),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 450,
+                  // Forum posts are usually shorter text, but let's give them room
+                  mainAxisExtent: 220,
+                  crossAxisSpacing: 20,
+                  mainAxisSpacing: 20,
+                ),
+                itemCount: posts.length,
+                itemBuilder: (context, index) {
+                  return ForumPostCard(
+                    post: posts[index],
+                    currentUser: user,
+                    service: _service,
+                  );
+                },
+              );
+            }
+
+            // Mobile View
+            return ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: posts.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 16),
+              itemBuilder: (context, index) {
+                return ForumPostCard(
+                  post: posts[index],
+                  currentUser: user,
+                  service: _service,
+                );
+              },
             );
           },
         );
@@ -232,7 +320,6 @@ Widget build(BuildContext context) {
                   children: [
                     IconButton(
                       onPressed: () {
-                        // Assuming you have a standard helper or use the custom one
                         Utils().showCustomSnackBar(
                           context,
                           'Feature coming soon, only text is allowed for now',

@@ -31,11 +31,11 @@ class LibraryScreen extends StatelessWidget {
               children: [
                 const Icon(Icons.person_off, size: 64, color: Colors.grey),
                 const SizedBox(height: 16),
-                const Text("You are browsing as a Guest"),
+                const Text("To see your library you have to login"),
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: () => context.push('/login'),
-                  child: const Text("Create Account to Save Progress"),
+                  child: const Text("Create Account to Save lessons"),
                 ),
               ],
             ),

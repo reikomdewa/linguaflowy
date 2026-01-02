@@ -95,17 +95,17 @@ class AppRouter {
       // =========================================================
       // AUTH & ONBOARDING
       // =========================================================
-  GoRoute(
-  path: '/login',
-  builder: (context, state) {
-    // If on Web, show the Web Layout. If on Mobile, show Mobile Layout.
-    if (kIsWeb) {
-      return const WebLoginLayout(); 
-    } else {
-      return const LoginScreen();
-    }
-  },
-),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) {
+          // If on Web, show the Web Layout. If on Mobile, show Mobile Layout.
+          if (kIsWeb) {
+            return const WebLoginLayout();
+          } else {
+            return const LoginScreen();
+          }
+        },
+      ),
 
       GoRoute(
         path: '/placement-test',
@@ -176,9 +176,15 @@ class AppRouter {
       GoRoute(
         path: '/premium',
         builder: (context, state) {
-          // Try to get 'isPremium' from extra, otherwise null (loading)
-          final isPremium = state.extra as bool?;
-          return PremiumScreen(isPremium: isPremium!);
+          // 1. Try to get it from the navigation 'extra'
+          final bool? extraIsPremium = state.extra as bool?;
+
+          // 2. Fallback: If 'extra' is lost (e.g. page refresh),
+          // we can try to look at the AuthBloc state directly if available,
+          // OR just default to false (safe approach).
+
+          // Simple fix: Default to false if null
+          return PremiumScreen(isPremium: extraIsPremium ?? false);
         },
       ),
 

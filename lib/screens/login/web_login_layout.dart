@@ -46,8 +46,7 @@ class WebLoginLayout extends StatelessWidget {
                       horizontal: 24,
                       vertical: 60,
                     ),
-                    // Optional: Slight background color difference to separate sections?
-                    // color: theme.colorScheme.surfaceContainerLow,
+
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 500),

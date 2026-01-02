@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/participant_tile.dart';
+// Import the chat sheet to embed it directly
+import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
 import 'room_controls.dart';
 
 class MorphingRoomCard extends StatelessWidget {
@@ -59,7 +61,7 @@ class MorphingRoomCard extends StatelessWidget {
     );
   }
 
-  // ... (Keep _buildMiniView exactly as it was) ...
+  // ... (Keep _buildMiniView exactly the same) ...
   Widget _buildMiniView(BuildContext context) {
     final localP = manager.livekitRoom?.localParticipant;
     final isMicOn = localP?.isMicrophoneEnabled() ?? false;
@@ -153,163 +155,198 @@ class MorphingRoomCard extends StatelessWidget {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // NEW EXPANDED VIEW LOGIC
+  // ---------------------------------------------------------------------------
   Widget _buildExpandedView(BuildContext context) {
+    return SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Breakpoint: Show chat on right if width > 900
+          final bool isDesktop = constraints.maxWidth > 900;
+
+          if (isDesktop) {
+            // DESKTOP: Row Layout (Video Left | Chat Right)
+            return Row(
+              children: [
+                Expanded(
+                  // Video Area (No Chat Button in bottom bar)
+                  child: _buildVideoContent(context, showChatButton: false),
+                ),
+                // Vertical Divider
+                Container(width: 1, color: Colors.white10),
+                // Chat Area
+                SizedBox(
+                  width: 400, // Fixed width for chat
+                  child: manager.roomData != null
+                      ? RoomChatSheet(room: manager.livekitRoom!)
+                      : const Center(child: CircularProgressIndicator()),
+                ),
+              ],
+            );
+          } else {
+            // MOBILE: Standard Column Layout (Video Area with Chat Button)
+            return _buildVideoContent(context, showChatButton: true);
+          }
+        },
+      ),
+    );
+  }
+
+  // Extracted the main content so we can reuse it in both Mobile and Desktop layouts
+  Widget _buildVideoContent(
+    BuildContext context, {
+    required bool showChatButton,
+  }) {
     final localP = manager.livekitRoom?.localParticipant;
     final isMicOn = localP?.isMicrophoneEnabled() ?? false;
     final isCamOn = localP?.isCameraEnabled() ?? false;
 
-    return SafeArea(
-      child: Column(
-        children: [
-          // TOP BAR
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 14,
-                        backgroundImage: manager.roomData?.hostAvatarUrl != null
-                            ? NetworkImage(manager.roomData!.hostAvatarUrl!)
-                            : null,
-                        child: manager.roomData?.hostAvatarUrl == null
-                            ? const Icon(Icons.person, size: 16)
-                            : null,
-                      ),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            manager.roomData?.title ?? "Live Room",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            "${participants.length} in live",
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Text(
-                          "LIVE",
-                          style: TextStyle(
+    return Column(
+      children: [
+        // --- TOP BAR ---
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundImage: manager.roomData?.hostAvatarUrl != null
+                          ? NetworkImage(manager.roomData!.hostAvatarUrl!)
+                          : null,
+                      child: manager.roomData?.hostAvatarUrl == null
+                          ? const Icon(Icons.person, size: 16)
+                          : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          manager.roomData?.title ?? "Live Room",
+                          style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 10,
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(
-                    Icons.keyboard_arrow_down,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                  onPressed: manager.collapse,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                  onPressed: onClosePress,
-                ),
-              ],
-            ),
-          ),
-
-          // -----------------------------------------------------------------
-          // RESPONSIVE GRID (UPDATED SECTION)
-          // -----------------------------------------------------------------
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-
-                // 1. Calculate Columns based on width
-                int crossAxisCount = 3; // Mobile default
-                if (width > 600) crossAxisCount = 4; // Tablet Portrait
-                if (width > 900)
-                  crossAxisCount = 5; // Tablet Landscape / Small Desktop
-                if (width > 1200) crossAxisCount = 6; // Desktop
-                if (width > 1500) crossAxisCount = 8; // Ultra Wide
-
-                // 2. Adjust Aspect Ratio based on device type
-                // Mobile (Portrait) looks better with taller cards (0.8).
-                // Desktop (Landscape) looks better with squarer cards (1.0 or 1.1) to fill space nicely.
-                double childAspectRatio = width > 900 ? 1.0 : 0.8;
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: GridView.builder(
-                    padding: EdgeInsets.zero,
-                    physics: const BouncingScrollPhysics(),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxisCount,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      childAspectRatio: childAspectRatio,
-                    ),
-                    itemCount: participants.length,
-                    itemBuilder: (context, index) {
-                      return GestureDetector(
-                        onTap: () => onParticipantTap(participants[index]),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey[900],
-                              border: Border.all(
-                                color: Colors.white10,
-                                width: 1,
-                              ),
-                            ),
-                            child: ParticipantTile(
-                              participant: participants[index],
-                            ),
+                        Text(
+                          "${participants.length} in live",
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
                           ),
                         ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
+                      ],
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        "LIVE",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(
+                  Icons.keyboard_arrow_down,
+                  color: Colors.white,
+                  size: 30,
+                ),
+                onPressed: manager.collapse,
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: onClosePress,
+              ),
+            ],
           ),
+        ),
 
-          // BOTTOM BAR
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-            child: Row(
-              children: [
+        // --- GRID ---
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+
+              // Responsive Grid Logic
+              int crossAxisCount = 3;
+              if (width > 600) crossAxisCount = 4;
+              // Since desktop splits the screen, the 'width' here is smaller than full screen
+              // so we adjust breakpoints slightly
+              if (width > 800) crossAxisCount = 5;
+              if (width > 1100) crossAxisCount = 6;
+
+              // Adjust Aspect Ratio
+              // On desktop split view, we want squarer tiles
+              double childAspectRatio = width > 800 ? 1.0 : 0.8;
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: GridView.builder(
+                  padding: EdgeInsets.zero,
+                  physics: const BouncingScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: childAspectRatio,
+                  ),
+                  itemCount: participants.length,
+                  itemBuilder: (context, index) {
+                    return GestureDetector(
+                      onTap: () => onParticipantTap(participants[index]),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            border: Border.all(color: Colors.white10, width: 1),
+                          ),
+                          child: ParticipantTile(
+                            participant: participants[index],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+
+        // --- BOTTOM BAR ---
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Chat Button (Only show if showChatButton is true)
+              if (showChatButton) ...[
                 Expanded(
                   child: GestureDetector(
                     onTap: onOpenChat,
@@ -355,23 +392,25 @@ class MorphingRoomCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                GlassButton(
-                  icon: isMicOn ? Icons.mic : Icons.mic_off,
-                  isRed: !isMicOn,
-                  onTap: manager.toggleMic,
-                ),
-                const SizedBox(width: 8),
-                GlassButton(
-                  icon: isCamOn ? Icons.videocam : Icons.videocam_off,
-                  onTap: manager.toggleCamera,
-                ),
-                const SizedBox(width: 8),
-                GlassButton(icon: Icons.more_horiz, onTap: onOpenMenu),
               ],
-            ),
+
+              // Controls
+              GlassButton(
+                icon: isMicOn ? Icons.mic : Icons.mic_off,
+                isRed: !isMicOn,
+                onTap: manager.toggleMic,
+              ),
+              const SizedBox(width: 8),
+              GlassButton(
+                icon: isCamOn ? Icons.videocam : Icons.videocam_off,
+                onTap: manager.toggleCamera,
+              ),
+              const SizedBox(width: 8),
+              GlassButton(icon: Icons.more_horiz, onTap: onOpenMenu),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

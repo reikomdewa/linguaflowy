@@ -314,9 +314,6 @@ class _SpeakViewState extends State<SpeakView> {
     );
   }
 
-  // ... (Keep existing _buildTabSelector, _showFilterSheet, _buildFab, etc.)
-  // Included purely to ensure context validity, copy your existing versions if unchanged.
-
   Widget _buildTabSelector(BuildContext context) {
     return Builder(
       builder: (context) {

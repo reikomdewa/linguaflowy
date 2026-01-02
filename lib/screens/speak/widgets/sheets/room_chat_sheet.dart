@@ -1,5 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; 
+import 'package:intl/intl.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:livekit_client/livekit_client.dart';
 import 'package:linguaflow/services/speak/chat_service.dart';
@@ -7,10 +8,10 @@ import 'package:linguaflow/services/speak/chat_service.dart';
 class RoomChatSheet extends StatefulWidget {
   final Room room;
   // FIX: Add this callback to handle closing without Navigator
-  final VoidCallback? onClose; 
+  final VoidCallback? onClose;
 
   const RoomChatSheet({
-    super.key, 
+    super.key,
     required this.room,
     this.onClose, // Optional parameter
   });
@@ -53,121 +54,136 @@ class _RoomChatSheetState extends State<RoomChatSheet> {
     final inputColor = isDark ? Colors.grey[900] : Colors.grey[100];
 
     return SafeArea(
-      child: Container(
-        height: MediaQuery.of(context).size.height * 0.85,
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            // HEADER
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Room Chat",
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    // --- FIX: HYBRID CLOSE LOGIC ---
-                    onPressed: () {
-                      if (widget.onClose != null) {
-                        // Manual Mode (Overlay)
-                        widget.onClose!();
-                      } else {
-                        // Modal Mode (Navigator)
-                        Navigator.of(context).pop();
-                      }
-                    },
-                  ),
-                ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isDesktop = constraints.maxWidth >= 900;
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.85,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
               ),
             ),
-            const Divider(height: 1),
-      
-            // MESSAGE LIST
-            Expanded(
-              child: StreamBuilder<List<types.Message>>(
-                stream: _chatService.messagesStream,
-                initialData: _chatService.currentMessages, 
-                builder: (context, snapshot) {
-                  final messages = snapshot.data ?? [];
-      
-                  if (messages.isEmpty) {
-                    return Center(
-                      child: Text(
-                        "No messages yet.",
-                        style: TextStyle(color: Colors.grey[500]),
-                      ),
-                    );
-                  }
-      
-                  return ListView.builder(
-                    reverse: true, 
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      final message = messages[index];
-                      final isMe = message.author.id == _currentUserId;
-                      
-                      return _MessageBubble(
-                        message: message, 
-                        isMe: isMe,
-                        isDark: isDark,
+            child: Column(
+              children: [
+                // HEADER
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 12.0,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      if (isDesktop)
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          // --- FIX: HYBRID CLOSE LOGIC ---
+                          onPressed: () {
+                            if (widget.onClose != null) {
+                              // Manual Mode (Overlay)
+                              widget.onClose!();
+                            } else {
+                              // Modal Mode (Navigator)
+                              Navigator.of(context).pop();
+                            }
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+
+                // MESSAGE LIST
+                Expanded(
+                  child: StreamBuilder<List<types.Message>>(
+                    stream: _chatService.messagesStream,
+                    initialData: _chatService.currentMessages,
+                    builder: (context, snapshot) {
+                      final messages = snapshot.data ?? [];
+
+                      if (messages.isEmpty) {
+                        return Center(
+                          child: Text(
+                            "No messages yet.",
+                            style: TextStyle(color: Colors.grey[500]),
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        reverse: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final message = messages[index];
+                          final isMe = message.author.id == _currentUserId;
+
+                          return _MessageBubble(
+                            message: message,
+                            isMe: isMe,
+                            isDark: isDark,
+                          );
+                        },
                       );
                     },
-                  );
-                },
-              ),
-            ),
-      
-            // INPUT AREA
-            Container(
-              padding: const EdgeInsets.only(
-                left: 16, 
-                right: 16, 
-                top: 10, 
-                bottom: 10 
-              ),
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.2))),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: inputColor,
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: TextField(
-                        controller: _textController,
-                        textCapitalization: TextCapitalization.sentences,
-                        decoration: const InputDecoration(
-                          hintText: "Type a message...",
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        ),
-                        onSubmitted: (_) => _sendMessage(),
-                      ),
+                  ),
+                ),
+
+                // INPUT AREA
+                Container(
+                  padding: const EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 10,
+                    bottom: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: backgroundColor,
+                    border: Border(
+                      top: BorderSide(color: Colors.grey.withOpacity(0.2)),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: _sendMessage,
-                    icon: const Icon(Icons.send),
-                    color: Colors.blueAccent,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: inputColor,
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: TextField(
+                            controller: _textController,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: const InputDecoration(
+                              hintText: "Type a message...",
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                            ),
+                            onSubmitted: (_) => _sendMessage(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _sendMessage,
+                        icon: const Icon(Icons.send),
+                        color: Colors.blueAccent,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -189,8 +205,10 @@ class _MessageBubble extends StatelessWidget {
     if (message is! types.TextMessage) return const SizedBox.shrink();
 
     final textMessage = message as types.TextMessage;
-    final time = message.createdAt != null 
-        ? DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(message.createdAt!))
+    final time = message.createdAt != null
+        ? DateFormat(
+            'HH:mm',
+          ).format(DateTime.fromMillisecondsSinceEpoch(message.createdAt!))
         : '';
 
     return Align(
@@ -198,10 +216,12 @@ class _MessageBubble extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+        ),
         decoration: BoxDecoration(
-          color: isMe 
-              ? Colors.blueAccent 
+          color: isMe
+              ? Colors.blueAccent
               : (isDark ? Colors.grey[800] : Colors.grey[200]),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
@@ -225,11 +245,13 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 ),
               ),
-            
+
             Text(
               textMessage.text,
               style: TextStyle(
-                color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
+                color: isMe
+                    ? Colors.white
+                    : (isDark ? Colors.white : Colors.black87),
                 fontSize: 16,
               ),
             ),

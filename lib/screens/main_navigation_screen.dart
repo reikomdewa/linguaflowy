@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -5,6 +6,7 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/constants/constants.dart';
 import 'package:linguaflow/models/user_model.dart'; // Ensure UserModel is imported
+import 'package:linguaflow/screens/community/community_screen.dart';
 
 // Screens
 import 'package:linguaflow/screens/home/home_screen.dart';
@@ -73,8 +75,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
 
     // 2. FIX: Handle Null User for Guests
-    final UserModel? user = (authState is AuthAuthenticated) ? authState.user : null;
-    
+    final UserModel? user = (authState is AuthAuthenticated)
+        ? authState.user
+        : null;
+    // Define a breakpoint (e.g., 800px or 1024px)
+    final bool isDesktop = MediaQuery.of(context).size.width > 800;
     // Only check admin if user exists
     final bool isAdmin = user != null && AppConstants.isAdmin(user.email);
 
@@ -135,7 +140,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
       );
     }
-
+    if (kIsWeb && isDesktop) {
+      navItems.insert(
+        5, // 👈 index where you want it (0-based)
+        _NavItem(
+          screen: const CommunityScreen(),
+          icon: const Icon(Icons.people),
+          activeIcon: const Icon(Icons.people),
+          label: 'Community',
+        ),
+      );
+    }
     // Profile Tab (Always show - ProfileScreen handles Guest view internally)
     navItems.add(
       _NavItem(

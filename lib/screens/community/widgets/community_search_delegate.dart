@@ -7,8 +7,11 @@ import 'package:linguaflow/screens/community/widgets/community_lesson_card.dart'
 import 'package:linguaflow/screens/community/widgets/forum_post_card.dart';
 
 class CommunitySearchDelegate extends SearchDelegate {
-  final UserModel currentUser;
+  final UserModel? currentUser; // Nullable for Guests
   final CommunityService service;
+  
+  // Fallback language if guest
+  final String _guestLanguage = 'English'; 
 
   CommunitySearchDelegate({required this.currentUser, required this.service});
 
@@ -59,7 +62,6 @@ class CommunitySearchDelegate extends SearchDelegate {
       return const Center(child: Text("Type to search..."));
     }
 
-    // Use a Tabbed view for results
     return DefaultTabController(
       length: 2,
       child: Column(
@@ -91,26 +93,26 @@ class CommunitySearchDelegate extends SearchDelegate {
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    // Optional: Show recent searches or popular tags here
     if (query.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search, size: 64, color: Colors.grey.withValues(alpha: 0.3)),
+            Icon(Icons.search, size: 64, color: Colors.grey.withOpacity(0.3)),
             const SizedBox(height: 16),
             const Text("Search for community lessons or questions", style: TextStyle(color: Colors.grey)),
           ],
         ),
       );
     }
-    // Show results as suggestions for instant feedback
     return buildResults(context); 
   }
 
   Widget _buildLessonResults(BuildContext context) {
+    final searchLang = currentUser?.currentLanguage ?? _guestLanguage;
+
     return StreamBuilder<List<LessonModel>>(
-      stream: service.searchPublicLessons(query, currentUser.currentLanguage),
+      stream: service.searchPublicLessons(query, searchLang),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -127,7 +129,7 @@ class CommunitySearchDelegate extends SearchDelegate {
           itemBuilder: (context, index) {
             return CommunityLessonCard(
               lesson: lessons[index],
-              currentUser: currentUser,
+              currentUser: currentUser, // Pass nullable
               service: service,
             );
           },
@@ -137,8 +139,10 @@ class CommunitySearchDelegate extends SearchDelegate {
   }
 
   Widget _buildForumResults(BuildContext context) {
+    final searchLang = currentUser?.currentLanguage ?? _guestLanguage;
+
     return StreamBuilder<List<ForumPost>>(
-      stream: service.searchForumPosts(query, currentUser.currentLanguage),
+      stream: service.searchForumPosts(query, searchLang),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -155,7 +159,7 @@ class CommunitySearchDelegate extends SearchDelegate {
           itemBuilder: (context, index) {
             return ForumPostCard(
               post: posts[index],
-              currentUser: currentUser,
+              currentUser: currentUser, // Pass nullable
               service: service,
             );
           },

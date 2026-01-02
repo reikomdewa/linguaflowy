@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:go_router/go_router.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/vocabulary/vocabulary_bloc.dart';
@@ -149,6 +150,7 @@ PreferredSizeWidget buildAppBar(
 
             // --- SEARCH BAR (Desktop) ---
             if (isDesktop) ...[
+              SizedBox(width: 20),
               BlocBuilder<LessonBloc, LessonState>(
                 builder: (context, state) {
                   // Only show search if we have lessons loaded
@@ -271,7 +273,14 @@ PreferredSizeWidget buildAppBar(
         TabButton(
           title: "Personalized Story Lesson",
           icon: Icons.auto_awesome,
-          onCustomTap: () => HomeUtils.showAIStoryGenerator(context),
+          onCustomTap: () {
+            AuthGuard.run(
+              context,
+              onAuthenticated: () {
+                HomeUtils.showAIStoryGenerator(context);
+              },
+            );
+          },
         ),
 
       // Mobile Search Button
@@ -327,11 +336,16 @@ PreferredSizeWidget buildAppBar(
             if (vocabState is VocabularyLoaded) {
               allItems = vocabState.items;
             }
-            HomeDialogs.showStatsDialog(
+            AuthGuard.run(
               context,
-              user,
-              allItems,
-              LanguageHelper.availableLanguages,
+              onAuthenticated: () {
+                HomeDialogs.showStatsDialog(
+                  context,
+                  user,
+                  allItems,
+                  LanguageHelper.availableLanguages,
+                );
+              },
             );
           },
           borderRadius: BorderRadius.circular(10),
@@ -376,12 +390,7 @@ PreferredSizeWidget buildAppBar(
         child: Center(
           child: InkWell(
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => PremiumScreen(isPremium: isPremium),
-                ),
-              );
+              context.push('/premium', extra: isPremium);
             },
             borderRadius: BorderRadius.circular(20),
             child: Container(

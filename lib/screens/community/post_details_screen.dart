@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:linguaflow/models/community_models.dart';
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/community_service.dart';
+import 'package:linguaflow/utils/auth_guard.dart'; // Import AuthGuard
 import 'package:timeago/timeago.dart' as timeago;
 
 class PostDetailsScreen extends StatefulWidget {
   final ForumPost post;
-  final UserModel currentUser;
+  final UserModel? currentUser; // Changed to Nullable
   final CommunityService service;
 
   const PostDetailsScreen({
@@ -28,6 +29,7 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
+    final isGuest = widget.currentUser == null;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -91,7 +93,7 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
               color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
+                  color: Colors.black.withOpacity(0.05),
                   blurRadius: 5,
                   offset: const Offset(0, -2),
                 ),
@@ -103,10 +105,19 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
                   Expanded(
                     child: TextField(
                       controller: _commentController,
-                      decoration: const InputDecoration(
-                        hintText: "Write a comment...",
+                      // GUEST LOGIC: Make read-only so keyboard doesn't open, 
+                      // but trigger login on tap.
+                      readOnly: isGuest,
+                      onTap: isGuest ? () {
+                        AuthGuard.run(context, onAuthenticated: () {});
+                      } : null,
+                      decoration: InputDecoration(
+                        hintText: isGuest ? "Log in to comment..." : "Write a comment...",
                         border: InputBorder.none,
                         isDense: true,
+                        hintStyle: TextStyle(
+                          color: isGuest ? Colors.blueAccent : Colors.grey
+                        )
                       ),
                       maxLines: null,
                     ),
@@ -114,8 +125,16 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
                   IconButton(
                     icon: _isSending 
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
-                      : const Icon(Icons.send, color: Colors.blue),
-                    onPressed: _isSending ? null : _handlePostComment,
+                      : Icon(Icons.send, color: isGuest ? Colors.grey : Colors.blue),
+                    onPressed: _isSending 
+                      ? null 
+                      : () {
+                          if (isGuest) {
+                             AuthGuard.run(context, onAuthenticated: () {});
+                          } else {
+                            _handlePostComment();
+                          }
+                        },
                   ),
                 ],
               ),
@@ -127,12 +146,16 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
   }
 
   Future<void> _handlePostComment() async {
+    // Safety check (though UI prevents it)
+    if (widget.currentUser == null) return;
+
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
 
     setState(() => _isSending = true);
     try {
-      await widget.service.addComment(widget.post.id, text, widget.currentUser);
+      // currentUser is guaranteed not null here because of check above
+      await widget.service.addComment(widget.post.id, text, widget.currentUser!);
       _commentController.clear();
       if(mounted) FocusManager.instance.primaryFocus?.unfocus();
     } catch (e) {
@@ -156,14 +179,16 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
         CircleAvatar(
           radius: 16,
           backgroundImage: data['authorPhoto'] != null ? NetworkImage(data['authorPhoto']) : null,
-          child: data['authorPhoto'] == null ? Text((data['authorName'] ?? "U")[0]) : null,
+          child: data['authorPhoto'] == null 
+            ? Text((data['authorName'] ?? "U").toString().substring(0, 1).toUpperCase()) 
+            : null,
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[100],
+              color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -195,7 +220,6 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
     );
   }
 
-  // ... (keep _buildOriginalPost from previous response) ...
   Widget _buildOriginalPost(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -208,7 +232,7 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
                   ? NetworkImage(widget.post.authorPhoto!)
                   : null,
               child: widget.post.authorPhoto == null
-                  ? Text(widget.post.authorName[0])
+                  ? Text(widget.post.authorName.isNotEmpty ? widget.post.authorName[0].toUpperCase() : "U")
                   : null,
             ),
             const SizedBox(width: 12),

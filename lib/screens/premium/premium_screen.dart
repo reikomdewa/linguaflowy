@@ -17,13 +17,12 @@ import 'package:linguaflow/screens/premium/payment_details_page.dart';
 import 'package:linguaflow/utils/centered_views.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:linguaflow/widgets/premium_lock_dialog.dart';
-// NEW IMPORT
 import 'package:linguaflow/utils/firebase_utils.dart';
 
 class PremiumScreen extends StatefulWidget {
   static const String routeName = 'premium';
-  bool isPremium;
-  PremiumScreen({required this.isPremium, Key? key}) : super(key: key);
+  final bool isPremium; // Changed to final
+  const PremiumScreen({required this.isPremium, Key? key}) : super(key: key);
 
   @override
   State<PremiumScreen> createState() => _PremiumScreenState();
@@ -35,10 +34,6 @@ class _PremiumScreenState extends State<PremiumScreen> {
     {'duration': '6 months', 'price': '20', 'per': 'per 6 months'},
     {'duration': '1 month', 'price': subscriptionPrice, 'per': 'per month'},
   ];
-  @override
-  void initState() {
-    super.initState();
-  }
 
   static const List proBenefits = [
     {
@@ -67,6 +62,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
           'Display your premium status and show you\'re part of the community supporting language diversity and accessible education.',
     },
   ];
+
   Future<void> _contactAdmin() async {
     showModalBottomSheet(
       context: context,
@@ -102,136 +98,91 @@ class _PremiumScreenState extends State<PremiumScreen> {
 
   @override
   Widget build(BuildContext context) {
-    //  final prices = FirebaseConstants.appData['prices'];
-    final size = MediaQuery.of(context).size;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
-    final textColor = Theme.of(context).textTheme.bodyLarge?.color;
-    return ClipRRect(
-      borderRadius: (MediaQuery.of(context).size.width > 640)
-          ? BorderRadius.circular(15)
-          : BorderRadius.circular(0),
-      child: Scaffold(
-        backgroundColor: bgColor,
-        appBar: (kIsWeb)
-            ? null
-            : AppBar(toolbarHeight: 0, backgroundColor: bgColor),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Container(
-              child: Padding(
-                padding: const EdgeInsets.only(
-                  right: 16.0,
-                  left: 16.0,
-                  top: 16.0,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.only(top: 20),
-                      child: Text(
-                        ' Linguaflow Pro prices',
-                        style: AppStyles.titleStyleBig(context),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    ListView.builder(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: prices.length,
-                      itemBuilder: (context, index) {
-                        return InkWell(
-                          onTap: () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => LayoutBuilder(
-                                builder: (context, constraints) {
-                                  bool isDesktop = constraints.maxWidth > 600;
-                                  return isDesktop
-                                      ? CenteredView(
-                                          horizontalPadding: 500,
-                                          child: PremiumLockDialog(
-                                            onClose: () {
-                                              Navigator.pop(context);
-                                            },
-                                          ),
-                                        )
-                                      : PremiumLockDialog(
-                                          title: 'Upgrade',
-                                          onClose: () {
-                                            Navigator.pop(context);
-                                          },
-                                        );
-                                },
-                              ),
-                            );
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 10),
-                            height: 60,
-                            width: size.width,
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white
-                                    : AppColor.mobileBackgroundColor,
-                                width: 2,
-                              ),
-                              color: Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16.0,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      prices[index]['duration'],
-                                      style: AppStyles.smallSubtitleStyle(
-                                        context,
-                                      ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          '\$' + prices[index]['price'],
-                                          style: AppStyles.smallSubtitleStyle(
-                                            context,
-                                          ),
-                                        ),
-                                        Text(
-                                          prices[index]['per'],
-                                          style: AppStyles.smallSubtitleStyle(
-                                            context,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
 
-                    Row(
-                      children: [
-                        ElevatedButton(
-                          onPressed: () {
-                            if (!widget.isPremium) {
+    return Scaffold(
+      backgroundColor: bgColor,
+
+      // Desktop AppBar: Show standard if desktop, otherwise standard logic
+      appBar: (kIsWeb)
+          ? AppBar(
+              scrolledUnderElevation: 0,
+              backgroundColor: bgColor,
+              elevation: 0,
+              iconTheme: IconThemeData(
+                color: Theme.of(context).textTheme.bodyLarge?.color,
+              ),
+            )
+          : AppBar(toolbarHeight: 0, backgroundColor: bgColor),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Determine if Desktop
+            final bool isDesktop = constraints.maxWidth > 800;
+
+            // Constrain max width for desktop view
+            return Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isDesktop ? 800 : double.infinity,
+                ),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isDesktop ? 0 : 16.0,
+                    vertical: 16.0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // --- TITLE ---
+                      Padding(
+                        padding: const EdgeInsets.only(top: 20, bottom: 20),
+                        child: Text(
+                          ' Linguaflow Pro prices',
+                          style: AppStyles.titleStyleBig(context),
+                        ),
+                      ),
+
+                      // --- GRID LAYOUT FOR DESKTOP (Prices) ---
+                      if (isDesktop)
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                childAspectRatio: 2.5,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                              ),
+                          itemCount: prices.length,
+                          itemBuilder: (context, index) =>
+                              _buildPriceCard(context, index),
+                        )
+                      else
+                        ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: prices.length,
+                          itemBuilder: (context, index) =>
+                              _buildPriceCard(context, index),
+                        ),
+
+                      const SizedBox(height: 20),
+
+                      // --- BUTTONS ---
+                      Row(
+                        children: [
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
+                            onPressed: () {
                               showPremiumDialog(context).then((unlocked) {
                                 if (unlocked == true && context.mounted) {
                                   context.read<AuthBloc>().add(
@@ -245,101 +196,185 @@ class _PremiumScreenState extends State<PremiumScreen> {
                                   );
                                 }
                               });
-                            } else {
-                              if (widget.isPremium) {
-                                showPremiumDialog(context).then((unlocked) {
-                                  if (unlocked == true && context.mounted) {
-                                    context.read<AuthBloc>().add(
-                                      AuthCheckRequested(),
-                                    );
-                                  }
-                                });
-                              }
-                            }
-                          },
-                          child: widget.isPremium
-                              ? const Text('Upgrade')
-                              : const Text('Get Premium'),
-                        ),
-                        SizedBox(width: 10),
-                        ElevatedButton(
-                          onPressed: () {
-                            _contactAdmin();
-                          },
-                          child: const Text('Contact Support'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-
-                    // --------------------------------------------------------
-                    // UPDATED SECTION: Payment Data Display
-                    // --------------------------------------------------------
-                    // Inside your PremiumScreen or any Widget
-                    if (widget.isPremium)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "You are a Pro Member",
-                            style: AppStyles.titleStyleBig(
-                              context,
-                            ).copyWith(color: Colors.greenAccent),
+                            },
+                            child: widget.isPremium
+                                ? const Text('Upgrade')
+                                : const Text('Get Premium'),
+                          ),
+                          const SizedBox(width: 10),
+                          OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
+                            onPressed: () {
+                              _contactAdmin();
+                            },
+                            child: const Text('Contact Support'),
                           ),
                         ],
                       ),
-                    BlocBuilder<AuthBloc, AuthState>(
-                      builder: (context, state) {
-                        if (state is AuthAuthenticated &&
-                            state.user.premiumDetails != null) {
-                          final data = state.user.premiumDetails!;
-                          // Use your _calculateExpiration logic here
-                          final expiration = _calculateExpiration(data);
+                      const SizedBox(height: 20),
 
-                          return Text(
-                            "Paid: ${data['amount_paid'] / 100} at ${_formatDate((data["createdAt"] as Timestamp).toDate())} • $expiration",
-                          );
-                        }
+                      // --- USER STATUS INFO ---
+                      if (widget.isPremium) ...[
+                        Text(
+                          "You are a Pro Member",
+                          style: AppStyles.titleStyleBig(
+                            context,
+                          ).copyWith(color: Colors.greenAccent),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
 
-                        return const SizedBox(); // Or loading/default text
-                      },
-                    ),
-
-                    // --------------------------------------------------------
-                    const SizedBox(height: 10),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: proBenefits.length,
-                      itemBuilder: (context, index) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              proBenefits[index]['note'],
-                              style: AppStyles.kTitleStyle(context),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                top: 8.0,
-                                bottom: 14,
+                      BlocBuilder<AuthBloc, AuthState>(
+                        builder: (context, state) {
+                          if (state is AuthAuthenticated &&
+                              state.user.premiumDetails != null) {
+                            final data = state.user.premiumDetails!;
+                            final expiration = _calculateExpiration(data);
+                            return Text(
+                              "Paid: \$${data['amount_paid'] / 100} at ${_formatDate((data["createdAt"] as Timestamp).toDate())} • $expiration",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
                               ),
-                              child: Text(
-                                proBenefits[index]['description'],
-                                style: AppStyles.smallSubtitleStyle(context),
+                            );
+                          }
+                          return const SizedBox();
+                        },
+                      ),
+
+                      const SizedBox(height: 30),
+                      const Divider(),
+                      const SizedBox(height: 20),
+
+                      // --- BENEFITS ---
+                      Text("Benefits", style: AppStyles.titleStyleBig(context)),
+                      const SizedBox(height: 20),
+
+                      if (isDesktop)
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2, // 2 benefits per row
+                                childAspectRatio: 2.8,
+                                crossAxisSpacing: 24,
+                                mainAxisSpacing: 24,
                               ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
+                          itemCount: proBenefits.length,
+                          itemBuilder: (ctx, i) => _buildBenefitItem(ctx, i),
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: proBenefits.length,
+                          itemBuilder: (ctx, i) => Padding(
+                            padding: const EdgeInsets.only(bottom: 20),
+                            child: _buildBenefitItem(ctx, i),
+                          ),
+                        ),
+
+                      const SizedBox(height: 40),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // --- HELPER WIDGETS ---
+
+  Widget _buildPriceCard(BuildContext context, int index) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return InkWell(
+      onTap: () => showPremiumDialog(context),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.symmetric(
+          vertical: 6,
+        ), // reduced margin for list
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isDark ? Colors.white24 : Colors.grey.shade300,
+            width: 2,
+          ),
+          // color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                prices[index]['duration'],
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '\$' + prices[index]['price'],
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    prices[index]['per'],
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBenefitItem(BuildContext context, int index) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.blueAccent, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              proBenefits[index]['note'],
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6.0, left: 28),
+          child: Text(
+            proBenefits[index]['description'],
+            style: TextStyle(
+              fontSize: 14,
+              color: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.color?.withOpacity(0.8),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -373,55 +408,37 @@ class _PremiumScreenState extends State<PremiumScreen> {
   String _calculateExpiration(Map<String, dynamic> data) {
     try {
       DateTime purchaseDate;
-
-      // 1. Try to get the date from 'claimedAt' (Timestamp)
       if (data['claimedAt'] != null) {
-        // Firestore stores dates as Timestamp objects
         purchaseDate = (data['claimedAt'] as Timestamp).toDate();
-      }
-      // 2. Fallback: Try 'purchased_at' (String from Gumroad)
-      else if (data['purchased_at'] != null) {
+      } else if (data['purchased_at'] != null) {
         purchaseDate = DateTime.parse(data['purchased_at']);
       } else {
         return "Unknown";
       }
 
-      final int amountPaid =
-          data['amount_paid'] ?? 0; // In cents (e.g. 2000 = $20)
+      final int amountPaid = data['amount_paid'] ?? 0;
 
-      // 3. Determine Duration based on Price Ranges
-
-      // Range: $100+ (10000 cents) -> Lifetime
       if (amountPaid >= 10000) {
         return "Lifetime Access";
       }
 
       DateTime expireDate;
-
-      // Range: $20.00 to $99.99 (2000 - 9999 cents) -> 6 Months
       if (amountPaid >= 2000) {
         expireDate = purchaseDate.add(const Duration(days: 30 * 6));
-      }
-      // Range: $4.99 to $19.99 (499 - 1999 cents) -> 1 Month
-      // Also catches $0 test keys by default logic below, or you can check >= 499
-      else {
-        // Default -> 1 Month
+      } else {
         expireDate = purchaseDate.add(const Duration(days: 30));
       }
 
-      // 4. Check if Expired
       if (DateTime.now().isAfter(expireDate)) {
         return "Expired on ${_formatDate(expireDate)}";
       }
 
       return "Expires: ${_formatDate(expireDate)}";
     } catch (e) {
-      // print("Date Error: $e");
       return "Active";
     }
   }
 
-  // Simple date formatter (DD/MM/YYYY)
   String _formatDate(DateTime date) {
     return "${date.day}/${date.month}/${date.year}";
   }

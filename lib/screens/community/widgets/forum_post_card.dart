@@ -5,12 +5,11 @@ import 'package:linguaflow/models/community_models.dart';
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/community_service.dart';
 import 'package:linguaflow/screens/community/post_details_screen.dart';
-// Ensure you import the FollowButton if it's in a different file
-// import 'package:linguaflow/widgets/user_follow_button.dart';
+import 'package:linguaflow/utils/auth_guard.dart'; // Import AuthGuard
 
 class ForumPostCard extends StatefulWidget {
   final ForumPost post;
-  final UserModel currentUser;
+  final UserModel? currentUser; // Nullable for Guests
   final CommunityService service;
 
   const ForumPostCard({
@@ -36,10 +35,13 @@ class _ForumPostCardState extends State<ForumPostCard> {
   }
 
   void _checkIfLiked() async {
+    // If guest, they haven't liked it
+    if (widget.currentUser == null) return;
+
     bool liked = await widget.service.hasUserLiked(
       'forum_posts',
       widget.post.id,
-      widget.currentUser.id,
+      widget.currentUser!.id,
     );
     if (mounted) {
       setState(() => _isLiked = liked);
@@ -47,15 +49,19 @@ class _ForumPostCardState extends State<ForumPostCard> {
   }
 
   void _handleLike() {
-    setState(() {
-      _isLiked = !_isLiked;
-      _currentLikes += _isLiked ? 1 : -1;
+    AuthGuard.run(context, onAuthenticated: () {
+      if (widget.currentUser == null) return;
+
+      setState(() {
+        _isLiked = !_isLiked;
+        _currentLikes += _isLiked ? 1 : -1;
+      });
+      widget.service.toggleLike(
+        'forum_posts',
+        widget.post.id,
+        widget.currentUser!.id,
+      );
     });
-    widget.service.toggleLike(
-      'forum_posts',
-      widget.post.id,
-      widget.currentUser.id,
-    );
   }
 
   void _navigateToDetails() {
@@ -63,9 +69,9 @@ class _ForumPostCardState extends State<ForumPostCard> {
       context,
       MaterialPageRoute(
         builder: (context) => PostDetailsScreen(
-          post: widget.post, // FIXED: use widget.post
-          currentUser: widget.currentUser, // FIXED: use widget.currentUser
-          service: widget.service, // FIXED: use widget.service
+          post: widget.post,
+          currentUser: widget.currentUser, // Pass nullable user
+          service: widget.service,
         ),
       ),
     );
@@ -76,10 +82,14 @@ class _ForumPostCardState extends State<ForumPostCard> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    // Helper: Check if I am the author (safely)
+    final bool isMyPost = widget.currentUser != null && 
+                          widget.post.authorId == widget.currentUser!.id;
+
     return GestureDetector(
       onTap: _navigateToDetails,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12), // Added margin for spacing
+        margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
@@ -100,17 +110,18 @@ class _ForumPostCardState extends State<ForumPostCard> {
                       ? NetworkImage(widget.post.authorPhoto!)
                       : null,
                   child: widget.post.authorPhoto == null
-                      ? Text(widget.post.authorName[0].toUpperCase())
+                      ? Text(widget.post.authorName.isNotEmpty 
+                          ? widget.post.authorName[0].toUpperCase() 
+                          : "U")
                       : null,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  // Use Expanded to prevent overflow
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.post.authorName,
+                        widget.post.authorName.isNotEmpty ? widget.post.authorName : "Anonymous",
                         style: const TextStyle(fontWeight: FontWeight.bold),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -126,21 +137,28 @@ class _ForumPostCardState extends State<ForumPostCard> {
                   ),
                 ),
 
-                // NEW: Follow Button
-                UserFollowButton(
-                  targetUserId: widget.post.authorId,
-                  activeColor: theme.primaryColor,
-                ),
+                // FOLLOW BUTTON (Hidden for Guests and Myself)
+                if (widget.currentUser != null && !isMyPost)
+                  UserFollowButton(
+                    targetUserId: widget.post.authorId,
+                    activeColor: theme.primaryColor,
+                  ),
 
-                // Menu Logic
+                // MENU
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.grey),
                   onSelected: (val) {
-                    // Handle report/delete
+                    if (val == 'delete') {
+                      // Implement delete logic here
+                    } else if (val == 'report') {
+                      AuthGuard.run(context, onAuthenticated: () {
+                        // Implement report logic here
+                      });
+                    }
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'report', child: Text('Report')),
-                    if (widget.post.authorId == widget.currentUser.id)
+                    if (isMyPost)
                       const PopupMenuItem(
                         value: 'delete',
                         child: Text(
@@ -192,7 +210,7 @@ class _ForumPostCardState extends State<ForumPostCard> {
 
                 // COMMENT BUTTON
                 TextButton.icon(
-                  onPressed: _navigateToDetails, // FIXED: Uses helper method
+                  onPressed: _navigateToDetails,
                   icon: const Icon(
                     Icons.comment_outlined,
                     size: 20,

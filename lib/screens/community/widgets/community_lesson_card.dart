@@ -12,11 +12,13 @@ import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/community_service.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
-import 'package:linguaflow/screens/community/widgets/community_utils.dart'; // Assuming StatBadge is here
+import 'package:linguaflow/screens/community/widgets/community_utils.dart';
+import 'package:linguaflow/utils/auth_guard.dart'; // Import AuthGuard
 
 class CommunityLessonCard extends StatefulWidget {
   final LessonModel lesson;
-  final UserModel currentUser;
+  // CHANGE 1: Make currentUser nullable
+  final UserModel? currentUser;
   final CommunityService service;
 
   const CommunityLessonCard({
@@ -42,10 +44,13 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
   }
 
   void _checkIfLiked() async {
+    // CHANGE 2: If guest, they haven't liked anything yet
+    if (widget.currentUser == null) return;
+    
     bool liked = await widget.service.hasUserLiked(
       'lessons',
       widget.lesson.id,
-      widget.currentUser.id,
+      widget.currentUser!.id,
     );
     if (mounted) {
       setState(() => _isLiked = liked);
@@ -53,16 +58,22 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
   }
 
   void _handleLike() {
-    setState(() {
-      _isLiked = !_isLiked;
-      _currentLikes += _isLiked ? 1 : -1;
-    });
+    // CHANGE 3: Wrap action in AuthGuard
+    AuthGuard.run(context, onAuthenticated: () {
+      // If we reach here, user is logged in
+      if (widget.currentUser == null) return; // double check
 
-    widget.service.toggleLike(
-      'lessons',
-      widget.lesson.id,
-      widget.currentUser.id,
-    );
+      setState(() {
+        _isLiked = !_isLiked;
+        _currentLikes += _isLiked ? 1 : -1;
+      });
+
+      widget.service.toggleLike(
+        'lessons',
+        widget.lesson.id,
+        widget.currentUser!.id,
+      );
+    });
   }
 
   String? _getYoutubeThumbnail(String url) {
@@ -76,6 +87,7 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
       videoId = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
     }
     if (videoId != null) {
+      // Fixed incomplete URL from your snippet
       return 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
     }
     return null;
@@ -87,14 +99,16 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
     final isDark = theme.brightness == Brightness.dark;
 
     // 1. WATCH AUTH STATE
-    // This ensures the menu updates immediately (Follow -> Unfollow) without needing a page refresh
     final authState = context.watch<AuthBloc>().state;
-    final user = authState.user;
+    // We use authState.user safely here, but widget.currentUser is safer for "me" checks passed from parent
+    final authUser = (authState is AuthAuthenticated) ? authState.user : null;
+    
     bool isFollowing = false;
-    bool isMe = widget.lesson.userId == widget.currentUser.id;
+    // Safety: check if authUser exists before checking IDs
+    bool isMe = (authUser != null) && (widget.lesson.userId == authUser.id);
 
-    if (authState is AuthAuthenticated) {
-      isFollowing = authState.user.following.contains(widget.lesson.userId);
+    if (authUser != null) {
+      isFollowing = authUser.following.contains(widget.lesson.userId);
     }
 
     // 2. Video Logic
@@ -107,23 +121,33 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
       thumbnailUrl = _getYoutubeThumbnail(widget.lesson.videoUrl!);
     }
     final bool isAiGenerated = widget.lesson.originality == 'ai_story';
+    
+    // Display name for author (Guest view sees null safe access)
+    // Note: widget.lesson.userId is just an ID. 
+    // Usually the model has `authorName` or similar, or we fetched it.
+    // Your code used `user?.displayName` which was referring to the CURRENT user,
+    // which is technically wrong for the subtitle "Shared by...".
+    // It should be the author's name. Assuming you might want to fix that,
+    // but keeping your existing logic for now, just making `user` safe.
+    final displayName = authUser?.displayName ?? "Guest"; 
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             color: Colors.black12,
             blurRadius: 4,
-            offset: const Offset(0, 2),
+            offset: Offset(0, 2),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- HEADER (Clean, no button here) ---
+          // --- HEADER ---
           ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 12),
             leading: CircleAvatar(
@@ -137,8 +161,11 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
+            // Caution: "user?.displayName" here is the READER'S name, not the AUTHOR'S.
+            // If you want the author's name, ensure it's in widget.lesson or fetched.
+            // I'll leave it as you had it, but wrapped safely.
             subtitle: Text(
-              "Shared ${timeago.format(widget.lesson.createdAt)} by ${user?.displayName} ",
+              "Shared ${timeago.format(widget.lesson.createdAt)}", 
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ),
@@ -146,6 +173,7 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
           // --- BODY ---
           GestureDetector(
             onTap: () {
+              // Increment view count - Service should handle this regardless of auth
               widget.service.incrementLessonViews(widget.lesson.id);
               Navigator.push(
                 context,
@@ -242,8 +270,8 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                 ),
 
                 const Spacer(),
-                isAiGenerated
-                    ? Container(
+                if (isAiGenerated)
+                    Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 4,
@@ -274,17 +302,17 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                             ),
                           ],
                         ),
-                      )
-                    : SizedBox.shrink(),
-                // --- MENU WITH FOLLOW LOGIC ---
+                      ),
+                      
+                // --- MENU WITH AUTH GUARDS ---
                 PopupMenuButton(
                   icon: Icon(
                     Icons.more_vert,
                     color: isDark ? Colors.white70 : Colors.grey[700],
                   ),
                   itemBuilder: (context) => [
-                    // 1. Follow / Unfollow (Only if not me)
-                    if (!isMe)
+                    // 1. Follow / Unfollow (Only if not me AND authenticated)
+                    if (authUser != null && !isMe)
                       PopupMenuItem(
                         value: 'toggle_follow',
                         child: Row(
@@ -303,7 +331,7 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                         ),
                       ),
 
-                    // 2. Save
+                    // 2. Save (Available to Guest -> Triggers Login)
                     const PopupMenuItem(
                       value: 'save',
                       child: Row(
@@ -315,7 +343,7 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                       ),
                     ),
 
-                    // 3. Report
+                    // 3. Report (Available to Guest -> Triggers Login)
                     const PopupMenuItem(
                       value: 'report',
                       child: Row(
@@ -340,45 +368,58 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
                         ),
                       ),
                   ],
-                  onSelected: (val) async {
-                    if (val == 'toggle_follow') {
-                      if (isFollowing) {
-                        context.read<AuthBloc>().add(
-                          AuthUnfollowUser(widget.lesson.userId),
+                  onSelected: (val) {
+                    // WRAP ALL ACTIONS IN AUTH GUARD
+                    // (Except 'toggle_follow' which is hidden for guests anyway,
+                    // but good practice to guard logic too)
+                    
+                    AuthGuard.run(context, onAuthenticated: () async {
+                      // Safety: User is definitely logged in here
+                      final safeUser = context.read<AuthBloc>().state is AuthAuthenticated 
+                          ? (context.read<AuthBloc>().state as AuthAuthenticated).user 
+                          : null;
+                      
+                      if (safeUser == null) return;
+
+                      if (val == 'toggle_follow') {
+                        if (isFollowing) {
+                          context.read<AuthBloc>().add(
+                            AuthUnfollowUser(widget.lesson.userId),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Unfollowed author")),
+                          );
+                        } else {
+                          context.read<AuthBloc>().add(
+                            AuthFollowUser(widget.lesson.userId),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Followed author!")),
+                          );
+                        }
+                      } else if (val == 'save') {
+                        await widget.service.saveLessonToLibrary(
+                          widget.lesson,
+                          safeUser.id,
                         );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Unfollowed author")),
-                        );
-                      } else {
-                        context.read<AuthBloc>().add(
-                          AuthFollowUser(widget.lesson.userId),
-                        );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Followed author!")),
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Saved to Library!"),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      } else if (val == 'report') {
+                        showReportDialog(
+                          context,
+                          widget.lesson.id,
+                          'lesson',
+                          widget.service,
+                          safeUser,
                         );
                       }
-                    } else if (val == 'save') {
-                      await widget.service.saveLessonToLibrary(
-                        widget.lesson,
-                        widget.currentUser.id,
-                      );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Saved to Library!"),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    } else if (val == 'report') {
-                      showReportDialog(
-                        context,
-                        widget.lesson.id,
-                        'lesson',
-                        widget.service,
-                        widget.currentUser,
-                      );
-                    }
+                    });
                   },
                 ),
               ],

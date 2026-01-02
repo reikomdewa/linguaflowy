@@ -1327,7 +1327,7 @@ void _showLimitDialog({bool isGuest = false}) {
             FilledButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                context.push('/login');
+                context.go('/login');
               },
               child: const Text("Login"),
             ),
