@@ -39,3 +39,7 @@ void main() async {
 
   runApp(const LinguaflowApp());
 }
+
+
+// flutter build web --dart-define-from-file=config.json
+// flutter run -d chrome --dart-define-from-file=config.json

@@ -11,6 +11,7 @@ import 'package:linguaflow/screens/community/community_screen.dart';
 // Screens
 import 'package:linguaflow/screens/home/home_screen.dart';
 import 'package:linguaflow/screens/discover/discover_screen.dart';
+import 'package:linguaflow/screens/inbox/inbox_screen.dart';
 import 'package:linguaflow/screens/library/library_screen.dart';
 import 'package:linguaflow/screens/profile/profile_screen.dart';
 import 'package:linguaflow/screens/speak/speak_screen.dart';
@@ -140,7 +141,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
       );
     }
-    if (kIsWeb && isDesktop) {
+    if (isDesktop) {
       navItems.insert(
         5, // 👈 index where you want it (0-based)
         _NavItem(
@@ -148,6 +149,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           icon: const Icon(Icons.people),
           activeIcon: const Icon(Icons.people),
           label: 'Community',
+        ),
+      );
+    }
+    if (isDesktop) {
+      navItems.insert(
+        6, // 👈 index where you want it (0-based)
+        _NavItem(
+          screen: const InboxScreen(),
+          icon: const Icon(Icons.message),
+          activeIcon: const Icon(Icons.message),
+          label: 'Inbox',
         ),
       );
     }

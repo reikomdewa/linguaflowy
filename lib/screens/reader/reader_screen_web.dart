@@ -136,25 +136,25 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
   Duration _totalDuration = Duration.zero;
   bool _isLimitDialogOpen = false;
 
- @override
+  @override
   void initState() {
     super.initState();
 
     _authBloc = context.read<AuthBloc>();
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    
+
     // --- 1. CHECK GUEST ACCESS LIMITS ---
-    _checkGuestAccess(); 
+    _checkGuestAccess();
 
     LocalLemmatizer().load(widget.lesson.language);
-    
+
     // Only start stream if NOT guest (Guests don't have Firestore vocab)
     if (!_authBloc.state.isGuest) {
       _startVocabularyStream();
       _loadUserPreferences();
     }
-    
+
     _determineMediaType();
 
     // Fetch Playlist if needed
@@ -173,6 +173,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       _finalizeContentInitialization();
     }
   }
+
   Future<void> _checkGuestAccess() async {
     final state = context.read<AuthBloc>().state;
     if (!state.isGuest) return; // Users are fine
@@ -185,8 +186,8 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       if (viewedLessons.length >= 2) {
         // LIMIT REACHED: Show blocking dialog immediately
         if (mounted) {
-           // Delay slightly to ensure context is ready
-           Future.delayed(Duration.zero, () => _showGuestBlockingDialog());
+          // Delay slightly to ensure context is ready
+          Future.delayed(Duration.zero, () => _showGuestBlockingDialog());
         }
       } else {
         // Allow, but track it
@@ -211,7 +212,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
             child: const Text("Go Home"),
           ),
           FilledButton(
-            onPressed: () => context.push('/login'),
+            onPressed: () => context.go('/login'),
             child: const Text("Login / Sign Up"),
           ),
         ],
@@ -1028,7 +1029,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     if (_isCheckingLimit) return;
 
     final authState = context.read<AuthBloc>().state;
-    
+
     // --- GUEST LOGIC START ---
     if (authState.isGuest) {
       _checkGuestTapLimit(word, cleanId, pos, isPhrase: false);
@@ -1037,11 +1038,11 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     // --- GUEST LOGIC END ---
 
     final user = authState.user; // Safe because we checked isGuest
-    
+
     // Existing Logic for Users...
     final existing = _vocabulary[cleanId];
     final status = _calculateSmartStatus(existing);
-    
+
     if (existing == null || existing.status != status) {
       _updateWordStatus(
         cleanId,
@@ -1057,6 +1058,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       _checkLimitAndActivate(user.id, cleanId, word, pos, false);
     }
   }
+
   String _restoreSpaces(String compressedPhrase) {
     if (_activeSentenceIndex >= 0 &&
         _activeSentenceIndex < _smartChunks.length) {
@@ -1091,27 +1093,27 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     return compressedPhrase;
   }
 
-void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
+  void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
     final restoredPhrase = _restoreSpaces(phrase);
     _activeSelectionClearer?.call();
     _activeSelectionClearer = clear;
-    
+
     final authState = context.read<AuthBloc>().state;
-    
+
     // --- GUEST LOGIC START ---
     if (authState.isGuest) {
-       _checkGuestTapLimit(
-         restoredPhrase, 
-         ReaderUtils.generateCleanId(restoredPhrase), 
-         pos, 
-         isPhrase: true
-       );
-       return;
+      _checkGuestTapLimit(
+        restoredPhrase,
+        ReaderUtils.generateCleanId(restoredPhrase),
+        pos,
+        isPhrase: true,
+      );
+      return;
     }
     // --- GUEST LOGIC END ---
 
     final user = authState.user;
-    
+
     if (user!.isPremium) {
       _activateCard(
         restoredPhrase,
@@ -1129,6 +1131,7 @@ void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
       );
     }
   }
+
   Future<void> _checkGuestTapLimit(
     String text,
     String cleanId,
@@ -1136,9 +1139,9 @@ void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
     required bool isPhrase,
   }) async {
     setState(() => _isCheckingLimit = true);
-    
+
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Get today's usage for guest
     final todayStr = DateTime.now().toIso8601String().split('T').first;
     final lastDate = prefs.getString('guest_tap_date') ?? '';
@@ -1157,7 +1160,7 @@ void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
     if (currentCount < guestLimit) {
       // Increment and Allow
       await prefs.setInt('guest_tap_count', currentCount + 1);
-      
+
       // Activate card directly (No saving to Firestore for guests)
       _activateCard(text, cleanId, pos, isPhrase: isPhrase);
     } else {
@@ -1310,15 +1313,17 @@ void _handlePhraseSelected(String phrase, Offset pos, VoidCallback clear) {
   }
 
   // Simple toggle now
-void _showLimitDialog({bool isGuest = false}) {
+  void _showLimitDialog({bool isGuest = false}) {
     _pauseMedia();
-    
+
     if (isGuest) {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text("Guest Limit Reached"),
-          content: const Text("You have used your 5 free translations for today.\n\nPlease login to get more!"),
+          content: const Text(
+            "You have used your 5 free translations for today.\n\nPlease login to get more!",
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
