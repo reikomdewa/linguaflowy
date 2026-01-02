@@ -95,7 +95,7 @@ class WebLoginLayout extends StatelessWidget {
 
   Widget _buildLoginPanel(Color surfaceColor, Color borderColor) {
     return Container(
-      padding: const EdgeInsets.all(40.0),
+      padding: const EdgeInsets.only(right: 40, left: 40),
       decoration: BoxDecoration(
         // color: surfaceColor,
         // border: Border.all(color: borderColor, width: 1.5),
@@ -117,6 +117,7 @@ class WebLoginLayout extends StatelessWidget {
           ? CrossAxisAlignment.center
           : CrossAxisAlignment.start,
       children: [
+        SizedBox(height: 10),
         Text(
           "🌊 LinguaFlow",
           style: theme.textTheme.displaySmall?.copyWith(

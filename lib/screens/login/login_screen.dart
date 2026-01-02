@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Required for Autofill
@@ -18,11 +19,7 @@ class LoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: LoginFormContent(),
-        ),
-      ),
+      body: SafeArea(child: Center(child: LoginFormContent())),
     );
   }
 }
@@ -117,12 +114,14 @@ class _LoginFormContentState extends State<LoginFormContent> {
 
                   if (email.isNotEmpty && pass.isNotEmpty) {
                     context.read<AuthBloc>().add(
-                          AuthResendVerificationEmail(email, pass),
-                        );
+                      AuthResendVerificationEmail(email, pass),
+                    );
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text("Fields empty. Please re-enter credentials."),
+                        content: Text(
+                          "Fields empty. Please re-enter credentials.",
+                        ),
                       ),
                     );
                   }
@@ -181,23 +180,31 @@ class _LoginFormContentState extends State<LoginFormContent> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // LOGO
-                Image.asset(
-                  'assets/images/linguaflow_logo_transparent.png',
-                  height: 100.0,
-                  width: 100.0,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.language, size: 100),
-                ),
+                if (!kIsWeb)
+                  Image.asset(
+                    'assets/images/linguaflow_logo_transparent.png',
+                    height: 100.0,
+                    width: 100.0,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const Icon(Icons.language, size: 100),
+                  ),
 
+                if (!kIsWeb)
+                  const Text(
+                    'LinguaFlow',
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                if (!kIsWeb) const SizedBox(height: 8),
+                if (!kIsWeb)
+                  const Text(
+                    'Learning language the natural way',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
                 const Text(
-                  'LinguaFlow',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Learning language the natural way',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  'Login or Sign Up',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
@@ -307,7 +314,9 @@ class _LoginFormContentState extends State<LoginFormContent> {
                       child: RichText(
                         text: TextSpan(
                           style: TextStyle(
-                            color: Theme.of(context).textTheme.bodyMedium?.color,
+                            color: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.color,
                             fontSize: 13,
                           ),
                           children: [
@@ -464,7 +473,7 @@ class _LoginFormContentState extends State<LoginFormContent> {
   // ---------------------------------------------------------------------------
 
   void _submitForm() {
-    FocusScope.of(context).unfocus(); 
+    FocusScope.of(context).unfocus();
 
     if (!_acceptedTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -483,19 +492,19 @@ class _LoginFormContentState extends State<LoginFormContent> {
 
       if (_isLogin) {
         context.read<AuthBloc>().add(
-              AuthLoginRequested(
-                _emailController.text.trim(),
-                _passwordController.text,
-              ),
-            );
+          AuthLoginRequested(
+            _emailController.text.trim(),
+            _passwordController.text,
+          ),
+        );
       } else {
         context.read<AuthBloc>().add(
-              AuthRegisterRequested(
-                _emailController.text.trim(),
-                _passwordController.text,
-                _nameController.text.trim(),
-              ),
-            );
+          AuthRegisterRequested(
+            _emailController.text.trim(),
+            _passwordController.text,
+            _nameController.text.trim(),
+          ),
+        );
       }
     }
   }
@@ -560,10 +569,8 @@ class _LoginFormContentState extends State<LoginFormContent> {
             onPressed: () {
               if (resetEmailController.text.isNotEmpty) {
                 context.read<AuthBloc>().add(
-                      AuthResetPasswordRequested(
-                        resetEmailController.text.trim(),
-                      ),
-                    );
+                  AuthResetPasswordRequested(resetEmailController.text.trim()),
+                );
                 Navigator.pop(ctx);
               }
             },
