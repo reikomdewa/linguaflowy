@@ -49,12 +49,111 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     on<CancelBoardRequestEvent>(_onCancelBoardRequest);
     on<GrantBoardAccessEvent>(_onGrantBoardAccess);
     on<StopBoardSharingEvent>(_onStopBoardSharing);
+
+    on<RequestYouTubeAccessEvent>(_onRequestYouTubeAccess);
+    on<CancelYouTubeRequestEvent>(_onCancelYouTubeRequest);
+    on<PlayYouTubeVideoEvent>(_onPlayYouTubeVideo);
+    on<StopYouTubeEvent>(_onStopYouTube);
+    on<SyncYouTubeStateEvent>(_onSyncYouTubeState);
   }
 
   @override
   Future<void> close() {
     _roomsSubscription?.cancel();
     return super.close();
+  }
+  
+Future<void> _onSyncYouTubeState(
+  SyncYouTubeStateEvent event,
+  Emitter<RoomState> emit,
+) async {
+  try {
+    // We store the state as a Map
+    await _firestore.collection('rooms').doc(event.roomId).update({
+      'activeFeatureState': {
+        'status': event.status,
+        'position': event.positionSeconds,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      }
+    });
+  } catch (e) {
+    debugPrint("Error syncing YouTube state: $e");
+  }
+}
+Future<void> _onRequestYouTubeAccess(
+  RequestYouTubeAccessEvent event,
+  Emitter<RoomState> emit,
+) async {
+  try {
+    // Add an object { userId, url } to the array
+    final requestObj = {
+      'userId': event.userId,
+      'url': event.videoUrl,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+    
+    await _firestore.collection('rooms').doc(event.roomId).update({
+      'youtubeRequests': FieldValue.arrayUnion([requestObj]),
+    });
+  } catch (e) {
+    debugPrint("Error requesting YouTube: $e");
+  }
+}
+
+Future<void> _onCancelYouTubeRequest(
+  CancelYouTubeRequestEvent event,
+  Emitter<RoomState> emit,
+) async {
+  try {
+    // Remove the specific object
+    await _firestore.collection('rooms').doc(event.roomId).update({
+      'youtubeRequests': FieldValue.arrayRemove([event.requestMap]),
+    });
+  } catch (e) {
+    debugPrint("Error canceling YouTube request: $e");
+  }
+}
+
+Future<void> _onPlayYouTubeVideo(
+  PlayYouTubeVideoEvent event,
+  Emitter<RoomState> emit,
+) async {
+  try {
+    final Map<String, dynamic> updates = {
+      'activeFeature': 'youtube',
+      'activeFeatureData': event.videoUrl,
+      
+      // --- FIX: RESET THE SYNC STATE ---
+      // This prevents the new video from trying to seek to the old video's time
+      'activeFeatureState': {
+        'status': 'playing',
+        'position': 0, 
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      }
+    };
+
+    if (event.requestToRemove != null) {
+      updates['youtubeRequests'] = FieldValue.arrayRemove([event.requestToRemove]);
+    }
+
+    await _firestore.collection('rooms').doc(event.roomId).update(updates);
+  } catch (e) {
+    debugPrint("Error playing YouTube video: $e");
+  }
+}
+
+  Future<void> _onStopYouTube(
+    StopYouTubeEvent event,
+    Emitter<RoomState> emit,
+  ) async {
+    try {
+      await _firestore.collection('rooms').doc(event.roomId).update({
+        'activeFeature': 'none',
+        'activeFeatureData': null,
+      });
+    } catch (e) {
+      debugPrint("Error stopping YouTube: $e");
+    }
   }
 
   Future<void> _onRequestBoardAccess(

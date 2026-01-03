@@ -7,24 +7,24 @@ import 'package:linguaflow/core/globals.dart';
 import 'package:linguaflow/models/speak/room_member.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
+import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/full_screen_participant.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/leave_comfirm_dialog.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/sheets/board_requests_sheet.dart';
+import 'package:linguaflow/screens/speak/active_screen/widgets/sheets/youtube_requests_sheet.dart'; // Ensure this exists
+import 'package:linguaflow/screens/speak/active_screen/widgets/youtube_input_dialog.dart'; // Ensure this exists
 import 'package:livekit_client/livekit_client.dart';
 
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
-import 'package:linguaflow/screens/speak/widgets/full_screen_participant.dart';
 import 'package:linguaflow/services/speak/chat_service.dart';
 
-// BLOC EVENTS (Needed for the Leave Logic)
+// BLOC EVENTS
 import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
-import 'package:linguaflow/blocs/speak/room/room_event.dart'
-    hide RoomEvent; // Hide LiveKit collision
+import 'package:linguaflow/blocs/speak/room/room_event.dart' hide RoomEvent;
 
 // COMPONENT IMPORTS
 import 'morphing_room_card.dart';
 import 'room_menu_sheet.dart';
 import 'participant_options_sheet.dart';
-// Assuming your dialog is in a file like this, or imported from room_sheets.dart
 
 class LiveRoomOverlay extends StatefulWidget {
   const LiveRoomOverlay({super.key});
@@ -44,15 +44,24 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
   int _publicUnreadCount = 0;
   int _lastReadCount = 0;
 
+  // -- UI STATE FLAGS --
   bool _isChatOpen = false;
   bool _isSettingsOpen = false;
   bool _isLeaveConfirmOpen = false;
+
+  // YouTube & Requests Flags
+  bool _isYouTubeInputOpen = false;
+  bool _isYouTubeRequestsOpen = false;
+  bool _isBoardRequestsOpen = false;
+
+  // Track who we are accepting a request from
+  String? _pendingRequestUserId;
 
   Participant? _selectedParticipant;
   Participant? _fullScreenParticipant;
   String? _currentSpotlightId;
   bool _hasSeenSelfInFirestore = false;
-  bool _isRequestsOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -81,9 +90,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
       _cleanupListeners();
       if (mounted) {
         setState(() {
-          _isChatOpen = false;
-          _isSettingsOpen = false;
-          _isLeaveConfirmOpen = false;
+          _resetUIState();
           _selectedParticipant = null;
           _fullScreenParticipant = null;
           _hasSeenSelfInFirestore = false;
@@ -92,6 +99,16 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
       }
     }
     if (mounted) setState(() {});
+  }
+
+  void _resetUIState() {
+    _isChatOpen = false;
+    _isSettingsOpen = false;
+    _isLeaveConfirmOpen = false;
+    _isYouTubeInputOpen = false;
+    _isYouTubeRequestsOpen = false;
+    _isBoardRequestsOpen = false;
+    _pendingRequestUserId = null;
   }
 
   void _resolveSpotlight(String? spotlightId) {
@@ -104,7 +121,6 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
       }
       return;
     }
-
     _currentSpotlightId = spotlightId;
     final room = RoomGlobalManager().livekitRoom;
     if (room == null) return;
@@ -168,7 +184,6 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           return;
         }
       }
-
       _resolveSpotlight(updatedRoom.spotlightedUserId);
     });
   }
@@ -226,8 +241,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
   void _handleParticipantTap(Participant p) {
     setState(() {
       _selectedParticipant = p;
-      _isChatOpen = false;
-      _isSettingsOpen = false;
+      _resetUIState(); // Close all sheets/dialogs
     });
   }
 
@@ -237,6 +251,8 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
     if (!manager.isActive) return const SizedBox.shrink();
 
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final isHost = manager.roomData?.hostId == currentUser?.uid;
 
     return Stack(
       children: [
@@ -258,9 +274,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
             unreadCount: _publicUnreadCount,
             onOpenChat: () {
               setState(() {
-                _isSettingsOpen = false;
-                _isLeaveConfirmOpen = false;
-                _isRequestsOpen = false;
+                _resetUIState();
                 _selectedParticipant = null;
                 _isChatOpen = true;
                 _publicUnreadCount = 0;
@@ -269,18 +283,14 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
             },
             onOpenMenu: () {
               setState(() {
-                _isChatOpen = false;
-                _isLeaveConfirmOpen = false;
-                _isRequestsOpen = false;
+                _resetUIState();
                 _selectedParticipant = null;
                 _isSettingsOpen = true;
               });
             },
             onClosePress: () {
               setState(() {
-                _isChatOpen = false;
-                _isSettingsOpen = false;
-                _isRequestsOpen = false;
+                _resetUIState();
                 _selectedParticipant = null;
                 _isLeaveConfirmOpen = true;
               });
@@ -313,7 +323,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
             ),
           ),
 
-        // CHAT
+        // CHAT SHEET
         if (_isChatOpen && manager.isExpanded) ...[
           Positioned.fill(
             child: GestureDetector(
@@ -349,7 +359,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           ),
         ],
 
-        // SETTINGS
+        // SETTINGS MENU
         if (_isSettingsOpen && manager.isExpanded) ...[
           Positioned.fill(
             child: GestureDetector(
@@ -359,32 +369,111 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           ),
           RoomMenuSheet(
             manager: manager,
-            isHost:
-                manager.roomData?.hostId ==
-                FirebaseAuth.instance.currentUser?.uid,
+            isHost: isHost,
             onClose: () => setState(() => _isSettingsOpen = false),
+            // Updated Callback: Opens Requests
             onOpenRequests: () {
               setState(() {
-                _isSettingsOpen = false; // Close menu
-                _isRequestsOpen = true; // Open requests
+                _isSettingsOpen = false;
+                _isBoardRequestsOpen = true; // Use separate flag if distinct
+                // Or if combining requests, just use one flag.
+                // Assuming you have separate lists, let's open Board requests first
+                // OR you can update RoomMenuSheet to split them.
+                // For now, let's assume this opens Youtube Requests as requested by logic:
+                _isYouTubeRequestsOpen = true;
+              });
+            },
+            // Updated Callback: Opens Youtube Input
+            onOpenYouTube: () {
+              setState(() {
+                _isSettingsOpen = false;
+                _pendingRequestUserId = null; // Clean entry
+                _isYouTubeInputOpen = true;
               });
             },
           ),
         ],
-        // --- NEW: BOARD REQUESTS SHEET ---
-        if (_isRequestsOpen && manager.isExpanded) ...[
+
+        // BOARD REQUESTS
+        if (_isBoardRequestsOpen &&
+            manager.isExpanded &&
+            manager.roomData != null) ...[
           Positioned.fill(
             child: GestureDetector(
-              onTap: () => setState(() => _isRequestsOpen = false),
+              onTap: () => setState(() => _isBoardRequestsOpen = false),
               child: Container(color: Colors.black.withOpacity(0.5)),
             ),
           ),
           BoardRequestsSheet(
             room: manager.roomData!,
-            onClose: () => setState(() => _isRequestsOpen = false),
+            onClose: () => setState(() => _isBoardRequestsOpen = false),
+          ),
+        ],
+  // YOUTUBE REQUESTS SHEET (Host View)
+        if (_isYouTubeRequestsOpen && manager.isExpanded && manager.roomData != null) ...[
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => setState(() => _isYouTubeRequestsOpen = false),
+              child: Container(color: Colors.black.withOpacity(0.5)),
+            ),
+          ),
+          YouTubeRequestsSheet(
+            room: manager.roomData!,
+            onClose: () => setState(() => _isYouTubeRequestsOpen = false),
+            // UPDATED CALLBACK:
+            onAccept: (url, requestMap) {
+              // 1. Close Sheet
+              setState(() => _isYouTubeRequestsOpen = false);
+              
+              // 2. Play Immediately (No Input Dialog needed for host here)
+              context.read<RoomBloc>().add(
+                PlayYouTubeVideoEvent(
+                  roomId: manager.roomData!.id,
+                  videoUrl: url,
+                  requestToRemove: requestMap, // Remove the request
+                )
+              );
+            },
           ),
         ],
 
+        // YOUTUBE INPUT DIALOG (Used by Host to Play Direct, OR Guest to Request)
+        if (_isYouTubeInputOpen && manager.isExpanded) ...[
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => setState(() => _isYouTubeInputOpen = false),
+              child: Container(color: Colors.black.withOpacity(0.7)),
+            ),
+          ),
+          YouTubeInputDialog(
+            onCancel: () => setState(() => _isYouTubeInputOpen = false),
+            onPlay: (url) {
+              setState(() => _isYouTubeInputOpen = false);
+              
+              if (manager.roomData == null) return;
+              final roomId = manager.roomData!.id;
+
+              if (isHost) {
+                // HOST: Plays directly
+                context.read<RoomBloc>().add(
+                  PlayYouTubeVideoEvent(roomId: roomId, videoUrl: url)
+                );
+              } else {
+                // GUEST: Sends Request with URL
+                if (currentUser != null) {
+                  context.read<RoomBloc>().add(
+                    RequestYouTubeAccessEvent(
+                      roomId: roomId,
+                      userId: currentUser.uid,
+                      videoUrl: url,
+                    )
+                  );
+                  // Optional: Show snackbar "Request Sent"
+                }
+              }
+            },
+          ),
+        ],
         // PARTICIPANT OPTIONS
         if (_selectedParticipant != null && manager.isExpanded) ...[
           Positioned.fill(
@@ -395,14 +484,10 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           ),
           ParticipantOptionsSheet(
             targetParticipant: _selectedParticipant!,
-            amIHost:
-                manager.roomData?.hostId ==
-                FirebaseAuth.instance.currentUser?.uid,
+            amIHost: isHost,
             currentSpotlightId: _currentSpotlightId,
             roomData: manager.roomData!,
             onClose: () => setState(() => _selectedParticipant = null),
-
-            // Callbacks for actions
             onSetFullScreen: (p) {
               setState(() {
                 _fullScreenParticipant = p;
@@ -425,7 +510,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           ),
         ],
 
-        // --- CUSTOM LEAVE CONFIRM DIALOG ---
+        // LEAVE CONFIRM
         if (_isLeaveConfirmOpen && manager.isExpanded) ...[
           Positioned.fill(
             child: GestureDetector(
@@ -433,30 +518,18 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
               child: Container(color: Colors.black.withOpacity(0.6)),
             ),
           ),
-          // Here is your custom dialog logic implementation
           LeaveConfirmDialog(
             roomData: manager.roomData,
             onCancel: () => setState(() => _isLeaveConfirmOpen = false),
             onConfirm: () {
-              // 1. Close UI
               setState(() => _isLeaveConfirmOpen = false);
-
-              // 2. Determine if Host or Guest logic needed for Bloc
-              final isHost =
-                  manager.roomData?.hostId ==
-                  FirebaseAuth.instance.currentUser?.uid;
-
               if (isHost && manager.roomData != null) {
-                // Host Ending Room
                 context.read<RoomBloc>().add(
                   DeleteRoomEvent(manager.roomData!.id),
                 );
               } else {
-                // Guest Leaving
                 context.read<RoomBloc>().add(LeaveRoomEvent());
               }
-
-              // 3. Disconnect LiveKit locally
               manager.leaveRoom();
             },
           ),

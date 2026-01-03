@@ -11,14 +11,16 @@ class RoomMenuSheet extends StatelessWidget {
   final RoomGlobalManager manager;
   final bool isHost;
   final VoidCallback onClose;
-  final VoidCallback onOpenRequests; // <--- NEW CALLBACK
+  final VoidCallback onOpenRequests;
+  final VoidCallback onOpenYouTube;
 
   const RoomMenuSheet({
     super.key,
     required this.manager,
     required this.isHost,
     required this.onClose,
-    required this.onOpenRequests, // Require it
+    required this.onOpenRequests,
+    required this.onOpenYouTube,
   });
 
   @override
@@ -30,10 +32,40 @@ class RoomMenuSheet extends StatelessWidget {
     final bool isFeatureGloballyActive =
         manager.activeFeature != RoomActiveFeature.none;
     final bool isLocalTiles = manager.isLocalTileView;
-    final bool hasRequested =
+
+    // --- BOARD STATE ---
+    final bool hasBoardRequested =
         manager.roomData?.boardRequests?.contains(currentUserId) ?? false;
+
+    // --- YOUTUBE STATE ---
+
+    // 1. SAFELY GET REQUESTS LIST
+    // Cast to List<dynamic> or List<Map> to be safe
+    final List<dynamic> youtubeRequests =
+        manager.roomData?.youtubeRequests ?? [];
+
+    // 2. CHECK IF CURRENT USER HAS REQUESTED (Guest State)
+    // We look for a map where 'userId' matches currentUserId
+    final Map<String, dynamic> myRequest = youtubeRequests
+        .firstWhere(
+          (req) => req['userId'] == currentUserId,
+          orElse: () => <String, dynamic>{}, // Return empty map if not found
+        )
+        .cast<String, dynamic>();
+
+    final bool hasYouTubeRequested = myRequest.isNotEmpty;
+
+    // 3. CHECK BOARD REQUESTS (Still List<String>)
+
+    // 4. HOST NOTIFICATION STATE
+    // Check if either list has items
     final bool hasPendingRequests =
-        (manager.roomData?.boardRequests?.isNotEmpty ?? false);
+        (manager.roomData?.boardRequests?.isNotEmpty ?? false) ||
+        (youtubeRequests.isNotEmpty);
+
+    // ... rest of the widget tree ...
+    // --- HOST NOTIFICATION STATE ---
+    // Show Amber request button if ANY request exists (Board OR YouTube)
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -47,6 +79,7 @@ class RoomMenuSheet extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // DRAG HANDLE
                 GestureDetector(
                   onTap: onClose,
                   behavior: HitTestBehavior.opaque,
@@ -90,7 +123,7 @@ class RoomMenuSheet extends StatelessWidget {
                         ),
                         _OptionItem(
                           icon: Icons.screen_share_outlined,
-                          label: "Share Screen",
+                          label: "Share",
                           onTap: () {
                             manager.toggleScreenShare();
                             onClose();
@@ -109,6 +142,8 @@ class RoomMenuSheet extends StatelessWidget {
                               onClose();
                             },
                           ),
+
+                        // --- HOST: MY BOARD ---
                         if (isHost)
                           _OptionItem(
                             icon: Icons.edit_note_rounded,
@@ -127,28 +162,33 @@ class RoomMenuSheet extends StatelessWidget {
                             },
                           ),
 
-                        // --- 3. HOST: REQUESTS (Stack Logic) ---
+                        // --- HOST: VIEW REQUESTS ---
                         if (isHost && hasPendingRequests)
                           _OptionItem(
                             icon: Icons.assignment_ind,
                             label: "Requests",
-                            color: Colors.amber,
+                            color: Colors.amber, // Highlighted
                             onTap: () {
-                              onClose(); // Close settings
-                              onOpenRequests(); // Tell parent to open requests
+                              onClose();
+                              onOpenRequests(); // Opens the Request Sheet
                             },
                           ),
 
+                        // --- GUEST: SHARE BOARD REQUEST ---
                         if (!isHost)
                           _OptionItem(
-                            icon: hasRequested
+                            icon: hasBoardRequested
                                 ? Icons.hourglass_top
                                 : Icons.edit_note_rounded,
-                            label: hasRequested ? "Waiting..." : "Share Board",
-                            color: hasRequested ? Colors.amber : Colors.white,
+                            label: hasBoardRequested
+                                ? "Waiting..."
+                                : "Share Board",
+                            color: hasBoardRequested
+                                ? Colors.amber
+                                : Colors.white,
                             onTap: () {
                               if (currentUserId == null) return;
-                              if (hasRequested) {
+                              if (hasBoardRequested) {
                                 context.read<RoomBloc>().add(
                                   CancelBoardRequestEvent(
                                     roomId: manager.roomData!.id,
@@ -167,10 +207,46 @@ class RoomMenuSheet extends StatelessWidget {
                             },
                           ),
 
+                        // --- YOUTUBE LOGIC (FIXED) ---
+                        // Helper to check if current user has any request in the list
                         _OptionItem(
-                          icon: Icons.ondemand_video_rounded,
-                          label: "YouTube",
-                          onTap: () => _showYouTubeInput(context),
+                          icon: isHost
+                              ? Icons.ondemand_video_rounded
+                              : (hasYouTubeRequested
+                                    ? Icons.hourglass_top
+                                    : Icons.ondemand_video_rounded),
+                          label: isHost
+                              ? "YouTube"
+                              : (hasYouTubeRequested
+                                    ? "Waiting..."
+                                    : "Req Video"),
+                          color: hasYouTubeRequested
+                              ? Colors.amber
+                              : Colors.white,
+                          onTap: () {
+                            onClose();
+
+                            if (isHost) {
+                              // Host: Open Input Dialog to play directly
+                              onOpenYouTube();
+                            } else {
+                              // Guest Logic
+                              if (currentUserId == null) return;
+
+                              if (hasYouTubeRequested) {
+                                // Cancel Request (No dialog needed)
+                                context.read<RoomBloc>().add(
+                                  CancelYouTubeRequestEvent(
+                                    roomId: manager.roomData!.id,
+                                    requestMap: myRequest,
+                                  ),
+                                );
+                              } else {
+                                // New Request: Open Input Dialog to get link
+                                onOpenYouTube();
+                              }
+                            }
+                          },
                         ),
                       ], itemWidth),
 
@@ -235,52 +311,6 @@ class RoomMenuSheet extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  void _showYouTubeInput(BuildContext context) {
-    // Keep YouTube logic as is, or use same pattern if it fails
-    final globalContext = navigatorKey.currentContext ?? context;
-    final controller = TextEditingController();
-    showDialog(
-      context: globalContext,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
-        title: const Text(
-          "Watch YouTube",
-          style: TextStyle(color: Colors.white),
-        ),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: "Paste Link...",
-            hintStyle: TextStyle(color: Colors.white54),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () {
-              if (isHost && manager.roomData != null) {
-                context.read<RoomBloc>().add(
-                  UpdateActiveFeatureEvent(
-                    roomId: manager.roomData!.id,
-                    feature: 'youtube',
-                    data: controller.text,
-                  ),
-                );
-              }
-              Navigator.of(ctx).pop();
-              onClose();
-            },
-            child: const Text("Play"),
-          ),
-        ],
       ),
     );
   }

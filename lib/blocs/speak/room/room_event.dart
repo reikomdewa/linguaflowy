@@ -191,3 +191,73 @@ class StopBoardSharingEvent extends RoomEvent {
   @override
   List<Object?> get props => [roomId];
 }
+
+// ... existing imports
+
+// --- YOUTUBE LOGIC ---
+
+// 1. Guest asks to play a video
+class RequestYouTubeAccessEvent extends RoomEvent {
+  final String roomId;
+  final String userId;
+  final String videoUrl; // <--- NEW
+
+  const RequestYouTubeAccessEvent({
+    required this.roomId, 
+    required this.userId,
+    required this.videoUrl
+  });
+  @override
+  List<Object?> get props => [roomId, userId, videoUrl];
+}
+
+
+class CancelYouTubeRequestEvent extends RoomEvent {
+  final String roomId;
+  final Map<String, dynamic> requestMap; // We need the object to remove it
+
+  const CancelYouTubeRequestEvent({required this.roomId, required this.requestMap});
+  @override
+  List<Object?> get props => [roomId, requestMap];
+}
+
+// 3. HOST plays a video (Updates feature to 'youtube' & sets the Link)
+class PlayYouTubeVideoEvent extends RoomEvent {
+  final String roomId;
+  final String videoUrl;
+  final Map<String, dynamic>? requestToRemove; // <--- NEW
+
+  const PlayYouTubeVideoEvent({
+    required this.roomId, 
+    required this.videoUrl,
+    this.requestToRemove,
+  });
+
+  @override
+  List<Object?> get props => [roomId, videoUrl, requestToRemove];
+}
+// 4. Stop YouTube (Switch back to none)
+class StopYouTubeEvent extends RoomEvent {
+  final String roomId;
+  const StopYouTubeEvent(this.roomId);
+  @override
+  List<Object?> get props => [roomId];
+}
+
+// ... inside room_event.dart
+
+// Host syncs player state (Play, Pause, Seek)
+class SyncYouTubeStateEvent extends RoomEvent {
+  final String roomId;
+  final String status; // 'playing' or 'paused'
+  final int positionSeconds; // Current timestamp in video
+
+  const SyncYouTubeStateEvent({
+    required this.roomId,
+    required this.status,
+    required this.positionSeconds,
+  });
+
+  @override
+  List<Object?> get props => [roomId, status, positionSeconds];
+}

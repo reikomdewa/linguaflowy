@@ -6,7 +6,10 @@ import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/particip
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/features/whiteboard_feature.dart';
 import 'package:share_plus/share_plus.dart';
-import 'room_controls.dart'; 
+import 'room_controls.dart';
+
+// FEATURES
+import 'package:linguaflow/screens/speak/active_screen/widgets/features/shared_youtube_player.dart';
 
 // BLOC IMPORTS
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -195,16 +198,21 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
               onPointerDown: (event) {
                 final double screenWidth = MediaQuery.of(context).size.width;
                 final double touchX = event.position.dx;
-                const double edgeWidth = 35.0; 
-                final bool isEdgeSwipe = touchX > (screenWidth - edgeWidth) || touchX < edgeWidth;
+                const double edgeWidth = 35.0;
+                final bool isEdgeSwipe =
+                    touchX > (screenWidth - edgeWidth) || touchX < edgeWidth;
 
                 if (isEdgeSwipe) {
                   if (_pagePhysics is! BouncingScrollPhysics) {
-                    setState(() => _pagePhysics = const BouncingScrollPhysics());
+                    setState(
+                      () => _pagePhysics = const BouncingScrollPhysics(),
+                    );
                   }
                 } else {
                   if (_pagePhysics is! NeverScrollableScrollPhysics) {
-                    setState(() => _pagePhysics = const NeverScrollableScrollPhysics());
+                    setState(
+                      () => _pagePhysics = const NeverScrollableScrollPhysics(),
+                    );
                   }
                 }
               },
@@ -231,18 +239,20 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
     // Check Local Tile View
     final isFeatureActive =
         widget.manager.activeFeature != RoomActiveFeature.none &&
-        !widget.manager.isLocalTileView; 
+        !widget.manager.isLocalTileView;
 
     final localP = widget.manager.livekitRoom?.localParticipant;
     final isMicOn = localP?.isMicrophoneEnabled() ?? false;
     final isCamOn = localP?.isCameraEnabled() ?? false;
 
-    // --- LOGIC FOR YELLOW DOT ---
+    // Dot Logic
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final isHost = widget.manager.roomData?.hostId == currentUserId;
-    final hasPendingRequests = (widget.manager.roomData?.boardRequests?.isNotEmpty ?? false);
-    // Show dot if I am host AND there are requests
-    final showMenuDot = isHost && hasPendingRequests;
+    
+    final hasBoardRequests = (widget.manager.roomData?.boardRequests?.isNotEmpty ?? false);
+    final hasYouTubeRequests = (widget.manager.roomData?.youtubeRequests?.isNotEmpty ?? false);
+    
+    final showMenuDot = isHost && (hasBoardRequests || hasYouTubeRequests);
 
     return Column(
       children: [
@@ -283,7 +293,7 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
         ),
         Expanded(
           child: isFeatureActive
-              ? _buildActiveFeatureView()
+              ? _buildActiveFeatureView(isHost)
               : _buildParticipantGrid(),
         ),
         Padding(
@@ -349,8 +359,7 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
                 onTap: widget.manager.toggleCamera,
               ),
               const SizedBox(width: 8),
-              
-              // --- MODIFIED MENU BUTTON WITH DOT ---
+
               Stack(
                 alignment: Alignment.topRight,
                 clipBehavior: Clip.none,
@@ -366,7 +375,10 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
                         decoration: BoxDecoration(
                           color: Colors.amber,
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.black, width: 2), // Tiny border for contrast
+                          border: Border.all(
+                            color: Colors.black,
+                            width: 2,
+                          ),
                         ),
                       ),
                     ),
@@ -433,7 +445,8 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
     );
   }
 
-  Widget _buildActiveFeatureView() {
+  Widget _buildActiveFeatureView(bool isHost) {
+    // 1. WHITEBOARD
     if (widget.manager.activeFeature == RoomActiveFeature.whiteboard) {
       return Container(
         decoration: BoxDecoration(
@@ -447,16 +460,29 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
           ), 
         ),
       );
-    } else if (widget.manager.activeFeature == RoomActiveFeature.youtube) {
-      return Container(
-        color: Colors.black,
-        child: Center(
-          child: Text(
-            "Playing YouTube: ${widget.manager.activeFeatureData ?? ''}",
-            style: const TextStyle(color: Colors.white),
+    } 
+    // 2. YOUTUBE
+    else if (widget.manager.activeFeature == RoomActiveFeature.youtube) {
+      final url = widget.manager.roomData?.activeFeatureData;
+      
+      if (url != null && url.isNotEmpty) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(12),
           ),
-        ),
-      );
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SharedYouTubePlayer(
+              // IMPORTANT: Key forces rebuild when URL changes
+              key: ValueKey(url), 
+              manager: widget.manager,
+              videoUrl: url,
+              isHost: isHost,
+            ),
+          ),
+        );
+      }
     }
     return const SizedBox.shrink();
   }

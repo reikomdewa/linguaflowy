@@ -27,10 +27,16 @@ class ChatRoom extends Equatable {
   final bool isActive;
   final String? spotlightedUserId;
 
-  // --- NEW FIELDS FOR FEATURES ---
+  // --- FEATURES ---
   final String? activeFeature; // 'whiteboard', 'youtube', 'none'
-  final String? activeFeatureData; // e.g. YouTube URL
-   final List<String>? boardRequests; 
+  final String? activeFeatureData; // e.g. YouTube URL or UserID for Board
+  
+  // This was missing! It holds { 'status': 'playing', 'position': 120 }
+  final Map<String, dynamic>? activeFeatureState; 
+
+  // --- REQUEST LISTS ---
+  final List<String>? boardRequests;
+  final List<Map<String, dynamic>>? youtubeRequests; 
 
   const ChatRoom({
     required this.id,
@@ -56,9 +62,14 @@ class ChatRoom extends Equatable {
     this.roomType = 'audio',
     this.isActive = true,
     this.spotlightedUserId,
+    
+    // Feature Fields
     this.activeFeature,
     this.activeFeatureData,
-     this.boardRequests,
+    this.activeFeatureState, // <--- ADDED HERE
+    
+    this.boardRequests,
+    this.youtubeRequests,
   });
 
   // Helper getters for UI
@@ -90,11 +101,14 @@ class ChatRoom extends Equatable {
       'roomType': roomType,
       'isActive': isActive,
       'spotlightedUserId': spotlightedUserId,
-      // New Fields
+      
+      // Feature Fields
       'activeFeature': activeFeature,
       'activeFeatureData': activeFeatureData,
-       "boardRequests": boardRequests,
+      'activeFeatureState': activeFeatureState, // <--- ADDED HERE
       
+      'boardRequests': boardRequests,
+      'youtubeRequests': youtubeRequests,
     };
   }
 
@@ -132,6 +146,14 @@ class ChatRoom extends Equatable {
         parsedMembers = [];
       }
     }
+    
+    List<Map<String, dynamic>> parseYoutubeRequests(dynamic val) {
+      if (val == null) return [];
+      if (val is List) {
+        return val.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return [];
+    }
 
     return ChatRoom(
       id: id,
@@ -157,12 +179,20 @@ class ChatRoom extends Equatable {
       roomType: map['roomType'] ?? 'audio',
       isActive: map['isActive'] ?? true,
       spotlightedUserId: map['spotlightedUserId'],
-      // New Fields
+      
+      // Feature Fields
       activeFeature: map['activeFeature'],
       activeFeatureData: map['activeFeatureData'],
-       boardRequests: map['boardRequests'] != null 
+      // <--- ADDED HERE: Safe parsing for the sync state map
+      activeFeatureState: map['activeFeatureState'] != null 
+          ? Map<String, dynamic>.from(map['activeFeatureState']) 
+          : null,
+      
+      // Request Lists
+      boardRequests: map['boardRequests'] != null 
           ? List<String>.from(map['boardRequests']) 
           : [],
+      youtubeRequests: parseYoutubeRequests(map['youtubeRequests']),
     );
   }
 
@@ -183,8 +213,12 @@ class ChatRoom extends Equatable {
     String? hostName,
     String? hostAvatarUrl,
     String? liveKitRoomId,
+    // Features
     String? activeFeature,
     String? activeFeatureData,
+    Map<String, dynamic>? activeFeatureState, // <--- ADDED HERE
+    List<String>? boardRequests,
+    List<Map<String, dynamic>>? youtubeRequests,
   }) {
     return ChatRoom(
       id: id,
@@ -210,9 +244,12 @@ class ChatRoom extends Equatable {
       liveKitRoomId: liveKitRoomId ?? this.liveKitRoomId,
       tags: tags,
       roomType: roomType,
-      // New Fields
+      // Feature Updates
       activeFeature: activeFeature ?? this.activeFeature,
       activeFeatureData: activeFeatureData ?? this.activeFeatureData,
+      activeFeatureState: activeFeatureState ?? this.activeFeatureState, // <--- ADDED HERE
+      boardRequests: boardRequests ?? this.boardRequests,
+      youtubeRequests: youtubeRequests ?? this.youtubeRequests,
     );
   }
 
@@ -231,5 +268,8 @@ class ChatRoom extends Equatable {
     liveKitRoomId,
     activeFeature,
     activeFeatureData,
+    activeFeatureState, // <--- ADDED HERE
+    boardRequests,
+    youtubeRequests,
   ];
 }

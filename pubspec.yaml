@@ -118,6 +118,7 @@ dependencies:
   youtube_player_iframe: ^5.2.2
   timeago: ^3.7.1
   go_router: ^17.0.1
+  flutter_whisper_kit: ^0.3.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
