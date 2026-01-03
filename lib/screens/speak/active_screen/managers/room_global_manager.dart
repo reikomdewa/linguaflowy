@@ -81,7 +81,12 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
     // 1. Sync Active Feature
     if (updatedRoom.activeFeature == 'whiteboard') {
       _currentFeature = RoomActiveFeature.whiteboard;
-      _featureData = null;
+      
+      // --- FIX IS HERE ---
+      // We must save the data (User ID) so the whiteboard knows who to stream.
+      // Previously this was set to null, causing the "Empty Document Path" crash.
+      _featureData = updatedRoom.activeFeatureData; 
+      
     } else if (updatedRoom.activeFeature == 'youtube') {
       _currentFeature = RoomActiveFeature.youtube;
       _featureData = updatedRoom.activeFeatureData;
@@ -111,41 +116,48 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  // --- FIX 1: SAFER CAMERA SWITCHING ---
   Future<void> switchCamera() async {
     final local = _livekitRoom?.localParticipant;
     if (local == null) return;
 
     try {
-      // 1. Get the current video track
-      final trackPublication = local.videoTrackPublications.firstOrNull;
-      final track = trackPublication?.track;
+      // CRITICAL: Only get tracks that are strictly CAMERA sources.
+      // We must ignore ScreenShare tracks, or the app will crash with "Video capturer not compatible".
+      final trackPublication = local.videoTrackPublications.firstWhere(
+        (pub) => pub.source == TrackSource.camera,
+        orElse: () => throw "No Camera Track found",
+      );
+
+      final track = trackPublication.track;
 
       if (track is LocalVideoTrack) {
-        // 2. Toggle the boolean state
         _isBackCamera = !_isBackCamera;
-
-        // 3. Determine the new camera position
         final newPosition = _isBackCamera
             ? CameraPosition.back
             : CameraPosition.front;
 
-        // 4. Restart the track with new options
         await track.restartTrack(
           CameraCaptureOptions(
             cameraPosition: newPosition,
-            // FIX IS HERE: Removed 'const' before VideoParametersPresets
-            params: VideoParametersPresets.h720_169,
+            params: const VideoParameters(
+              dimensions: VideoDimensions(1280, 720),
+              encoding: VideoEncoding(
+                maxBitrate: 1700 * 1000,
+                maxFramerate: 30,
+              ),
+            ),
           ),
         );
         notifyListeners();
       }
     } catch (e) {
-      debugPrint("Error switching camera: $e");
-      // Revert state on failure
-      _isBackCamera = !_isBackCamera;
+      // If no camera track is found (e.g. user only has screen share on), ignore.
+      debugPrint("Switch Camera ignored: $e");
     }
   }
 
+  // --- FIX 2: ROBUST SCREEN SHARING ---
   Future<void> toggleScreenShare() async {
     final local = _livekitRoom?.localParticipant;
     if (local == null) return;
@@ -153,13 +165,12 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
     final isSharing = local.isScreenShareEnabled();
 
     if (!isSharing) {
-      // --- START SHARING ---
-
-      // 1. Android Specific Setup (Prevent App Kill)
+      // STARTING SHARE
       if (Platform.isAndroid) {
+        // 1. Config
         final androidConfig = FlutterBackgroundAndroidConfig(
-          notificationTitle: "Screen Sharing",
-          notificationText: "Live Room is active in the background.",
+          notificationTitle: "Screen Sharing Active",
+          notificationText: "Linguaflow is sharing your screen.",
           notificationImportance: AndroidNotificationImportance.normal,
           notificationIcon: AndroidResource(
             name: 'ic_launcher',
@@ -167,48 +178,33 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
           ),
         );
 
-        // FIX: Always Initialize, regardless of current permission state
-        bool initSuccess = await FlutterBackground.initialize(
-          androidConfig: androidConfig,
-        );
+        // 2. Initialize (ALWAYS required)
+        await FlutterBackground.initialize(androidConfig: androidConfig);
 
-        if (initSuccess) {
-          try {
-            // Enable the background service
-            bool enabled = await FlutterBackground.enableBackgroundExecution();
-            if (!enabled) {
-              debugPrint("Failed to enable background execution");
-              return; // Stop if we can't run in background
-            }
-          } catch (e) {
-            debugPrint("Background execution error: $e");
-            return;
-          }
-        } else {
-          debugPrint("FlutterBackground initialization failed");
+        // 3. Enable Background Execution
+        final success = await FlutterBackground.enableBackgroundExecution();
+        if (!success) {
+          debugPrint("Failed to enable background execution.");
           return;
         }
       }
 
-      // 2. Start LiveKit Sharing
       try {
         await local.setScreenShareEnabled(true, captureScreenAudio: true);
         notifyListeners();
       } catch (e) {
-        debugPrint("Error starting screen share: $e");
-        // Cleanup if LiveKit fails
+        debugPrint("Screen Share Start Error: $e");
         if (Platform.isAndroid)
           await FlutterBackground.disableBackgroundExecution();
       }
     } else {
-      // --- STOP SHARING ---
+      // STOPPING SHARE
       try {
         await local.setScreenShareEnabled(false);
       } catch (e) {
-        debugPrint("Error stopping screen share: $e");
+        debugPrint("Screen Share Stop Error: $e");
       }
 
-      // Disable background service to save battery
       if (Platform.isAndroid) {
         await FlutterBackground.disableBackgroundExecution();
       }

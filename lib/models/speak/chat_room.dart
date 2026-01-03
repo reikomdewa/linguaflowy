@@ -30,6 +30,7 @@ class ChatRoom extends Equatable {
   // --- NEW FIELDS FOR FEATURES ---
   final String? activeFeature; // 'whiteboard', 'youtube', 'none'
   final String? activeFeatureData; // e.g. YouTube URL
+   final List<String>? boardRequests; 
 
   const ChatRoom({
     required this.id,
@@ -57,6 +58,7 @@ class ChatRoom extends Equatable {
     this.spotlightedUserId,
     this.activeFeature,
     this.activeFeatureData,
+     this.boardRequests,
   });
 
   // Helper getters for UI
@@ -91,6 +93,8 @@ class ChatRoom extends Equatable {
       // New Fields
       'activeFeature': activeFeature,
       'activeFeatureData': activeFeatureData,
+       "boardRequests": boardRequests,
+      
     };
   }
 
@@ -156,6 +160,9 @@ class ChatRoom extends Equatable {
       // New Fields
       activeFeature: map['activeFeature'],
       activeFeatureData: map['activeFeatureData'],
+       boardRequests: map['boardRequests'] != null 
+          ? List<String>.from(map['boardRequests']) 
+          : [],
     );
   }
 

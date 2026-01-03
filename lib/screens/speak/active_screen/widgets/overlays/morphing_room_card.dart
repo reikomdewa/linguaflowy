@@ -4,8 +4,15 @@ import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/live_sta
 import 'package:livekit_client/livekit_client.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/participant_tile.dart';
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
+import 'package:linguaflow/screens/speak/active_screen/widgets/features/whiteboard_feature.dart'; // Import Whiteboard
 import 'package:share_plus/share_plus.dart';
-import 'room_controls.dart';
+import 'room_controls.dart'; // Assuming you have this or standard buttons
+
+// BLOC IMPORTS for Whiteboard closing logic
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_event.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class MorphingRoomCard extends StatefulWidget {
   final RoomGlobalManager manager;
@@ -33,6 +40,9 @@ class MorphingRoomCard extends StatefulWidget {
 
 class _MorphingRoomCardState extends State<MorphingRoomCard> {
   final PageController _pageController = PageController();
+
+  // --- SWIPE FIX: Default to NOT scrollable so drawing works ---
+  ScrollPhysics _pagePhysics = const NeverScrollableScrollPhysics();
 
   @override
   Widget build(BuildContext context) {
@@ -183,13 +193,53 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
               ],
             );
           } else {
-            return PageView(
-              controller: _pageController,
-              scrollDirection: Axis.horizontal,
-              children: [
-                _buildVideoContent(context, showChatButton: true),
-                LiveStatsView(manager: widget.manager),
-              ],
+            // --- SWIPE FIX IMPLEMENTATION ---
+            return Listener(
+              onPointerDown: (event) {
+                // Get touch position
+                final double screenWidth = MediaQuery.of(context).size.width;
+                final double touchX = event.position.dx;
+                final double touchY = event.position.dy;
+                final double screenHeight = MediaQuery.of(context).size.height;
+
+                // Define "Edge" zone (e.g., 35 pixels from right edge)
+                // We only care about Right Edge because Stats are on the Right.
+                // You can add `|| touchX < 35` if you have a left page.
+                const double edgeWidth = 35.0;
+
+                // Optional: "Edge in the middle" check (Vertical Middle)
+                // If you strictly want the middle 50% of the screen height:
+                // bool isVertMiddle = touchY > (screenHeight * 0.25) && touchY < (screenHeight * 0.75);
+                // For now, let's keep it simple: any part of the right edge.
+
+                final bool isEdgeSwipe =
+                    touchX > (screenWidth - edgeWidth) || touchX < edgeWidth;
+
+                if (isEdgeSwipe) {
+                  // If touching edge, ENABLE swiping
+                  if (_pagePhysics is! BouncingScrollPhysics) {
+                    setState(() {
+                      _pagePhysics = const BouncingScrollPhysics();
+                    });
+                  }
+                } else {
+                  // If touching center, DISABLE swiping (Enable Drawing)
+                  if (_pagePhysics is! NeverScrollableScrollPhysics) {
+                    setState(() {
+                      _pagePhysics = const NeverScrollableScrollPhysics();
+                    });
+                  }
+                }
+              },
+              child: PageView(
+                controller: _pageController,
+                physics: _pagePhysics, // Use the dynamic physics
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _buildVideoContent(context, showChatButton: true),
+                  LiveStatsView(manager: widget.manager),
+                ],
+              ),
             );
           }
         },
@@ -377,16 +427,13 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
   Widget _buildActiveFeatureView() {
     if (widget.manager.activeFeature == RoomActiveFeature.whiteboard) {
       return Container(
-        margin: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Center(
-          child: Text(
-            "Whiteboard Active",
-            style: TextStyle(color: Colors.black),
-          ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: CollaborativeWhiteboard(manager: widget.manager),
         ),
       );
     } else if (widget.manager.activeFeature == RoomActiveFeature.youtube) {
@@ -422,7 +469,6 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
             ),
             itemCount: widget.participants.length,
             itemBuilder: (context, index) {
-              // REMOVE the outer GestureDetector here
               return ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
@@ -432,7 +478,6 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
                   ),
                   child: ParticipantTile(
                     participant: widget.participants[index],
-                    // PASS THE CALLBACK HERE
                     onTap: () =>
                         widget.onParticipantTap(widget.participants[index]),
                   ),

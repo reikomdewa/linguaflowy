@@ -43,6 +43,12 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     on<ToggleSpotlightEvent>(_onToggleSpotlight);
     
     on<KickUserEvent>(_onKickUser);
+
+        // ADD THESE TO CONSTRUCTOR
+    on<RequestBoardAccessEvent>(_onRequestBoardAccess);
+    on<CancelBoardRequestEvent>(_onCancelBoardRequest);
+    on<GrantBoardAccessEvent>(_onGrantBoardAccess);
+    on<StopBoardSharingEvent>(_onStopBoardSharing);
   }
 
   @override
@@ -54,6 +60,63 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
  
 
 
+  Future<void> _onRequestBoardAccess(
+    RequestBoardAccessEvent event,
+    Emitter<RoomState> emit,
+  ) async {
+    try {
+      await _firestore.collection('rooms').doc(event.roomId).update({
+        'boardRequests': FieldValue.arrayUnion([event.userId])
+      });
+    } catch (e) {
+      debugPrint("Error requesting board: $e");
+    }
+  }
+
+  Future<void> _onCancelBoardRequest(
+    CancelBoardRequestEvent event,
+    Emitter<RoomState> emit,
+  ) async {
+    try {
+      await _firestore.collection('rooms').doc(event.roomId).update({
+        'boardRequests': FieldValue.arrayRemove([event.userId])
+      });
+    } catch (e) {
+      debugPrint("Error canceling board request: $e");
+    }
+  }
+
+  Future<void> _onGrantBoardAccess(
+    GrantBoardAccessEvent event,
+    Emitter<RoomState> emit,
+  ) async {
+    try {
+      // 1. Set feature to whiteboard
+      // 2. Set data to the User ID who is streaming
+      // 3. Clear requests list (optional, or just remove the accepted one)
+      await _firestore.collection('rooms').doc(event.roomId).update({
+        'activeFeature': 'whiteboard',
+        'activeFeatureData': event.targetUserId,
+        'boardRequests': FieldValue.arrayRemove([event.targetUserId]), 
+      });
+    } catch (e) {
+      debugPrint("Error granting board access: $e");
+    }
+  }
+
+  Future<void> _onStopBoardSharing(
+    StopBoardSharingEvent event,
+    Emitter<RoomState> emit,
+  ) async {
+    try {
+      await _firestore.collection('rooms').doc(event.roomId).update({
+        'activeFeature': 'none',
+        'activeFeatureData': null,
+      });
+    } catch (e) {
+      debugPrint("Error stopping board: $e");
+    }
+  }
 
   // =========================================================
   // 1. REAL-TIME LOADING

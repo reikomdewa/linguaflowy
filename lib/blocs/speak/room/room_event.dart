@@ -152,3 +152,42 @@ class UpdateActiveFeatureEvent extends RoomEvent {
   @override
   List<Object?> get props => [roomId, feature, data];
 }
+
+// ... existing imports
+
+// --- BOARD REQUEST LOGIC ---
+
+// User asks to share their board
+class RequestBoardAccessEvent extends RoomEvent {
+  final String roomId;
+  final String userId;
+  const RequestBoardAccessEvent({required this.roomId, required this.userId});
+  @override
+  List<Object?> get props => [roomId, userId];
+}
+
+// User cancels request
+class CancelBoardRequestEvent extends RoomEvent {
+  final String roomId;
+  final String userId;
+  const CancelBoardRequestEvent({required this.roomId, required this.userId});
+  @override
+  List<Object?> get props => [roomId, userId];
+}
+
+// Host accepts a user (Sets activeFeature = 'whiteboard' & activeFeatureData = userId)
+class GrantBoardAccessEvent extends RoomEvent {
+  final String roomId;
+  final String targetUserId; // The user who will stream
+  const GrantBoardAccessEvent({required this.roomId, required this.targetUserId});
+  @override
+  List<Object?> get props => [roomId, targetUserId];
+}
+
+// Host closes the board (Switch to Tiles)
+class StopBoardSharingEvent extends RoomEvent {
+  final String roomId;
+  const StopBoardSharingEvent(this.roomId);
+  @override
+  List<Object?> get props => [roomId];
+}
