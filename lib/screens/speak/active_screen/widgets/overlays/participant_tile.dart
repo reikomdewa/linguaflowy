@@ -3,7 +3,7 @@ import 'package:linguaflow/screens/speak/active_screen/managers/room_global_mana
 import 'package:livekit_client/livekit_client.dart';
 import 'package:linguaflow/models/speak/room_member.dart';
 
-class ParticipantTile extends StatelessWidget {
+class ParticipantTile extends StatefulWidget {
   final Participant participant;
   final bool isFullScreen;
   final BoxFit fit;
@@ -18,8 +18,46 @@ class ParticipantTile extends StatelessWidget {
   });
 
   @override
+  State<ParticipantTile> createState() => _ParticipantTileState();
+}
+
+class _ParticipantTileState extends State<ParticipantTile> {
+  @override
+  void initState() {
+    super.initState();
+    // 1. LISTEN TO CHANGES
+    // This triggers a rebuild whenever the participant's audio/video/connection state changes
+    widget.participant.addListener(_onParticipantChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant ParticipantTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If the participant object itself changes (rare, but possible in grids), switch listeners
+    if (oldWidget.participant != widget.participant) {
+      oldWidget.participant.removeListener(_onParticipantChanged);
+      widget.participant.addListener(_onParticipantChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    // 2. CLEANUP
+    widget.participant.removeListener(_onParticipantChanged);
+    super.dispose();
+  }
+
+  void _onParticipantChanged() {
+    // 3. REBUILD UI ON CHANGE
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final roomData = RoomGlobalManager().roomData;
+    final participant = widget.participant; // Use the widget's participant
 
     // --- 1. RESOLVE USER DATA ---
     String displayName = "";
@@ -52,10 +90,12 @@ class ParticipantTile extends StatelessWidget {
 
     // --- 2. VIDEO STATE ---
     TrackPublication? videoPub;
+    // Check if there is a video track
     if (participant.videoTrackPublications.isNotEmpty) {
       videoPub = participant.videoTrackPublications.first;
     }
 
+    // Determine if video should be shown
     final isVideoActive =
         videoPub != null &&
         videoPub.subscribed &&
@@ -69,7 +109,7 @@ class ParticipantTile extends StatelessWidget {
     Color borderColor = Colors.transparent;
     double borderWidth = 0;
 
-    if (!isFullScreen) {
+    if (!widget.isFullScreen) {
       if (isSpeaking) {
         borderColor = Colors.greenAccent;
         borderWidth = 3.0;
@@ -79,20 +119,20 @@ class ParticipantTile extends StatelessWidget {
       }
     }
 
-    final videoViewFit = fit == BoxFit.contain
+    final videoViewFit = widget.fit == BoxFit.contain
         ? VideoViewFit.contain
         : VideoViewFit.cover;
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey[800],
-        borderRadius: isFullScreen ? null : BorderRadius.circular(12),
-        border: isFullScreen
+        borderRadius: widget.isFullScreen ? null : BorderRadius.circular(12),
+        border: widget.isFullScreen
             ? null
             : Border.all(color: borderColor, width: borderWidth),
       ),
       child: ClipRRect(
-        borderRadius: isFullScreen
+        borderRadius: widget.isFullScreen
             ? BorderRadius.circular(0)
             : BorderRadius.circular(10),
         child: Stack(
@@ -110,7 +150,7 @@ class ParticipantTile extends StatelessWidget {
                 child: Center(
                   child: avatarUrl != null && avatarUrl.isNotEmpty
                       ? CircleAvatar(
-                          radius: isFullScreen ? 60 : 25,
+                          radius: widget.isFullScreen ? 60 : 25,
                           backgroundColor: Colors.grey[800],
                           backgroundImage: NetworkImage(avatarUrl),
                         )
@@ -120,7 +160,7 @@ class ParticipantTile extends StatelessWidget {
                             Icon(
                               Icons.person,
                               color: Colors.white24,
-                              size: isFullScreen ? 80 : 30,
+                              size: widget.isFullScreen ? 80 : 30,
                             ),
                             const SizedBox(height: 10),
                             Text(
@@ -130,7 +170,7 @@ class ParticipantTile extends StatelessWidget {
                               style: TextStyle(
                                 color: Colors.white54,
                                 fontWeight: FontWeight.bold,
-                                fontSize: isFullScreen ? 30 : 14,
+                                fontSize: widget.isFullScreen ? 30 : 14,
                               ),
                             ),
                           ],
@@ -146,8 +186,8 @@ class ParticipantTile extends StatelessWidget {
               child: Container(
                 color: Colors.black54,
                 padding: EdgeInsets.symmetric(
-                  horizontal: isFullScreen ? 20 : 6,
-                  vertical: isFullScreen ? 20 : 4,
+                  horizontal: widget.isFullScreen ? 20 : 6,
+                  vertical: widget.isFullScreen ? 20 : 4,
                 ),
                 child: Row(
                   children: [
@@ -156,8 +196,8 @@ class ParticipantTile extends StatelessWidget {
                         displayName,
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: isFullScreen ? 18 : 10,
-                          fontWeight: isFullScreen
+                          fontSize: widget.isFullScreen ? 18 : 10,
+                          fontWeight: widget.isFullScreen
                               ? FontWeight.bold
                               : FontWeight.normal,
                         ),
@@ -166,7 +206,7 @@ class ParticipantTile extends StatelessWidget {
                     ),
                     Icon(
                       isMicOn ? Icons.mic : Icons.mic_off,
-                      size: isFullScreen ? 24 : 12,
+                      size: widget.isFullScreen ? 24 : 12,
                       color: isMicOn ? Colors.greenAccent : Colors.redAccent,
                     ),
                   ],
@@ -174,15 +214,14 @@ class ParticipantTile extends StatelessWidget {
               ),
             ),
 
-            // LAYER C: TOUCH DETECTOR (The Fix)
-            // This sits ON TOP of the video, guaranteeing the tap is caught.
-            // We only show this if onTap is provided (i.e. in Grid View).
-            if (onTap != null)
+            // LAYER C: TOUCH DETECTOR
+            // Only add InkWell if onTap is provided (usually in grid view)
+            if (widget.onTap != null)
               Positioned.fill(
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: onTap,
+                    onTap: widget.onTap,
                     splashColor: Colors.white.withOpacity(0.1),
                     highlightColor: Colors.white.withOpacity(0.05),
                   ),
