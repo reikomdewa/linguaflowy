@@ -6,48 +6,99 @@ import 'package:linguaflow/models/speak/speak_models.dart';
 
 class BoardRequestsSheet extends StatelessWidget {
   final ChatRoom room;
+  final VoidCallback onClose; // New Callback
   
-  const BoardRequestsSheet({super.key, required this.room});
+  const BoardRequestsSheet({
+    super.key, 
+    required this.room,
+    required this.onClose,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Filter members who are in the requests list
-    final requests = room.boardRequests ?? []; // Add boardRequests to ChatRoom model if not there
-    // Map IDs to actual Member objects
+    final requests = room.boardRequests ?? []; 
     final requestMembers = room.members.where((m) => requests.contains(m.uid)).toList();
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Board Requests", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          if (requestMembers.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: Text("No pending requests.", style: TextStyle(color: Colors.grey)),
+    // Use Align to position it at the bottom like a bottom sheet
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: Material(
+          color: const Color(0xFF1E1E1E),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Board Requests", 
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: onClose, // Use callback
+                    )
+                  ],
+                ),
+                const SizedBox(height: 10),
+                
+                if (requestMembers.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Text("No pending requests.", style: TextStyle(color: Colors.grey)),
+                  ),
+                
+                ...requestMembers.map((member) {
+                  final hasAvatar = member.avatarUrl != null && member.avatarUrl!.isNotEmpty;
+                  
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.grey[800],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: hasAvatar 
+                        ? Image.network(
+                            member.avatarUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Colors.white),
+                          )
+                        : const Icon(Icons.person, color: Colors.white),
+                    ),
+                    title: Text(
+                      member.displayName ?? "Unknown User", 
+                      style: const TextStyle(color: Colors.white)
+                    ),
+                    trailing: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () {
+                        context.read<RoomBloc>().add(
+                          GrantBoardAccessEvent(roomId: room.id, targetUserId: member.uid)
+                        );
+                        onClose(); // Close sheet after accepting
+                      },
+                      child: const Text("Accept"),
+                    ),
+                  );
+                }),
+                // Add bottom padding for safety
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 10),
+              ],
             ),
-          
-          ...requestMembers.map((member) => ListTile(
-            leading: CircleAvatar(backgroundImage: NetworkImage(member.avatarUrl ?? '')),
-            title: Text(member.displayName!, style: const TextStyle(color: Colors.white)),
-            trailing: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              onPressed: () {
-                context.read<RoomBloc>().add(GrantBoardAccessEvent(roomId: room.id, targetUserId: member.uid));
-                Navigator.pop(context);
-              },
-              child: const Text("Accept"),
-            ),
-          )),
-          const SizedBox(height: 20),
-        ],
+          ),
+        ),
       ),
     );
   }

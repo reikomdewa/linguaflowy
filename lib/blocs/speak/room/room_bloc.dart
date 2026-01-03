@@ -41,10 +41,10 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     on<UpdateActiveFeatureEvent>(_onUpdateActiveFeature);
     // Moderation
     on<ToggleSpotlightEvent>(_onToggleSpotlight);
-    
+
     on<KickUserEvent>(_onKickUser);
 
-        // ADD THESE TO CONSTRUCTOR
+    // ADD THESE TO CONSTRUCTOR
     on<RequestBoardAccessEvent>(_onRequestBoardAccess);
     on<CancelBoardRequestEvent>(_onCancelBoardRequest);
     on<GrantBoardAccessEvent>(_onGrantBoardAccess);
@@ -57,16 +57,13 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     return super.close();
   }
 
- 
-
-
   Future<void> _onRequestBoardAccess(
     RequestBoardAccessEvent event,
     Emitter<RoomState> emit,
   ) async {
     try {
       await _firestore.collection('rooms').doc(event.roomId).update({
-        'boardRequests': FieldValue.arrayUnion([event.userId])
+        'boardRequests': FieldValue.arrayUnion([event.userId]),
       });
     } catch (e) {
       debugPrint("Error requesting board: $e");
@@ -79,7 +76,7 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
   ) async {
     try {
       await _firestore.collection('rooms').doc(event.roomId).update({
-        'boardRequests': FieldValue.arrayRemove([event.userId])
+        'boardRequests': FieldValue.arrayRemove([event.userId]),
       });
     } catch (e) {
       debugPrint("Error canceling board request: $e");
@@ -97,7 +94,7 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
       await _firestore.collection('rooms').doc(event.roomId).update({
         'activeFeature': 'whiteboard',
         'activeFeatureData': event.targetUserId,
-        'boardRequests': FieldValue.arrayRemove([event.targetUserId]), 
+        'boardRequests': FieldValue.arrayRemove([event.targetUserId]),
       });
     } catch (e) {
       debugPrint("Error granting board access: $e");
@@ -179,11 +176,11 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     final _all = allRooms ?? state.allRooms;
     final _filters = filters ?? state.filters;
     final _query = (query ?? state.searchQuery).toLowerCase();
-
+    //inactive rooms
     // --- GHOST ROOM LOGIC ---
     // Hide rooms that are empty (0 members) AND older than 10 minutes.
     final DateTime staleCutoff = DateTime.now().subtract(
-      const Duration(minutes: 10),
+      const Duration(minutes: 60 * 2),
     );
 
     final _filtered = _all.where((room) {
@@ -502,7 +499,7 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
   // =========================================================
   // 5. MODERATION
   // =========================================================
- // =========================================================
+  // =========================================================
   Future<void> _onToggleSpotlight(
     ToggleSpotlightEvent event,
     Emitter<RoomState> emit,
@@ -516,16 +513,19 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
       debugPrint("❌ [RoomBloc] Spotlight Error: $e");
     }
   }
-Future<void> _onKickUser(KickUserEvent event, Emitter<RoomState> emit) async {
+
+  Future<void> _onKickUser(KickUserEvent event, Emitter<RoomState> emit) async {
     debugPrint("🏗️ [RoomBloc] Kicking User: ${event.userId}");
     try {
       final roomRef = _firestore.collection('rooms').doc(event.roomId);
-      
+
       await _firestore.runTransaction((transaction) async {
         final snapshot = await transaction.get(roomRef);
         if (!snapshot.exists) return;
 
-        final members = List<Map<String, dynamic>>.from(snapshot.data()?['members'] ?? []);
+        final members = List<Map<String, dynamic>>.from(
+          snapshot.data()?['members'] ?? [],
+        );
         // Remove where ID matches
         members.removeWhere((m) => m['uid'] == event.userId);
 
@@ -539,7 +539,7 @@ Future<void> _onKickUser(KickUserEvent event, Emitter<RoomState> emit) async {
     }
   }
 
-   Future<void> _onUpdateActiveFeature(
+  Future<void> _onUpdateActiveFeature(
     UpdateActiveFeatureEvent event,
     Emitter<RoomState> emit,
   ) async {

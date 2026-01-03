@@ -6,7 +6,6 @@ import 'package:linguaflow/models/speak/room_member.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
 
-// Enum to track what is currently overlaying the video grid
 enum RoomActiveFeature { none, whiteboard, youtube }
 
 class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
@@ -24,7 +23,11 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
   // -- STATE FOR FEATURES --
   RoomActiveFeature _currentFeature = RoomActiveFeature.none;
   String? _featureData;
-  bool _isBackCamera = false; // Tracks if we are using back camera
+  bool _isBackCamera = false;
+  
+  // -- NEW: LOCAL VIEW OVERRIDE --
+  // If true, shows the Participant Grid (Tiles) even if a Board is active globally
+  bool _isLocalTileView = false; 
 
   // -- GETTERS --
   Room? get livekitRoom => _livekitRoom;
@@ -35,10 +38,17 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
   RoomActiveFeature get activeFeature => _currentFeature;
   String? get activeFeatureData => _featureData;
   bool get isBackCamera => _isBackCamera;
+  bool get isLocalTileView => _isLocalTileView; // Expose getter
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Optional: Handle background state if needed
+    // Optional
+  }
+
+  // -- NEW: TOGGLE LOCAL VIEW --
+  void toggleLocalTileView() {
+    _isLocalTileView = !_isLocalTileView;
+    notifyListeners();
   }
 
   Future<void> joinRoom(Room room, ChatRoom data) async {
@@ -48,6 +58,7 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
     _isExpanded = true;
     _currentFeature = RoomActiveFeature.none;
     _isBackCamera = false;
+    _isLocalTileView = false; // Reset
     notifyListeners();
   }
 
@@ -70,35 +81,39 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
     _isExpanded = false;
     _currentFeature = RoomActiveFeature.none;
     _featureData = null;
+    _isLocalTileView = false;
     notifyListeners();
   }
 
-  // -- FIRESTORE SYNC --
-  // This is called by LiveRoomOverlay when Firestore doc updates
   void syncFromFirestore(ChatRoom updatedRoom) {
+    // Check if feature actually changed to reset local view
+    final oldFeature = _roomData?.activeFeature;
     _roomData = updatedRoom;
 
-    // 1. Sync Active Feature
     if (updatedRoom.activeFeature == 'whiteboard') {
       _currentFeature = RoomActiveFeature.whiteboard;
+      _featureData = updatedRoom.activeFeatureData;
       
-      // --- FIX IS HERE ---
-      // We must save the data (User ID) so the whiteboard knows who to stream.
-      // Previously this was set to null, causing the "Empty Document Path" crash.
-      _featureData = updatedRoom.activeFeatureData; 
+      // If a NEW whiteboard starts, force user to see it (reset tiles mode)
+      if (oldFeature != 'whiteboard') {
+        _isLocalTileView = false;
+      }
       
     } else if (updatedRoom.activeFeature == 'youtube') {
       _currentFeature = RoomActiveFeature.youtube;
       _featureData = updatedRoom.activeFeatureData;
+      
+      if (oldFeature != 'youtube') {
+        _isLocalTileView = false;
+      }
     } else {
       _currentFeature = RoomActiveFeature.none;
       _featureData = null;
+      _isLocalTileView = false;
     }
 
     notifyListeners();
   }
-
-  // -- MEDIA CONTROLS --
 
   Future<void> toggleMic() async {
     final local = _livekitRoom?.localParticipant;
@@ -116,14 +131,11 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  // --- FIX 1: SAFER CAMERA SWITCHING ---
   Future<void> switchCamera() async {
     final local = _livekitRoom?.localParticipant;
     if (local == null) return;
 
     try {
-      // CRITICAL: Only get tracks that are strictly CAMERA sources.
-      // We must ignore ScreenShare tracks, or the app will crash with "Video capturer not compatible".
       final trackPublication = local.videoTrackPublications.firstWhere(
         (pub) => pub.source == TrackSource.camera,
         orElse: () => throw "No Camera Track found",
@@ -152,12 +164,10 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       }
     } catch (e) {
-      // If no camera track is found (e.g. user only has screen share on), ignore.
       debugPrint("Switch Camera ignored: $e");
     }
   }
 
-  // --- FIX 2: ROBUST SCREEN SHARING ---
   Future<void> toggleScreenShare() async {
     final local = _livekitRoom?.localParticipant;
     if (local == null) return;
@@ -165,9 +175,7 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
     final isSharing = local.isScreenShareEnabled();
 
     if (!isSharing) {
-      // STARTING SHARE
       if (Platform.isAndroid) {
-        // 1. Config
         final androidConfig = FlutterBackgroundAndroidConfig(
           notificationTitle: "Screen Sharing Active",
           notificationText: "Linguaflow is sharing your screen.",
@@ -178,15 +186,9 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
           ),
         );
 
-        // 2. Initialize (ALWAYS required)
         await FlutterBackground.initialize(androidConfig: androidConfig);
-
-        // 3. Enable Background Execution
         final success = await FlutterBackground.enableBackgroundExecution();
-        if (!success) {
-          debugPrint("Failed to enable background execution.");
-          return;
-        }
+        if (!success) return;
       }
 
       try {
@@ -198,7 +200,6 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
           await FlutterBackground.disableBackgroundExecution();
       }
     } else {
-      // STOPPING SHARE
       try {
         await local.setScreenShareEnabled(false);
       } catch (e) {

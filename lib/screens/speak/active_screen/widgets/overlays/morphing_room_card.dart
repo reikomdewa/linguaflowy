@@ -4,11 +4,11 @@ import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/live_sta
 import 'package:livekit_client/livekit_client.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/participant_tile.dart';
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
-import 'package:linguaflow/screens/speak/active_screen/widgets/features/whiteboard_feature.dart'; // Import Whiteboard
+import 'package:linguaflow/screens/speak/active_screen/widgets/features/whiteboard_feature.dart';
 import 'package:share_plus/share_plus.dart';
-import 'room_controls.dart'; // Assuming you have this or standard buttons
+import 'room_controls.dart'; 
 
-// BLOC IMPORTS for Whiteboard closing logic
+// BLOC IMPORTS
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_event.dart';
@@ -40,8 +40,6 @@ class MorphingRoomCard extends StatefulWidget {
 
 class _MorphingRoomCardState extends State<MorphingRoomCard> {
   final PageController _pageController = PageController();
-
-  // --- SWIPE FIX: Default to NOT scrollable so drawing works ---
   ScrollPhysics _pagePhysics = const NeverScrollableScrollPhysics();
 
   @override
@@ -193,47 +191,26 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
               ],
             );
           } else {
-            // --- SWIPE FIX IMPLEMENTATION ---
             return Listener(
               onPointerDown: (event) {
-                // Get touch position
                 final double screenWidth = MediaQuery.of(context).size.width;
                 final double touchX = event.position.dx;
-                final double touchY = event.position.dy;
-                final double screenHeight = MediaQuery.of(context).size.height;
-
-                // Define "Edge" zone (e.g., 35 pixels from right edge)
-                // We only care about Right Edge because Stats are on the Right.
-                // You can add `|| touchX < 35` if you have a left page.
-                const double edgeWidth = 35.0;
-
-                // Optional: "Edge in the middle" check (Vertical Middle)
-                // If you strictly want the middle 50% of the screen height:
-                // bool isVertMiddle = touchY > (screenHeight * 0.25) && touchY < (screenHeight * 0.75);
-                // For now, let's keep it simple: any part of the right edge.
-
-                final bool isEdgeSwipe =
-                    touchX > (screenWidth - edgeWidth) || touchX < edgeWidth;
+                const double edgeWidth = 35.0; 
+                final bool isEdgeSwipe = touchX > (screenWidth - edgeWidth) || touchX < edgeWidth;
 
                 if (isEdgeSwipe) {
-                  // If touching edge, ENABLE swiping
                   if (_pagePhysics is! BouncingScrollPhysics) {
-                    setState(() {
-                      _pagePhysics = const BouncingScrollPhysics();
-                    });
+                    setState(() => _pagePhysics = const BouncingScrollPhysics());
                   }
                 } else {
-                  // If touching center, DISABLE swiping (Enable Drawing)
                   if (_pagePhysics is! NeverScrollableScrollPhysics) {
-                    setState(() {
-                      _pagePhysics = const NeverScrollableScrollPhysics();
-                    });
+                    setState(() => _pagePhysics = const NeverScrollableScrollPhysics());
                   }
                 }
               },
               child: PageView(
                 controller: _pageController,
-                physics: _pagePhysics, // Use the dynamic physics
+                physics: _pagePhysics,
                 scrollDirection: Axis.horizontal,
                 children: [
                   _buildVideoContent(context, showChatButton: true),
@@ -251,11 +228,21 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
     BuildContext context, {
     required bool showChatButton,
   }) {
+    // Check Local Tile View
+    final isFeatureActive =
+        widget.manager.activeFeature != RoomActiveFeature.none &&
+        !widget.manager.isLocalTileView; 
+
     final localP = widget.manager.livekitRoom?.localParticipant;
     final isMicOn = localP?.isMicrophoneEnabled() ?? false;
     final isCamOn = localP?.isCameraEnabled() ?? false;
-    final isFeatureActive =
-        widget.manager.activeFeature != RoomActiveFeature.none;
+
+    // --- LOGIC FOR YELLOW DOT ---
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final isHost = widget.manager.roomData?.hostId == currentUserId;
+    final hasPendingRequests = (widget.manager.roomData?.boardRequests?.isNotEmpty ?? false);
+    // Show dot if I am host AND there are requests
+    final showMenuDot = isHost && hasPendingRequests;
 
     return Column(
       children: [
@@ -362,7 +349,29 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
                 onTap: widget.manager.toggleCamera,
               ),
               const SizedBox(width: 8),
-              GlassButton(icon: Icons.more_horiz, onTap: widget.onOpenMenu),
+              
+              // --- MODIFIED MENU BUTTON WITH DOT ---
+              Stack(
+                alignment: Alignment.topRight,
+                clipBehavior: Clip.none,
+                children: [
+                  GlassButton(icon: Icons.more_horiz, onTap: widget.onOpenMenu),
+                  if (showMenuDot)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: Colors.amber,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black, width: 2), // Tiny border for contrast
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -433,7 +442,9 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: CollaborativeWhiteboard(manager: widget.manager),
+          child: CollaborativeWhiteboard(
+            manager: widget.manager,
+          ), 
         ),
       );
     } else if (widget.manager.activeFeature == RoomActiveFeature.youtube) {

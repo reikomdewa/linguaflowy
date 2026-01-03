@@ -7,7 +7,8 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 // CONFIG
 import 'package:linguaflow/app_router.dart';
-import 'package:linguaflow/core/theme/app_theme.dart'; // <--- IMPORT THEME
+import 'package:linguaflow/core/theme/app_theme.dart';
+import 'package:linguaflow/core/globals.dart'; // <--- 1. IMPORT GLOBALS
 
 // BLOCS
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -109,14 +110,19 @@ class _LinguaflowAppViewState extends State<LinguaflowAppView> {
     final authBloc = context.read<AuthBloc>();
 
     _router = GoRouter(
-      navigatorKey: GlobalKey<NavigatorState>(),
+      // --- FIX IS HERE ---
+      // Use the global key imported from core/globals.dart
+      // NOT GlobalKey<NavigatorState>() which creates a new, useless key.
+      navigatorKey: navigatorKey, 
+      
       initialLocation: '/',
       refreshListenable: GoRouterRefreshStream(authBloc.stream),
-      routes: AppRouter.router.configuration.routes,
+      // Assuming AppRouter.router is properly defined elsewhere to get routes
+      routes: AppRouter.router.configuration.routes, 
       errorBuilder: (context, state) =>
           const Scaffold(body: Center(child: Text("Page not found"))),
 
-      // --- UPDATE THIS SECTION ---
+      // --- REDIRECT LOGIC ---
       redirect: (context, state) {
         final authState = authBloc.state;
         final bool isLoggedIn = authState is AuthAuthenticated;
@@ -124,9 +130,7 @@ class _LinguaflowAppViewState extends State<LinguaflowAppView> {
             authState is AuthInitial || authState is AuthLoading;
         final String location = state.uri.toString();
         final bool isLoggingIn = location == '/login';
-        final bool isPlacementTest = location.startsWith(
-          '/placement-test',
-        ); // Optional: Allow placement test?
+        final bool isPlacementTest = location.startsWith('/placement-test');
 
         // 1. Remove Splash Screen once Auth is determined
         if (!isInitializing) {
@@ -135,7 +139,6 @@ class _LinguaflowAppViewState extends State<LinguaflowAppView> {
 
         // 2. MOBILE SPECIFIC: FORCE LOGIN
         if (!kIsWeb) {
-          // If NOT Web, NOT Logged in, NOT Initializing, and NOT already at Login
           if (!isLoggedIn &&
               !isInitializing &&
               !isLoggingIn &&
@@ -149,7 +152,7 @@ class _LinguaflowAppViewState extends State<LinguaflowAppView> {
           return '/';
         }
 
-        return null; // Guest mode allowed on Web (fall-through)
+        return null; 
       },
     );
   }
@@ -159,6 +162,7 @@ class _LinguaflowAppViewState extends State<LinguaflowAppView> {
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, settings) {
         return MaterialApp.router(
+          routerConfig: _router,
           title: 'LinguaFlow',
           debugShowCheckedModeBanner: false,
 
@@ -166,8 +170,6 @@ class _LinguaflowAppViewState extends State<LinguaflowAppView> {
           themeMode: settings.themeMode,
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
-
-          routerConfig: _router,
 
           builder: (context, child) {
             return Stack(

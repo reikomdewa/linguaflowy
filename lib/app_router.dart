@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/core/globals.dart';
 import 'package:linguaflow/screens/login/web_login_layout.dart';
 import 'package:upgrader/upgrader.dart';
 
@@ -33,10 +34,8 @@ import 'package:linguaflow/screens/story_mode/story_mode_screen.dart';
 import 'package:linguaflow/screens/vocabulary/vocabulary_screen.dart';
 
 class AppRouter {
-  static final _rootNavigatorKey = GlobalKey<NavigatorState>();
-
   static final GoRouter router = GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: navigatorKey,
     initialLocation: '/',
 
     // --- REDIRECT LOGIC ---

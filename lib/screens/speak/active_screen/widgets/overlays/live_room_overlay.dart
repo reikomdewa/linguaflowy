@@ -8,6 +8,7 @@ import 'package:linguaflow/models/speak/room_member.dart';
 import 'package:linguaflow/models/speak/speak_models.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/leave_comfirm_dialog.dart';
+import 'package:linguaflow/screens/speak/active_screen/widgets/sheets/board_requests_sheet.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
@@ -51,7 +52,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
   Participant? _fullScreenParticipant;
   String? _currentSpotlightId;
   bool _hasSeenSelfInFirestore = false;
-
+  bool _isRequestsOpen = false;
   @override
   void initState() {
     super.initState();
@@ -259,6 +260,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
               setState(() {
                 _isSettingsOpen = false;
                 _isLeaveConfirmOpen = false;
+                _isRequestsOpen = false;
                 _selectedParticipant = null;
                 _isChatOpen = true;
                 _publicUnreadCount = 0;
@@ -269,6 +271,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
               setState(() {
                 _isChatOpen = false;
                 _isLeaveConfirmOpen = false;
+                _isRequestsOpen = false;
                 _selectedParticipant = null;
                 _isSettingsOpen = true;
               });
@@ -277,6 +280,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
               setState(() {
                 _isChatOpen = false;
                 _isSettingsOpen = false;
+                _isRequestsOpen = false;
                 _selectedParticipant = null;
                 _isLeaveConfirmOpen = true;
               });
@@ -359,6 +363,25 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
                 manager.roomData?.hostId ==
                 FirebaseAuth.instance.currentUser?.uid,
             onClose: () => setState(() => _isSettingsOpen = false),
+            onOpenRequests: () {
+              setState(() {
+                _isSettingsOpen = false; // Close menu
+                _isRequestsOpen = true; // Open requests
+              });
+            },
+          ),
+        ],
+        // --- NEW: BOARD REQUESTS SHEET ---
+        if (_isRequestsOpen && manager.isExpanded) ...[
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => setState(() => _isRequestsOpen = false),
+              child: Container(color: Colors.black.withOpacity(0.5)),
+            ),
+          ),
+          BoardRequestsSheet(
+            room: manager.roomData!,
+            onClose: () => setState(() => _isRequestsOpen = false),
           ),
         ],
 

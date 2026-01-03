@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_event.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
-import 'package:linguaflow/screens/speak/active_screen/widgets/sheets/board_requests_sheet.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:linguaflow/core/globals.dart';
 
@@ -12,27 +11,29 @@ class RoomMenuSheet extends StatelessWidget {
   final RoomGlobalManager manager;
   final bool isHost;
   final VoidCallback onClose;
+  final VoidCallback onOpenRequests; // <--- NEW CALLBACK
 
   const RoomMenuSheet({
     super.key,
     required this.manager,
     required this.isHost,
     required this.onClose,
+    required this.onOpenRequests, // Require it
   });
 
   @override
   Widget build(BuildContext context) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    
     final double screenWidth = MediaQuery.of(context).size.width;
     final double itemWidth = (screenWidth - 32) / 4.5;
 
-    // Is the board or youtube currently active?
-    final bool isFeatureActive = manager.activeFeature != RoomActiveFeature.none;
-
-    // Logic for Request indicators
-    final bool hasRequested = manager.roomData?.boardRequests?.contains(currentUserId) ?? false;
-    final bool hasPendingRequests = (manager.roomData?.boardRequests?.isNotEmpty ?? false);
+    final bool isFeatureGloballyActive =
+        manager.activeFeature != RoomActiveFeature.none;
+    final bool isLocalTiles = manager.isLocalTileView;
+    final bool hasRequested =
+        manager.roomData?.boardRequests?.contains(currentUserId) ?? false;
+    final bool hasPendingRequests =
+        (manager.roomData?.boardRequests?.isNotEmpty ?? false);
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -46,7 +47,6 @@ class RoomMenuSheet extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Handle Bar
                 GestureDetector(
                   onTap: onClose,
                   behavior: HitTestBehavior.opaque,
@@ -65,7 +65,6 @@ class RoomMenuSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 const Text(
                   "Settings",
                   style: TextStyle(
@@ -82,73 +81,74 @@ class RoomMenuSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // MEDIA SECTION
                       _buildSectionHeader("Media"),
                       _buildWrapOptions([
-                        // 1. TILES (Only if a feature is open)
-                        if (isFeatureActive)
+                        _OptionItem(
+                          icon: Icons.flip_camera_ios_outlined,
+                          label: "Flip",
+                          onTap: manager.switchCamera,
+                        ),
+                        _OptionItem(
+                          icon: Icons.screen_share_outlined,
+                          label: "Share Screen",
+                          onTap: () {
+                            manager.toggleScreenShare();
+                            onClose();
+                          },
+                        ),
+
+                        if (isFeatureGloballyActive)
                           _OptionItem(
-                            icon: Icons.grid_view_rounded,
-                            label: "Tiles",
+                            icon: isLocalTiles
+                                ? Icons.featured_video_outlined
+                                : Icons.grid_view_rounded,
+                            label: isLocalTiles ? "Board" : "Tiles",
                             color: Colors.greenAccent,
                             onTap: () {
-                              if (manager.roomData != null) {
-                                context.read<RoomBloc>().add(
-                                  UpdateActiveFeatureEvent(
-                                    roomId: manager.roomData!.id,
-                                    feature: 'none',
-                                    data: null,
-                                  ),
-                                );
-                              }
+                              manager.toggleLocalTileView();
                               onClose();
                             },
                           ),
-
-                        // 2. HOST: MY BOARD (Starts Host Stream)
                         if (isHost)
                           _OptionItem(
                             icon: Icons.edit_note_rounded,
                             label: "My Board",
                             onTap: () {
-                              if (manager.roomData != null && currentUserId != null) {
+                              if (manager.roomData != null &&
+                                  currentUserId != null) {
                                 context.read<RoomBloc>().add(
                                   GrantBoardAccessEvent(
                                     roomId: manager.roomData!.id,
-                                    targetUserId: currentUserId, // Host grants self
+                                    targetUserId: currentUserId,
                                   ),
                                 );
                               }
                               onClose();
                             },
                           ),
-                        
-                        // 3. HOST: REQUESTS (Only if requests exist)
+
+                        // --- 3. HOST: REQUESTS (Stack Logic) ---
                         if (isHost && hasPendingRequests)
                           _OptionItem(
                             icon: Icons.assignment_ind,
                             label: "Requests",
-                            color: Colors.amber, // Alert color
+                            color: Colors.amber,
                             onTap: () {
-                              onClose();
-                              showModalBottomSheet(
-                                context: context,
-                                backgroundColor: Colors.transparent,
-                                builder: (_) => BoardRequestsSheet(room: manager.roomData!),
-                              );
+                              onClose(); // Close settings
+                              onOpenRequests(); // Tell parent to open requests
                             },
                           ),
 
-                        // 4. GUEST: SHARE BOARD (Requests access)
                         if (!isHost)
                           _OptionItem(
-                            icon: hasRequested ? Icons.hourglass_top : Icons.edit_note_rounded,
+                            icon: hasRequested
+                                ? Icons.hourglass_top
+                                : Icons.edit_note_rounded,
                             label: hasRequested ? "Waiting..." : "Share Board",
                             color: hasRequested ? Colors.amber : Colors.white,
                             onTap: () {
                               if (currentUserId == null) return;
                               if (hasRequested) {
-                                // Cancel
                                 context.read<RoomBloc>().add(
                                   CancelBoardRequestEvent(
                                     roomId: manager.roomData!.id,
@@ -156,7 +156,6 @@ class RoomMenuSheet extends StatelessWidget {
                                   ),
                                 );
                               } else {
-                                // Request
                                 context.read<RoomBloc>().add(
                                   RequestBoardAccessEvent(
                                     roomId: manager.roomData!.id,
@@ -168,20 +167,6 @@ class RoomMenuSheet extends StatelessWidget {
                             },
                           ),
 
-                        // 5. STANDARD OPTIONS
-                        _OptionItem(
-                          icon: Icons.flip_camera_ios_outlined,
-                          label: "Flip",
-                          onTap: manager.switchCamera,
-                        ),
-                        _OptionItem(
-                          icon: Icons.screen_share_outlined,
-                          label: "Share",
-                          onTap: () {
-                            manager.toggleScreenShare();
-                            onClose();
-                          },
-                        ),
                         _OptionItem(
                           icon: Icons.ondemand_video_rounded,
                           label: "YouTube",
@@ -190,29 +175,40 @@ class RoomMenuSheet extends StatelessWidget {
                       ], itemWidth),
 
                       const SizedBox(height: 15),
-
-                      // HOST TOOLS SECTION
                       if (isHost) ...[
                         _buildSectionHeader("Host Tools"),
                         _buildWrapOptions([
-                          _OptionItem(icon: Icons.edit, label: "Edit", onTap: () {}),
-                          _OptionItem(icon: Icons.pause_circle_outline, label: "Pause", onTap: () {}),
-                          _OptionItem(icon: Icons.mic_off_outlined, label: "Mutes", onTap: () {}),
-                          _OptionItem(icon: Icons.block, label: "Bans", onTap: () {}),
+                          _OptionItem(
+                            icon: Icons.edit,
+                            label: "Edit",
+                            onTap: () {},
+                          ),
+                          _OptionItem(
+                            icon: Icons.pause_circle_outline,
+                            label: "Pause",
+                            onTap: () {},
+                          ),
+                          _OptionItem(
+                            icon: Icons.mic_off_outlined,
+                            label: "Mutes",
+                            onTap: () {},
+                          ),
+                          _OptionItem(
+                            icon: Icons.block,
+                            label: "Bans",
+                            onTap: () {},
+                          ),
                         ], itemWidth),
                         const SizedBox(height: 15),
                       ],
-
-                      // GENERAL SECTION
                       _buildSectionHeader("General"),
                       _buildWrapOptions([
                         _OptionItem(
                           icon: Icons.share,
                           label: "Invite",
                           onTap: () {
-                            if (manager.roomData != null) {
+                            if (manager.roomData != null)
                               Share.share("Join room: ${manager.roomData!.id}");
-                            }
                           },
                         ),
                         _OptionItem(
@@ -244,14 +240,17 @@ class RoomMenuSheet extends StatelessWidget {
   }
 
   void _showYouTubeInput(BuildContext context) {
+    // Keep YouTube logic as is, or use same pattern if it fails
     final globalContext = navigatorKey.currentContext ?? context;
     final controller = TextEditingController();
-
     showDialog(
       context: globalContext,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF2C2C2C),
-        title: const Text("Watch YouTube", style: TextStyle(color: Colors.white)),
+        title: const Text(
+          "Watch YouTube",
+          style: TextStyle(color: Colors.white),
+        ),
         content: TextField(
           controller: controller,
           style: const TextStyle(color: Colors.white),
