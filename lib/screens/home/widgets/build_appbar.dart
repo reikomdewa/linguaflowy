@@ -15,6 +15,7 @@ import 'package:linguaflow/screens/premium/premium_screen.dart';
 import 'package:linguaflow/screens/reader/reader_screen.dart';
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
 import 'package:linguaflow/screens/discover/library_search_delegate.dart';
+import 'package:linguaflow/screens/stats/stats_screen.dart';
 import 'package:linguaflow/utils/auth_guard.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 
@@ -339,12 +340,29 @@ PreferredSizeWidget buildAppBar(
             AuthGuard.run(
               context,
               onAuthenticated: () {
-                HomeDialogs.showStatsDialog(
-                  context,
-                  user,
-                  allItems,
-                  LanguageHelper.availableLanguages,
-                );
+                if (kIsWeb && isDesktop) {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => Dialog(
+                      child: SizedBox(
+                        width: 700,
+                        height: 800,
+                        child: StatsScreen(
+                          user: user,
+                          vocabItems: allItems,
+                          languageNames: LanguageHelper.availableLanguages,
+                        ), // You might need to hide AppBar leading icon if used here
+                      ),
+                    ),
+                  );
+                } else {
+                  HomeDialogs.showStatsDialog(
+                    context,
+                    user,
+                    allItems,
+                    LanguageHelper.availableLanguages,
+                  );
+                }
               },
             );
           },
