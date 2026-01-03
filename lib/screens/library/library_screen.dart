@@ -60,7 +60,6 @@ class LibraryScreen extends StatelessWidget {
           BlocBuilder<LessonBloc, LessonState>(
             builder: (context, state) {
               final bool isLoaded = state is LessonLoaded;
-
               return Padding(
                 padding: const EdgeInsets.only(right: 16.0),
                 child: Center(
@@ -82,7 +81,7 @@ class LibraryScreen extends StatelessWidget {
                       height: 40,
                       decoration: BoxDecoration(
                         color: isDark
-                            ? Colors.white.withValues(alpha: 0.1)
+                            ? Colors.white.withOpacity(0.1)
                             : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -112,207 +111,131 @@ class LibraryScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (state is LessonLoaded) {
-            // --- 1. FILTERING LOGIC ---
+            // FILTERING LOGIC
+            final importedLessons = state.lessons.where((l) => l.isLocal).toList();
+            final cloudLessons = state.lessons.where((l) => !l.isLocal).toList();
 
-            // A. Imported (Local Files)
-            final importedLessons = state.lessons
-                .where((l) => l.isLocal)
-                .toList();
-
-            // B. Cloud/Saved Lessons (Not Local)
-            final cloudLessons = state.lessons
-                .where((l) => !l.isLocal)
-                .toList();
-
-            // C. Text Stories (Horizontal)
-            // Logic: Not Video AND (Is Favorite OR Is AI Generated)
             final textLessons = cloudLessons.where((l) {
-              bool isVideo =
-                  l.type == 'video' ||
-                  (l.videoUrl != null && l.videoUrl!.isNotEmpty);
+              bool isVideo = l.type == 'video' || (l.videoUrl != null && l.videoUrl!.isNotEmpty);
               if (isVideo) return false;
-
-              // Only show if Favorite OR explicitly AI type
-              // This hides "random history" text lessons
               return l.isFavorite || l.type == 'ai_story';
             }).toList();
 
-            // D. Favorite Videos (Vertical)
-            // Logic: Is Video AND Is Favorite
             final videoLessons = cloudLessons.where((l) {
-              bool isVideo =
-                  l.type == 'video' ||
-                  (l.videoUrl != null && l.videoUrl!.isNotEmpty);
+              bool isVideo = l.type == 'video' || (l.videoUrl != null && l.videoUrl!.isNotEmpty);
               return isVideo && l.isFavorite;
             }).toList();
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // --- SECTION 1: IMPORTED (Horizontal) ---
-                  if (importedLessons.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.download_for_offline,
-                            color: textColor,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            "Imported",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(
-                      height: 240,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        scrollDirection: Axis.horizontal,
-                        itemCount: importedLessons.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 12),
-                        itemBuilder: (context, index) {
-                          final lesson = importedLessons[index];
-                          // Handle corner case where a local file acts as video
-                          if (lesson.type == 'video' ||
-                              (lesson.videoUrl?.isNotEmpty ?? false)) {
-                            return LibraryVideoCard(
-                              lesson: lesson,
-                              isDark: isDark,
-                              width: 220,
-                            );
-                          }
-                          return LibraryTextCard(
-                            lesson: lesson,
-                            isDark: isDark,
-                            width: 220,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final bool isDesktop = constraints.maxWidth > 900;
+                
+                // --- DESKTOP VIEW ---
+                if (isDesktop) {
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                         // Playlists First on Desktop
+                         _buildPlaylistsSection(context, user.id, isDark, textColor, user.currentLanguage),
+                         const SizedBox(height: 20),
 
-                  // --- SECTION 2: PLAYLISTS (Horizontal) ---
-                  _buildPlaylistsSection(
-                    context,
-                    user.id,
-                    isDark,
-                    textColor,
-                    user.currentLanguage,
+                         if (importedLessons.isNotEmpty) ...[
+                           _buildSectionHeader("Imported Lessons", textColor),
+                           _buildDesktopGrid(importedLessons, isDark),
+                           const SizedBox(height: 40),
+                         ],
+
+                         if (textLessons.isNotEmpty) ...[
+                           _buildSectionHeader("Saved Stories", textColor),
+                           _buildDesktopGrid(textLessons, isDark),
+                           const SizedBox(height: 40),
+                         ],
+
+                         if (videoLessons.isNotEmpty) ...[
+                           _buildSectionHeader("Favorite Videos", textColor),
+                           _buildDesktopGrid(videoLessons, isDark),
+                           const SizedBox(height: 100),
+                         ],
+                         
+                         if(importedLessons.isEmpty && textLessons.isEmpty && videoLessons.isEmpty)
+                             _buildEmptyStateCheck(user.id, user.currentLanguage),
+                      ],
+                    ),
+                  );
+                }
+
+                // --- MOBILE VIEW (Original) ---
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 100),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (importedLessons.isNotEmpty) ...[
+                        _buildSectionHeader("Imported", textColor, icon: Icons.download_for_offline),
+                        SizedBox(
+                          height: 240,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            scrollDirection: Axis.horizontal,
+                            itemCount: importedLessons.length,
+                            separatorBuilder: (_, _) => const SizedBox(width: 12),
+                            itemBuilder: (context, index) {
+                              final lesson = importedLessons[index];
+                              if (lesson.type == 'video' || (lesson.videoUrl?.isNotEmpty ?? false)) {
+                                return LibraryVideoCard(lesson: lesson, isDark: isDark, width: 220);
+                              }
+                              return LibraryTextCard(lesson: lesson, isDark: isDark, width: 220);
+                            },
+                          ),
+                        ),
+                      ],
+
+                      _buildPlaylistsSection(context, user.id, isDark, textColor, user.currentLanguage),
+
+                      if (textLessons.isNotEmpty) ...[
+                         _buildSectionHeader("Saved Stories", textColor, icon: Icons.library_books),
+                         SizedBox(
+                           height: 240,
+                           child: ListView.separated(
+                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                             scrollDirection: Axis.horizontal,
+                             itemCount: textLessons.length,
+                             separatorBuilder: (_, _) => const SizedBox(width: 12),
+                             itemBuilder: (context, index) {
+                               return LibraryTextCard(lesson: textLessons[index], isDark: isDark, width: 220);
+                             },
+                           ),
+                         ),
+                      ],
+
+                      if (videoLessons.isNotEmpty) ...[
+                         _buildSectionHeader("Favorite Videos", textColor, icon: Icons.video_library),
+                         ListView.separated(
+                           padding: const EdgeInsets.all(16),
+                           shrinkWrap: true,
+                           physics: const NeverScrollableScrollPhysics(),
+                           itemCount: videoLessons.length,
+                           separatorBuilder: (_, _) => const SizedBox(height: 16),
+                           itemBuilder: (context, index) {
+                             return LibraryVideoCard(lesson: videoLessons[index], isDark: isDark);
+                           },
+                         ),
+                      ],
+                      
+                      if (importedLessons.isEmpty && textLessons.isEmpty && videoLessons.isEmpty)
+                         _buildEmptyStateCheck(user.id, user.currentLanguage),
+                    ],
                   ),
-
-                  // --- SECTION 3: SAVED STORIES (Horizontal) ---
-                  if (textLessons.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.library_books,
-                            color: Colors.blue[400],
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            "Saved Stories",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(
-                      height: 240,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        scrollDirection: Axis.horizontal,
-                        itemCount: textLessons.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 12),
-                        itemBuilder: (context, index) {
-                          final lesson = textLessons[index];
-                          return LibraryTextCard(
-                            lesson: lesson,
-                            isDark: isDark,
-                            width: 220, // Fixed width for horizontal scrolling
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-
-                  // --- SECTION 4: FAVORITE VIDEOS (Vertical) ---
-                  if (videoLessons.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.video_library,
-                            color: Colors.red[400],
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            "Favorite Videos",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: videoLessons.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 16),
-                      itemBuilder: (context, index) {
-                        final lesson = videoLessons[index];
-                        return LibraryVideoCard(
-                          lesson: lesson,
-                          isDark: isDark,
-                          // No width = Full width vertical
-                        );
-                      },
-                    ),
-                  ],
-
-                  // Empty State Fallback
-                  if (importedLessons.isEmpty &&
-                      textLessons.isEmpty &&
-                      videoLessons.isEmpty)
-                    _buildEmptyStateCheck(user.id, user.currentLanguage),
-                ],
-              ),
+                );
+              },
             );
           }
           return const Center(child: Text('Something went wrong'));
         },
       ),
 
-      // --- FAB ---
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -321,7 +244,6 @@ class LibraryScreen extends StatelessWidget {
           children: [
             HomeUtils.buildFloatingButton(
               label: "Community",
-              // icon: Icons.school_rounded,
               onTap: () => HomeUtils.navigateToCommunityScreen(context),
             ),
             HomeUtils.buildFloatingButton(
@@ -341,9 +263,54 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
-  // ... (Playlist Widgets & Empty State remain the same as previous) ...
-  // [INCLUDE THE _buildPlaylistsSection and _buildEmptyStateCheck methods here]
-  // --- PLAYLIST SECTION WIDGET ---
+  // --- HELPER: SECTION HEADER ---
+  Widget _buildSectionHeader(String title, Color? textColor, {IconData? icon}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: Colors.blueAccent, size: 20),
+            const SizedBox(width: 8),
+          ],
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- HELPER: DESKTOP GRID ---
+  Widget _buildDesktopGrid(List<LessonModel> lessons, bool isDark) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 350,
+        mainAxisExtent: 260,
+        crossAxisSpacing: 20,
+        mainAxisSpacing: 20,
+      ),
+      itemCount: lessons.length,
+      itemBuilder: (context, index) {
+        final lesson = lessons[index];
+        bool isVideo = lesson.type == 'video' || (lesson.videoUrl?.isNotEmpty ?? false);
+        
+        if (isVideo) {
+          return LibraryVideoCard(lesson: lesson, isDark: isDark);
+        } else {
+          return LibraryTextCard(lesson: lesson, isDark: isDark);
+        }
+      },
+    );
+  }
+
   Widget _buildPlaylistsSection(
     BuildContext context,
     String userId,
@@ -369,29 +336,10 @@ class LibraryScreen extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.playlist_play_rounded,
-                    color: Colors.blueAccent,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    "Playlists",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Horizontal Scroll View for Playlists
+            _buildSectionHeader("Playlists", textColor, icon: Icons.playlist_play_rounded),
+            
+            // Note: Playlists usually look better as a horizontal strip even on desktop
+            // to differentiate them from the lesson grids below.
             SizedBox(
               height: 120,
               child: ListView.separated(
@@ -405,13 +353,8 @@ class LibraryScreen extends StatelessWidget {
                   final id = docs[index].id;
                   final lessonIds = data['lessonIds'] as List<dynamic>? ?? [];
 
-                  void handleEdit() {
-                    _showEditPlaylistDialog(context, userId, id, name);
-                  }
-
-                  void handleDelete() {
-                    _showDeletePlaylistDialog(context, userId, id);
-                  }
+                  void handleEdit() { _showEditPlaylistDialog(context, userId, id, name); }
+                  void handleDelete() { _showDeletePlaylistDialog(context, userId, id); }
 
                   return Center(
                     child: SizedBox(
@@ -420,47 +363,7 @@ class LibraryScreen extends StatelessWidget {
                         children: [
                           GestureDetector(
                             onLongPress: () {
-                              showModalBottomSheet(
-                                context: context,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.vertical(
-                                    top: Radius.circular(16),
-                                  ),
-                                ),
-                                builder: (ctx) => SafeArea(
-                                  child: Wrap(
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          top: 8.0,
-                                        ),
-                                        child: ListTile(
-                                          leading: const Icon(Icons.edit),
-                                          title: const Text('Rename Playlist'),
-                                          onTap: () {
-                                            Navigator.pop(ctx);
-                                            handleEdit();
-                                          },
-                                        ),
-                                      ),
-                                      ListTile(
-                                        leading: const Icon(
-                                          Icons.delete,
-                                          color: Colors.red,
-                                        ),
-                                        title: const Text(
-                                          'Delete Playlist',
-                                          style: TextStyle(color: Colors.red),
-                                        ),
-                                        onTap: () {
-                                          Navigator.pop(ctx);
-                                          handleDelete();
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
+                              _showPlaylistOptions(context, handleEdit, handleDelete);
                             },
                             child: PlaylistOpenButton(
                               playlistName: name,
@@ -470,60 +373,17 @@ class LibraryScreen extends StatelessWidget {
                               isDark: isDark,
                             ),
                           ),
-
                           Positioned(
                             top: 4,
                             right: 4,
                             child: Material(
                               color: Colors.transparent,
                               child: PopupMenuButton<String>(
-                                icon: Icon(
-                                  Icons.more_vert_rounded,
-                                  color: isDark
-                                      ? Colors.white70
-                                      : Colors.black54,
-                                  size: 20,
-                                ),
-                                padding: EdgeInsets.zero,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                onSelected: (value) {
-                                  if (value == 'edit') handleEdit();
-                                  if (value == 'delete') handleDelete();
-                                },
-                                itemBuilder: (BuildContext context) => [
-                                  const PopupMenuItem(
-                                    value: 'edit',
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.edit,
-                                          size: 18,
-                                          color: Colors.blue,
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text('Rename'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'delete',
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.delete_outline,
-                                          size: 18,
-                                          color: Colors.red,
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Delete',
-                                          style: TextStyle(color: Colors.red),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                icon: Icon(Icons.more_vert_rounded, color: isDark ? Colors.white70 : Colors.black54, size: 20),
+                                onSelected: (val) => val == 'edit' ? handleEdit() : handleDelete(),
+                                itemBuilder: (ctx) => [
+                                  const PopupMenuItem(value: 'edit', child: Text('Rename')),
+                                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
                                 ],
                               ),
                             ),
@@ -541,38 +401,33 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
-  void _showEditPlaylistDialog(
-    BuildContext context,
-    String userId,
-    String playlistId,
-    String currentName,
-  ) {
+  void _showPlaylistOptions(BuildContext context, VoidCallback onEdit, VoidCallback onDelete) {
+      showModalBottomSheet(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(leading: const Icon(Icons.edit), title: const Text('Rename'), onTap: () { Navigator.pop(ctx); onEdit(); }),
+              ListTile(leading: const Icon(Icons.delete, color: Colors.red), title: const Text('Delete'), onTap: () { Navigator.pop(ctx); onDelete(); }),
+            ],
+          ),
+        ),
+      );
+  }
+
+  void _showEditPlaylistDialog(BuildContext context, String userId, String playlistId, String currentName) {
     final controller = TextEditingController(text: currentName);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Rename Playlist"),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: "Enter new name"),
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-        ),
+        content: TextField(controller: controller, autofocus: true, textCapitalization: TextCapitalization.sentences),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           TextButton(
             onPressed: () async {
-              final newName = controller.text.trim();
-              if (newName.isNotEmpty) {
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(userId)
-                    .collection('playlists')
-                    .doc(playlistId)
-                    .update({'name': newName});
+              if (controller.text.trim().isNotEmpty) {
+                 await FirebaseFirestore.instance.collection('users').doc(userId).collection('playlists').doc(playlistId).update({'name': controller.text.trim()});
               }
               if (ctx.mounted) Navigator.pop(ctx);
             },
@@ -583,31 +438,17 @@ class LibraryScreen extends StatelessWidget {
     );
   }
 
-  void _showDeletePlaylistDialog(
-    BuildContext context,
-    String userId,
-    String playlistId,
-  ) {
+  void _showDeletePlaylistDialog(BuildContext context, String userId, String playlistId) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Delete Playlist?"),
-        content: const Text(
-          "Are you sure you want to delete this playlist? The lessons inside will not be deleted.",
-        ),
+        content: const Text("Lessons will not be deleted."),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           TextButton(
             onPressed: () async {
-              await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(userId)
-                  .collection('playlists')
-                  .doc(playlistId)
-                  .delete();
+              await FirebaseFirestore.instance.collection('users').doc(userId).collection('playlists').doc(playlistId).delete();
               if (ctx.mounted) Navigator.pop(ctx);
             },
             child: const Text("Delete", style: TextStyle(color: Colors.red)),
@@ -619,17 +460,9 @@ class LibraryScreen extends StatelessWidget {
 
   Widget _buildEmptyStateCheck(String userId, String currentLanguage) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('playlists')
-          .where('language', isEqualTo: currentLanguage)
-          .limit(1)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('users').doc(userId).collection('playlists').where('language', isEqualTo: currentLanguage).limit(1).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox.shrink();
-        if (snapshot.data!.docs.isNotEmpty) return const SizedBox.shrink();
-
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.only(top: 100),
           child: Center(
@@ -638,15 +471,7 @@ class LibraryScreen extends StatelessWidget {
               children: [
                 Icon(Icons.auto_stories, size: 80, color: Colors.grey[300]),
                 const SizedBox(height: 16),
-                Text(
-                  'Library is empty',
-                  style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Import texts or create playlists.',
-                  style: TextStyle(color: Colors.grey),
-                ),
+                Text('Library is empty', style: TextStyle(fontSize: 18, color: Colors.grey[600])),
               ],
             ),
           ),

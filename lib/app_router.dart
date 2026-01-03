@@ -8,14 +8,12 @@ import 'package:upgrader/upgrader.dart';
 // BLOCS
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
-import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 
 // MODELS
 import 'package:linguaflow/models/lesson_model.dart';
 
 // --- SCREEN IMPORTS ---
 import 'package:linguaflow/screens/main_navigation_screen.dart';
-import 'package:linguaflow/screens/home/home_screen.dart';
 import 'package:linguaflow/screens/login/login_screen.dart';
 import 'package:linguaflow/screens/reader/reader_screen_wraper.dart';
 

@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/models/lesson_model.dart';
@@ -240,13 +242,15 @@ class _LibraryVideoCardState extends State<LibraryVideoCard> {
 
     if (imagePath != null && imagePath.isNotEmpty) {
       // Check if it is a Local File (created by your import function)
-      final File localFile = File(imagePath);
-      if (localFile.existsSync()) {
-        return Image.file(
-          localFile,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
-        );
+      if (!kIsWeb) {
+        final File localFile = File(imagePath);
+        if (localFile.existsSync()) {
+          return Image.file(
+            localFile,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+          );
+        }
       }
       // Else assume it is a Network URL (legacy or web imports)
       else {
