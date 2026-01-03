@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -36,9 +37,11 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
       (event, emit) => emit(state.copyWith(activeLivekitRoom: event.room)),
     );
     on<LeaveRoomEvent>(_onLeaveRoom);
-
+    on<UpdateRoomInfoEvent>(_onUpdateRoomInfo);
+    on<UpdateActiveFeatureEvent>(_onUpdateActiveFeature);
     // Moderation
     on<ToggleSpotlightEvent>(_onToggleSpotlight);
+    
     on<KickUserEvent>(_onKickUser);
   }
 
@@ -47,6 +50,10 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     _roomsSubscription?.cancel();
     return super.close();
   }
+
+ 
+
+
 
   // =========================================================
   // 1. REAL-TIME LOADING
@@ -432,32 +439,68 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
   // =========================================================
   // 5. MODERATION
   // =========================================================
+ // =========================================================
   Future<void> _onToggleSpotlight(
     ToggleSpotlightEvent event,
     Emitter<RoomState> emit,
   ) async {
-    await _firestore.collection('rooms').doc(event.roomId).update({
-      'spotlightedUserId': event.userId,
-    });
+    debugPrint("🏗️ [RoomBloc] ToggleSpotlight: ${event.userId}");
+    try {
+      await _firestore.collection('rooms').doc(event.roomId).update({
+        'spotlightedUserId': event.userId,
+      });
+    } catch (e) {
+      debugPrint("❌ [RoomBloc] Spotlight Error: $e");
+    }
   }
-
-  Future<void> _onKickUser(KickUserEvent event, Emitter<RoomState> emit) async {
+Future<void> _onKickUser(KickUserEvent event, Emitter<RoomState> emit) async {
+    debugPrint("🏗️ [RoomBloc] Kicking User: ${event.userId}");
     try {
       final roomRef = _firestore.collection('rooms').doc(event.roomId);
-      final snapshot = await roomRef.get();
-      if (!snapshot.exists) return;
+      
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(roomRef);
+        if (!snapshot.exists) return;
 
-      final members = List<Map<String, dynamic>>.from(
-        snapshot.data()?['members'] ?? [],
-      );
+        final members = List<Map<String, dynamic>>.from(snapshot.data()?['members'] ?? []);
+        // Remove where ID matches
+        members.removeWhere((m) => m['uid'] == event.userId);
 
-      members.removeWhere((m) {
-        return m['uid'] == event.userId || m['displayName'] == event.userId;
+        transaction.update(roomRef, {
+          'members': members,
+          'memberCount': members.length,
+        });
       });
-
-      await roomRef.update({'members': members, 'memberCount': members.length});
     } catch (e) {
-      print("Kick Error: $e");
+      debugPrint("❌ [RoomBloc] Kick Error: $e");
+    }
+  }
+
+   Future<void> _onUpdateActiveFeature(
+    UpdateActiveFeatureEvent event,
+    Emitter<RoomState> emit,
+  ) async {
+    try {
+      await _firestore.collection('rooms').doc(event.roomId).update({
+        'activeFeature': event.feature,
+        'activeFeatureData': event.data,
+      });
+    } catch (e) {
+      debugPrint("Error updating feature: $e");
+    }
+  }
+
+  Future<void> _onUpdateRoomInfo(
+    UpdateRoomInfoEvent event,
+    Emitter<RoomState> emit,
+  ) async {
+    try {
+      await _firestore.collection('rooms').doc(event.roomId).update({
+        'title': event.title,
+        'description': event.description,
+      });
+    } catch (e) {
+      debugPrint("Error updating info: $e");
     }
   }
 }

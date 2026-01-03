@@ -85,5 +85,11 @@
     <string>audio</string>
     <string>voip</string>
     <string>fetch</string>
+	<key>UIBackgroundModes</key>
+<array>
+    <string>audio</string>
+    <string>voip</string>
+    <string>fetch</string>
+</array>
 </array>
 </plist>

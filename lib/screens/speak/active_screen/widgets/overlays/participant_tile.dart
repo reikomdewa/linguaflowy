@@ -7,57 +7,50 @@ class ParticipantTile extends StatelessWidget {
   final Participant participant;
   final bool isFullScreen;
   final BoxFit fit;
+  final VoidCallback? onTap;
 
   const ParticipantTile({
     super.key,
     required this.participant,
     this.isFullScreen = false,
     this.fit = BoxFit.cover,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final roomData = RoomGlobalManager().roomData;
 
-    // --- 1. RESOLVE USER DATA (NAME & AVATAR) ---
+    // --- 1. RESOLVE USER DATA ---
     String displayName = "";
     String? avatarUrl;
 
     if (roomData != null) {
-      // CHECK A: Is this participant the HOST?
-      // The host's details are stored in top-level fields, not always in 'members'
       if (participant.identity == roomData.hostId) {
-        displayName = roomData.hostName!;
+        displayName = roomData.hostName ?? "Host";
         avatarUrl = roomData.hostAvatarUrl;
-      }
-      // CHECK B: Is this participant a MEMBER?
-      else if (roomData.members.isNotEmpty) {
+      } else if (roomData.members.isNotEmpty) {
         try {
           final member = roomData.members.firstWhere(
             (m) => m.uid == participant.identity,
           );
-          displayName = member.displayName!;
+          displayName = member.displayName ?? "Member";
           avatarUrl = member.avatarUrl;
-        } catch (_) {
-          // Not found in members list
-        }
+        } catch (_) {}
       }
     }
 
-    // --- 2. FALLBACKS ---
-    // If Firestore didn't return a name, use LiveKit name, or ID
     if (displayName.isEmpty || displayName == "Guest") {
       displayName = participant.name.isNotEmpty
           ? participant.name
-          : (participant.identity ?? "User");
+          : (participant.identity);
     }
 
-    // Append "(You)" if it's the local user
     if (participant is LocalParticipant) {
       displayName = "$displayName (You)";
     }
 
-    // --- 3. VIDEO STATE ---
+    // --- 2. VIDEO STATE ---
     TrackPublication? videoPub;
     if (participant.videoTrackPublications.isNotEmpty) {
       videoPub = participant.videoTrackPublications.first;
@@ -72,7 +65,7 @@ class ParticipantTile extends StatelessWidget {
     final isMicOn = participant.isMicrophoneEnabled();
     final isSpeaking = participant.isSpeaking;
 
-    // --- 4. BORDER LOGIC ---
+    // --- 3. BORDER LOGIC ---
     Color borderColor = Colors.transparent;
     double borderWidth = 0;
 
@@ -105,7 +98,7 @@ class ParticipantTile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // LAYER 1: VIDEO or AVATAR
+            // LAYER A: VIDEO / AVATAR
             if (isVideoActive)
               VideoTrackRenderer(
                 videoPub.track as VideoTrack,
@@ -145,7 +138,7 @@ class ParticipantTile extends StatelessWidget {
                 ),
               ),
 
-            // LAYER 2: STATUS BAR
+            // LAYER B: STATUS BAR (Name & Mic)
             Positioned(
               bottom: 0,
               left: 0,
@@ -180,6 +173,21 @@ class ParticipantTile extends StatelessWidget {
                 ),
               ),
             ),
+
+            // LAYER C: TOUCH DETECTOR (The Fix)
+            // This sits ON TOP of the video, guaranteeing the tap is caught.
+            // We only show this if onTap is provided (i.e. in Grid View).
+            if (onTap != null)
+              Positioned.fill(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onTap,
+                    splashColor: Colors.white.withOpacity(0.1),
+                    highlightColor: Colors.white.withOpacity(0.05),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

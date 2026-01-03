@@ -27,6 +27,10 @@ class ChatRoom extends Equatable {
   final bool isActive;
   final String? spotlightedUserId;
 
+  // --- NEW FIELDS FOR FEATURES ---
+  final String? activeFeature; // 'whiteboard', 'youtube', 'none'
+  final String? activeFeatureData; // e.g. YouTube URL
+
   const ChatRoom({
     required this.id,
     required this.hostId,
@@ -51,6 +55,8 @@ class ChatRoom extends Equatable {
     this.roomType = 'audio',
     this.isActive = true,
     this.spotlightedUserId,
+    this.activeFeature,
+    this.activeFeatureData,
   });
 
   // Helper getters for UI
@@ -82,11 +88,13 @@ class ChatRoom extends Equatable {
       'roomType': roomType,
       'isActive': isActive,
       'spotlightedUserId': spotlightedUserId,
+      // New Fields
+      'activeFeature': activeFeature,
+      'activeFeatureData': activeFeatureData,
     };
   }
 
   factory ChatRoom.fromMap(Map<String, dynamic> map, String id) {
-    if (map['members'] != null) {}
     DateTime parseDate(dynamic val) {
       if (val is Timestamp) return val.toDate();
       if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
@@ -145,6 +153,9 @@ class ChatRoom extends Equatable {
       roomType: map['roomType'] ?? 'audio',
       isActive: map['isActive'] ?? true,
       spotlightedUserId: map['spotlightedUserId'],
+      // New Fields
+      activeFeature: map['activeFeature'],
+      activeFeatureData: map['activeFeatureData'],
     );
   }
 
@@ -165,6 +176,8 @@ class ChatRoom extends Equatable {
     String? hostName,
     String? hostAvatarUrl,
     String? liveKitRoomId,
+    String? activeFeature,
+    String? activeFeatureData,
   }) {
     return ChatRoom(
       id: id,
@@ -190,6 +203,9 @@ class ChatRoom extends Equatable {
       liveKitRoomId: liveKitRoomId ?? this.liveKitRoomId,
       tags: tags,
       roomType: roomType,
+      // New Fields
+      activeFeature: activeFeature ?? this.activeFeature,
+      activeFeatureData: activeFeatureData ?? this.activeFeatureData,
     );
   }
 
@@ -206,5 +222,7 @@ class ChatRoom extends Equatable {
     lastUpdatedAt,
     expireAt,
     liveKitRoomId,
+    activeFeature,
+    activeFeatureData,
   ];
 }

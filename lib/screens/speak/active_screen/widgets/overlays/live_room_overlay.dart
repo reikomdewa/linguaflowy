@@ -1,21 +1,29 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:linguaflow/core/globals.dart';
 import 'package:linguaflow/models/speak/room_member.dart';
+import 'package:linguaflow/models/speak/speak_models.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
-import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/morphing_room_card.dart';
-import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/room_sheets.dart';
+import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/leave_comfirm_dialog.dart';
 import 'package:livekit_client/livekit_client.dart';
-
-// INTERNAL IMPORTS (New Paths)
 
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
 import 'package:linguaflow/screens/speak/widgets/full_screen_participant.dart';
 import 'package:linguaflow/services/speak/chat_service.dart';
 
-// GLOBAL
+// BLOC EVENTS (Needed for the Leave Logic)
+import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_event.dart'
+    hide RoomEvent; // Hide LiveKit collision
+
+// COMPONENT IMPORTS
+import 'morphing_room_card.dart';
+import 'room_menu_sheet.dart';
+import 'participant_options_sheet.dart';
+// Assuming your dialog is in a file like this, or imported from room_sheets.dart
 
 class LiveRoomOverlay extends StatefulWidget {
   const LiveRoomOverlay({super.key});
@@ -36,7 +44,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
   int _lastReadCount = 0;
 
   bool _isChatOpen = false;
-  bool _isMenuOpen = false;
+  bool _isSettingsOpen = false;
   bool _isLeaveConfirmOpen = false;
 
   Participant? _selectedParticipant;
@@ -70,17 +78,50 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
       }
     } else {
       _cleanupListeners();
-      // Reset UI
-      if (_isChatOpen) setState(() => _isChatOpen = false);
-      if (_isMenuOpen) setState(() => _isMenuOpen = false);
-      if (_isLeaveConfirmOpen) setState(() => _isLeaveConfirmOpen = false);
-      if (_selectedParticipant != null)
-        setState(() => _selectedParticipant = null);
-      if (_fullScreenParticipant != null)
-        setState(() => _fullScreenParticipant = null);
-      _hasSeenSelfInFirestore = false;
+      if (mounted) {
+        setState(() {
+          _isChatOpen = false;
+          _isSettingsOpen = false;
+          _isLeaveConfirmOpen = false;
+          _selectedParticipant = null;
+          _fullScreenParticipant = null;
+          _hasSeenSelfInFirestore = false;
+          _currentSpotlightId = null;
+        });
+      }
     }
     if (mounted) setState(() {});
+  }
+
+  void _resolveSpotlight(String? spotlightId) {
+    if (spotlightId == null) {
+      if (_currentSpotlightId != null) {
+        setState(() {
+          _currentSpotlightId = null;
+          _fullScreenParticipant = null;
+        });
+      }
+      return;
+    }
+
+    _currentSpotlightId = spotlightId;
+    final room = RoomGlobalManager().livekitRoom;
+    if (room == null) return;
+
+    Participant? foundUser;
+    if (room.localParticipant?.identity == spotlightId) {
+      foundUser = room.localParticipant;
+    } else {
+      try {
+        foundUser = room.remoteParticipants.values.firstWhere(
+          (p) => p.identity == spotlightId,
+        );
+      } catch (_) {}
+    }
+
+    if (foundUser != null && _fullScreenParticipant != foundUser) {
+      setState(() => _fullScreenParticipant = foundUser);
+    }
   }
 
   void _setupFirestoreListeners(String roomId) {
@@ -88,7 +129,6 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
     final docRef = FirebaseFirestore.instance.collection('rooms').doc(roomId);
 
     _roomDocSubscription = docRef.snapshots().listen((snapshot) {
-      // 1. HANDLE ROOM DELETION
       if (!snapshot.exists || !mounted) {
         RoomGlobalManager().leaveRoom();
         return;
@@ -98,56 +138,28 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
       if (data == null) return;
 
       final manager = RoomGlobalManager();
+      final updatedRoom = ChatRoom.fromMap(data, snapshot.id);
+      manager.syncFromFirestore(updatedRoom);
 
-      // 2. SYNC MEMBERS (Fixes "Guest" name issue)
-      // We must update the local manager state so ParticipantTile can find names.
-      if (data.containsKey('members')) {
-        try {
-          final List<dynamic> rawMembers = data['members'] ?? [];
-          final List<RoomMember> parsedMembers = rawMembers
-              .map((m) => RoomMember.fromMap(m as Map<String, dynamic>))
-              .toList();
-
-          manager.updateMembers(parsedMembers);
-        } catch (e) {
-          debugPrint("Error parsing members: $e");
-        }
-      }
-
+      // KICK LOGIC
       final currentUser = FirebaseAuth.instance.currentUser;
-
-      // 3. KICK LOGIC (With Safety Flag)
       if (currentUser != null) {
-        final members = List.from(data['members'] ?? []);
+        final members = updatedRoom.members;
         final myUid = currentUser.uid;
+        final amIInList = members.any((m) => m.uid == myUid);
+        final amIHost = updatedRoom.hostId == myUid;
 
-        // Check if I exist in the member list
-        final amIInList = members.any((m) {
-          if (m is Map) return m['uid'] == myUid;
-          return false;
-        });
+        if (amIInList || amIHost) _hasSeenSelfInFirestore = true;
 
-        final amIHost = manager.roomData?.hostId == myUid;
-
-        // SAFETY FLAG: Only mark as "Seen" if we are actually present.
-        // This prevents the app from kicking us during the 1-second delay
-        // between joining LiveKit and Firestore updating.
-        if (amIInList || amIHost) {
-          _hasSeenSelfInFirestore = true;
-        }
-
-        // EXECUTE KICK: Only if we were previously seen, and now we are gone.
         if (_hasSeenSelfInFirestore &&
             !amIInList &&
             !amIHost &&
             manager.isActive) {
           manager.leaveRoom();
-
-          // Use global navigator key to show snackbar safely over the overlay
           if (navigatorKey.currentContext != null) {
             ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
               const SnackBar(
-                content: Text("You have been kicked from the room."),
+                content: Text("You have been kicked."),
                 backgroundColor: Colors.red,
               ),
             );
@@ -156,25 +168,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
         }
       }
 
-      // 4. SPOTLIGHT LOGIC
-      final spotlightId = data['spotlightedUserId'] as String?;
-      if (spotlightId != _currentSpotlightId) {
-        setState(() => _currentSpotlightId = spotlightId);
-
-        if (spotlightId != null) {
-          try {
-            final p = _participants.firstWhere(
-              (p) => p.identity == spotlightId,
-            );
-            setState(() => _fullScreenParticipant = p);
-          } catch (_) {}
-        } else {
-          // If spotlight removed, close fullscreen
-          if (_fullScreenParticipant != null) {
-            setState(() => _fullScreenParticipant = null);
-          }
-        }
-      }
+      _resolveSpotlight(updatedRoom.spotlightedUserId);
     });
   }
 
@@ -187,10 +181,19 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
       ..on<TrackUnsubscribedEvent>((_) => _safeSetState())
       ..on<LocalTrackPublishedEvent>((_) => _safeSetState())
       ..on<LocalTrackUnpublishedEvent>((_) => _safeSetState())
-      ..on<TrackMutedEvent>((_) => _safeSetState())
-      ..on<TrackUnmutedEvent>((_) => _safeSetState())
-      ..on<ActiveSpeakersChangedEvent>((_) => _safeSetState())
       ..on<RoomDisconnectedEvent>((_) => RoomGlobalManager().leaveRoom());
+  }
+
+  void _refreshParticipants() {
+    final room = RoomGlobalManager().livekitRoom;
+    if (room == null) return;
+    setState(() {
+      _participants = [
+        if (room.localParticipant != null) room.localParticipant!,
+        ...room.remoteParticipants.values,
+      ];
+    });
+    if (_currentSpotlightId != null) _resolveSpotlight(_currentSpotlightId);
   }
 
   void _setupChatListener() {
@@ -207,17 +210,6 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
     });
   }
 
-  void _refreshParticipants() {
-    final room = RoomGlobalManager().livekitRoom;
-    if (room == null) return;
-    setState(() {
-      _participants = [
-        if (room.localParticipant != null) room.localParticipant!,
-        ...room.remoteParticipants.values,
-      ];
-    });
-  }
-
   void _cleanupListeners() {
     _listener?.dispose();
     _listener = null;
@@ -231,20 +223,11 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
   }
 
   void _handleParticipantTap(Participant p) {
-    final manager = RoomGlobalManager();
-    final myId = manager.livekitRoom?.localParticipant?.identity;
-
-    if (p.identity == myId) {
-      setState(() {
-        _fullScreenParticipant = (_fullScreenParticipant == p) ? null : p;
-      });
-    } else {
-      setState(() {
-        _selectedParticipant = p;
-        _isChatOpen = false;
-        _isMenuOpen = false;
-      });
-    }
+    setState(() {
+      _selectedParticipant = p;
+      _isChatOpen = false;
+      _isSettingsOpen = false;
+    });
   }
 
   @override
@@ -260,9 +243,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           Positioned.fill(
             child: GestureDetector(
               onTap: manager.collapse,
-              child: Container(
-                // color: Colors.black.withOpacity(0.8)
-              ),
+              child: Container(color: Colors.transparent),
             ),
           ),
 
@@ -276,7 +257,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
             unreadCount: _publicUnreadCount,
             onOpenChat: () {
               setState(() {
-                _isMenuOpen = false;
+                _isSettingsOpen = false;
                 _isLeaveConfirmOpen = false;
                 _selectedParticipant = null;
                 _isChatOpen = true;
@@ -289,13 +270,13 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
                 _isChatOpen = false;
                 _isLeaveConfirmOpen = false;
                 _selectedParticipant = null;
-                _isMenuOpen = true;
+                _isSettingsOpen = true;
               });
             },
             onClosePress: () {
               setState(() {
                 _isChatOpen = false;
-                _isMenuOpen = false;
+                _isSettingsOpen = false;
                 _selectedParticipant = null;
                 _isLeaveConfirmOpen = true;
               });
@@ -304,6 +285,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           ),
         ),
 
+        // FULL SCREEN VIEW
         if (_fullScreenParticipant != null && manager.isExpanded)
           Positioned.fill(
             child: Stack(
@@ -314,20 +296,20 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
                 Positioned(
                   top: 40,
                   left: 20,
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.close,
-                      // color: Colors.white,
-                      size: 30,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: IconButton(
+                      icon: const Icon(Icons.close, size: 30),
+                      onPressed: () =>
+                          setState(() => _fullScreenParticipant = null),
                     ),
-                    onPressed: () =>
-                        setState(() => _fullScreenParticipant = null),
                   ),
                 ),
               ],
             ),
           ),
 
+        // CHAT
         if (_isChatOpen && manager.isExpanded) ...[
           Positioned.fill(
             child: GestureDetector(
@@ -344,7 +326,6 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
                 child: Container(
                   height: MediaQuery.of(context).size.height * 0.75,
                   decoration: const BoxDecoration(
-                    // color: Color(0xFF1E1E1E),
                     borderRadius: BorderRadius.vertical(
                       top: Radius.circular(20),
                     ),
@@ -364,56 +345,64 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           ),
         ],
 
-        if (_isMenuOpen && manager.isExpanded) ...[
+        // SETTINGS
+        if (_isSettingsOpen && manager.isExpanded) ...[
           Positioned.fill(
             child: GestureDetector(
-              onTap: () => setState(() => _isMenuOpen = false),
-              child: Container(color: Colors.black.withOpacity(0.6)),
+              onTap: () => setState(() => _isSettingsOpen = false),
+              child: Container(color: Colors.black.withOpacity(0.5)),
             ),
           ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Material(
-              type: MaterialType.transparency,
-              child: RoomMenuSheet(
-                manager: manager,
-                onClose: () => setState(() => _isMenuOpen = false),
-                roomData: manager.roomData!,
-              ),
-            ),
+          RoomMenuSheet(
+            manager: manager,
+            isHost:
+                manager.roomData?.hostId ==
+                FirebaseAuth.instance.currentUser?.uid,
+            onClose: () => setState(() => _isSettingsOpen = false),
           ),
         ],
 
+        // PARTICIPANT OPTIONS
         if (_selectedParticipant != null && manager.isExpanded) ...[
           Positioned.fill(
             child: GestureDetector(
               onTap: () => setState(() => _selectedParticipant = null),
-              child: Container(color: Colors.black.withOpacity(0.6)),
+              child: Container(color: Colors.black.withOpacity(0.5)),
             ),
           ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Material(
-              type: MaterialType.transparency,
-              child: ParticipantOptionsSheet(
-                targetParticipant: _selectedParticipant!,
-                amIHost:
-                    manager.roomData?.hostId ==
-                    FirebaseAuth.instance.currentUser?.uid,
-                currentSpotlightId: _currentSpotlightId,
-                roomData: manager.roomData!,
-                onClose: () => setState(() => _selectedParticipant = null),
-                onSetFullScreen: () {
-                  setState(() {
-                    _fullScreenParticipant = _selectedParticipant;
-                    _selectedParticipant = null;
-                  });
-                },
-              ),
-            ),
+          ParticipantOptionsSheet(
+            targetParticipant: _selectedParticipant!,
+            amIHost:
+                manager.roomData?.hostId ==
+                FirebaseAuth.instance.currentUser?.uid,
+            currentSpotlightId: _currentSpotlightId,
+            roomData: manager.roomData!,
+            onClose: () => setState(() => _selectedParticipant = null),
+
+            // Callbacks for actions
+            onSetFullScreen: (p) {
+              setState(() {
+                _fullScreenParticipant = p;
+                _selectedParticipant = null;
+              });
+            },
+            onToggleSpotlight: (userId) {
+              context.read<RoomBloc>().add(
+                ToggleSpotlightEvent(
+                  roomId: manager.roomData!.id,
+                  userId: userId,
+                ),
+              );
+            },
+            onKickUser: (userId) {
+              context.read<RoomBloc>().add(
+                KickUserEvent(roomId: manager.roomData!.id, userId: userId),
+              );
+            },
           ),
         ],
 
+        // --- CUSTOM LEAVE CONFIRM DIALOG ---
         if (_isLeaveConfirmOpen && manager.isExpanded) ...[
           Positioned.fill(
             child: GestureDetector(
@@ -421,15 +410,32 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
               child: Container(color: Colors.black.withOpacity(0.6)),
             ),
           ),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: LeaveConfirmDialog(
-                roomData: manager.roomData,
-                onConfirm: () => manager.leaveRoom(),
-                onCancel: () => setState(() => _isLeaveConfirmOpen = false),
-              ),
-            ),
+          // Here is your custom dialog logic implementation
+          LeaveConfirmDialog(
+            roomData: manager.roomData,
+            onCancel: () => setState(() => _isLeaveConfirmOpen = false),
+            onConfirm: () {
+              // 1. Close UI
+              setState(() => _isLeaveConfirmOpen = false);
+
+              // 2. Determine if Host or Guest logic needed for Bloc
+              final isHost =
+                  manager.roomData?.hostId ==
+                  FirebaseAuth.instance.currentUser?.uid;
+
+              if (isHost && manager.roomData != null) {
+                // Host Ending Room
+                context.read<RoomBloc>().add(
+                  DeleteRoomEvent(manager.roomData!.id),
+                );
+              } else {
+                // Guest Leaving
+                context.read<RoomBloc>().add(LeaveRoomEvent());
+              }
+
+              // 3. Disconnect LiveKit locally
+              manager.leaveRoom();
+            },
           ),
         ],
       ],

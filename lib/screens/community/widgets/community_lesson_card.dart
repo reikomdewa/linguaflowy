@@ -129,7 +129,6 @@ class _CommunityLessonCardState extends State<CommunityLessonCard> {
     // which is technically wrong for the subtitle "Shared by...".
     // It should be the author's name. Assuming you might want to fix that,
     // but keeping your existing logic for now, just making `user` safe.
-    final displayName = authUser?.displayName ?? "Guest"; 
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),

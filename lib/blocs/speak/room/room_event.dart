@@ -104,7 +104,7 @@ class LeaveRoomEvent extends RoomEvent {}
 
 class ToggleSpotlightEvent extends RoomEvent {
   final String roomId;
-  final String? userId; 
+  final String? userId; // MUST be nullable
   const ToggleSpotlightEvent({required this.roomId, this.userId});
   @override
   List<Object?> get props => [roomId, userId];
@@ -116,4 +116,39 @@ class KickUserEvent extends RoomEvent {
   const KickUserEvent({required this.roomId, required this.userId});
   @override
   List<Object?> get props => [roomId, userId];
+}
+
+
+// Add these to your existing RoomEvent file
+
+// 1. Host updates Title/Description
+class UpdateRoomInfoEvent extends RoomEvent {
+  final String roomId;
+  final String title;
+  final String description;
+
+  const UpdateRoomInfoEvent({
+    required this.roomId,
+    required this.title,
+    required this.description,
+  });
+  
+  @override
+  List<Object?> get props => [roomId, title, description];
+}
+
+// 2. Host toggles Whiteboard or YouTube
+class UpdateActiveFeatureEvent extends RoomEvent {
+  final String roomId;
+  final String feature; // 'whiteboard', 'youtube', 'none'
+  final String? data;   // YouTube Link
+
+  const UpdateActiveFeatureEvent({
+    required this.roomId,
+    required this.feature,
+    this.data,
+  });
+
+  @override
+  List<Object?> get props => [roomId, feature, data];
 }
