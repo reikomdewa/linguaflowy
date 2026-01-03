@@ -4,18 +4,57 @@ import 'package:linguaflow/blocs/speak/whiteboard_models.dart';
 class WhiteboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Add generic object (Text or Stroke)
-  Future<void> addObject(String roomId, String userId, WhiteboardObject object) async {
+  // Add object
+  Future<void> addObject(
+    String roomId,
+    String userId,
+    WhiteboardObject object,
+  ) async {
     await _firestore
         .collection('rooms')
         .doc(roomId)
         .collection('whiteboards')
         .doc(userId)
-        .collection('objects') // Renamed collection from 'strokes' to 'objects'
-        .add(object.toMap());
+        .collection('objects')
+        .doc(object.id) // Use the object ID as the doc ID
+        .set(object.toMap());
   }
 
-  // Clear specific user's whiteboard
+  // --- NEW: Update Position (Required for Dragging) ---
+  Future<void> updateObjectPosition(
+    String roomId,
+    String userId,
+    String objectId,
+    double x,
+    double y,
+  ) async {
+    await _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('whiteboards')
+        .doc(userId)
+        .collection('objects')
+        .doc(objectId)
+        .update({'posX': x, 'posY': y});
+  }
+
+  // Delete Object (For Eraser/Undo)
+  Future<void> deleteObject(
+    String roomId,
+    String userId,
+    String objectId,
+  ) async {
+    await _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('whiteboards')
+        .doc(userId)
+        .collection('objects')
+        .doc(objectId)
+        .delete();
+  }
+
+  // Clear Board
   Future<void> clearBoard(String roomId, String userId) async {
     final ref = _firestore
         .collection('rooms')
@@ -32,8 +71,11 @@ class WhiteboardService {
     await batch.commit();
   }
 
-  // Stream objects
-  Stream<List<WhiteboardObject>> streamObjects(String roomId, String targetUserId) {
+  // Stream
+  Stream<List<WhiteboardObject>> streamObjects(
+    String roomId,
+    String targetUserId,
+  ) {
     return _firestore
         .collection('rooms')
         .doc(roomId)
@@ -43,9 +85,9 @@ class WhiteboardService {
         .orderBy('createdAt', descending: false)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => WhiteboardObject.fromMap(doc.data(), doc.id))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => WhiteboardObject.fromMap(doc.data(), doc.id))
+              .toList();
+        });
   }
 }
