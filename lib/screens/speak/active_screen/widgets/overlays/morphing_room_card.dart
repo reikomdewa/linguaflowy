@@ -248,8 +248,12 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
         (widget.manager.roomData?.boardRequests?.isNotEmpty ?? false);
     final hasYouTubeRequests =
         (widget.manager.roomData?.youtubeRequests?.isNotEmpty ?? false);
+    // --- ADDED: Check for Join Requests ---
+    final hasJoinRequests = 
+        (widget.manager.roomData?.joinRequests.isNotEmpty ?? false);
 
-    final showMenuDot = isHost && (hasBoardRequests || hasYouTubeRequests);
+    // Show dot if Host AND (Board OR YouTube OR Join requests exist)
+    final showMenuDot = isHost && (hasBoardRequests || hasYouTubeRequests || hasJoinRequests);
 
     return Column(
       children: [
