@@ -50,10 +50,15 @@ class RoomCard extends StatelessWidget {
     final bool isFull = displayCount >= room.maxMembers;
     final bool isAlreadyMember = allMembers.any((m) => m.uid == currentUserId);
     
+    // --- CHECK IF BANNED ---
+    // Note: Ensure your ChatRoom model has 'bannedUserIds' list
+    final bool isBanned = room.bannedUserIds.contains(currentUserId);
+
     // You can enter if: 
     // 1. The room is NOT full
     // 2. OR You are the Host
     // 3. OR You are already on the list (rejoining)
+    // 4. Banned users get a special "Request" flow via the button, so we enable the button for them too
     final bool canEnter = !isFull || isMe || isAlreadyMember;
 
     return Card(
@@ -133,7 +138,7 @@ class RoomCard extends StatelessWidget {
             const SizedBox(height: 20),
             
             // --- ACTION BUTTON ---
-            _buildJoinButton(context, theme, canEnter),
+            _buildJoinButton(context, theme, canEnter, isBanned),
           ],
         ),
       ),
@@ -269,27 +274,46 @@ class RoomCard extends StatelessWidget {
     );
   }
 
-  Widget _buildJoinButton(BuildContext context, ThemeData theme, bool canEnter) {
-    final color = canEnter ? Colors.blue : Colors.grey;
-    final text = canEnter ? "Join and talk" : "Room Full";
-    final icon = canEnter ? Icons.call_outlined : Icons.lock_outline;
+  Widget _buildJoinButton(BuildContext context, ThemeData theme, bool canEnter, bool isBanned) {
+    // Determine visuals based on state
+    Color color;
+    String text;
+    IconData icon;
+
+    if (isBanned) {
+      color = Colors.red;
+      text = "Banned (Request Entry)";
+      icon = Icons.block;
+    } else if (canEnter) {
+      color = Colors.blue;
+      text = "Join and talk";
+      icon = Icons.call_outlined;
+    } else {
+      color = Colors.grey;
+      text = "Room Full";
+      icon = Icons.lock_outline;
+    }
 
     return DottedBorder(
       options: RoundedRectDottedBorderOptions(
-        color: canEnter ? theme.dividerColor : Colors.transparent,
+        color: (canEnter || isBanned) ? theme.dividerColor : Colors.transparent,
         strokeWidth: 1.2,
         dashPattern: const [6, 3],
         radius: const Radius.circular(12),
       ),
       child: Container(
-        decoration: !canEnter ? BoxDecoration(
+        decoration: (!canEnter && !isBanned) ? BoxDecoration(
           color: theme.disabledColor.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
         ) : null,
         width: double.infinity,
         child: TextButton(
-          onPressed: canEnter
-              ? () => room.isPaid
+          // Logic: 
+          // If banned -> Handle Request Logic
+          // If canEnter -> Join Logic (Payment or Direct)
+          // Else -> Show Full Snackbar
+          onPressed: (canEnter || isBanned)
+              ? () => room.isPaid && !isBanned
                   ? _showPaymentDialog(context)
                   : _joinRoom(context, room)
               : () {
@@ -368,6 +392,7 @@ class RoomCard extends StatelessWidget {
               title: const Text("Report Room"),
               onTap: () {
                 Navigator.pop(ctx);
+                // In a real app, you would show the ReportDialog here
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Report submitted")));
               },
             ),
@@ -398,10 +423,60 @@ class RoomCard extends StatelessWidget {
   }
 
   // -----------------------------------------------------------------------
-  // [IMPORTANT] OPTIMIZED JOIN METHOD
-  // This relies on RoomBloc.on(JoinRoomEvent) having the cleanup logic.
+  // JOIN ROOM LOGIC (Includes Ban/Rejoin Request)
   // -----------------------------------------------------------------------
   Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    // --- 1. BAN CHECK ---
+    // Ensure your ChatRoom model has `bannedUserIds` and `joinRequests` fields.
+    if (roomData.bannedUserIds.contains(currentUser.uid)) {
+      // Check if already requested
+      final hasRequested = roomData.joinRequests.any((r) => r['uid'] == currentUser.uid);
+
+      if (hasRequested) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Request pending. Waiting for host approval."),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Show Request Dialog
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("You are banned"),
+          content: const Text("You have been removed from this room. Would you like to request to rejoin?"),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+            ElevatedButton(
+              onPressed: () {
+                context.read<RoomBloc>().add(
+                  RequestRejoinEvent(
+                    roomId: roomData.id,
+                    userId: currentUser.uid,
+                    displayName: currentUser.displayName ?? "Guest",
+                    avatarUrl: currentUser.photoURL,
+                  )
+                );
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Rejoin request sent to host.")),
+                );
+              },
+              child: const Text("Request Entry"),
+            ),
+          ],
+        ),
+      );
+      return; // STOP JOIN PROCESS HERE
+    }
+
+    // --- 2. NORMAL JOIN PROCESS ---
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -412,25 +487,21 @@ class RoomCard extends StatelessWidget {
       final speakService = SpeakService();
       final roomBloc = context.read<RoomBloc>();
 
-      // 1. Get Token (Validate we can join LiveKit first)
+      // A. Get LiveKit Token
       final token = await speakService.getLiveKitToken(
         roomData.id,
-        FirebaseAuth.instance.currentUser?.displayName ?? "Guest",
+        currentUser.displayName ?? "Guest",
       );
 
-      // 2. Dispatch Bloc Event
-      // This triggers the Firestore logic:
-      // - Removes user from any OLD rooms
-      // - Adds user to THIS room
+      // B. Dispatch Bloc Event (Handles Firestore updates)
       roomBloc.add(JoinRoomEvent(roomData));
 
-      // 3. Connect LiveKit
-      // We do this concurrently or immediately after the bloc dispatch
+      // C. Connect LiveKit
       final livekitRoom = Room();
       await livekitRoom.connect('wss://linguaflow-7eemmnrq.livekit.cloud', token);
 
       if (context.mounted) {
-        // 4. Activate Global Overlay
+        // D. Activate Global Overlay & Manager
         RoomGlobalManager().joinRoom(livekitRoom, roomData);
         Navigator.pop(context); // Close loading dialog
       }

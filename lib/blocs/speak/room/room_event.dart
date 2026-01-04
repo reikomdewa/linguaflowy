@@ -155,6 +155,35 @@ class UpdateActiveFeatureEvent extends RoomEvent {
 
 // ... existing imports
 
+// --- NEW EVENTS ---
+
+// 1. Pause/Lock Room (Host toggles "isPrivate")
+class ToggleRoomLockEvent extends RoomEvent {
+  final String roomId;
+  final bool isLocked; 
+  const ToggleRoomLockEvent({required this.roomId, required this.isLocked});
+  @override
+  List<Object?> get props => [roomId, isLocked];
+}
+
+// 2. Report Room
+class ReportRoomEvent extends RoomEvent {
+  final String roomId;
+  final String reporterId;
+  final String reason;
+  final String description;
+
+  const ReportRoomEvent({
+    required this.roomId,
+    required this.reporterId,
+    required this.reason,
+    required this.description,
+  });
+
+  @override
+  List<Object?> get props => [roomId, reporterId, reason, description];
+}
+
 // --- BOARD REQUEST LOGIC ---
 
 // User asks to share their board
@@ -260,4 +289,47 @@ class SyncYouTubeStateEvent extends RoomEvent {
 
   @override
   List<Object?> get props => [roomId, status, positionSeconds];
+}
+// ... existing events
+
+// 1. Guest requests to rejoin after ban
+class RequestRejoinEvent extends RoomEvent {
+  final String roomId;
+  final String userId;
+  final String displayName;
+  final String? avatarUrl;
+
+  const RequestRejoinEvent({
+    required this.roomId,
+    required this.userId,
+    required this.displayName,
+    this.avatarUrl,
+  });
+  @override
+  List<Object?> get props => [roomId, userId];
+}
+
+// 2. Host Approves the request (Unbans them)
+class ApproveRejoinEvent extends RoomEvent {
+  final String roomId;
+  final String userId; // The ID to unban
+  final Map<String, dynamic> requestMap; // To remove from list
+
+  const ApproveRejoinEvent({
+    required this.roomId,
+    required this.userId,
+    required this.requestMap,
+  });
+  @override
+  List<Object?> get props => [roomId, userId];
+}
+
+// 3. Host Denies the request
+class DenyRejoinEvent extends RoomEvent {
+  final String roomId;
+  final Map<String, dynamic> requestMap;
+
+  const DenyRejoinEvent({required this.roomId, required this.requestMap});
+  @override
+  List<Object?> get props => [roomId, requestMap];
 }

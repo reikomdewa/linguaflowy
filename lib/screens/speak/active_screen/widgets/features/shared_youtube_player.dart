@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
@@ -14,7 +15,7 @@ class SharedYouTubePlayer extends StatefulWidget {
   final bool isHost;
 
   const SharedYouTubePlayer({
-    super.key, // The Key from MorphingRoomCard (ValueKey) makes this rebuild on URL change
+    super.key,
     required this.manager,
     required this.videoUrl,
     required this.isHost,
@@ -24,43 +25,62 @@ class SharedYouTubePlayer extends StatefulWidget {
   State<SharedYouTubePlayer> createState() => _SharedYouTubePlayerState();
 }
 
-class _SharedYouTubePlayerState extends State<SharedYouTubePlayer> {
+class _SharedYouTubePlayerState extends State<SharedYouTubePlayer>
+    with WidgetsBindingObserver {
   YoutubePlayerController? _controller;
-  String? _errorMessage;
 
-  // UI State
   bool _isControlsVisible = false;
   bool _isPlaying = true;
   bool _isBuffering = false;
   bool _isFullScreen = false;
+
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
   Timer? _hideTimer;
   bool _isDragging = false;
 
-  final List<SubtitleLine> _mockSubtitles = [
-    SubtitleLine(
-      start: const Duration(seconds: 0),
-      end: const Duration(seconds: 4),
-      text: "Connecting to audio stream...",
-    ),
-  ];
+  List<SubtitleLine> _subtitles = [];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _generateMockSubtitles();
     _initializePlayer();
   }
 
-  // NOTE: didUpdateWidget is NOT needed for URL changes because
-  // MorphingRoomCard uses a Key. This widget gets disposed and re-created.
+  void _generateMockSubtitles() {
+    _subtitles = List.generate(500, (index) {
+      final startSeconds = index * 5;
+      return SubtitleLine(
+        start: Duration(seconds: startSeconds),
+        end: Duration(seconds: startSeconds + 4),
+        text: "coming soon ${startSeconds}s.",
+      );
+    });
+  }
+
   @override
   void didUpdateWidget(covariant SharedYouTubePlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Only sync if we are GUEST
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      _loadNewVideo(widget.videoUrl);
+    }
     if (!widget.isHost) {
       _syncWithHost();
     }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (_isFullScreen) {
+      _exitFullScreenSystem();
+    }
+    _hideTimer?.cancel();
+    _controller?.removeListener(_playerListener);
+    _controller?.dispose();
+    super.dispose();
   }
 
   void _syncWithHost() {
@@ -78,9 +98,8 @@ class _SharedYouTubePlayerState extends State<SharedYouTubePlayer> {
       _controller!.play();
     }
 
-    final hostPos = Duration(seconds: hostPosSeconds);
-    // Don't sync if dragging or difference is small
     if (!_isDragging) {
+      final hostPos = Duration(seconds: hostPosSeconds);
       final diff = (hostPos.inSeconds - _currentPosition.inSeconds).abs();
       if (diff > 2) {
         _controller!.seekTo(hostPos);
@@ -90,11 +109,7 @@ class _SharedYouTubePlayerState extends State<SharedYouTubePlayer> {
 
   void _initializePlayer() {
     final videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
-
-    if (videoId == null) {
-      setState(() => _errorMessage = "Invalid Video URL");
-      return;
-    }
+    if (videoId == null) return;
 
     _controller = YoutubePlayerController(
       initialVideoId: videoId,
@@ -115,18 +130,17 @@ class _SharedYouTubePlayerState extends State<SharedYouTubePlayer> {
     if (_controller == null || !mounted || _isDragging) return;
     setState(() {
       _isPlaying = _controller!.value.isPlaying;
-      _isFullScreen = _controller!.value.isFullScreen;
       _currentPosition = _controller!.value.position;
       _totalDuration = _controller!.metadata.duration;
     });
   }
 
-  @override
-  void dispose() {
-    _hideTimer?.cancel();
-    _controller?.removeListener(_playerListener);
-    _controller?.dispose();
-    super.dispose();
+  void _loadNewVideo(String url) {
+    final videoId = YoutubePlayer.convertUrlToId(url);
+    if (videoId != null && _controller != null) {
+      _controller!.load(videoId);
+      _controller!.play();
+    }
   }
 
   // --- ACTIONS ---
@@ -151,16 +165,6 @@ class _SharedYouTubePlayerState extends State<SharedYouTubePlayer> {
     _resetHideTimer();
   }
 
-  void _toggleFullScreen() {
-    try {
-      if (_controller != null) {
-        _controller!.toggleFullScreenMode();
-      }
-    } catch (e) {
-      debugPrint("Full screen toggle failed: $e");
-    }
-  }
-
   void _sendSyncEvent(String status, int seconds) {
     context.read<RoomBloc>().add(
       SyncYouTubeStateEvent(
@@ -171,7 +175,49 @@ class _SharedYouTubePlayerState extends State<SharedYouTubePlayer> {
     );
   }
 
-  // --- UI LOGIC ---
+  // --- FULL SCREEN LOGIC ---
+
+  void _toggleCustomFullScreen() {
+    if (!_isFullScreen) {
+      setState(() => _isFullScreen = true);
+
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+      Navigator.of(context, rootNavigator: true)
+          .push(
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) {
+                return _buildFullscreenScaffold();
+              },
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+            ),
+          )
+          .then((_) {
+            _exitFullScreenSystem();
+          });
+    } else {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
+  void _exitFullScreenSystem() {
+    if (!mounted) return;
+    setState(() => _isFullScreen = false);
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
+  }
+
+  // --- CONTROLS VISIBILITY ---
 
   void _toggleControlsVisibility() {
     setState(() => _isControlsVisible = !_isControlsVisible);
@@ -196,234 +242,281 @@ class _SharedYouTubePlayerState extends State<SharedYouTubePlayer> {
     if (d.inHours > 0) {
       return "${d.inHours}:${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}";
     }
-    return "${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}";
+    return "${d.inMinutes}:${twoDigits(d.inSeconds.remainder(60))}";
   }
+
+  // --- WIDGET BUILDERS ---
 
   @override
   Widget build(BuildContext context) {
-    // 1. Error State
-    if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 40),
-            const SizedBox(height: 10),
-            Text(_errorMessage!, style: const TextStyle(color: Colors.white)),
-          ],
-        ),
-      );
-    }
-
-    // 2. Loading State
     if (_controller == null) {
       return const Center(child: CircularProgressIndicator(color: Colors.red));
     }
 
+    if (_isFullScreen) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Icon(Icons.fullscreen, color: Colors.white24, size: 50),
+        ),
+      );
+    }
+
     return Column(
       children: [
-        // 1. VIDEO PLAYER (16:9)
         AspectRatio(
           aspectRatio: 16 / 9,
-          child: Container(
-            color: Colors.black,
-            child: Stack(
-              alignment: Alignment.center,
-              fit: StackFit.expand,
-              children: [
-                // LAYER A: ACTUAL VIDEO
-                YoutubePlayer(
-                  controller: _controller!,
-                  showVideoProgressIndicator: false,
+          child: _buildPlayerStack(isFullScreen: false),
+        ),
+        // SubtitleBox(currentPosition: _currentPosition, subtitles: _subtitles),
+      ],
+    );
+  }
+
+  Widget _buildFullscreenScaffold() {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _toggleCustomFullScreen();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Stack(
+            fit: StackFit.expand,
+            alignment: Alignment.center,
+            children: [
+              Center(
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: _buildPlayerStack(isFullScreen: true),
                 ),
-
-                // LAYER B: TOUCH INTERCEPTOR
-                GestureDetector(
-                  onTap: _toggleControlsVisibility,
-                  behavior: HitTestBehavior.translucent,
-                  child: Container(color: Colors.transparent),
+              ),
+              // Floating Subtitles in Landscape
+              if (_isControlsVisible == false || _isPlaying)
+                Positioned(
+                  bottom: _isControlsVisible ? 80 : 20,
+                  left: 60,
+                  right: 60,
+                  child: Center(child: _buildSubtitleText()),
                 ),
-
-                // LAYER C: CONTROLS
-                AnimatedOpacity(
-                  opacity: (_isControlsVisible || !_isPlaying || _isBuffering)
-                      ? 1.0
-                      : 0.0,
-                  duration: const Duration(milliseconds: 300),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.3),
-                    ),
-                    child: Stack(
-                      children: [
-                        // C1. PLAY/PAUSE CENTER
-                        Center(
-                          child: _isBuffering
-                              ? const CircularProgressIndicator(
-                                  color: Colors.white,
-                                )
-                              : widget.isHost
-                              ? Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: _hostTogglePlay,
-                                    borderRadius: BorderRadius.circular(50),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withOpacity(0.5),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        _isPlaying
-                                            ? Icons.pause
-                                            : Icons.play_arrow,
-                                        color: Colors.white,
-                                        size: 48,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                              : (!_isPlaying
-                                    ? Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withOpacity(0.5),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(
-                                          Icons.pause,
-                                          color: Colors.white,
-                                          size: 48,
-                                        ),
-                                      )
-                                    : const SizedBox()),
-                        ),
-
-                        // C2. STOP BUTTON (Host)
-                        if (widget.isHost)
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: IconButton(
-                              tooltip: null,
-                              icon: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                              style: IconButton.styleFrom(
-                                backgroundColor: Colors.black45,
-                              ),
-                              onPressed: () {
-                                context.read<RoomBloc>().add(
-                                  StopYouTubeEvent(widget.manager.roomData!.id),
-                                );
-                              },
-                            ),
-                          ),
-
-                        // C3. BOTTOM BAR
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.fromLTRB(12, 20, 12, 8),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.transparent,
-                                  Colors.black.withOpacity(0.8),
-                                ],
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Text(
-                                  "${_formatDuration(_currentPosition)} / ${_formatDuration(_totalDuration)}",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 20,
-                                    child: CupertinoSlider(
-                                      value: _currentPosition.inSeconds
-                                          .toDouble()
-                                          .clamp(
-                                            0,
-                                            _totalDuration.inSeconds.toDouble(),
-                                          ),
-                                      min: 0,
-                                      max:
-                                          _totalDuration.inSeconds.toDouble() >
-                                              0
-                                          ? _totalDuration.inSeconds.toDouble()
-                                          : 1.0,
-                                      activeColor: const Color(0xFFFF0000),
-                                      thumbColor: widget.isHost
-                                          ? const Color(0xFFFF0000)
-                                          : Colors.transparent,
-                                      onChangeStart: (_) {
-                                        if (widget.isHost) {
-                                          _isDragging = true;
-                                          _hideTimer?.cancel();
-                                        }
-                                      },
-                                      onChanged: (val) {
-                                        if (widget.isHost)
-                                          setState(
-                                            () => _currentPosition = Duration(
-                                              seconds: val.toInt(),
-                                            ),
-                                          );
-                                      },
-                                      onChangeEnd: (val) {
-                                        if (widget.isHost) {
-                                          _isDragging = false;
-                                          _hostSeekTo(val);
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                GestureDetector(
-                                  onTap: _toggleFullScreen,
-                                  child: Icon(
-                                    _isFullScreen
-                                        ? Icons.fullscreen_exit
-                                        : Icons.fullscreen,
-                                    color: Colors.white,
-                                    size: 26,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
         ),
+      ),
+    );
+  }
 
-        // 2. SUBTITLES
-        SubtitleBox(
-          currentPosition: _currentPosition,
-          subtitles: _mockSubtitles,
+  Widget _buildPlayerStack({required bool isFullScreen}) {
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        alignment: Alignment.center,
+        fit: StackFit.expand,
+        children: [
+          YoutubePlayer(
+            controller: _controller!,
+            showVideoProgressIndicator: false,
+          ),
+
+          GestureDetector(
+            onTap: _toggleControlsVisibility,
+            behavior: HitTestBehavior.translucent,
+            child: Container(color: Colors.transparent),
+          ),
+
+          AnimatedOpacity(
+            opacity: (_isControlsVisible || !_isPlaying || _isBuffering)
+                ? 1.0
+                : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: Container(
+              decoration: BoxDecoration(color: Colors.black.withOpacity(0.4)),
+              child: Stack(
+                children: [
+                  Center(
+                    child: _isBuffering
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : widget.isHost
+                        ? Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _hostTogglePlay,
+                              borderRadius: BorderRadius.circular(50),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  _isPlaying ? Icons.pause : Icons.play_arrow,
+                                  color: Colors.white,
+                                  size: isFullScreen ? 60 : 40,
+                                ),
+                              ),
+                            ),
+                          )
+                        : (!_isPlaying
+                              ? Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.pause,
+                                    color: Colors.white,
+                                    size: isFullScreen ? 60 : 40,
+                                  ),
+                                )
+                              : const SizedBox()),
+                  ),
+
+                  if (widget.isHost)
+                    Positioned(
+                      top: 16,
+                      right: 16,
+                      child: IconButton(
+                        tooltip: null, // FIX: Prevent Overlay Crash
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        iconSize: isFullScreen ? 32 : 24,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black54,
+                        ),
+                        onPressed: () {
+                          if (_isFullScreen) Navigator.of(context).pop();
+                          context.read<RoomBloc>().add(
+                            StopYouTubeEvent(widget.manager.roomData!.id),
+                          );
+                        },
+                      ),
+                    ),
+
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isFullScreen ? 24 : 12,
+                        vertical: isFullScreen ? 16 : 8,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.8),
+                          ],
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            "${_formatDuration(_currentPosition)} / ${_formatDuration(_totalDuration)}",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: isFullScreen ? 14 : 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SizedBox(
+                              height: 20,
+                              // FIX: Use CupertinoSlider to avoid "No Overlay widget found"
+                              child: CupertinoSlider(
+                                value: _currentPosition.inSeconds
+                                    .toDouble()
+                                    .clamp(
+                                      0,
+                                      _totalDuration.inSeconds.toDouble(),
+                                    ),
+                                min: 0,
+                                max: _totalDuration.inSeconds.toDouble() > 0
+                                    ? _totalDuration.inSeconds.toDouble()
+                                    : 1.0,
+                                activeColor: const Color(0xFFFF0000),
+                                thumbColor: widget.isHost
+                                    ? const Color(0xFFFF0000)
+                                    : Colors.transparent,
+                                onChangeStart: (_) {
+                                  if (widget.isHost) {
+                                    _isDragging = true;
+                                    _hideTimer?.cancel();
+                                  }
+                                },
+                                onChanged: (val) {
+                                  if (widget.isHost)
+                                    setState(
+                                      () => _currentPosition = Duration(
+                                        seconds: val.toInt(),
+                                      ),
+                                    );
+                                },
+                                onChangeEnd: (val) {
+                                  if (widget.isHost) {
+                                    _isDragging = false;
+                                    _hostSeekTo(val);
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: _toggleCustomFullScreen,
+                            child: Icon(
+                              _isFullScreen
+                                  ? Icons.fullscreen_exit
+                                  : Icons.fullscreen,
+                              color: Colors.white,
+                              size: isFullScreen ? 32 : 24,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubtitleText() {
+    final currentLine = _subtitles.firstWhere(
+      (s) => _currentPosition >= s.start && _currentPosition <= s.end,
+      orElse: () =>
+          SubtitleLine(start: Duration.zero, end: Duration.zero, text: ""),
+    );
+
+    if (currentLine.text.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        currentLine.text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.yellow,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          shadows: [
+            Shadow(offset: Offset(0, 1), blurRadius: 4, color: Colors.black),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

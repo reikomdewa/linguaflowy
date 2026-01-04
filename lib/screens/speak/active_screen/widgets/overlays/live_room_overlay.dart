@@ -10,8 +10,9 @@ import 'package:linguaflow/screens/speak/active_screen/managers/room_global_mana
 import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/full_screen_participant.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/leave_comfirm_dialog.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/sheets/board_requests_sheet.dart';
-import 'package:linguaflow/screens/speak/active_screen/widgets/sheets/youtube_requests_sheet.dart'; // Ensure this exists
-import 'package:linguaflow/screens/speak/active_screen/widgets/youtube_input_dialog.dart'; // Ensure this exists
+import 'package:linguaflow/screens/speak/active_screen/widgets/sheets/join_requests_sheet.dart';
+import 'package:linguaflow/screens/speak/active_screen/widgets/sheets/youtube_requests_sheet.dart';
+import 'package:linguaflow/screens/speak/active_screen/widgets/youtube_input_dialog.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
@@ -54,6 +55,12 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
   bool _isYouTubeRequestsOpen = false;
   bool _isBoardRequestsOpen = false;
 
+  // -- NEW FLAGS FOR STACK WIDGETS --
+  bool _isUserManagementOpen = false;
+  bool _isBanningMode = false; // true = ban, false = mute
+  bool _isEditRoomOpen = false;
+  bool _isReportOpen = false;
+  bool _isJoinRequestsOpen = false;
   // Track who we are accepting a request from
   String? _pendingRequestUserId;
 
@@ -109,6 +116,12 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
     _isYouTubeRequestsOpen = false;
     _isBoardRequestsOpen = false;
     _pendingRequestUserId = null;
+
+    // Reset new flags
+    _isUserManagementOpen = false;
+    _isEditRoomOpen = false;
+    _isReportOpen = false;
+    _isJoinRequestsOpen = false;
   }
 
   void _resolveSpotlight(String? spotlightId) {
@@ -197,6 +210,8 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
       ..on<TrackUnsubscribedEvent>((_) => _safeSetState())
       ..on<LocalTrackPublishedEvent>((_) => _safeSetState())
       ..on<LocalTrackUnpublishedEvent>((_) => _safeSetState())
+      ..on<TrackMutedEvent>((_) => _safeSetState()) // Capture Mutes
+      ..on<TrackUnmutedEvent>((_) => _safeSetState()) // Capture Unmutes
       ..on<RoomDisconnectedEvent>((_) => RoomGlobalManager().leaveRoom());
   }
 
@@ -241,7 +256,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
   void _handleParticipantTap(Participant p) {
     setState(() {
       _selectedParticipant = p;
-      _resetUIState(); // Close all sheets/dialogs
+      _resetUIState();
     });
   }
 
@@ -371,26 +386,135 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
             manager: manager,
             isHost: isHost,
             onClose: () => setState(() => _isSettingsOpen = false),
-            // Updated Callback: Opens Requests
+            // Callbacks
             onOpenRequests: () {
               setState(() {
                 _isSettingsOpen = false;
-                _isBoardRequestsOpen = true; // Use separate flag if distinct
-                // Or if combining requests, just use one flag.
-                // Assuming you have separate lists, let's open Board requests first
-                // OR you can update RoomMenuSheet to split them.
-                // For now, let's assume this opens Youtube Requests as requested by logic:
-                _isYouTubeRequestsOpen = true;
+                // Check for Join Requests first (Priority)
+                if (manager.roomData!.joinRequests.isNotEmpty) {
+                  _isJoinRequestsOpen = true;
+                } else {
+                  _isBoardRequestsOpen = true;
+                  _isYouTubeRequestsOpen = true;
+                }
               });
             },
-            // Updated Callback: Opens Youtube Input
             onOpenYouTube: () {
               setState(() {
                 _isSettingsOpen = false;
-                _pendingRequestUserId = null; // Clean entry
+                _pendingRequestUserId = null;
                 _isYouTubeInputOpen = true;
               });
             },
+            onOpenUserManagement: (isBanning) {
+              setState(() {
+                _isSettingsOpen = false;
+                _isBanningMode = isBanning;
+                _isUserManagementOpen = true;
+              });
+            },
+            onOpenEdit: () {
+              setState(() {
+                _isSettingsOpen = false;
+                _isEditRoomOpen = true;
+              });
+            },
+            onOpenReport: () {
+              setState(() {
+                _isSettingsOpen = false;
+                _isReportOpen = true;
+              });
+            },
+          ),
+        ],
+
+        // --- NEW: USER MANAGEMENT (MUTES/BANS) ---
+        if (_isUserManagementOpen &&
+            manager.isExpanded &&
+            manager.roomData != null) ...[
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => setState(() => _isUserManagementOpen = false),
+              child: Container(color: Colors.black.withOpacity(0.5)),
+            ),
+          ),
+          UserManagementSheetStack(
+            isBanning: _isBanningMode,
+            members: manager.roomData!.members,
+            roomId: manager.roomData!.id,
+            onClose: () => setState(() => _isUserManagementOpen = false),
+            manager: manager,
+          ),
+        ],
+
+        // --- NEW: EDIT ROOM DIALOG ---
+        if (_isEditRoomOpen &&
+            manager.isExpanded &&
+            manager.roomData != null) ...[
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => setState(() => _isEditRoomOpen = false),
+              child: Container(color: Colors.black.withOpacity(0.7)),
+            ),
+          ),
+          EditRoomDialogStack(
+            key: const ValueKey('edit_room_dialog'), // Prevents state loss
+            room: manager.roomData!,
+            onClose: () => setState(() => _isEditRoomOpen = false),
+          ),
+        ],
+        // --- JOIN REQUESTS (BANNED USERS) ---
+      // --- JOIN REQUESTS (BANNED USERS) ---
+        if (_isJoinRequestsOpen &&
+            manager.isExpanded &&
+            manager.roomData != null) ...[
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => setState(() => _isJoinRequestsOpen = false),
+              child: Container(color: Colors.black.withOpacity(0.5)),
+            ),
+          ),
+          JoinRequestsSheet(
+            room: manager.roomData!,
+            onClose: () => setState(() => _isJoinRequestsOpen = false),
+            
+            // ACCEPT HANDLER
+            onAccept: (userId, req) {
+              // This triggers the new robust Transaction logic
+              context.read<RoomBloc>().add(
+                ApproveRejoinEvent(
+                  roomId: manager.roomData!.id,
+                  userId: userId,
+                  requestMap: req,
+                ),
+              );
+              // Auto-close if this was the last request
+              if (manager.roomData!.joinRequests.length <= 1) {
+                setState(() => _isJoinRequestsOpen = false);
+              }
+            },
+            
+            // DENY HANDLER
+            onDeny: (req) {
+              context.read<RoomBloc>().add(
+                DenyRejoinEvent(roomId: manager.roomData!.id, requestMap: req),
+              );
+            },
+          ),
+        ],
+        // --- NEW: REPORT DIALOG ---
+        if (_isReportOpen &&
+            manager.isExpanded &&
+            manager.roomData != null) ...[
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => setState(() => _isReportOpen = false),
+              child: Container(color: Colors.black.withOpacity(0.7)),
+            ),
+          ),
+          ReportDialogStack(
+            roomId: manager.roomData!.id,
+            onClose: () => setState(() => _isReportOpen = false),
           ),
         ],
 
@@ -409,8 +533,11 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
             onClose: () => setState(() => _isBoardRequestsOpen = false),
           ),
         ],
-  // YOUTUBE REQUESTS SHEET (Host View)
-        if (_isYouTubeRequestsOpen && manager.isExpanded && manager.roomData != null) ...[
+
+        // YOUTUBE REQUESTS SHEET
+        if (_isYouTubeRequestsOpen &&
+            manager.isExpanded &&
+            manager.roomData != null) ...[
           Positioned.fill(
             child: GestureDetector(
               onTap: () => setState(() => _isYouTubeRequestsOpen = false),
@@ -420,24 +547,20 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           YouTubeRequestsSheet(
             room: manager.roomData!,
             onClose: () => setState(() => _isYouTubeRequestsOpen = false),
-            // UPDATED CALLBACK:
             onAccept: (url, requestMap) {
-              // 1. Close Sheet
               setState(() => _isYouTubeRequestsOpen = false);
-              
-              // 2. Play Immediately (No Input Dialog needed for host here)
               context.read<RoomBloc>().add(
                 PlayYouTubeVideoEvent(
                   roomId: manager.roomData!.id,
                   videoUrl: url,
-                  requestToRemove: requestMap, // Remove the request
-                )
+                  requestToRemove: requestMap,
+                ),
               );
             },
           ),
         ],
 
-        // YOUTUBE INPUT DIALOG (Used by Host to Play Direct, OR Guest to Request)
+        // YOUTUBE INPUT DIALOG
         if (_isYouTubeInputOpen && manager.isExpanded) ...[
           Positioned.fill(
             child: GestureDetector(
@@ -449,31 +572,27 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
             onCancel: () => setState(() => _isYouTubeInputOpen = false),
             onPlay: (url) {
               setState(() => _isYouTubeInputOpen = false);
-              
               if (manager.roomData == null) return;
               final roomId = manager.roomData!.id;
-
               if (isHost) {
-                // HOST: Plays directly
                 context.read<RoomBloc>().add(
-                  PlayYouTubeVideoEvent(roomId: roomId, videoUrl: url)
+                  PlayYouTubeVideoEvent(roomId: roomId, videoUrl: url),
                 );
               } else {
-                // GUEST: Sends Request with URL
                 if (currentUser != null) {
                   context.read<RoomBloc>().add(
                     RequestYouTubeAccessEvent(
                       roomId: roomId,
                       userId: currentUser.uid,
                       videoUrl: url,
-                    )
+                    ),
                   );
-                  // Optional: Show snackbar "Request Sent"
                 }
               }
             },
           ),
         ],
+
         // PARTICIPANT OPTIONS
         if (_selectedParticipant != null && manager.isExpanded) ...[
           Positioned.fill(
@@ -535,6 +654,481 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           ),
         ],
       ],
+    );
+  }
+}
+
+// ==========================================
+//  HELPER STACK WIDGETS
+// ==========================================
+
+// --- 1. User Management Sheet (Mutes/Bans) ---
+class UserManagementSheetStack extends StatelessWidget {
+  final bool isBanning;
+  final List<RoomMember> members;
+  final String roomId;
+  final VoidCallback onClose;
+  final RoomGlobalManager manager;
+
+  const UserManagementSheetStack({
+    super.key,
+    required this.isBanning,
+    required this.members,
+    required this.roomId,
+    required this.onClose,
+    required this.manager,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Filter out the host
+    final currentUserUid = FirebaseAuth.instance.currentUser?.uid;
+    final guests = members.where((m) => m.uid != currentUserUid).toList();
+
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Material(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const SizedBox(width: 40),
+                  Text(
+                    isBanning ? "Ban Users" : "Manage Audio",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white70),
+                    onPressed: onClose,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              if (guests.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text(
+                    "No guests in the room.",
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ),
+
+              // LIST
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: guests.length,
+                  itemBuilder: (context, index) {
+                    final member = guests[index];
+                    return _UserAudioTile(
+                      key: ValueKey(
+                        member.uid,
+                      ), // Critical: Keeps state logic attached to the user
+                      member: member,
+                      manager: manager,
+                      isBanning: isBanning,
+                      roomId: roomId,
+                      onCloseSheet: onClose,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// --- PRIVATE HELPER: AUDIO TILE ---
+class _UserAudioTile extends StatefulWidget {
+  final RoomMember member;
+  final RoomGlobalManager manager;
+  final bool isBanning;
+  final String roomId;
+  final VoidCallback onCloseSheet;
+
+  const _UserAudioTile({
+    super.key,
+    required this.member,
+    required this.manager,
+    required this.isBanning,
+    required this.roomId,
+    required this.onCloseSheet,
+  });
+
+  @override
+  State<_UserAudioTile> createState() => _UserAudioTileState();
+}
+
+class _UserAudioTileState extends State<_UserAudioTile> {
+  Participant? _participant;
+
+  @override
+  void initState() {
+    super.initState();
+    _findParticipant();
+  }
+
+  @override
+  void didUpdateWidget(covariant _UserAudioTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re-check on every build, because the Room object or participants map changes
+    _findParticipant();
+  }
+
+  @override
+  void dispose() {
+    _participant?.removeListener(_onParticipantChanged);
+    super.dispose();
+  }
+
+  void _findParticipant() {
+    final room = widget.manager.livekitRoom;
+    if (room == null) return;
+
+    // 1. DIRECT LOOKUP in Remote Participants
+    // We search values because keys are SIDs, not always UIDs
+    Participant? found;
+    try {
+      found = room.remoteParticipants.values.firstWhere(
+        (p) => p.identity == widget.member.uid,
+      );
+    } catch (_) {
+      // Not in remote participants
+    }
+
+    // 2. Fallback: Check Local (Shouldn't happen due to filter, but safe)
+    if (found == null && room.localParticipant?.identity == widget.member.uid) {
+      found = room.localParticipant;
+    }
+
+    // 3. Listener Management
+    if (found != _participant) {
+      // If we switched to a new object (or went from null to found)
+      if (_participant != null) {
+        _participant!.removeListener(_onParticipantChanged);
+      }
+      _participant = found;
+      if (_participant != null) {
+        _participant!.addListener(_onParticipantChanged);
+      }
+
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _onParticipantChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. Get Live Data directly from Participant object
+    bool isMicOn = false;
+    bool isSpeaking = false;
+    bool isConnected = _participant != null;
+
+    if (_participant != null) {
+      isMicOn = _participant!.isMicrophoneEnabled();
+      isSpeaking = _participant!.isSpeaking;
+    }
+
+    String statusText;
+    Color statusColor;
+
+    if (!isConnected) {
+      statusText = "Not Connected";
+      statusColor = Colors.grey;
+    } else if (isSpeaking) {
+      statusText = "Speaking...";
+      statusColor = Colors.greenAccent;
+    } else if (isMicOn) {
+      statusText = "Mic On";
+      statusColor = Colors.green;
+    } else {
+      statusText = "Muted";
+      statusColor = Colors.redAccent;
+    }
+
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundImage:
+            (widget.member.avatarUrl != null &&
+                widget.member.avatarUrl!.isNotEmpty)
+            ? NetworkImage(widget.member.avatarUrl!)
+            : null,
+        backgroundColor: Colors.grey[800],
+        child:
+            (widget.member.avatarUrl == null ||
+                widget.member.avatarUrl!.isEmpty)
+            ? const Icon(Icons.person, color: Colors.white70)
+            : null,
+      ),
+      title: Text(
+        widget.member.displayName ?? "Guest",
+        style: const TextStyle(color: Colors.white),
+      ),
+      subtitle: !widget.isBanning
+          ? Row(
+              children: [
+                Icon(Icons.circle, size: 8, color: statusColor),
+                const SizedBox(width: 6),
+                Text(
+                  statusText,
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            )
+          : null,
+      trailing: IconButton(
+        icon: Icon(
+          widget.isBanning
+              ? Icons.gavel
+              : (isMicOn ? Icons.mic : Icons.mic_off),
+          color: widget.isBanning
+              ? Colors.redAccent
+              : (isMicOn ? Colors.green : Colors.grey),
+        ),
+        onPressed: () {
+          if (widget.isBanning) {
+            context.read<RoomBloc>().add(
+              KickUserEvent(roomId: widget.roomId, userId: widget.member.uid),
+            );
+            widget.onCloseSheet();
+          } else {
+            // Mute Logic - Visual only for now as discussed
+            if (isConnected)
+              debugPrint("Mute toggled for ${widget.member.displayName}");
+          }
+        },
+      ),
+    );
+  }
+}
+
+// --- 2. Edit Room Dialog (Stack Version) ---
+class EditRoomDialogStack extends StatefulWidget {
+  final ChatRoom room;
+  final VoidCallback onClose;
+  const EditRoomDialogStack({
+    super.key,
+    required this.room,
+    required this.onClose,
+  });
+
+  @override
+  State<EditRoomDialogStack> createState() => _EditRoomDialogStackState();
+}
+
+class _EditRoomDialogStackState extends State<EditRoomDialogStack> {
+  late TextEditingController _titleCtrl;
+  late TextEditingController _descCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController(text: widget.room.title);
+    _descCtrl = TextEditingController(text: widget.room.description);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Material(
+        color: const Color(0xFF2C2C2C),
+        borderRadius: BorderRadius.circular(12),
+        elevation: 10,
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.85,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Edit Room",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: _titleCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: "Topic",
+                  labelStyle: TextStyle(color: Colors.white54),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _descCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: "Description",
+                  labelStyle: TextStyle(color: Colors.white54),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: widget.onClose,
+                    child: const Text("Cancel"),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      context.read<RoomBloc>().add(
+                        UpdateRoomInfoEvent(
+                          roomId: widget.room.id,
+                          title: _titleCtrl.text,
+                          description: _descCtrl.text,
+                        ),
+                      );
+                      widget.onClose();
+                    },
+                    child: const Text("Save"),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// --- 3. Report Dialog (Stack Version) ---
+class ReportDialogStack extends StatefulWidget {
+  final String roomId;
+  final VoidCallback onClose;
+  const ReportDialogStack({
+    super.key,
+    required this.roomId,
+    required this.onClose,
+  });
+
+  @override
+  State<ReportDialogStack> createState() => _ReportDialogStackState();
+}
+
+class _ReportDialogStackState extends State<ReportDialogStack> {
+  final TextEditingController _reasonCtrl = TextEditingController();
+  String _selectedReason = "Spam";
+  final List<String> _reasons = [
+    "Spam",
+    "Abusive Language",
+    "Inappropriate Content",
+    "Other",
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Material(
+        color: const Color(0xFF2C2C2C),
+        borderRadius: BorderRadius.circular(12),
+        elevation: 10,
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.85,
+          padding: const EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Report Room",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 15),
+                const Text(
+                  "Reason:",
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+
+                // FIXED: Use Radio Buttons instead of Dropdown to avoid Navigator crashes in Overlay
+                ..._reasons.map(
+                  (r) => RadioListTile<String>(
+                    title: Text(
+                      r,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                    value: r,
+                    groupValue: _selectedReason,
+                    activeColor: Colors.redAccent,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    onChanged: (val) => setState(() => _selectedReason = val!),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _reasonCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: "Description (Optional)",
+                    hintStyle: TextStyle(color: Colors.white54),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: widget.onClose,
+                      child: const Text("Cancel"),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                      ),
+                      onPressed: () {
+                        final reporterId =
+                            FirebaseAuth.instance.currentUser?.uid ?? "anon";
+                        context.read<RoomBloc>().add(
+                          ReportRoomEvent(
+                            roomId: widget.roomId,
+                            reporterId: reporterId,
+                            reason: _selectedReason,
+                            description: _reasonCtrl.text,
+                          ),
+                        );
+                        widget.onClose();
+                      },
+                      child: const Text("Report"),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

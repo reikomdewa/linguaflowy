@@ -21,7 +21,6 @@ import flutter_inappwebview_macos
 import flutter_secure_storage_darwin
 import flutter_tts
 import flutter_webrtc
-import flutter_whisper_kit_apple
 import google_sign_in_ios
 import just_audio
 import livekit_client
@@ -55,7 +54,6 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   FlutterSecureStorageDarwinPlugin.register(with: registry.registrar(forPlugin: "FlutterSecureStorageDarwinPlugin"))
   FlutterTtsPlugin.register(with: registry.registrar(forPlugin: "FlutterTtsPlugin"))
   FlutterWebRTCPlugin.register(with: registry.registrar(forPlugin: "FlutterWebRTCPlugin"))
-  FlutterWhisperKitApplePlugin.register(with: registry.registrar(forPlugin: "FlutterWhisperKitApplePlugin"))
   FLTGoogleSignInPlugin.register(with: registry.registrar(forPlugin: "FLTGoogleSignInPlugin"))
   JustAudioPlugin.register(with: registry.registrar(forPlugin: "JustAudioPlugin"))
   LiveKitPlugin.register(with: registry.registrar(forPlugin: "LiveKitPlugin"))

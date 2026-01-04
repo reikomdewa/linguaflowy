@@ -5,16 +5,11 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/participant_tile.dart';
 import 'package:linguaflow/screens/speak/widgets/sheets/room_chat_sheet.dart';
 import 'package:linguaflow/screens/speak/active_screen/widgets/features/whiteboard_feature.dart';
-import 'package:share_plus/share_plus.dart';
 import 'room_controls.dart';
 
 // FEATURES
 import 'package:linguaflow/screens/speak/active_screen/widgets/features/shared_youtube_player.dart';
 
-// BLOC IMPORTS
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
-import 'package:linguaflow/blocs/speak/room/room_event.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class MorphingRoomCard extends StatefulWidget {
@@ -248,10 +243,12 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
     // Dot Logic
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final isHost = widget.manager.roomData?.hostId == currentUserId;
-    
-    final hasBoardRequests = (widget.manager.roomData?.boardRequests?.isNotEmpty ?? false);
-    final hasYouTubeRequests = (widget.manager.roomData?.youtubeRequests?.isNotEmpty ?? false);
-    
+
+    final hasBoardRequests =
+        (widget.manager.roomData?.boardRequests?.isNotEmpty ?? false);
+    final hasYouTubeRequests =
+        (widget.manager.roomData?.youtubeRequests?.isNotEmpty ?? false);
+
     final showMenuDot = isHost && (hasBoardRequests || hasYouTubeRequests);
 
     return Column(
@@ -262,20 +259,7 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
             children: [
               _buildHostInfoPill(),
               const Spacer(),
-              IconButton(
-                icon: const Icon(
-                  Icons.ios_share,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                onPressed: () {
-                  if (widget.manager.roomData != null) {
-                    Share.share(
-                      "Join my live room! ID: ${widget.manager.roomData!.id}",
-                    );
-                  }
-                },
-              ),
+
               IconButton(
                 icon: const Icon(
                   Icons.keyboard_arrow_down,
@@ -375,10 +359,7 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
                         decoration: BoxDecoration(
                           color: Colors.amber,
                           shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.black,
-                            width: 2,
-                          ),
+                          border: Border.all(color: Colors.black, width: 2),
                         ),
                       ),
                     ),
@@ -455,16 +436,14 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: CollaborativeWhiteboard(
-            manager: widget.manager,
-          ), 
+          child: CollaborativeWhiteboard(manager: widget.manager),
         ),
       );
-    } 
+    }
     // 2. YOUTUBE
     else if (widget.manager.activeFeature == RoomActiveFeature.youtube) {
       final url = widget.manager.roomData?.activeFeatureData;
-      
+
       if (url != null && url.isNotEmpty) {
         return Container(
           decoration: BoxDecoration(
@@ -475,7 +454,7 @@ class _MorphingRoomCardState extends State<MorphingRoomCard> {
             borderRadius: BorderRadius.circular(12),
             child: SharedYouTubePlayer(
               // IMPORTANT: Key forces rebuild when URL changes
-              key: ValueKey(url), 
+              key: ValueKey(url),
               manager: widget.manager,
               videoUrl: url,
               isHost: isHost,

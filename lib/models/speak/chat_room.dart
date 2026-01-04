@@ -30,13 +30,15 @@ class ChatRoom extends Equatable {
   // --- FEATURES ---
   final String? activeFeature; // 'whiteboard', 'youtube', 'none'
   final String? activeFeatureData; // e.g. YouTube URL or UserID for Board
-  
+
   // This was missing! It holds { 'status': 'playing', 'position': 120 }
-  final Map<String, dynamic>? activeFeatureState; 
+  final Map<String, dynamic>? activeFeatureState;
 
   // --- REQUEST LISTS ---
   final List<String>? boardRequests;
-  final List<Map<String, dynamic>>? youtubeRequests; 
+  final List<Map<String, dynamic>>? youtubeRequests;
+  final List<Map<String, dynamic>> joinRequests;
+  final List<String> bannedUserIds;
 
   const ChatRoom({
     required this.id,
@@ -62,14 +64,16 @@ class ChatRoom extends Equatable {
     this.roomType = 'audio',
     this.isActive = true,
     this.spotlightedUserId,
-    
+
     // Feature Fields
     this.activeFeature,
     this.activeFeatureData,
     this.activeFeatureState, // <--- ADDED HERE
-    
+
     this.boardRequests,
     this.youtubeRequests,
+    this.joinRequests = const [],
+    this.bannedUserIds = const [],
   });
 
   // Helper getters for UI
@@ -101,14 +105,16 @@ class ChatRoom extends Equatable {
       'roomType': roomType,
       'isActive': isActive,
       'spotlightedUserId': spotlightedUserId,
-      
+
       // Feature Fields
       'activeFeature': activeFeature,
       'activeFeatureData': activeFeatureData,
       'activeFeatureState': activeFeatureState, // <--- ADDED HERE
-      
+
       'boardRequests': boardRequests,
       'youtubeRequests': youtubeRequests,
+      'joinRequests': joinRequests,
+      'bannedUserIds': bannedUserIds,
     };
   }
 
@@ -146,8 +152,16 @@ class ChatRoom extends Equatable {
         parsedMembers = [];
       }
     }
-    
+
     List<Map<String, dynamic>> parseYoutubeRequests(dynamic val) {
+      if (val == null) return [];
+      if (val is List) {
+        return val.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return [];
+    }
+
+    List<Map<String, dynamic>> parseJoinRequests(dynamic val) {
       if (val == null) return [];
       if (val is List) {
         return val.map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -179,20 +193,22 @@ class ChatRoom extends Equatable {
       roomType: map['roomType'] ?? 'audio',
       isActive: map['isActive'] ?? true,
       spotlightedUserId: map['spotlightedUserId'],
-      
+
       // Feature Fields
       activeFeature: map['activeFeature'],
       activeFeatureData: map['activeFeatureData'],
       // <--- ADDED HERE: Safe parsing for the sync state map
-      activeFeatureState: map['activeFeatureState'] != null 
-          ? Map<String, dynamic>.from(map['activeFeatureState']) 
+      activeFeatureState: map['activeFeatureState'] != null
+          ? Map<String, dynamic>.from(map['activeFeatureState'])
           : null,
-      
+
       // Request Lists
-      boardRequests: map['boardRequests'] != null 
-          ? List<String>.from(map['boardRequests']) 
+      boardRequests: map['boardRequests'] != null
+          ? List<String>.from(map['boardRequests'])
           : [],
       youtubeRequests: parseYoutubeRequests(map['youtubeRequests']),
+      bannedUserIds: List<String>.from(map['bannedUserIds'] ?? []),
+      joinRequests: parseJoinRequests(map['joinRequests']),
     );
   }
 
@@ -219,6 +235,9 @@ class ChatRoom extends Equatable {
     Map<String, dynamic>? activeFeatureState, // <--- ADDED HERE
     List<String>? boardRequests,
     List<Map<String, dynamic>>? youtubeRequests,
+
+    List<String>? bannedUserIds,
+    List<Map<String, dynamic>>? joinRequests,
   }) {
     return ChatRoom(
       id: id,
@@ -247,9 +266,11 @@ class ChatRoom extends Equatable {
       // Feature Updates
       activeFeature: activeFeature ?? this.activeFeature,
       activeFeatureData: activeFeatureData ?? this.activeFeatureData,
-      activeFeatureState: activeFeatureState ?? this.activeFeatureState, // <--- ADDED HERE
+      activeFeatureState:
+          activeFeatureState ?? this.activeFeatureState, // <--- ADDED HERE
       boardRequests: boardRequests ?? this.boardRequests,
       youtubeRequests: youtubeRequests ?? this.youtubeRequests,
+      bannedUserIds: bannedUserIds ?? this.bannedUserIds,
     );
   }
 
@@ -271,5 +292,7 @@ class ChatRoom extends Equatable {
     activeFeatureState, // <--- ADDED HERE
     boardRequests,
     youtubeRequests,
+    bannedUserIds,
+    joinRequests,
   ];
 }
