@@ -69,19 +69,21 @@ class _ParticipantTileState extends State<ParticipantTile> {
       // Strategy A: Direct UID Match (Correct)
       if (participant.identity == roomData.hostId) {
         isHost = true;
-      } 
+      }
       // Strategy B: Lookup Member to check ID
       else if (roomData.members.isNotEmpty) {
         try {
           // Try finding by UID
           matchedMember = roomData.members.firstWhere(
-            (m) => m.uid == participant.identity, 
+            (m) => m.uid == participant.identity,
             orElse: () => roomData.members.firstWhere(
               // Fallback: Try finding by Display Name (Legacy/ID Mismatch Fix)
-              (m) => m.displayName == participant.identity || m.displayName == participant.name,
-            )
+              (m) =>
+                  m.displayName == participant.identity ||
+                  m.displayName == participant.name,
+            ),
           );
-          
+
           if (matchedMember != null && matchedMember.uid == roomData.hostId) {
             isHost = true;
           }
@@ -109,7 +111,9 @@ class _ParticipantTileState extends State<ParticipantTile> {
 
     // Fallbacks
     if (displayName.isEmpty || displayName == "Guest") {
-      displayName = participant.name.isNotEmpty ? participant.name : participant.identity;
+      displayName = participant.name.isNotEmpty
+          ? participant.name
+          : participant.identity;
     }
     if (participant is LocalParticipant) {
       displayName = "$displayName (You)";
@@ -120,12 +124,16 @@ class _ParticipantTileState extends State<ParticipantTile> {
     if (participant.videoTrackPublications.isNotEmpty) {
       videoPub = participant.videoTrackPublications.first;
     }
-    final isVideoActive = videoPub != null && videoPub.subscribed && videoPub.track != null && !videoPub.muted;
+    final isVideoActive =
+        videoPub != null &&
+        videoPub.subscribed &&
+        videoPub.track != null &&
+        !videoPub.muted;
     final isMicOn = participant.isMicrophoneEnabled();
 
     // --- 5. SAFE AREA ---
-    final double topBadgePadding = widget.isFullScreen 
-        ? MediaQuery.of(context).padding.top + 12 
+    final double topBadgePadding = widget.isFullScreen
+        ? MediaQuery.of(context).padding.top + 12
         : 6.0;
     final double leftBadgePadding = widget.isFullScreen ? 16.0 : 6.0;
 
@@ -135,23 +143,42 @@ class _ParticipantTileState extends State<ParticipantTile> {
         borderRadius: widget.isFullScreen ? null : BorderRadius.circular(12),
         border: widget.isFullScreen
             ? null
-            : Border.all(color: participant.isSpeaking ? Colors.greenAccent : Colors.transparent, width: participant.isSpeaking ? 3 : 0),
+            : Border.all(
+                color: participant.isSpeaking
+                    ? Colors.greenAccent
+                    : Colors.transparent,
+                width: participant.isSpeaking ? 3 : 0,
+              ),
       ),
       child: ClipRRect(
-        borderRadius: widget.isFullScreen ? BorderRadius.zero : BorderRadius.circular(10),
+        borderRadius: widget.isFullScreen
+            ? BorderRadius.zero
+            : BorderRadius.circular(10),
         child: Stack(
           fit: StackFit.expand,
           children: [
             // A. VIDEO / AVATAR
             if (isVideoActive)
-              VideoTrackRenderer(videoPub.track as VideoTrack, fit: widget.fit == BoxFit.contain ? VideoViewFit.contain : VideoViewFit.cover)
+              VideoTrackRenderer(
+                videoPub.track as VideoTrack,
+                fit: widget.fit == BoxFit.contain
+                    ? VideoViewFit.contain
+                    : VideoViewFit.cover,
+              )
             else
               Container(
                 color: Colors.grey[900],
                 child: Center(
-                  child: avatarUrl != null 
-                      ? CircleAvatar(radius: widget.isFullScreen ? 60 : 25, backgroundImage: NetworkImage(avatarUrl))
-                      : const Icon(Icons.person, color: Colors.white24, size: 40),
+                  child: avatarUrl != null
+                      ? CircleAvatar(
+                          radius: widget.isFullScreen ? 60 : 25,
+                          backgroundImage: NetworkImage(avatarUrl),
+                        )
+                      : const Icon(
+                          Icons.person,
+                          color: Colors.white24,
+                          size: 40,
+                        ),
                 ),
               ),
 
@@ -163,7 +190,11 @@ class _ParticipantTileState extends State<ParticipantTile> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.pause_circle_filled_rounded, color: Colors.amber, size: widget.isFullScreen ? 60 : 32),
+                      Icon(
+                        Icons.pause_circle_filled_rounded,
+                        color: Colors.amber,
+                        size: widget.isFullScreen ? 60 : 32,
+                      ),
                       const SizedBox(height: 8),
                       Text(
                         "HOST PAUSED",
@@ -173,7 +204,13 @@ class _ParticipantTileState extends State<ParticipantTile> {
                           fontWeight: FontWeight.w900,
                           fontSize: widget.isFullScreen ? 18 : 11,
                           letterSpacing: 1.2,
-                          shadows: const [Shadow(blurRadius: 4, color: Colors.black, offset: Offset(0, 1))]
+                          shadows: const [
+                            Shadow(
+                              blurRadius: 4,
+                              color: Colors.black,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -183,16 +220,54 @@ class _ParticipantTileState extends State<ParticipantTile> {
 
             // C. NAME BAR
             Positioned(
-              bottom: 0, left: 0, right: 0,
+              bottom: 5, // Moved up slightly for a better look
+              left: 5, // Anchored to left
+              // REMOVED: right: 0 (This stops it from stretching full width)
               child: Container(
-                color: Colors.black54,
-                padding: EdgeInsets.all(widget.isFullScreen ? 20 : 6),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black54.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(4), // Rounded corners
+                ),
+                // Constrain width so long names still truncate with ellipsis
+                constraints: BoxConstraints(
+                  maxWidth: widget.isFullScreen
+                      ? MediaQuery.of(context).size.width * 0.7
+                      : 100,
+                ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min, // Shrink wrap the row
                   children: [
-                    Expanded(child: Text(displayName, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white))),
-                    Icon(isMicOn ? Icons.mic : Icons.mic_off, size: 16, color: isMicOn ? Colors.green : Colors.red),
+                    Flexible(
+                      child: Text(
+                        displayName,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    // If you want the mic icon back, uncomment this:
+                    /*
+                    const SizedBox(width: 4),
+                    Icon(
+                      isMicOn ? Icons.mic : Icons.mic_off, 
+                      size: 14, 
+                      color: isMicOn ? Colors.greenAccent : Colors.redAccent
+                    ),
+                    */
                   ],
                 ),
+              ),
+            ),
+            Positioned(
+              right: 2,
+              top: 2,
+              child: Icon(
+                isMicOn ? Icons.mic : Icons.mic_off,
+                size: 16,
+                color: isMicOn ? Colors.green : Colors.red,
               ),
             ),
 
@@ -202,19 +277,40 @@ class _ParticipantTileState extends State<ParticipantTile> {
                 top: topBadgePadding,
                 left: leftBadgePadding,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEA4359),
-                    borderRadius: BorderRadius.circular(4),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 4, offset: const Offset(0, 2))],
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
                   ),
-                  child: const Text("HOST", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  decoration: BoxDecoration(
+                    color: Colors.black54.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(4),
+                    // boxShadow: [
+                    //   BoxShadow(
+                    //     color: Colors.black.withOpacity(0.4),
+                    //     blurRadius: 4,
+                    //     offset: const Offset(0, 2),
+                    //   ),
+                    // ],
+                  ),
+                  child: const Text(
+                    "HOST",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
-              
+
             // E. TOUCH
             if (widget.onTap != null)
-              Positioned.fill(child: Material(color: Colors.transparent, child: InkWell(onTap: widget.onTap))),
+              Positioned.fill(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(onTap: widget.onTap),
+                ),
+              ),
           ],
         ),
       ),
