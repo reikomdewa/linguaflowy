@@ -18,10 +18,10 @@ class ParticipantOptionsSheet extends StatelessWidget {
   final ChatRoom roomData;
   final VoidCallback onClose;
   
-  // CALLBACKS (Fixes Context/Bloc Issues)
+  // CALLBACKS
   final Function(Participant) onSetFullScreen;
-  final Function(String?) onToggleSpotlight; // Passes User ID or Null
-  final Function(String) onKickUser;         // Passes User ID
+  final Function(String?) onToggleSpotlight; 
+  final Function(String) onKickUser;
 
   const ParticipantOptionsSheet({
     super.key,
@@ -39,67 +39,34 @@ class ParticipantOptionsSheet extends StatelessWidget {
 
   void _handleFullScreen() {
     onClose();
-    Future.delayed(const Duration(milliseconds: 100), () {
+    Future.delayed(const Duration(milliseconds: 50), () {
       onSetFullScreen(targetParticipant);
     });
   }
 
   Future<void> _toggleMyMic() async {
-    final manager = RoomGlobalManager();
-    await manager.toggleMic();
+    await RoomGlobalManager().toggleMic();
     onClose();
   }
 
   Future<void> _toggleMyCam() async {
-    final manager = RoomGlobalManager();
-    await manager.toggleCamera();
+    await RoomGlobalManager().toggleCamera();
     onClose();
   }
 
   Future<void> _flipMyCamera() async {
-    final manager = RoomGlobalManager();
-    await manager.switchCamera();
+    await RoomGlobalManager().switchCamera();
     onClose();
   }
 
   void _handleSpotlight() {
-    // Logic: If currently spotlighted, send null (remove). Else send ID (add).
     final isCurrentlySpotlighted = currentSpotlightId == targetParticipant.identity;
     final userIdToSet = isCurrentlySpotlighted ? null : targetParticipant.identity;
-    
-    // Execute Callback using Parent's Context
     onToggleSpotlight(userIdToSet);
     onClose();
   }
 
-  void _confirmKick(BuildContext context) {
-    // Use global context for Dialog to ensure it overlays correctly
-    final dialogContext = navigatorKey.currentContext ?? context;
-
-    showDialog(
-      context: dialogContext,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
-        title: const Text("Kick User?", style: TextStyle(color: Colors.white)),
-        content: const Text("This will remove them from the room.", style: TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text("Cancel")),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogCtx);
-              // Execute Callback
-              onKickUser(targetParticipant.identity!);
-              onClose(); 
-            },
-            child: const Text("Kick", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _initiatePrivateChat() async {
-    // Private chat navigation still needs global context as it pushes a new screen
     final navContext = navigatorKey.currentContext;
     if (navContext == null) return;
 
@@ -108,18 +75,27 @@ class ParticipantOptionsSheet extends StatelessWidget {
       final myUser = authState.user;
       final targetId = targetParticipant.identity;
       
+      // Try to find the member info for the chat header
       RoomMember? targetMember;
       try {
         targetMember = roomData.members.firstWhere((m) => m.uid == targetId);
-      } catch (_) {}
+      } catch (_) {
+        // Fallback: Try by name if UID lookup fails (handling legacy connections)
+        try {
+          targetMember = roomData.members.firstWhere((m) => m.displayName == targetId);
+        } catch (_) {}
+      }
 
       onClose();
       RoomGlobalManager().collapse();
 
       try {
+        // Resolve the correct ID for the chat service as well
+        final chatPartnerId = targetMember?.uid ?? targetId!;
+
         final chatId = await PrivateChatService().startChat(
           currentUserId: myUser.id,
-          otherUserId: targetId!,
+          otherUserId: chatPartnerId,
           currentUserName: myUser.displayName,
           otherUserName: targetMember?.displayName ?? targetParticipant.name,
           currentUserPhoto: myUser.photoUrl,
@@ -138,6 +114,25 @@ class ParticipantOptionsSheet extends StatelessWidget {
         debugPrint("Error starting chat: $e");
       }
     }
+  }
+
+  // --- HELPER TO RESOLVE CORRECT UID ---
+  String _resolveRealUid(String identity) {
+    // 1. Check if identity matches a known UID in the list
+    try {
+      final memberByUid = roomData.members.firstWhere((m) => m.uid == identity);
+      return memberByUid.uid; // Identity IS the UID, proceed.
+    } catch (_) {}
+
+    // 2. If not, check if identity matches a DisplayName, and return THAT user's UID
+    try {
+      final memberByName = roomData.members.firstWhere((m) => m.displayName == identity);
+      debugPrint("Resolved Identity '$identity' to UID '${memberByName.uid}'");
+      return memberByName.uid;
+    } catch (_) {}
+
+    // 3. Fallback: just return identity
+    return identity;
   }
 
   @override
@@ -166,6 +161,7 @@ class ParticipantOptionsSheet extends StatelessWidget {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           child: Container(
             width: double.infinity,
+            padding: const EdgeInsets.only(bottom: 20),
             decoration: const BoxDecoration(
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
@@ -173,12 +169,13 @@ class ParticipantOptionsSheet extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // DRAG HANDLE
                   GestureDetector(
                     onTap: onClose,
                     behavior: HitTestBehavior.opaque,
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.only(top: 15, bottom: 10),
+                      padding: const EdgeInsets.symmetric(vertical: 15),
                       child: Center(
                         child: Container(
                           width: 40, height: 4,
@@ -188,6 +185,7 @@ class ParticipantOptionsSheet extends StatelessWidget {
                     ),
                   ),
                   
+                  // NAME HEADER
                   Padding(
                     padding: const EdgeInsets.only(bottom: 20),
                     child: Row(
@@ -205,6 +203,7 @@ class ParticipantOptionsSheet extends StatelessWidget {
                     ),
                   ),
 
+                  // OPTIONS GRID
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Wrap(
@@ -234,12 +233,27 @@ class ParticipantOptionsSheet extends StatelessWidget {
                             width: itemWidth,
                           ),
                           if (!isMe)
-                            _buildOption(icon: Icons.remove_circle_outline, label: "Kick", color: Colors.redAccent, onTap: () => _confirmKick(context), width: itemWidth),
+                            _buildOption(
+                              icon: Icons.block, 
+                              label: "Ban", 
+                              color: Colors.redAccent, 
+                              onTap: () {
+                                if (targetParticipant.identity != null) {
+                                  // --- CRITICAL FIX: RESOLVE REAL UID ---
+                                  final String rawId = targetParticipant.identity!;
+                                  final String realUid = _resolveRealUid(rawId);
+                                  
+                                  debugPrint("BAN: Raw Identity: $rawId -> Real UID: $realUid");
+                                  onKickUser(realUid);
+                                }
+                                onClose();
+                              }, 
+                              width: itemWidth
+                            ),
                         ],
                       ],
                     ),
                   ),
-                  SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
                 ],
               ),
             ),

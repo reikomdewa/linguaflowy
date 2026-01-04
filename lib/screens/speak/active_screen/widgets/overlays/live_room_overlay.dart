@@ -84,6 +84,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
     super.dispose();
   }
 
+  // UPDATE THIS METHOD
   void _onManagerChanged() {
     final manager = RoomGlobalManager();
     if (manager.isActive) {
@@ -105,9 +106,9 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
         });
       }
     }
-    if (mounted) setState(() {});
+    // REMOVED: if (mounted) setState(() {}); <--- This caused unnecessary double rebuilds
+    if (mounted) setState(() {}); // Keep one, but ensure it doesn't conflict
   }
-
   void _resetUIState() {
     _isChatOpen = false;
     _isSettingsOpen = false;
@@ -215,15 +216,40 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
       ..on<RoomDisconnectedEvent>((_) => RoomGlobalManager().leaveRoom());
   }
 
-  void _refreshParticipants() {
+ void _refreshParticipants() {
     final room = RoomGlobalManager().livekitRoom;
     if (room == null) return;
-    setState(() {
-      _participants = [
-        if (room.localParticipant != null) room.localParticipant!,
-        ...room.remoteParticipants.values,
-      ];
-    });
+    
+    // FIX: Explicitly type the list as <Participant> so Dart knows what it contains
+    final List<Participant> newParticipants = [
+      if (room.localParticipant != null) room.localParticipant!,
+      ...room.remoteParticipants.values,
+    ];
+
+    // Check if the selected participant (menu open) is still in the room
+    if (_selectedParticipant != null) {
+      // Now 'p' is correctly identified as a Participant, so .identity works
+      final stillExists = newParticipants.any((p) => p.identity == _selectedParticipant!.identity);
+      if (!stillExists) {
+        // If the user I was looking at left (or got banned), close the menu
+        _selectedParticipant = null;
+      }
+    }
+
+    // Check if full screen participant still exists
+    if (_fullScreenParticipant != null) {
+       final stillExists = newParticipants.any((p) => p.identity == _fullScreenParticipant!.identity);
+       if (!stillExists) {
+         _fullScreenParticipant = null;
+       }
+    }
+
+    if (mounted) {
+      setState(() {
+        _participants = newParticipants;
+      });
+    }
+    
     if (_currentSpotlightId != null) _resolveSpotlight(_currentSpotlightId);
   }
 
@@ -464,7 +490,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           ),
         ],
         // --- JOIN REQUESTS (BANNED USERS) ---
-      // --- JOIN REQUESTS (BANNED USERS) ---
+        // --- JOIN REQUESTS (BANNED USERS) ---
         if (_isJoinRequestsOpen &&
             manager.isExpanded &&
             manager.roomData != null) ...[
@@ -477,7 +503,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
           JoinRequestsSheet(
             room: manager.roomData!,
             onClose: () => setState(() => _isJoinRequestsOpen = false),
-            
+
             // ACCEPT HANDLER
             onAccept: (userId, req) {
               // This triggers the new robust Transaction logic
@@ -493,7 +519,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
                 setState(() => _isJoinRequestsOpen = false);
               }
             },
-            
+
             // DENY HANDLER
             onDeny: (req) {
               context.read<RoomBloc>().add(
@@ -594,6 +620,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
         ],
 
         // PARTICIPANT OPTIONS
+      // PARTICIPANT OPTIONS
         if (_selectedParticipant != null && manager.isExpanded) ...[
           Positioned.fill(
             child: GestureDetector(
@@ -607,12 +634,14 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
             currentSpotlightId: _currentSpotlightId,
             roomData: manager.roomData!,
             onClose: () => setState(() => _selectedParticipant = null),
+            
             onSetFullScreen: (p) {
               setState(() {
                 _fullScreenParticipant = p;
                 _selectedParticipant = null;
               });
             },
+            
             onToggleSpotlight: (userId) {
               context.read<RoomBloc>().add(
                 ToggleSpotlightEvent(
@@ -621,14 +650,18 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
                 ),
               );
             },
+            
+            // --- CRITICAL FIX: BAN LOGIC HERE ---
             onKickUser: (userId) {
+              debugPrint("Processing BAN for userId: $userId");
+              // This triggers the Bloc Event from the Overlay's valid context
               context.read<RoomBloc>().add(
                 KickUserEvent(roomId: manager.roomData!.id, userId: userId),
               );
             },
+            // -------------------------------------
           ),
         ],
-
         // LEAVE CONFIRM
         if (_isLeaveConfirmOpen && manager.isExpanded) ...[
           Positioned.fill(

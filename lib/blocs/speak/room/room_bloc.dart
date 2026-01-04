@@ -69,30 +69,59 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     return super.close();
   }
 
-  // --- UPDATED KICK LOGIC (Now Bans) ---
   Future<void> _onKickUser(KickUserEvent event, Emitter<RoomState> emit) async {
+    print(
+      "🔥 BLOC: Attempting to kick user: ${event.userId} from room: ${event.roomId}",
+    );
+
     try {
       final roomRef = _firestore.collection('rooms').doc(event.roomId);
+
       await _firestore.runTransaction((transaction) async {
         final snapshot = await transaction.get(roomRef);
-        if (!snapshot.exists) return;
+        if (!snapshot.exists) {
+          print("❌ BLOC: Room document does not exist!");
+          return;
+        }
 
-        final members = List<Map<String, dynamic>>.from(
-          snapshot.data()?['members'] ?? [],
-        );
+        final data = snapshot.data()!;
+        final members = List<Map<String, dynamic>>.from(data['members'] ?? []);
 
-        // Remove from members
+        print("🔍 BLOC: Current members count: ${members.length}");
+
+        // Check if user exists in list before removing
+        final initialCount = members.length;
         members.removeWhere((m) => m['uid'] == event.userId);
+        final afterCount = members.length;
 
-        // Add to bannedUserIds
+        if (initialCount == afterCount) {
+          print(
+            "⚠️ BLOC: User ${event.userId} was NOT found in the 'members' list. IDs might be mismatching.",
+          );
+          // We continue anyway to ensure they are added to the ban list
+        } else {
+          print("✅ BLOC: User removed from members list.");
+        }
+
+        // Add to ban list logic
+        List<String> currentBans = List<String>.from(
+          data['bannedUserIds'] ?? [],
+        );
+        if (!currentBans.contains(event.userId)) {
+          currentBans.add(event.userId);
+        }
+
         transaction.update(roomRef, {
           'members': members,
           'memberCount': members.length,
-          'bannedUserIds': FieldValue.arrayUnion([event.userId]), // <--- BAN
+          'bannedUserIds': currentBans,
+          'lastUpdatedAt': FieldValue.serverTimestamp(), // Force client update
         });
       });
+
+      print("🚀 BLOC: Kick/Ban transaction completed successfully.");
     } catch (e) {
-      debugPrint("Error kicking/banning user: $e");
+      print("❌ BLOC: Error kicking user: $e");
     }
   }
 
@@ -156,7 +185,6 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     }
   }
 
-  
   Future<void> _onDenyRejoin(
     DenyRejoinEvent event,
     Emitter<RoomState> emit,
@@ -173,9 +201,11 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
         // Remove the request based on exact object or ID logic
         // We use the ID from the passed map to be safe
         final targetUid = event.requestMap['uid'];
-        
+
         final joinRequests = List<Map<String, dynamic>>.from(
-          (data['joinRequests'] as List? ?? []).map((e) => Map<String, dynamic>.from(e))
+          (data['joinRequests'] as List? ?? []).map(
+            (e) => Map<String, dynamic>.from(e),
+          ),
         );
 
         if (targetUid != null) {
@@ -185,9 +215,7 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
           joinRequests.remove(event.requestMap);
         }
 
-        transaction.update(roomRef, {
-          'joinRequests': joinRequests,
-        });
+        transaction.update(roomRef, {'joinRequests': joinRequests});
       });
     } catch (e) {
       debugPrint("Error denying rejoin: $e");
@@ -572,6 +600,8 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
   // =========================================================
   // FIX 2: JOIN ROOM (With "Ghost" Cleanup & XP Fetching)
   // =========================================================
+  // FIX 2: JOIN ROOM (With Ban Check, Ghost Cleanup & XP)
+  // =========================================================
   Future<void> _onJoinRoom(JoinRoomEvent event, Emitter<RoomState> emit) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -580,9 +610,7 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     emit(state.copyWith(activeChatRoom: event.room));
 
     // --- STEP A: CLEANUP (Remove user from ANY other rooms first) ---
-    // We iterate through the locally loaded rooms to find where the user currently is.
     final roomsWithUser = state.allRooms.where((r) {
-      // Check if user is in this room AND it's not the room we are trying to join
       return r.id != event.room.id && r.members.any((m) => m.uid == user.uid);
     }).toList();
 
@@ -606,17 +634,24 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
       print("⚠️ [RoomBloc] Could not fetch guest XP: $e");
     }
 
-    // --- STEP C: JOIN NEW ROOM ---
+    // --- STEP C: JOIN NEW ROOM (With Ban Check) ---
     try {
       final roomRef = _firestore.collection('rooms').doc(event.room.id);
 
       await _firestore.runTransaction((transaction) async {
         final snapshot = await transaction.get(roomRef);
-        if (!snapshot.exists) return;
+        if (!snapshot.exists) throw Exception("Room does not exist");
 
         final currentData = snapshot.data()!;
 
-        // Robust List Parsing
+        // 1. SECURITY CHECK: Is user banned?
+        // Even if UI checks this, the database must enforce it to prevent forced writes.
+        final bannedList = List<String>.from(currentData['bannedUserIds'] ?? []);
+        if (bannedList.contains(user.uid)) {
+          throw Exception("BANNED_USER"); 
+        }
+
+        // 2. Parse Members
         final rawList = currentData['members'] as List<dynamic>? ?? [];
         final members = rawList
             .map((m) {
@@ -629,11 +664,11 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
             .cast<RoomMember>()
             .toList();
 
-        // Add user if not present
+        // 3. Add user if not present
         if (!members.any((m) => m.uid == user.uid)) {
           members.add(
             RoomMember(
-              uid: user.uid,
+              uid: user.uid, // This ensures Firestore has the correct UID
               displayName: user.displayName ?? "Guest",
               avatarUrl: user.photoURL,
               joinedAt: DateTime.now(),
@@ -651,7 +686,9 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
       });
     } catch (e) {
       print("Join Error: $e");
-      // If join fails, you might want to reset the activeChatRoom in state
+      
+      // If error was "BANNED_USER", you might want to show a specific state
+      // For now, we just clear the active room so the UI knows join failed.
       emit(state.copyWith(clearActiveChatRoom: true));
     }
   }
