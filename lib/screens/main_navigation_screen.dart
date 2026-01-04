@@ -5,7 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/constants/constants.dart';
-import 'package:linguaflow/models/user_model.dart'; // Ensure UserModel is imported
+import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/screens/community/community_screen.dart';
 
 // Screens
@@ -69,22 +69,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
 
-    // 1. FIX: Only block if strictly Loading or Initial
-    // Allow 'AuthUnauthenticated' (Guests) to pass through
+    // 1. Loading State
     if (authState is AuthInitial || authState is AuthLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // 2. FIX: Handle Null User for Guests
+    // 2. User & Admin check
     final UserModel? user = (authState is AuthAuthenticated)
         ? authState.user
         : null;
-    // Define a breakpoint (e.g., 800px or 1024px)
-    final bool isDesktop = MediaQuery.of(context).size.width > 800;
-    // Only check admin if user exists
     final bool isAdmin = user != null && AppConstants.isAdmin(user.email);
 
-    // --- THEME AWARE COLORS ---
+    // 3. Determine Layout Mode (Consistency is key: use same breakpoint everywhere)
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isDesktop = screenWidth >= 900;
+
+    // --- THEME ---
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final navBarColor = theme.scaffoldBackgroundColor;
@@ -93,7 +93,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final borderColor = theme.dividerColor;
 
     // ----------------------------------------------------------------------
-    // 3. DEFINE NAVIGATION ITEMS
+    // 4. DEFINE NAVIGATION ITEMS
     // ----------------------------------------------------------------------
     List<_NavItem> navItems = [
       _NavItem(
@@ -114,7 +114,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         activeIcon: const Icon(Icons.school_rounded),
         label: 'Vocabulary',
       ),
-
       _NavItem(
         screen: const DiscoverScreen(),
         icon: const Padding(
@@ -125,12 +124,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       _NavItem(
         screen: SpeakScreen(),
-        icon: FaIcon(FontAwesomeIcons.microphone, size: 20),
+        icon: const FaIcon(FontAwesomeIcons.microphone, size: 20),
         label: 'Speak',
       ),
     ];
 
-    // Admin Tab (Only if Admin)
+    // -- Admin Tab --
     if (isAdmin) {
       navItems.add(
         _NavItem(
@@ -141,9 +140,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
       );
     }
+
+    // -- Desktop Only Tabs --
     if (isDesktop) {
-      navItems.insert(
-        5, // 👈 index where you want it (0-based)
+      // Use explicit insertion indices carefully based on your list above
+      // Current base length is 5 (or 6 if admin)
+
+      // Add Community
+      navItems.add(
         _NavItem(
           screen: const CommunityScreen(),
           icon: const Icon(Icons.people),
@@ -151,10 +155,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           label: 'Community',
         ),
       );
-    }
-    if (isDesktop) {
-      navItems.insert(
-        6, // 👈 index where you want it (0-based)
+
+      // Add Inbox
+      navItems.add(
         _NavItem(
           screen: const InboxScreen(),
           icon: const Icon(Icons.message),
@@ -163,7 +166,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
       );
     }
-    // Profile Tab (Always show - ProfileScreen handles Guest view internally)
+
+    // -- Profile Tab (Always Last) --
     navItems.add(
       _NavItem(
         screen: ProfileScreen(),
@@ -174,26 +178,31 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
 
     // ----------------------------------------------------------------------
-    // 4. BUILD LAYOUT
+    // 5. SAFETY CHECK (CRITICAL FIX)
+    // ----------------------------------------------------------------------
+    // If we switched from Desktop -> Mobile, _currentIndex might be pointing
+    // to an index that no longer exists. We clamp it here for rendering.
+    final int effectiveIndex = (_currentIndex >= navItems.length)
+        ? 0
+        : _currentIndex;
+
+    // ----------------------------------------------------------------------
+    // 6. BUILD LAYOUT
     // ----------------------------------------------------------------------
     return ActiveTabNotifier(
-      activeIndex: _currentIndex,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // Breakpoint: 900px
-          final isDesktop = constraints.maxWidth >= 900;
-
-          if (isDesktop) {
+      activeIndex: effectiveIndex,
+      child: Scaffold(
+        backgroundColor: navBarColor,
+        body: isDesktop
             // ============================================================
             // DESKTOP LAYOUT
             // ============================================================
-            return Scaffold(
-              backgroundColor: navBarColor,
-              body: Row(
+            ? Row(
                 children: [
                   NavigationRail(
                     backgroundColor: navBarColor,
-                    selectedIndex: _currentIndex,
+                    // Use effectiveIndex to prevent crash during resize
+                    selectedIndex: effectiveIndex,
                     onDestinationSelected: (index) {
                       setState(() => _currentIndex = index);
                     },
@@ -244,65 +253,68 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     }).toList(),
                   ),
                   Expanded(
+                    // Use effectiveIndex
                     child: IndexedStack(
-                      index: _currentIndex,
+                      index: effectiveIndex,
                       children: navItems.map((e) => e.screen).toList(),
                     ),
                   ),
                 ],
-              ),
-            );
-          } else {
+              )
             // ============================================================
             // MOBILE LAYOUT
             // ============================================================
-            return Scaffold(
-              body: IndexedStack(
-                index: _currentIndex,
-                children: navItems.map((e) => e.screen).toList(),
-              ),
-              bottomNavigationBar: Theme(
-                data: theme.copyWith(
-                  splashColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: navBarColor,
-                    border: Border(
-                      top: BorderSide(color: borderColor, width: 0.5),
+            : Column(
+                children: [
+                  Expanded(
+                    // Use effectiveIndex
+                    child: IndexedStack(
+                      index: effectiveIndex,
+                      children: navItems.map((e) => e.screen).toList(),
                     ),
                   ),
-                  child: BottomNavigationBar(
-                    currentIndex: _currentIndex,
-                    onTap: (index) => setState(() => _currentIndex = index),
-                    type: BottomNavigationBarType.fixed,
-                    backgroundColor: navBarColor,
-                    selectedItemColor: selectedColor,
-                    unselectedItemColor: unselectedColor,
-                    selectedLabelStyle: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11,
+                  Theme(
+                    data: theme.copyWith(
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
                     ),
-                    unselectedLabelStyle: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 11,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: navBarColor,
+                        border: Border(
+                          top: BorderSide(color: borderColor, width: 0.5),
+                        ),
+                      ),
+                      child: BottomNavigationBar(
+                        // Use effectiveIndex (Prevents RangeError)
+                        currentIndex: effectiveIndex,
+                        onTap: (index) => setState(() => _currentIndex = index),
+                        type: BottomNavigationBarType.fixed,
+                        backgroundColor: navBarColor,
+                        selectedItemColor: selectedColor,
+                        unselectedItemColor: unselectedColor,
+                        selectedLabelStyle: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                        ),
+                        unselectedLabelStyle: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 11,
+                        ),
+                        elevation: 0,
+                        showUnselectedLabels: true,
+                        items: navItems.map((item) {
+                          return BottomNavigationBarItem(
+                            icon: item.icon,
+                            activeIcon: item.activeIcon,
+                            label: item.label,
+                          );
+                        }).toList(),
+                      ),
                     ),
-                    elevation: 0,
-                    showUnselectedLabels: true,
-                    items: navItems.map((item) {
-                      return BottomNavigationBarItem(
-                        icon: item.icon,
-                        activeIcon: item.activeIcon,
-                        label: item.label,
-                      );
-                    }).toList(),
                   ),
-                ),
+                ],
               ),
-            );
-          }
-        },
       ),
     );
   }

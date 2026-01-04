@@ -83,7 +83,7 @@ class ParticipantOptionsSheet extends StatelessWidget {
       try {
         targetMember = roomData.members.firstWhere((m) => m.uid == targetId);
       } catch (_) {
-        // Fallback: Try by name if UID lookup fails (handling legacy connections)
+        // Fallback: Try by name if UID lookup fails
         try {
           targetMember = roomData.members.firstWhere(
             (m) => m.displayName == targetId,
@@ -146,6 +146,13 @@ class ParticipantOptionsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final double screenWidth = MediaQuery.of(context).size.width;
+
+    // --- 1. DETERMINE PLATFORM/SIZE ---
+    final bool isDesktop = screenWidth > 600;
+    
+    // Original Mobile Calculation
+    final double mobileItemWidth = (screenWidth - 32) / 4.5;
 
     // Strict "Is Me" Logic
     bool isMe = targetParticipant is LocalParticipant;
@@ -157,8 +164,72 @@ class ParticipantOptionsSheet extends StatelessWidget {
     final isCamOn = targetParticipant.isCameraEnabled();
     final isSpotlighted = currentSpotlightId == targetParticipant.identity;
 
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double itemWidth = (screenWidth - 32) / 4.5;
+    // --- 2. GENERATE OPTIONS LIST ---
+    List<_OptionItem> options = [];
+
+    // Full Screen
+    options.add(_OptionItem(
+      icon: Icons.fullscreen,
+      label: "Full Screen",
+      onTap: _handleFullScreen,
+    ));
+
+    // Me Options
+    if (isMe) {
+      options.add(_OptionItem(
+        icon: isMicOn ? Icons.mic : Icons.mic_off,
+        label: isMicOn ? "Mute" : "Unmute",
+        color: isMicOn ? Colors.white : Colors.redAccent,
+        onTap: _toggleMyMic,
+      ));
+      options.add(_OptionItem(
+        icon: isCamOn ? Icons.videocam : Icons.videocam_off,
+        label: isCamOn ? "Stop Cam" : "Start Cam",
+        onTap: _toggleMyCam,
+      ));
+      options.add(_OptionItem(
+        icon: Icons.flip_camera_ios,
+        label: "Flip",
+        onTap: _flipMyCamera,
+      ));
+    }
+
+    // Guest Options
+    if (!isMe) {
+      options.add(_OptionItem(
+        icon: Icons.chat_bubble_outline_rounded,
+        label: "Message",
+        color: Colors.blueAccent,
+        onTap: _initiatePrivateChat,
+      ));
+    }
+
+    // Host Options
+    if (amIHost) {
+      options.add(_OptionItem(
+        icon: isSpotlighted ? Icons.star : Icons.star_border,
+        label: isSpotlighted ? "Un-Spot" : "Spotlight",
+        color: Colors.amber,
+        onTap: _handleSpotlight,
+      ));
+
+      if (!isMe) {
+        options.add(_OptionItem(
+          icon: Icons.block,
+          label: "Ban",
+          color: Colors.redAccent,
+          onTap: () {
+            if (targetParticipant.identity != null) {
+              final String rawId = targetParticipant.identity!;
+              final String realUid = _resolveRealUid(rawId);
+              debugPrint("BAN: Raw Identity: $rawId -> Real UID: $realUid");
+              onKickUser(realUid);
+            }
+            onClose();
+          },
+        ));
+      }
+    }
 
     return SafeArea(
       child: Align(
@@ -207,10 +278,7 @@ class ParticipantOptionsSheet extends StatelessWidget {
                           if (isMe)
                             const Text(
                               "(You) ",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 14,
-                              ),
+                              style: TextStyle(color: Colors.grey, fontSize: 14),
                             ),
                           Flexible(
                             child: Text(
@@ -229,90 +297,13 @@ class ParticipantOptionsSheet extends StatelessWidget {
                       ),
                     ),
 
-                    // OPTIONS GRID
+                    // --- 3. ADAPTIVE LAYOUT ---
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 20,
-                        alignment: WrapAlignment.center,
-                        children: [
-                          _buildOption(
-                            icon: Icons.fullscreen,
-                            label: "Full Screen",
-                            onTap: _handleFullScreen,
-                            width: itemWidth,
-                          ),
-
-                          if (isMe) ...[
-                            _buildOption(
-                              icon: isMicOn ? Icons.mic : Icons.mic_off,
-                              label: isMicOn ? "Mute" : "Unmute",
-                              color: isMicOn ? Colors.white : Colors.redAccent,
-                              onTap: _toggleMyMic,
-                              width: itemWidth,
-                            ),
-                            _buildOption(
-                              icon: isCamOn
-                                  ? Icons.videocam
-                                  : Icons.videocam_off,
-                              label: isCamOn ? "Stop Cam" : "Start Cam",
-                              onTap: _toggleMyCam,
-                              width: itemWidth,
-                            ),
-                            _buildOption(
-                              icon: Icons.flip_camera_ios,
-                              label: "Flip",
-                              onTap: _flipMyCamera,
-                              width: itemWidth,
-                            ),
-                          ],
-
-                          if (!isMe) ...[
-                            _buildOption(
-                              icon: Icons.chat_bubble_outline_rounded,
-                              label: "Message",
-                              color: Colors.blueAccent,
-                              onTap: _initiatePrivateChat,
-                              width: itemWidth,
-                            ),
-                          ],
-
-                          if (amIHost) ...[
-                            _buildOption(
-                              icon: isSpotlighted
-                                  ? Icons.star
-                                  : Icons.star_border,
-                              label: isSpotlighted ? "Un-Spot" : "Spotlight",
-                              color: Colors.amber,
-                              onTap: _handleSpotlight,
-                              width: itemWidth,
-                            ),
-                            if (!isMe)
-                              _buildOption(
-                                icon: Icons.block,
-                                label: "Ban",
-                                color: Colors.redAccent,
-                                onTap: () {
-                                  if (targetParticipant.identity != null) {
-                                    // --- CRITICAL FIX: RESOLVE REAL UID ---
-                                    final String rawId =
-                                        targetParticipant.identity!;
-                                    final String realUid = _resolveRealUid(
-                                      rawId,
-                                    );
-
-                                    debugPrint(
-                                      "BAN: Raw Identity: $rawId -> Real UID: $realUid",
-                                    );
-                                    onKickUser(realUid);
-                                  }
-                                  onClose();
-                                },
-                                width: itemWidth,
-                              ),
-                          ],
-                        ],
+                      child: _buildAdaptiveLayout(
+                        isDesktop: isDesktop,
+                        mobileItemWidth: mobileItemWidth,
+                        items: options,
                       ),
                     ),
                   ],
@@ -325,40 +316,88 @@ class ParticipantOptionsSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildOption({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    required double width,
-    Color color = Colors.white,
+  /// -----------------------------------------------------------
+  /// ADAPTIVE LAYOUT BUILDER
+  /// -----------------------------------------------------------
+  Widget _buildAdaptiveLayout({
+    required bool isDesktop,
+    required double mobileItemWidth,
+    required List<_OptionItem> items,
   }) {
-    return SizedBox(
-      width: width,
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(color: color, fontSize: 11),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+    if (isDesktop) {
+      // DESKTOP: GridView
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 4, // 4 items per row
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 20,
+          childAspectRatio: 1.1,
         ),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          return _buildSingleItem(items[index]);
+        },
+      );
+    } else {
+      // MOBILE: Wrap (Preserves exact previous behavior)
+      return Wrap(
+        spacing: 12,
+        runSpacing: 20,
+        alignment: WrapAlignment.center,
+        children: items.map((item) {
+          return SizedBox(
+            width: mobileItemWidth,
+            child: _buildSingleItem(item),
+          );
+        }).toList(),
+      );
+    }
+  }
+
+  // Shared visual builder for the button
+  Widget _buildSingleItem(_OptionItem item) {
+    return GestureDetector(
+      onTap: item.onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(item.icon, color: item.color, size: 24),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            item.label,
+            style: TextStyle(color: item.color, fontSize: 11),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
+}
+
+// Data Class for Options
+class _OptionItem {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color color;
+
+  _OptionItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color = Colors.white,
+  });
 }

@@ -136,7 +136,7 @@ class RoomMenuSheet extends StatelessWidget {
                           // SHARE SCREEN
                           _OptionItem(
                             icon: Icons.screen_share_outlined,
-                            label: "Share",
+                            label: "Share Screen",
                             onTap: () {
                               manager.toggleScreenShare();
                               onClose();

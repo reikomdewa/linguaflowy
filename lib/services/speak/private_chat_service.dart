@@ -9,6 +9,7 @@ class PrivateChatService {
     return _firestore
         .collection('private_chats')
         .where('participants', arrayContains: myUserId)
+        
         .orderBy('lastMessageTime', descending: true)
         .snapshots()
         .map((snapshot) {
