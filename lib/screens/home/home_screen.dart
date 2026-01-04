@@ -15,6 +15,7 @@ import 'package:linguaflow/screens/home/widgets/sections/library_section.dart';
 import 'package:linguaflow/screens/home/widgets/tap_button.dart';
 import 'package:linguaflow/screens/login/web_login_layout.dart';
 import 'package:linguaflow/screens/reader/reader_screen_web.dart';
+import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/theme/colors.dart';
 import 'package:linguaflow/utils/utils.dart';
 import 'package:linguaflow/widgets/buttons/build_ai_button.dart';
@@ -559,7 +560,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     color: Colors.brown,
                                                   ),
                                                   title: Text(
-                                                    "You are viewing ${LanguageHelper.getLanguageName(currentLanguageName)} content as a guest. By the way, the app is better.",
+                                                    "You are viewing ${LanguageHelper.getLanguageName(currentLanguageName)} content as a guest. Use the app or login for more lessons and features",
                                                     style: TextStyle(
                                                       color: AppColor.primary,
                                                     ),

@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:linguaflow/core/globals.dart';
-import 'package:linguaflow/screens/login/web_login_layout.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:upgrader/upgrader.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+// GLOBALS
+import 'package:linguaflow/core/globals.dart'; 
 
 // BLOCS
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -16,6 +19,7 @@ import 'package:linguaflow/models/lesson_model.dart';
 // --- SCREEN IMPORTS ---
 import 'package:linguaflow/screens/main_navigation_screen.dart';
 import 'package:linguaflow/screens/login/login_screen.dart';
+import 'package:linguaflow/screens/login/web_login_layout.dart';
 import 'package:linguaflow/screens/reader/reader_screen_wraper.dart';
 
 import 'package:linguaflow/screens/admin/admin_screen.dart';
@@ -34,25 +38,66 @@ import 'package:linguaflow/screens/story_mode/story_mode_screen.dart';
 import 'package:linguaflow/screens/vocabulary/vocabulary_screen.dart';
 
 class AppRouter {
-  static final GoRouter router = GoRouter(
-    navigatorKey: navigatorKey,
+  final AuthBloc authBloc;
+
+  AppRouter(this.authBloc);
+
+  late final GoRouter router = GoRouter(
+    navigatorKey: navigatorKey, // Ensure this is the GlobalKey form globals.dart
     initialLocation: '/',
 
-    // --- REDIRECT LOGIC ---
+    // 1. REFRESH LISTENABLE
+    // This connects GoRouter to the AuthBloc. When the state changes,
+    // the redirect logic is re-evaluated immediately.
+    refreshListenable: GoRouterRefreshStream(authBloc.stream),
+
+    // 2. REDIRECT LOGIC
     redirect: (context, state) {
-      final authState = context.read<AuthBloc>().state;
-      final bool isLoggedIn = authState is AuthAuthenticated;
+      final authState = authBloc.state;
       final String location = state.uri.toString();
 
-      // 1. Prevent Logged-in users from seeing Login
-      if (isLoggedIn && location == '/login') return '/';
+      // Status Checks
+      final bool isLoggedIn = authState is AuthAuthenticated;
+      final bool isInitializing = authState is AuthInitial || authState is AuthLoading;
+      final bool isLoggingIn = location == '/login';
+      final bool isPlacementTest = location.startsWith('/placement-test');
 
-      // 2. Protect Admin Routes
-      if (location.startsWith('/admin') && !isLoggedIn) return '/login';
+      // A. Handling Splash Screen & Initialization
+      // If we are still loading the user, we DO NOT redirect yet.
+      // This prevents the Home Screen from mounting and firing queries with null User.
+      if (isInitializing) {
+        return null; 
+      }
+      
+      // Once we know the state (LoggedIn or Unauthenticated), remove native splash
+      FlutterNativeSplash.remove();
 
-      return null;
+      // B. Unauthenticated User Logic
+      if (!isLoggedIn) {
+        // Allow access to Login and Placement Test
+        if (isLoggingIn || isPlacementTest) {
+          return null;
+        }
+        // Redirect everything else to Login
+        return '/login';
+      }
+
+      // C. Authenticated User Logic
+      // If user is logged in but trying to go to login page, send to Home
+      if (isLoggedIn && isLoggingIn) {
+        return '/';
+      }
+
+      // D. Admin Route Protection
+      if (location.startsWith('/admin')) {
+         // You can add specific Admin checks here if your AuthState has an isAdmin field
+         // if (!authState.isAdmin) return '/';
+      }
+
+      return null; // No redirect needed, proceed to route
     },
 
+    // 3. ROUTE DEFINITIONS
     routes: [
       // =========================================================
       // ROOT / MAIN TABS
@@ -80,9 +125,7 @@ class AppRouter {
           GoRoute(
             path: 'quiz/:quizId',
             builder: (context, state) {
-              final quizId = state.pathParameters['quizId']!;
-              // Note: Ensure your QuizScreen constructor accepts the ID if needed.
-              // e.g. return QuizScreen(quizId: quizId);
+              // final quizId = state.pathParameters['quizId']!;
               return const QuizScreen();
             },
           ),
@@ -95,7 +138,6 @@ class AppRouter {
       GoRoute(
         path: '/login',
         builder: (context, state) {
-          // If on Web, show the Web Layout. If on Mobile, show Mobile Layout.
           if (kIsWeb) {
             return const WebLoginLayout();
           } else {
@@ -107,7 +149,6 @@ class AppRouter {
       GoRoute(
         path: '/placement-test',
         builder: (context, state) {
-          // Expecting parameters passed via extra map
           final map = state.extra as Map<String, dynamic>? ?? {};
           return PlacementTestScreen(
             nativeLanguage: map['nativeLanguage'] ?? '',
@@ -145,7 +186,7 @@ class AppRouter {
           GoRoute(
             path: 'room/:roomId',
             builder: (context, state) {
-              return const SizedBox(); // Placeholder for LiveRoomScreen
+              return const SizedBox(); // Placeholder logic
             },
           ),
         ],
@@ -163,9 +204,7 @@ class AppRouter {
       GoRoute(
         path: '/profile/:userId',
         builder: (context, state) {
-          final userId = state.pathParameters['userId'];
-          // Note: If you updated ProfileScreen to not take params, this is fine.
-          // Otherwise pass: ProfileScreen(userId: userId)
+          // final userId = state.pathParameters['userId'];
           return const ProfileScreen();
         },
       ),
@@ -173,14 +212,7 @@ class AppRouter {
       GoRoute(
         path: '/premium',
         builder: (context, state) {
-          // 1. Try to get it from the navigation 'extra'
           final bool? extraIsPremium = state.extra as bool?;
-
-          // 2. Fallback: If 'extra' is lost (e.g. page refresh),
-          // we can try to look at the AuthBloc state directly if available,
-          // OR just default to false (safe approach).
-
-          // Simple fix: Default to false if null
           return PremiumScreen(isPremium: extraIsPremium ?? false);
         },
       ),
@@ -193,8 +225,6 @@ class AppRouter {
       GoRoute(
         path: '/playlist/:type',
         builder: (context, state) {
-          // final type = state.pathParameters['type']!;
-          // Try to get the actual list from extra
           final playlist = state.extra as List<LessonModel>? ?? [];
           return PlaylistScreen(playlist: playlist);
         },
@@ -203,7 +233,6 @@ class AppRouter {
       GoRoute(
         path: '/story-mode',
         builder: (context, state) {
-          // Expecting a LessonModel in extra
           final lesson = state.extra as LessonModel?;
           return StoryModeScreen(lesson: lesson!);
         },
@@ -213,4 +242,25 @@ class AppRouter {
     errorBuilder: (context, state) =>
         const Scaffold(body: Center(child: Text("Page not found"))),
   );
+}
+
+// =================================================================
+// HELPER CLASS
+// Converts Stream to Listenable for GoRouter
+// =================================================================
+class GoRouterRefreshStream extends ChangeNotifier {
+  late final StreamSubscription<dynamic> _subscription;
+
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    notifyListeners();
+    _subscription = stream.asBroadcastStream().listen(
+      (dynamic _) => notifyListeners(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
 }

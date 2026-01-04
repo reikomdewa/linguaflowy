@@ -66,15 +66,26 @@ Stream<List<LessonModel>> getPublicLessons(String language) {
     }
   }
 
-  // --- 2. CHECK IF LIKED (New) ---
+// --- 2. CHECK IF LIKED (FIXED) ---
   Future<bool> hasUserLiked(String collection, String docId, String userId) async {
-    final doc = await _firestore
-        .collection(collection)
-        .doc(docId)
-        .collection('likes')
-        .doc(userId)
-        .get();
-    return doc.exists;
+    // 1. Safety check: Don't query if IDs are missing
+    if (collection.isEmpty || docId.isEmpty || userId.isEmpty) return false;
+
+    try {
+      final doc = await _firestore
+          .collection(collection)
+          .doc(docId)
+          .collection('likes') // Make sure this subcollection exists in Firestore Rules!
+          .doc(userId)
+          .get();
+          
+      return doc.exists;
+    } catch (e) {
+      // 2. Catch Permission Denied errors so the app doesn't crash
+      // This will simply treat it as "not liked" if there's an error.
+      print("Warning: Failed to check like status for $docId: $e");
+      return false;
+    }
   }
 
   // --- 3. INCREMENT VIEWS (New) ---

@@ -1,14 +1,11 @@
-import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:linguaflow/core/theme/app_theme.dart';
 
 // CONFIG
+// IMPORT THE APP ROUTER WE JUST CREATED
 import 'package:linguaflow/app_router.dart';
-import 'package:linguaflow/core/theme/app_theme.dart';
-import 'package:linguaflow/core/globals.dart'; // <--- 1. IMPORT GLOBALS
 
 // BLOCS
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -17,7 +14,6 @@ import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/blocs/quiz/quiz_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
-
 import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_event.dart';
 import 'package:linguaflow/blocs/speak/tutor/tutor_bloc.dart';
@@ -44,11 +40,13 @@ class LinguaflowApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Initialize Repositories
     final lessonRepository = LessonRepository(
       firestoreService: LessonService(),
       localService: HybridLessonService(),
     );
 
+    // 2. MultiRepositoryProvider (Dependency Injection)
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider.value(value: lessonRepository),
@@ -60,11 +58,13 @@ class LinguaflowApp extends StatelessWidget {
         RepositoryProvider(create: (context) => HybridLessonService()),
         RepositoryProvider(create: (context) => ChatService()),
       ],
+      // 3. MultiBlocProvider (State Management)
       child: MultiBlocProvider(
         providers: [
           BlocProvider(
             create: (context) => SettingsBloc()..add(LoadSettings()),
           ),
+          // AUTH BLOC: Created here, starts checking auth immediately
           BlocProvider(
             create: (context) => AuthBloc(
               context.read<AuthService>(),
@@ -89,6 +89,7 @@ class LinguaflowApp extends StatelessWidget {
                 VocabularyBloc(context.read<VocabularyService>()),
           ),
         ],
+        // 4. Pass execution to the View, which holds the Router
         child: const LinguaflowAppView(),
       ),
     );
@@ -103,58 +104,15 @@ class LinguaflowAppView extends StatefulWidget {
 }
 
 class _LinguaflowAppViewState extends State<LinguaflowAppView> {
-  late final GoRouter _router;
+  // Instance of the Router class we created in app_router.dart
+  late final AppRouter _appRouter;
+
   @override
   void initState() {
     super.initState();
-    final authBloc = context.read<AuthBloc>();
-
-    _router = GoRouter(
-      // --- FIX IS HERE ---
-      // Use the global key imported from core/globals.dart
-      // NOT GlobalKey<NavigatorState>() which creates a new, useless key.
-      navigatorKey: navigatorKey, 
-      
-      initialLocation: '/',
-      refreshListenable: GoRouterRefreshStream(authBloc.stream),
-      // Assuming AppRouter.router is properly defined elsewhere to get routes
-      routes: AppRouter.router.configuration.routes, 
-      errorBuilder: (context, state) =>
-          const Scaffold(body: Center(child: Text("Page not found"))),
-
-      // --- REDIRECT LOGIC ---
-      redirect: (context, state) {
-        final authState = authBloc.state;
-        final bool isLoggedIn = authState is AuthAuthenticated;
-        final bool isInitializing =
-            authState is AuthInitial || authState is AuthLoading;
-        final String location = state.uri.toString();
-        final bool isLoggingIn = location == '/login';
-        final bool isPlacementTest = location.startsWith('/placement-test');
-
-        // 1. Remove Splash Screen once Auth is determined
-        if (!isInitializing) {
-          FlutterNativeSplash.remove();
-        }
-
-        // 2. MOBILE SPECIFIC: FORCE LOGIN
-        if (!kIsWeb) {
-          if (!isLoggedIn &&
-              !isInitializing &&
-              !isLoggingIn &&
-              !isPlacementTest) {
-            return '/login';
-          }
-        }
-
-        // 3. GENERAL: Prevent Logged-in users from seeing Login page
-        if (isLoggedIn && isLoggingIn) {
-          return '/';
-        }
-
-        return null; 
-      },
-    );
+    // 5. Initialize the Router using the AuthBloc from Context
+    // This is the critical connection point.
+    _appRouter = AppRouter(context.read<AuthBloc>());
   }
 
   @override
@@ -162,15 +120,18 @@ class _LinguaflowAppViewState extends State<LinguaflowAppView> {
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, settings) {
         return MaterialApp.router(
-          routerConfig: _router,
+          // 6. Use the router configuration from our instance
+          routerConfig: _appRouter.router,
+          
           title: 'LinguaFlow',
           debugShowCheckedModeBanner: false,
 
-          // --- THEME USAGE ---
+          // THEME
           themeMode: settings.themeMode,
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
 
+          // OVERLAYS (Audio Player, Live Rooms)
           builder: (context, child) {
             return Stack(
               children: [
@@ -185,23 +146,3 @@ class _LinguaflowAppViewState extends State<LinguaflowAppView> {
     );
   }
 }
-
-// Helper Class
-class GoRouterRefreshStream extends ChangeNotifier {
-  GoRouterRefreshStream(Stream<dynamic> stream) {
-    notifyListeners();
-    _subscription = stream.asBroadcastStream().listen(
-      (dynamic _) => notifyListeners(),
-    );
-  }
-
-  late final StreamSubscription<dynamic> _subscription;
-
-  @override
-  void dispose() {
-    _subscription.cancel();
-    super.dispose();
-  }
-}
-// flutter build web --dart-define-from-file=config.json
-// flutter run -d chrome --dart-define-from-file=config.json
