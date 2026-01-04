@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart'; // Required for kIsWeb
 import 'package:flutter/material.dart';
 import 'package:flutter_background/flutter_background.dart';
 import 'package:linguaflow/models/speak/room_member.dart';
@@ -175,7 +176,10 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
     final isSharing = local.isScreenShareEnabled();
 
     if (!isSharing) {
-      if (Platform.isAndroid) {
+      // 1. Android Specific Setup (SKIP ON WEB)
+      // We check !kIsWeb first because accessing Platform on Web can cause issues
+      // in some configurations, and logic short-circuits.
+      if (!kIsWeb && Platform.isAndroid) {
         final androidConfig = FlutterBackgroundAndroidConfig(
           notificationTitle: "Screen Sharing Active",
           notificationText: "Linguaflow is sharing your screen.",
@@ -191,22 +195,29 @@ class RoomGlobalManager extends ChangeNotifier with WidgetsBindingObserver {
         if (!success) return;
       }
 
+      // 2. Enable Screen Share (Web & Mobile)
       try {
+        // On Web, this triggers the browser's native screen picker dialog
         await local.setScreenShareEnabled(true, captureScreenAudio: true);
         notifyListeners();
       } catch (e) {
         debugPrint("Screen Share Start Error: $e");
-        if (Platform.isAndroid)
+        
+        // Cleanup background service if Android failed
+        if (!kIsWeb && Platform.isAndroid) {
           await FlutterBackground.disableBackgroundExecution();
+        }
       }
     } else {
+      // 3. Disable Screen Share
       try {
         await local.setScreenShareEnabled(false);
       } catch (e) {
         debugPrint("Screen Share Stop Error: $e");
       }
 
-      if (Platform.isAndroid) {
+      // Cleanup background service (Android only)
+      if (!kIsWeb && Platform.isAndroid) {
         await FlutterBackground.disableBackgroundExecution();
       }
       notifyListeners();
