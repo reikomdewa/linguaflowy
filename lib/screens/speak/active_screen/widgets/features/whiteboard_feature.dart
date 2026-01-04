@@ -26,6 +26,13 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
   final WhiteboardService _service = WhiteboardService();
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
+  // --- ZOOM & PAN STATE ---
+  final TransformationController _transformController =
+      TransformationController();
+  // Large virtual canvas size
+  final double _boardWidth = 3000.0;
+  final double _boardHeight = 3000.0;
+
   // State
   ToolMode _currentTool = ToolMode.pen;
   Color _selectedColor = Colors.black;
@@ -35,13 +42,12 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
   List<DrawPoint> _currentStrokePoints = [];
 
   // -- Text Input State --
-  Offset? _typingPosition;
+  Offset? _typingPosition; // Stored in Board Coordinates
   final TextEditingController _textController = TextEditingController();
 
   // -- Dragging State --
   String? _draggedObjectId;
-  Offset _dragOffset =
-      Offset.zero; // Difference between touch point and object origin
+  Offset _dragOffset = Offset.zero;
 
   // -- OPTIMISTIC UI STATE --
   final List<WhiteboardObject> _optimisticObjects = [];
@@ -56,8 +62,23 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
   bool get _isHost => widget.manager.roomData?.hostId == _currentUserId;
 
   @override
+  void initState() {
+    super.initState();
+    // Center the view on the large canvas initially
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final size = MediaQuery.of(context).size;
+      // Calculate center offset
+      final x = -(_boardWidth - size.width) / 2;
+      final y = -(_boardHeight - size.height) / 2;
+      _transformController.value = Matrix4.identity()..translate(x, y);
+    });
+  }
+
+  @override
   void dispose() {
     _textController.dispose();
+    _transformController.dispose();
     super.dispose();
   }
 
@@ -141,9 +162,8 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
       text: textSpan,
       textDirection: TextDirection.ltr,
     );
-    textPainter.layout(); // Calculate size
+    textPainter.layout();
 
-    // Create rectangle at position with calculated size
     return Rect.fromLTWH(
       obj.position.dx,
       obj.position.dy,
@@ -160,16 +180,12 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
 
     for (var obj in _hitTestableObjects) {
       if (obj.type == WhiteboardItemType.text) {
-        // Calculate exact bounding box of the text
         final rect = _getTextBoundingBox(obj);
-
-        // Add some padding (inflation) to make it easier to grab
         final hitRect = rect.inflate(20.0);
 
         if (hitRect.contains(touchPos)) {
           setState(() {
             _draggedObjectId = obj.id;
-            // Store the offset so the text doesn't snap to center of finger
             _dragOffset = touchPos - obj.position;
           });
           break;
@@ -180,17 +196,13 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
 
   void _onLongPressUpdate(LongPressMoveUpdateDetails details) {
     if (!_isMyBoard || _draggedObjectId == null) return;
-
-    // Calculate new Top-Left position based on finger position minus initial offset
     final newPos = details.localPosition - _dragOffset;
 
     setState(() {
-      // Find object in optimistic list
       final index = _optimisticObjects.indexWhere(
         (o) => o.id == _draggedObjectId,
       );
 
-      // If found in local optimistic list, update it there
       if (index != -1) {
         final oldObj = _optimisticObjects[index];
         final newObj = WhiteboardObject(
@@ -206,8 +218,7 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
         );
         _optimisticObjects[index] = newObj;
       } else {
-        // If not in optimistic list (it came from server), we need to create a copy and add it
-        // so we can see it moving locally immediately.
+        // Dragging a server object
         final serverObj = _hitTestableObjects.firstWhere(
           (o) => o.id == _draggedObjectId,
         );
@@ -230,7 +241,6 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
   void _onLongPressEnd(LongPressEndDetails details) {
     if (!_isMyBoard || _draggedObjectId == null) return;
 
-    // Find final position
     final obj = _optimisticObjects.firstWhere(
       (o) => o.id == _draggedObjectId,
       orElse: () => WhiteboardObject(
@@ -274,9 +284,8 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
           }
         }
       } else if (obj.type == WhiteboardItemType.text) {
-        // Use the same robust bounding box logic for eraser
         final rect = _getTextBoundingBox(obj);
-        final hitRect = rect.inflate(20.0); // Inflate for easier erasing
+        final hitRect = rect.inflate(20.0);
         if (hitRect.contains(touchPos)) {
           hit = true;
         }
@@ -297,7 +306,7 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
     }
   }
 
-  // --- TEXT LOGIC (In-Place) ---
+  // --- TEXT LOGIC ---
 
   void _onTapUp(TapUpDetails details) {
     if (!_isMyBoard || _currentTool != ToolMode.text) return;
@@ -380,81 +389,108 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
       color: Colors.white,
       child: Stack(
         children: [
-          // 1. STREAM LAYER
+          // 1. INTERACTIVE CANVAS (Zoom/Pan)
           Positioned.fill(
-            child: StreamBuilder<List<WhiteboardObject>>(
-              stream: _service.streamObjects(
-                widget.manager.roomData!.id,
-                streamerId,
+            child: InteractiveViewer(
+              transformationController: _transformController,
+              boundaryMargin: const EdgeInsets.all(2000), // Huge scroll area
+              minScale: 0.1,
+              maxScale: 5.0,
+              // panEnabled: false allows single-finger gestures to pass through to the GestureDetector
+              // scaleEnabled: true allows two-finger pinch/drag to zoom/pan the view
+              panEnabled: false,
+              scaleEnabled: true,
+              constrained: false, // Canvas can be bigger than screen
+              child: SizedBox(
+                width: _boardWidth,
+                height: _boardHeight,
+                child: Stack(
+                  children: [
+                    // A. STREAM LAYER (The drawings)
+                    Positioned.fill(
+                      child: StreamBuilder<List<WhiteboardObject>>(
+                        stream: _service.streamObjects(
+                          widget.manager.roomData!.id,
+                          streamerId,
+                        ),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                                  ConnectionState.waiting &&
+                              _optimisticObjects.isEmpty) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+
+                          final serverObjects = snapshot.data ?? [];
+
+                          final pendingObjects = _optimisticObjects.where((
+                            opt,
+                          ) {
+                            if (_draggedObjectId == opt.id) return true;
+                            return !serverObjects.any(
+                              (server) => server.id == opt.id,
+                            );
+                          }).toList();
+
+                          final displayServerObjects = serverObjects
+                              .where((s) => s.id != _draggedObjectId)
+                              .toList();
+                          final allObjects = [
+                            ...displayServerObjects,
+                            ...pendingObjects,
+                          ];
+
+                          if (_isMyBoard) {
+                            _hitTestableObjects = allObjects;
+                          }
+
+                          return CustomPaint(
+                            painter: StreamWhiteboardPainter(
+                              objects: allObjects,
+                              currentDraftPoints: _currentStrokePoints,
+                              currentDraftColor: _selectedColor,
+                              currentDraftWidth: _strokeWidth,
+                              isEraser: _currentTool == ToolMode.eraser,
+                            ),
+                            size: Size.infinite,
+                          );
+                        },
+                      ),
+                    ),
+
+                    // B. INPUT LAYER (Gestures inside the scaled view)
+                    if (_isMyBoard && _typingPosition == null)
+                      Positioned.fill(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+
+                          // Drawing/Erasing
+                          onPanStart: isTextMode ? null : _onPanStart,
+                          onPanUpdate: isTextMode ? null : _onPanUpdate,
+                          onPanEnd: isTextMode ? null : _onPanEnd,
+
+                          // Text Input
+                          onTapUp: isTextMode ? _onTapUp : null,
+
+                          // Dragging
+                          onLongPressStart: _onLongPressStart,
+                          onLongPressMoveUpdate: _onLongPressUpdate,
+                          onLongPressEnd: _onLongPressEnd,
+
+                          child: Container(color: Colors.transparent),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting &&
-                    _optimisticObjects.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final serverObjects = snapshot.data ?? [];
-
-                // Filter out optimistic objects that are already in the server list (to avoid duplicates)
-                // EXCEPT if we are currently dragging that object (we want our local dragging version to win)
-                final pendingObjects = _optimisticObjects.where((opt) {
-                  if (_draggedObjectId == opt.id)
-                    return true; // Always show dragging object
-                  return !serverObjects.any((server) => server.id == opt.id);
-                }).toList();
-
-                // If we are dragging, we hide the server version of the dragged object
-                final displayServerObjects = serverObjects
-                    .where((s) => s.id != _draggedObjectId)
-                    .toList();
-
-                final allObjects = [...displayServerObjects, ...pendingObjects];
-
-                if (_isMyBoard) {
-                  _hitTestableObjects = allObjects;
-                }
-
-                return CustomPaint(
-                  painter: StreamWhiteboardPainter(
-                    objects: allObjects,
-                    currentDraftPoints: _currentStrokePoints,
-                    currentDraftColor: _selectedColor,
-                    currentDraftWidth: _strokeWidth,
-                    isEraser: _currentTool == ToolMode.eraser,
-                  ),
-                  size: Size.infinite,
-                );
-              },
             ),
           ),
 
-          // 2. INPUT LAYER
-          if (_isMyBoard && _typingPosition == null)
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-
-                // Drawing/Erasing
-                onPanStart: isTextMode ? null : _onPanStart,
-                onPanUpdate: isTextMode ? null : _onPanUpdate,
-                onPanEnd: isTextMode ? null : _onPanEnd,
-
-                // Text Input
-                onTapUp: isTextMode ? _onTapUp : null,
-
-                // Dragging Text (Long Press) - Works in ANY mode
-                onLongPressStart: _onLongPressStart,
-                onLongPressMoveUpdate: _onLongPressUpdate,
-                onLongPressEnd: _onLongPressEnd,
-
-                child: Container(color: Colors.transparent),
-              ),
-            ),
-
-          // 3. IN-PLACE TEXT FIELD
+          // 2. IN-PLACE TEXT FIELD (Correctly positioned over zoomed canvas)
           if (_typingPosition != null) _buildFloatingInput(context),
 
-          // 4. UI LAYERS
+          // 3. UI LAYERS (Tools, Headers)
           _buildTopBar(streamerId),
 
           if (_isMyBoard) _buildTools(),
@@ -464,13 +500,21 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
   }
 
   Widget _buildFloatingInput(BuildContext context) {
+    // We must map the Board Coordinate (_typingPosition) to Screen Coordinate
+    // taking current Zoom/Pan into account.
+    final Matrix4 transform = _transformController.value;
+    final Offset screenPos = MatrixUtils.transformPoint(
+      transform,
+      _typingPosition!,
+    );
+
     final double screenWidth = MediaQuery.of(context).size.width;
-    final double tapX = _typingPosition!.dx;
-    final double tapY = _typingPosition!.dy;
 
-    double leftPos = tapX;
-    double widthConstraint = screenWidth - tapX - 16;
+    // Simple logic to keep the text box on screen
+    double leftPos = screenPos.dx;
+    double topPos = screenPos.dy - 20;
 
+    double widthConstraint = screenWidth - leftPos - 16;
     if (widthConstraint < 150) {
       leftPos = screenWidth - 220;
       widthConstraint = 200;
@@ -478,7 +522,7 @@ class _CollaborativeWhiteboardState extends State<CollaborativeWhiteboard> {
 
     return Positioned(
       left: leftPos,
-      top: tapY - 20,
+      top: topPos,
       child: Material(
         color: Colors.transparent,
         child: Container(
@@ -711,6 +755,7 @@ class StreamWhiteboardPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Draw all confirmed objects
     for (var obj in objects) {
       if (obj.type == WhiteboardItemType.stroke &&
           obj.points != null &&
@@ -745,6 +790,7 @@ class StreamWhiteboardPainter extends CustomPainter {
       }
     }
 
+    // Draw the current pending stroke
     if (currentDraftPoints.isNotEmpty && !isEraser) {
       final paint = Paint()
         ..color = currentDraftColor
