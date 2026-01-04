@@ -3,7 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:linguaflow/core/env.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
+import 'package:linguaflow/screens/speak/utils/remote_config_utils.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 // BLOCS
@@ -590,10 +592,10 @@ class TutorCard extends StatelessWidget {
 
       // 4. Connect to LiveKit
       final livekitRoom = Room();
-      await livekitRoom.connect(
-        'wss://linguaflow-7eemmnrq.livekit.cloud',
-        token,
+      final livekitUrl = await RemoteConfigUtils.getLiveKitUrl(
+        forceRefresh: true,
       );
+      await livekitRoom.connect(livekitUrl, token);
 
       if (context.mounted) {
         // --- 5. ACTIVATE GLOBAL OVERLAY ---

@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:linguaflow/core/env.dart';
+import 'package:linguaflow/screens/speak/utils/remote_config_utils.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -25,9 +27,11 @@ class RoomCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = context.read<AuthBloc>().state;
-    
+
     // Get current User ID safely
-    final String currentUserId = (authState is AuthAuthenticated) ? authState.user.id : '';
+    final String currentUserId = (authState is AuthAuthenticated)
+        ? authState.user.id
+        : '';
     final bool isMe = currentUserId == room.hostId;
 
     final List<RoomMember> allMembers = List<RoomMember>.from(room.members);
@@ -49,12 +53,12 @@ class RoomCard extends StatelessWidget {
     // --- CHECK IF FULL ---
     final bool isFull = displayCount >= room.maxMembers;
     final bool isAlreadyMember = allMembers.any((m) => m.uid == currentUserId);
-    
+
     // --- CHECK IF BANNED ---
     // Note: Ensure your ChatRoom model has 'bannedUserIds' list
     final bool isBanned = room.bannedUserIds.contains(currentUserId);
 
-    // You can enter if: 
+    // You can enter if:
     // 1. The room is NOT full
     // 2. OR You are the Host
     // 3. OR You are already on the list (rejoining)
@@ -97,7 +101,11 @@ class RoomCard extends StatelessWidget {
                     const SizedBox(width: 4),
                     IconButton(
                       onPressed: () => _showOptionsMenu(context, isMe),
-                      icon: Icon(Icons.more_vert, color: theme.hintColor, size: 20),
+                      icon: Icon(
+                        Icons.more_vert,
+                        color: theme.hintColor,
+                        size: 20,
+                      ),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -108,7 +116,9 @@ class RoomCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               room.title,
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 20),
 
@@ -129,14 +139,18 @@ class RoomCard extends StatelessWidget {
                 }
 
                 if (index < realListCount) {
-                  return _buildMemberItem(allMembers[index], room.hostId, theme);
+                  return _buildMemberItem(
+                    allMembers[index],
+                    room.hostId,
+                    theme,
+                  );
                 }
 
                 return _buildPlaceholder(theme);
               },
             ),
             const SizedBox(height: 20),
-            
+
             // --- ACTION BUTTON ---
             _buildJoinButton(context, theme, canEnter, isBanned),
           ],
@@ -155,12 +169,22 @@ class RoomCard extends StatelessWidget {
     final color = isFull ? Colors.red : Colors.blue;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Row(
         children: [
           Icon(Icons.mic, size: 14, color: color),
           const SizedBox(width: 4),
-          Text("$displayCurrent/$max", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+          Text(
+            "$displayCurrent/$max",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
         ],
       ),
     );
@@ -168,7 +192,8 @@ class RoomCard extends StatelessWidget {
 
   Widget _buildMemberItem(RoomMember member, String hostId, ThemeData theme) {
     final bool isHost = member.uid == hostId;
-    final String initial = (member.displayName != null && member.displayName!.isNotEmpty)
+    final String initial =
+        (member.displayName != null && member.displayName!.isNotEmpty)
         ? member.displayName![0].toUpperCase()
         : "?";
 
@@ -196,9 +221,7 @@ class RoomCard extends StatelessWidget {
                 ? Colors.grey[800]
                 : Colors.grey[200],
             backgroundImage: imageProvider,
-            onBackgroundImageError: imageProvider != null 
-                ? (_, __) {} 
-                : null,
+            onBackgroundImageError: imageProvider != null ? (_, __) {} : null,
             child: imageProvider == null
                 ? Text(
                     initial,
@@ -274,7 +297,12 @@ class RoomCard extends StatelessWidget {
     );
   }
 
-  Widget _buildJoinButton(BuildContext context, ThemeData theme, bool canEnter, bool isBanned) {
+  Widget _buildJoinButton(
+    BuildContext context,
+    ThemeData theme,
+    bool canEnter,
+    bool isBanned,
+  ) {
     // Determine visuals based on state
     Color color;
     String text;
@@ -302,24 +330,28 @@ class RoomCard extends StatelessWidget {
         radius: const Radius.circular(12),
       ),
       child: Container(
-        decoration: (!canEnter && !isBanned) ? BoxDecoration(
-          color: theme.disabledColor.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-        ) : null,
+        decoration: (!canEnter && !isBanned)
+            ? BoxDecoration(
+                color: theme.disabledColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              )
+            : null,
         width: double.infinity,
         child: TextButton(
-          // Logic: 
+          // Logic:
           // If banned -> Handle Request Logic
           // If canEnter -> Join Logic (Payment or Direct)
           // Else -> Show Full Snackbar
           onPressed: (canEnter || isBanned)
               ? () => room.isPaid && !isBanned
-                  ? _showPaymentDialog(context)
-                  : _joinRoom(context, room)
+                    ? _showPaymentDialog(context)
+                    : _joinRoom(context, room)
               : () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text("This room has reached its participant limit."),
+                      content: Text(
+                        "This room has reached its participant limit.",
+                      ),
                       backgroundColor: Colors.orange,
                     ),
                   );
@@ -377,8 +409,17 @@ class RoomCard extends StatelessWidget {
             ),
             if (isMe) ...[
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                title: const Text("End Session & Delete Room", style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+                leading: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red,
+                ),
+                title: const Text(
+                  "End Session & Delete Room",
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 subtitle: const Text("This will remove the room for everyone"),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -393,7 +434,9 @@ class RoomCard extends StatelessWidget {
               onTap: () {
                 Navigator.pop(ctx);
                 // In a real app, you would show the ReportDialog here
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Report submitted")));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Report submitted")),
+                );
               },
             ),
           ],
@@ -407,9 +450,14 @@ class RoomCard extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("End Session?"),
-        content: const Text("Are you sure you want to delete this room? This action is permanent."),
+        content: const Text(
+          "Are you sure you want to delete this room? This action is permanent.",
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
           TextButton(
             onPressed: () {
               bloc.add(DeleteRoomEvent(room.id));
@@ -433,7 +481,9 @@ class RoomCard extends StatelessWidget {
     // Ensure your ChatRoom model has `bannedUserIds` and `joinRequests` fields.
     if (roomData.bannedUserIds.contains(currentUser.uid)) {
       // Check if already requested
-      final hasRequested = roomData.joinRequests.any((r) => r['uid'] == currentUser.uid);
+      final hasRequested = roomData.joinRequests.any(
+        (r) => r['uid'] == currentUser.uid,
+      );
 
       if (hasRequested) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -450,9 +500,14 @@ class RoomCard extends StatelessWidget {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text("You are banned"),
-          content: const Text("You have been removed from this room. Would you like to request to rejoin?"),
+          content: const Text(
+            "You have been removed from this room. Would you like to request to rejoin?",
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel"),
+            ),
             ElevatedButton(
               onPressed: () {
                 context.read<RoomBloc>().add(
@@ -461,7 +516,7 @@ class RoomCard extends StatelessWidget {
                     userId: currentUser.uid,
                     displayName: currentUser.displayName ?? "Guest",
                     avatarUrl: currentUser.photoURL,
-                  )
+                  ),
                 );
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -498,7 +553,11 @@ class RoomCard extends StatelessWidget {
 
       // C. Connect LiveKit
       final livekitRoom = Room();
-      await livekitRoom.connect('wss://linguaflow-7eemmnrq.livekit.cloud', token);
+      final livekitUrl = await RemoteConfigUtils.getLiveKitUrl(
+        forceRefresh: true,
+      );
+
+      await livekitRoom.connect(livekitUrl, token);
 
       if (context.mounted) {
         // D. Activate Global Overlay & Manager
@@ -508,9 +567,9 @@ class RoomCard extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error joining room: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error joining room: $e")));
       }
     }
   }
@@ -535,22 +594,39 @@ class RoomCard extends StatelessWidget {
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(
                 hintText: "0000",
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+            style: ElevatedButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
             onPressed: () {
               if (passwordController.text.trim() == room.password) {
                 Navigator.pop(ctx);
                 _joinRoom(context, room);
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Incorrect access code."), backgroundColor: Colors.red));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Incorrect access code."),
+                    backgroundColor: Colors.red,
+                  ),
+                );
               }
             },
             child: const Text("Join"),

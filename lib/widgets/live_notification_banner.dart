@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_event.dart';
+import 'package:linguaflow/core/env.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
 import 'package:livekit_client/livekit_client.dart';
 
@@ -93,7 +94,7 @@ class _LiveNotificationBannerState extends State<LiveNotificationBanner>
   }
 
   /// SMART PICK LOGIC
- /// SMART PICK LOGIC
+  /// SMART PICK LOGIC
   void _pickSmartRoom() {
     if (!mounted) return;
 
@@ -345,7 +346,8 @@ class _LiveNotificationBannerState extends State<LiveNotificationBanner>
       ),
     );
   }
-Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
+
+  Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
     // 1. Show Loading Indicator
     showDialog(
       context: context,
@@ -354,7 +356,7 @@ Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
     );
 
     try {
-      const liveKitUrl = 'wss://linguaflow-7eemmnrq.livekit.cloud';
+      const liveKitUrl = Env.livekitUrl;
 
       final currentUser = firebase_auth.FirebaseAuth.instance.currentUser;
       final username = currentUser?.displayName ?? "Guest";
@@ -379,7 +381,7 @@ Future<void> _joinRoom(BuildContext context, ChatRoom roomData) async {
         // 6. Hide Loading Dialog
         Navigator.pop(context);
 
-        // REMOVED: Navigator.push(...) 
+        // REMOVED: Navigator.push(...)
         // The Overlay now handles the UI.
       }
     } catch (e) {
