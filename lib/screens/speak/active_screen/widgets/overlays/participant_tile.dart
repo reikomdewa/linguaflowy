@@ -22,18 +22,19 @@ class ParticipantTile extends StatefulWidget {
 }
 
 class _ParticipantTileState extends State<ParticipantTile> {
+  // Listen to Manager to catch Pause/Unpause events immediately
+  final RoomGlobalManager _manager = RoomGlobalManager();
+
   @override
   void initState() {
     super.initState();
-    // 1. LISTEN TO CHANGES
-    // This triggers a rebuild whenever the participant's audio/video/connection state changes
     widget.participant.addListener(_onParticipantChanged);
+    _manager.addListener(_onManagerChanged);
   }
 
   @override
   void didUpdateWidget(covariant ParticipantTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If the participant object itself changes (rare, but possible in grids), switch listeners
     if (oldWidget.participant != widget.participant) {
       oldWidget.participant.removeListener(_onParticipantChanged);
       widget.participant.addListener(_onParticipantChanged);
@@ -42,86 +43,91 @@ class _ParticipantTileState extends State<ParticipantTile> {
 
   @override
   void dispose() {
-    // 2. CLEANUP
     widget.participant.removeListener(_onParticipantChanged);
+    _manager.removeListener(_onManagerChanged);
     super.dispose();
   }
 
   void _onParticipantChanged() {
-    // 3. REBUILD UI ON CHANGE
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
+  }
+
+  void _onManagerChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    final roomData = RoomGlobalManager().roomData;
-    final participant = widget.participant; // Use the widget's participant
+    final roomData = _manager.roomData;
+    final participant = widget.participant;
 
-    // --- 1. RESOLVE USER DATA ---
-    String displayName = "";
-    String? avatarUrl;
+    // --- 1. ROBUST HOST CHECK ---
+    bool isHost = false;
+    RoomMember? matchedMember;
 
     if (roomData != null) {
+      // Strategy A: Direct UID Match (Correct)
       if (participant.identity == roomData.hostId) {
-        displayName = roomData.hostName ?? "Host";
-        avatarUrl = roomData.hostAvatarUrl;
-      } else if (roomData.members.isNotEmpty) {
+        isHost = true;
+      } 
+      // Strategy B: Lookup Member to check ID
+      else if (roomData.members.isNotEmpty) {
         try {
-          final member = roomData.members.firstWhere(
-            (m) => m.uid == participant.identity,
+          // Try finding by UID
+          matchedMember = roomData.members.firstWhere(
+            (m) => m.uid == participant.identity, 
+            orElse: () => roomData.members.firstWhere(
+              // Fallback: Try finding by Display Name (Legacy/ID Mismatch Fix)
+              (m) => m.displayName == participant.identity || m.displayName == participant.name,
+            )
           );
-          displayName = member.displayName ?? "Member";
-          avatarUrl = member.avatarUrl;
+          
+          if (matchedMember != null && matchedMember.uid == roomData.hostId) {
+            isHost = true;
+          }
         } catch (_) {}
       }
     }
 
-    if (displayName.isEmpty || displayName == "Guest") {
-      displayName = participant.name.isNotEmpty
-          ? participant.name
-          : (participant.identity);
+    // --- 2. PAUSE STATE ---
+    final bool isRoomPaused = roomData?.isPrivate ?? false;
+    final bool showPauseOverlay = isRoomPaused && isHost;
+
+    // --- 3. RESOLVE DISPLAY DATA ---
+    String displayName = "";
+    String? avatarUrl;
+
+    if (roomData != null) {
+      if (isHost) {
+        displayName = roomData.hostName ?? "Host";
+        avatarUrl = roomData.hostAvatarUrl;
+      } else if (matchedMember != null) {
+        displayName = matchedMember.displayName ?? "Member";
+        avatarUrl = matchedMember.avatarUrl;
+      }
     }
 
+    // Fallbacks
+    if (displayName.isEmpty || displayName == "Guest") {
+      displayName = participant.name.isNotEmpty ? participant.name : participant.identity;
+    }
     if (participant is LocalParticipant) {
       displayName = "$displayName (You)";
     }
 
-    // --- 2. VIDEO STATE ---
+    // --- 4. VIDEO STATE ---
     TrackPublication? videoPub;
-    // Check if there is a video track
     if (participant.videoTrackPublications.isNotEmpty) {
       videoPub = participant.videoTrackPublications.first;
     }
-
-    // Determine if video should be shown
-    final isVideoActive =
-        videoPub != null &&
-        videoPub.subscribed &&
-        videoPub.track != null &&
-        !videoPub.muted;
-
+    final isVideoActive = videoPub != null && videoPub.subscribed && videoPub.track != null && !videoPub.muted;
     final isMicOn = participant.isMicrophoneEnabled();
-    final isSpeaking = participant.isSpeaking;
 
-    // --- 3. BORDER LOGIC ---
-    Color borderColor = Colors.transparent;
-    double borderWidth = 0;
-
-    if (!widget.isFullScreen) {
-      if (isSpeaking) {
-        borderColor = Colors.greenAccent;
-        borderWidth = 3.0;
-      } else if (participant is LocalParticipant) {
-        borderColor = Colors.blueAccent.withOpacity(0.5);
-        borderWidth = 2.0;
-      }
-    }
-
-    final videoViewFit = widget.fit == BoxFit.contain
-        ? VideoViewFit.contain
-        : VideoViewFit.cover;
+    // --- 5. SAFE AREA ---
+    final double topBadgePadding = widget.isFullScreen 
+        ? MediaQuery.of(context).padding.top + 12 
+        : 6.0;
+    final double leftBadgePadding = widget.isFullScreen ? 16.0 : 6.0;
 
     return Container(
       decoration: BoxDecoration(
@@ -129,104 +135,86 @@ class _ParticipantTileState extends State<ParticipantTile> {
         borderRadius: widget.isFullScreen ? null : BorderRadius.circular(12),
         border: widget.isFullScreen
             ? null
-            : Border.all(color: borderColor, width: borderWidth),
+            : Border.all(color: participant.isSpeaking ? Colors.greenAccent : Colors.transparent, width: participant.isSpeaking ? 3 : 0),
       ),
       child: ClipRRect(
-        borderRadius: widget.isFullScreen
-            ? BorderRadius.circular(0)
-            : BorderRadius.circular(10),
+        borderRadius: widget.isFullScreen ? BorderRadius.zero : BorderRadius.circular(10),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // LAYER A: VIDEO / AVATAR
+            // A. VIDEO / AVATAR
             if (isVideoActive)
-              VideoTrackRenderer(
-                videoPub.track as VideoTrack,
-                fit: videoViewFit,
-              )
+              VideoTrackRenderer(videoPub.track as VideoTrack, fit: widget.fit == BoxFit.contain ? VideoViewFit.contain : VideoViewFit.cover)
             else
               Container(
                 color: Colors.grey[900],
                 child: Center(
-                  child: avatarUrl != null && avatarUrl.isNotEmpty
-                      ? CircleAvatar(
-                          radius: widget.isFullScreen ? 60 : 25,
-                          backgroundColor: Colors.grey[800],
-                          backgroundImage: NetworkImage(avatarUrl),
-                        )
-                      : Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.person,
-                              color: Colors.white24,
-                              size: widget.isFullScreen ? 80 : 30,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              displayName.isNotEmpty
-                                  ? displayName.substring(0, 1).toUpperCase()
-                                  : "?",
-                              style: TextStyle(
-                                color: Colors.white54,
-                                fontWeight: FontWeight.bold,
-                                fontSize: widget.isFullScreen ? 30 : 14,
-                              ),
-                            ),
-                          ],
-                        ),
+                  child: avatarUrl != null 
+                      ? CircleAvatar(radius: widget.isFullScreen ? 60 : 25, backgroundImage: NetworkImage(avatarUrl))
+                      : const Icon(Icons.person, color: Colors.white24, size: 40),
                 ),
               ),
 
-            // LAYER B: STATUS BAR (Name & Mic)
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                color: Colors.black54,
-                padding: EdgeInsets.symmetric(
-                  horizontal: widget.isFullScreen ? 20 : 6,
-                  vertical: widget.isFullScreen ? 20 : 4,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        displayName,
+            // B. PAUSE OVERLAY (Host Only)
+            if (showPauseOverlay)
+              Container(
+                color: Colors.black.withOpacity(0.75),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.pause_circle_filled_rounded, color: Colors.amber, size: widget.isFullScreen ? 60 : 32),
+                      const SizedBox(height: 8),
+                      Text(
+                        "HOST PAUSED",
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: widget.isFullScreen ? 18 : 10,
-                          fontWeight: widget.isFullScreen
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+                          fontWeight: FontWeight.w900,
+                          fontSize: widget.isFullScreen ? 18 : 11,
+                          letterSpacing: 1.2,
+                          shadows: const [Shadow(blurRadius: 4, color: Colors.black, offset: Offset(0, 1))]
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    Icon(
-                      isMicOn ? Icons.mic : Icons.mic_off,
-                      size: widget.isFullScreen ? 24 : 12,
-                      color: isMicOn ? Colors.greenAccent : Colors.redAccent,
-                    ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // C. NAME BAR
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Container(
+                color: Colors.black54,
+                padding: EdgeInsets.all(widget.isFullScreen ? 20 : 6),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(displayName, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white))),
+                    Icon(isMicOn ? Icons.mic : Icons.mic_off, size: 16, color: isMicOn ? Colors.green : Colors.red),
                   ],
                 ),
               ),
             ),
 
-            // LAYER C: TOUCH DETECTOR
-            // Only add InkWell if onTap is provided (usually in grid view)
-            if (widget.onTap != null)
-              Positioned.fill(
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: widget.onTap,
-                    splashColor: Colors.white.withOpacity(0.1),
-                    highlightColor: Colors.white.withOpacity(0.05),
+            // D. HOST BADGE
+            if (isHost)
+              Positioned(
+                top: topBadgePadding,
+                left: leftBadgePadding,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEA4359),
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 4, offset: const Offset(0, 2))],
                   ),
+                  child: const Text("HOST", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
               ),
+              
+            // E. TOUCH
+            if (widget.onTap != null)
+              Positioned.fill(child: Material(color: Colors.transparent, child: InkWell(onTap: widget.onTap))),
           ],
         ),
       ),

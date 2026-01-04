@@ -25,7 +25,7 @@ class RoomsUpdated extends RoomEvent {
 }
 
 class FilterRooms extends RoomEvent {
-  final String? query; 
+  final String? query;
   final String? category; // e.g., 'Language Level', 'Paid'
   const FilterRooms(this.query, {this.category});
   @override
@@ -112,12 +112,11 @@ class ToggleSpotlightEvent extends RoomEvent {
 
 class KickUserEvent extends RoomEvent {
   final String roomId;
-  final String userId; 
+  final String userId;
   const KickUserEvent({required this.roomId, required this.userId});
   @override
   List<Object?> get props => [roomId, userId];
 }
-
 
 // Add these to your existing RoomEvent file
 
@@ -132,7 +131,7 @@ class UpdateRoomInfoEvent extends RoomEvent {
     required this.title,
     required this.description,
   });
-  
+
   @override
   List<Object?> get props => [roomId, title, description];
 }
@@ -141,7 +140,7 @@ class UpdateRoomInfoEvent extends RoomEvent {
 class UpdateActiveFeatureEvent extends RoomEvent {
   final String roomId;
   final String feature; // 'whiteboard', 'youtube', 'none'
-  final String? data;   // YouTube Link
+  final String? data; // YouTube Link
 
   const UpdateActiveFeatureEvent({
     required this.roomId,
@@ -160,7 +159,7 @@ class UpdateActiveFeatureEvent extends RoomEvent {
 // 1. Pause/Lock Room (Host toggles "isPrivate")
 class ToggleRoomLockEvent extends RoomEvent {
   final String roomId;
-  final bool isLocked; 
+  final bool isLocked;
   const ToggleRoomLockEvent({required this.roomId, required this.isLocked});
   @override
   List<Object?> get props => [roomId, isLocked];
@@ -208,7 +207,10 @@ class CancelBoardRequestEvent extends RoomEvent {
 class GrantBoardAccessEvent extends RoomEvent {
   final String roomId;
   final String targetUserId; // The user who will stream
-  const GrantBoardAccessEvent({required this.roomId, required this.targetUserId});
+  const GrantBoardAccessEvent({
+    required this.roomId,
+    required this.targetUserId,
+  });
   @override
   List<Object?> get props => [roomId, targetUserId];
 }
@@ -232,20 +234,22 @@ class RequestYouTubeAccessEvent extends RoomEvent {
   final String videoUrl; // <--- NEW
 
   const RequestYouTubeAccessEvent({
-    required this.roomId, 
+    required this.roomId,
     required this.userId,
-    required this.videoUrl
+    required this.videoUrl,
   });
   @override
   List<Object?> get props => [roomId, userId, videoUrl];
 }
 
-
 class CancelYouTubeRequestEvent extends RoomEvent {
   final String roomId;
   final Map<String, dynamic> requestMap; // We need the object to remove it
 
-  const CancelYouTubeRequestEvent({required this.roomId, required this.requestMap});
+  const CancelYouTubeRequestEvent({
+    required this.roomId,
+    required this.requestMap,
+  });
   @override
   List<Object?> get props => [roomId, requestMap];
 }
@@ -257,7 +261,7 @@ class PlayYouTubeVideoEvent extends RoomEvent {
   final Map<String, dynamic>? requestToRemove; // <--- NEW
 
   const PlayYouTubeVideoEvent({
-    required this.roomId, 
+    required this.roomId,
     required this.videoUrl,
     this.requestToRemove,
   });
@@ -265,6 +269,7 @@ class PlayYouTubeVideoEvent extends RoomEvent {
   @override
   List<Object?> get props => [roomId, videoUrl, requestToRemove];
 }
+
 // 4. Stop YouTube (Switch back to none)
 class StopYouTubeEvent extends RoomEvent {
   final String roomId;

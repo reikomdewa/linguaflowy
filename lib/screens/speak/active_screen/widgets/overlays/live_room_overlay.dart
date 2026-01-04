@@ -124,8 +124,8 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
     _isReportOpen = false;
     _isJoinRequestsOpen = false;
   }
-
-  void _resolveSpotlight(String? spotlightId) {
+void _resolveSpotlight(String? spotlightId) {
+    // 1. If spotlight is removed (null)
     if (spotlightId == null) {
       if (_currentSpotlightId != null) {
         setState(() {
@@ -135,14 +135,27 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
       }
       return;
     }
+
+    // 2. CHECK: Only proceed if the Spotlight ID is DIFFERENT from what we last saw.
+    // This prevents "refreshing" the view (re-opening full screen) just because 
+    // the room paused or member count changed.
+    if (spotlightId == _currentSpotlightId) {
+      return; 
+    }
+
+    // 3. New Spotlight Detected
     _currentSpotlightId = spotlightId;
+    
     final room = RoomGlobalManager().livekitRoom;
     if (room == null) return;
 
     Participant? foundUser;
+    // Check Local
     if (room.localParticipant?.identity == spotlightId) {
       foundUser = room.localParticipant;
-    } else {
+    } 
+    // Check Remote
+    else {
       try {
         foundUser = room.remoteParticipants.values.firstWhere(
           (p) => p.identity == spotlightId,
@@ -150,7 +163,8 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
       } catch (_) {}
     }
 
-    if (foundUser != null && _fullScreenParticipant != foundUser) {
+    // 4. Update UI
+    if (foundUser != null) {
       setState(() => _fullScreenParticipant = foundUser);
     }
   }
