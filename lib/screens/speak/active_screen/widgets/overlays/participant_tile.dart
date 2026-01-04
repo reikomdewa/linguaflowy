@@ -220,7 +220,9 @@ class _ParticipantTileState extends State<ParticipantTile> {
 
             // C. NAME BAR
             Positioned(
-              bottom: 5, // Moved up slightly for a better look
+              bottom: widget.isFullScreen
+                  ? 50
+                  : 5, // Moved up slightly for a better look
               left: 5, // Anchored to left
               // REMOVED: right: 0 (This stops it from stretching full width)
               child: Container(
@@ -248,28 +250,29 @@ class _ParticipantTileState extends State<ParticipantTile> {
                         ),
                       ),
                     ),
+
                     // If you want the mic icon back, uncomment this:
-                    /*
                     const SizedBox(width: 4),
-                    Icon(
-                      isMicOn ? Icons.mic : Icons.mic_off, 
-                      size: 14, 
-                      color: isMicOn ? Colors.greenAccent : Colors.redAccent
-                    ),
-                    */
+                    if (widget.isFullScreen)
+                      Icon(
+                        isMicOn ? Icons.mic : Icons.mic_off,
+                        size: 14,
+                        color: isMicOn ? Colors.greenAccent : Colors.redAccent,
+                      ),
                   ],
                 ),
               ),
             ),
-            Positioned(
-              right: 2,
-              top: 2,
-              child: Icon(
-                isMicOn ? Icons.mic : Icons.mic_off,
-                size: 16,
-                color: isMicOn ? Colors.green : Colors.red,
+            if (!widget.isFullScreen)
+              Positioned(
+                right: 2,
+                top: 2,
+                child: Icon(
+                  isMicOn ? Icons.mic : Icons.mic_off,
+                  size: 16,
+                  color: isMicOn ? Colors.green : Colors.red,
+                ),
               ),
-            ),
 
             // D. HOST BADGE
             if (isHost)

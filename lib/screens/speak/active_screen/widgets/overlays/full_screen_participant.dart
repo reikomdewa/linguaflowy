@@ -5,10 +5,7 @@ import 'package:linguaflow/screens/speak/active_screen/widgets/overlays/particip
 class FullScreenParticipantScreen extends StatelessWidget {
   final Participant participant;
 
-  const FullScreenParticipantScreen({
-    super.key,
-    required this.participant,
-  });
+  const FullScreenParticipantScreen({super.key, required this.participant});
 
   @override
   Widget build(BuildContext context) {
@@ -25,23 +22,23 @@ class FullScreenParticipantScreen extends StatelessWidget {
               // We DO NOT pass onTap here, so tapping video doesn't open menu
             ),
           ),
-          
-          // Optional: Add gradient at bottom for better text visibility
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 100,
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Colors.black87, Colors.transparent],
-                ),
-              ),
-            ),
-          ),
+
+          // // Optional: Add gradient at bottom for better text visibility
+          // Positioned(
+          //   left: 0,
+          //   right: 0,
+          //   bottom: 30,
+          //   height: 100,
+          //   child: Container(
+          //     decoration: const BoxDecoration(
+          //       gradient: LinearGradient(
+          //         begin: Alignment.bottomCenter,
+          //         end: Alignment.topCenter,
+          //         colors: [Colors.black87, Colors.transparent],
+          //       ),
+          //     ),
+          //   ),
+          // ),
         ],
       ),
     );
