@@ -78,7 +78,7 @@ class LessonBloc extends Bloc<LessonEvent, LessonState> {
       // This will automatically re-sort everything by your "cheated" dates (2024 vs 2025)
       emit(LessonLoaded(freshLessons, hasReachedMax: false));
     } catch (e) {
-      printLog("Sync failed: $e");
+      print("Sync failed: $e");
 
       // FALLBACK: If sync fails and we have no data on screen, show error.
       // If we already emitted LessonLoaded from cache, we keep showing it.

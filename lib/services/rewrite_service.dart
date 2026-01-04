@@ -28,43 +28,43 @@ class RewriteService {
 
     // 3. Clean Formatting (Strip Markdown)
     newContent = newContent
-        .replaceAll(RegExp(r'\*\*'), '') 
-        .replaceAll(RegExp(r'\*'), '')   
-        .replaceAll(RegExp(r'__'), '')   
-        .replaceAll(RegExp(r'_'), '')    
-        .replaceAll(RegExp(r'#'), '')    
-        .replaceAll(RegExp(r'`'), '')    
+        .replaceAll(RegExp(r'\*\*'), '')
+        .replaceAll(RegExp(r'\*'), '')
+        .replaceAll(RegExp(r'__'), '')
+        .replaceAll(RegExp(r'_'), '')
+        .replaceAll(RegExp(r'#'), '')
+        .replaceAll(RegExp(r'`'), '')
         .trim();
 
     // 4. CREATE NEW OBJECT
     final newLesson = LessonModel(
       id: const Uuid().v4(),
-      userId: user.id, 
+      userId: user.id,
       title: "${originalLesson.title} ($targetLevel)",
       language: originalLesson.language,
       content: newContent,
-      
+
       // --- CRITICAL OVERRIDES ---
-      type: 'text',       
-      videoUrl: null,     
-      subtitleUrl: null,  
-      transcript: [],     
-      sentences: [],      
-      
+      type: 'text',
+      videoUrl: null,
+      subtitleUrl: null,
+      transcript: [],
+      sentences: [],
+
       difficulty: targetLevel,
       createdAt: DateTime.now(),
       progress: 0,
-      
+
       // --- UPDATED: Mark as AI Story ---
-      originality: 'ai_story', 
-      source: 'ai', 
+      originality: 'ai_story',
+      source: 'ai',
       // --------------------------------
-      
+
       // Set to TRUE so it shows in Library
-      isFavorite: true, 
-      
+      isFavorite: true,
+
       isLocal: false,
-      
+
       // Inherit Metadata
       genre: originalLesson.genre,
       imageUrl: originalLesson.imageUrl,
@@ -84,7 +84,7 @@ class RewriteService {
 
   // --- HELPER: CHECK LIMITS ---
   Future<void> _checkAndEnforceLimit(UserModel user) async {
-    if (user.isPremium) return; 
+    if (user.isPremium) return;
 
     try {
       final userDoc = await _firestore.collection('users').doc(user.id).get();
@@ -109,7 +109,7 @@ class RewriteService {
           'rewriteUsageCount': 0,
           'lastRewriteDate': FieldValue.serverTimestamp(),
         });
-        return; 
+        return;
       }
 
       if (usageCount >= _freeDailyLimit) {
@@ -117,7 +117,7 @@ class RewriteService {
       }
     } catch (e) {
       if (e.toString().contains("LIMIT_REACHED")) rethrow;
-      printLog("Error checking limits: $e");
+      print("Error checking limits: $e");
     }
   }
 
@@ -129,7 +129,7 @@ class RewriteService {
         'lastRewriteDate': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      printLog("Failed to increment usage stats: $e");
+      print("Failed to increment usage stats: $e");
     }
   }
 }

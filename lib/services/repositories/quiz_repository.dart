@@ -16,7 +16,7 @@ class QuizPathRepository {
 
       return snapshot.docs.map((doc) => QuizLevel.fromMap(doc.data())).toList();
     } catch (e) {
-      printLog("Error fetching quiz path: $e");
+      print("Error fetching quiz path: $e");
       return [];
     }
   }

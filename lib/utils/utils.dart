@@ -429,7 +429,7 @@ Future<void> printFirestoreSchema() async {
     }
   }
 
-  // printLog(jsonEncode(schemaJson));
+  // print(jsonEncode(schemaJson));
   // ... inside your printFirestoreSchema function, after the loop ...
 
   // Use an encoder to "pretty print" the JSON output
@@ -437,12 +437,12 @@ Future<void> printFirestoreSchema() async {
   String prettyJson = encoder.convert(schemaJson);
 
   // You can still print it to the console if you want
-  printLog("--- Firestore Schema (from 1-document sample) ---");
-  //  printLog(prettyJson);
+  print("--- Firestore Schema (from 1-document sample) ---");
+  //  print(prettyJson);
   printSchemaInChunks(prettyJson);
-  printLog('⚡⚡⚡⚡⚡⚡⚡⚡⚡');
+  print('⚡⚡⚡⚡⚡⚡⚡⚡⚡');
   // await writeOutputToFile(prettyJson, 'schema_output.json');
-  printLog("-------------------------------------------------");
+  print("-------------------------------------------------");
 }
 
 Future<void> writeOutputToFile(String content, String filename) async {

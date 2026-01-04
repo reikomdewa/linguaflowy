@@ -24,7 +24,7 @@ class VocabularyService {
         return VocabularyItem.fromMap(doc.data(), doc.id);
       }).toList();
     } catch (e) {
-      printLog("Error in VocabularyService.getVocabulary: $e");
+      print("Error in VocabularyService.getVocabulary: $e");
       return [];
     }
   }
@@ -64,7 +64,7 @@ class VocabularyService {
           .doc(vocabularyId) // The ID from the model is already the Doc ID
           .delete();
     } catch (e) {
-      printLog("Error deleting vocabulary: $e");
+      print("Error deleting vocabulary: $e");
       throw Exception("Failed to delete vocabulary item");
     }
   }

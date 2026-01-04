@@ -5,7 +5,7 @@ import 'package:linguaflow/utils/logger.dart';
 
 class PremiumService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  
+
   // Your Gumroad Product ID
   static const String _gumroadProductId = "uIq5F1GwaxHuVmADcfcbIw==";
 
@@ -20,9 +20,9 @@ class PremiumService {
       if (code.contains('-')) {
         // 1. Verify API First (Must happen outside the transaction)
         final purchaseData = await _verifyGumroadApi(code);
-        
+
         if (purchaseData == null) {
-           throw Exception("Invalid, Refunded, or Disputed License Key.");
+          throw Exception("Invalid, Refunded, or Disputed License Key.");
         }
 
         // 2. Run Transaction (Prevents double-spending)
@@ -42,13 +42,13 @@ class PremiumService {
             'claimedAt': FieldValue.serverTimestamp(),
             'source': 'gumroad',
             'createdAt': FieldValue.serverTimestamp(),
-            
+
             // Payment Metadata (Crucial for AuthBloc logic)
-            'amount_paid': purchaseData['price'],      // e.g. 500
-            'currency': purchaseData['currency'],      // e.g. 'usd'
+            'amount_paid': purchaseData['price'], // e.g. 500
+            'currency': purchaseData['currency'], // e.g. 'usd'
             'purchaser_email': purchaseData['email'],
-            'purchased_at': purchaseData['created_at'], // Keep Gumroad date string
-            
+            'purchased_at':
+                purchaseData['created_at'], // Keep Gumroad date string
             // Ensure manual fields are null so logic defaults to calculated price
             'manual_expires_at': null,
           });
@@ -56,18 +56,17 @@ class PremiumService {
           // Upgrade the User
           final userRef = _db.collection('users').doc(userId);
           transaction.update(userRef, {'isPremium': true});
-          
+
           return true;
         });
-      } 
-      
+      }
       // ---------------------------------------------------------
       // B. MANUAL / ADMIN CODES (No '-')
       // ---------------------------------------------------------
       else {
         // Note: Manual codes are stored in UPPERCASE usually
         final docRef = _db.collection('promo_codes').doc(code.toUpperCase());
-        
+
         // Run Transaction (Prevents race conditions)
         return await _db.runTransaction((transaction) async {
           final snapshot = await transaction.get(docRef);
@@ -97,7 +96,7 @@ class PremiumService {
         });
       }
     } catch (e) {
-      printLog("REDEEM ERROR: $e");
+      print("REDEEM ERROR: $e");
       rethrow; // Pass error to UI to show SnackBar
     }
   }
@@ -113,7 +112,7 @@ class PremiumService {
 
       // If Gumroad API is down, we return null (fail safe)
       if (response.statusCode != 200) {
-        printLog("Gumroad API Error: ${response.statusCode} - ${response.body}");
+        print("Gumroad API Error: ${response.statusCode} - ${response.body}");
         return null;
       }
 
@@ -127,36 +126,35 @@ class PremiumService {
       final purchase = data['purchase'];
 
       // 2. SECURITY: Check for "Bad" States
-      
+
       // A. Refunded (Voluntary refund)
       if (purchase['refunded'] == true) {
-        printLog("Verification Failed: Purchase was refunded.");
+        print("Verification Failed: Purchase was refunded.");
         return null;
       }
 
       // B. Chargebacked (Fraud/Bank Reversal)
       if (purchase['chargebacked'] == true) {
-        printLog("Verification Failed: Purchase was chargebacked.");
+        print("Verification Failed: Purchase was chargebacked.");
         return null;
       }
 
       // C. Disputed (PayPal/Bank Dispute)
       if (purchase['disputed'] == true) {
-        printLog("Verification Failed: Purchase is disputed.");
+        print("Verification Failed: Purchase is disputed.");
         return null;
       }
-      
+
       // D. Subscription Failed (Optional strict check)
       if (purchase['subscription_failed_at'] != null) {
-         printLog("Verification Failed: Subscription payment failed.");
-         // return null; // Uncomment if you want to be strict
+        print("Verification Failed: Subscription payment failed.");
+        // return null; // Uncomment if you want to be strict
       }
 
       // If all checks pass, return the data map
       return purchase as Map<String, dynamic>;
-
     } catch (e) {
-      printLog("Gumroad Connection Failed: $e");
+      print("Gumroad Connection Failed: $e");
       return null;
     }
   }

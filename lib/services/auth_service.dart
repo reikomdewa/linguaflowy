@@ -24,7 +24,7 @@ class AuthService {
       if (!doc.exists) return null;
       return UserModel.fromMap(doc.data()!, doc.id);
     } catch (e) {
-      printLog("Error getting user: $e");
+      print("Error getting user: $e");
       return null;
     }
   }

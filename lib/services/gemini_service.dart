@@ -74,7 +74,7 @@ class GeminiService {
         progress: 0,
       );
     } catch (e) {
-      printLog("Gemini Parsing Error: $e");
+      print("Gemini Parsing Error: $e");
       throw Exception("Failed to generate lesson. Try a different topic.");
     }
   }
@@ -118,7 +118,7 @@ class GeminiService {
           .replaceAll('```', '')
           .trim();
     } catch (e) {
-      printLog("Gemini Rewrite Error: $e");
+      print("Gemini Rewrite Error: $e");
       throw Exception("Failed to rewrite text. Please try again.");
     }
   }

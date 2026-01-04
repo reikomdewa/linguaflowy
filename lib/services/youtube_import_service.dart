@@ -63,7 +63,7 @@ class YoutubeParser {
         throw Exception('Could not find subtitle URL');
       }
 
-      printLog('🔍 Raw subtitle URL: "$subtitleUrl"'); // Debug
+      print('🔍 Raw subtitle URL: "$subtitleUrl"'); // Debug
 
       // ⚠️ CRITICAL FIX: Ensure the URL is complete with domain
       subtitleUrl = subtitleUrl.trim();
@@ -78,7 +78,7 @@ class YoutubeParser {
         subtitleUrl = 'https://www.youtube.com$subtitleUrl';
       }
 
-      printLog('✅ Fixed subtitle URL: "$subtitleUrl"'); // Debug
+      print('✅ Fixed subtitle URL: "$subtitleUrl"'); // Debug
 
       // Download and parse the XML subtitles
       final transcriptLines = await _fetchAndParseSubtitles(subtitleUrl);
@@ -92,14 +92,14 @@ class YoutubeParser {
         'fullContent': fullContent,
       };
     } catch (e) {
-      printLog('❌ Error in processExtractedData: $e');
+      print('❌ Error in processExtractedData: $e');
       rethrow;
     }
   }
 
   Future<List<TranscriptLine>> _fetchAndParseSubtitles(String url) async {
     try {
-      printLog('🌐 Downloading subtitles from: $url');
+      print('🌐 Downloading subtitles from: $url');
 
       final response = await http.get(
         Uri.parse(url),
@@ -113,7 +113,7 @@ class YoutubeParser {
         throw Exception('Failed to download subtitles: ${response.statusCode}');
       }
 
-      printLog('✅ Subtitles downloaded (${response.body.length} chars)');
+      print('✅ Subtitles downloaded (${response.body.length} chars)');
 
       // Parse XML
       final document = xml.XmlDocument.parse(response.body);
@@ -141,7 +141,7 @@ class YoutubeParser {
         }
       }
 
-      printLog('✅ Parsed ${lines.length} subtitle lines');
+      print('✅ Parsed ${lines.length} subtitle lines');
 
       if (lines.isEmpty) {
         throw Exception('No subtitle lines found');
@@ -149,7 +149,7 @@ class YoutubeParser {
 
       return lines;
     } catch (e) {
-      printLog('❌ Error fetching subtitles: $e');
+      print('❌ Error fetching subtitles: $e');
       rethrow;
     }
   }

@@ -152,7 +152,7 @@ class _CategoryResultsScreenState extends State<CategoryResultsScreen> {
       }
     } catch (e) {
       // On error or timeout, we simply stop the spinner so the user can try again later
-      printLog("Load more failed or timed out: $e");
+      print("Load more failed or timed out: $e");
     } finally {
       // 4. Always ensure the spinner turns off
       if (mounted) {

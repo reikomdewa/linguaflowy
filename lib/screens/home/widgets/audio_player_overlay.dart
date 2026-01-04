@@ -72,10 +72,10 @@ class AudioGlobalManager extends ChangeNotifier {
         await _player.setAudioSource(audioSource);
         _player.play();
       } else {
-        printLog("AUDIO_MANAGER: Error - URL is null or empty");
+        print("AUDIO_MANAGER: Error - URL is null or empty");
       }
     } catch (e) {
-      printLog("AUDIO_MANAGER: Error setting audio source: $e");
+      print("AUDIO_MANAGER: Error setting audio source: $e");
     }
   }
 
@@ -177,7 +177,7 @@ class _AudioPlayerOverlayState extends State<AudioPlayerOverlay> {
       // Dispatch Event to AuthBloc
       context.read<AuthBloc>().add(AuthUpdateListeningTime(minutesToAdd));
 
-      printLog("🎧 TRACKING: Added $minutesToAdd minutes of listening time.");
+      print("🎧 TRACKING: Added $minutesToAdd minutes of listening time.");
     }
 
     // Reset counter

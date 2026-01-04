@@ -77,7 +77,7 @@ class QuizService {
 
       return questions;
     } catch (e) {
-      printLog("Quiz Service Error: $e");
+      print("Quiz Service Error: $e");
       if (e.toString().contains("429") ||
           e.toString().contains("quota") ||
           e.toString().contains("exhausted")) {
@@ -106,9 +106,7 @@ class QuizService {
         return response.text;
       } catch (e) {
         final err = e.toString();
-        printLog(
-          "⚠️ Attempt ${attempts + 1} failed with $currentModelName: $err",
-        );
+        print("⚠️ Attempt ${attempts + 1} failed with $currentModelName: $err");
 
         // 1. Handle Rate Limits (429)
         if (err.contains("429") ||
@@ -116,7 +114,7 @@ class QuizService {
             err.contains("exhausted")) {
           attempts++;
           int waitTime = attempts * 2;
-          printLog("⏳ Rate limit. Waiting $waitTime seconds...");
+          print("⏳ Rate limit. Waiting $waitTime seconds...");
           await Future.delayed(Duration(seconds: waitTime));
         }
         // 2. Handle "Not Found" / Deprecated Model
@@ -124,7 +122,7 @@ class QuizService {
             err.contains("404") ||
             err.contains("deprecated")) {
           if (currentModelName == _primaryModel) {
-            printLog(
+            print(
               "🔄 Model $_primaryModel not found. Switching to $_fallbackModel...",
             );
             currentModelName = _fallbackModel;
@@ -132,7 +130,7 @@ class QuizService {
             continue;
           } else {
             // If fallback also fails, we are stuck.
-            printLog("❌ All models failed.");
+            print("❌ All models failed.");
             rethrow;
           }
         }

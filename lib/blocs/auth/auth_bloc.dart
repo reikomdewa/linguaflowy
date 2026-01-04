@@ -69,7 +69,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             );
 
             if (!isStillValid) {
-              printLog(
+              print(
                 "License Key is no longer valid (Refund/Chargeback). Downgrading.",
               );
               await _downgradeUser(user.id);
@@ -116,7 +116,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
           // 2. CHECK IF EXPIRED
           if (expireDate != null && DateTime.now().isAfter(expireDate)) {
-            printLog("EXPIRED. Downgrading.");
+            print("EXPIRED. Downgrading.");
             await _downgradeUser(user.id);
             return user.copyWith(isPremium: false, premiumDetails: null);
           }
@@ -130,7 +130,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           return user.copyWith(premiumDetails: premiumData);
         }
       } catch (e) {
-        printLog("Network error fetching premium: $e");
+        print("Network error fetching premium: $e");
         // FALLBACK TO SECURE STORAGE (Fix #5)
         if (cachedExpiry != null) {
           if (cachedExpiry == 'LIFETIME') return user; // Still premium
@@ -179,20 +179,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       // A. Refunded: Merchant voluntarily gave money back
       if (purchase['refunded'] == true) {
-        printLog("Gumroad Check: User was refunded.");
+        print("Gumroad Check: User was refunded.");
         return false;
       }
 
       // B. Chargebacked: User forced money back via bank (Fraud)
       if (purchase['chargebacked'] == true) {
-        printLog("Gumroad Check: Payment was chargebacked.");
+        print("Gumroad Check: Payment was chargebacked.");
         return false;
       }
 
       // C. Disputed: User opened a dispute with PayPal/Bank
       // (Usually treated as suspended access until resolved)
       if (purchase['disputed'] == true) {
-        printLog("Gumroad Check: Payment is disputed.");
+        print("Gumroad Check: Payment is disputed.");
         return false;
       }
 
@@ -200,7 +200,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // If the latest payment failed, this might be non-null.
       if (purchase['subscription_failed_at'] != null) {
         // Optional: Check if grace period is over
-        printLog("Gumroad Check: Subscription payment failed.");
+        print("Gumroad Check: Subscription payment failed.");
         // return false; // Uncomment if you want strict enforcement
       }
 
@@ -211,7 +211,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       return true;
     } catch (e) {
-      printLog("Gumroad Re-verify Network Error: $e");
+      print("Gumroad Re-verify Network Error: $e");
       return true; // Assume valid on network error
     }
   }
@@ -234,11 +234,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             .doc(currentUser.id)
             .update({'xp': FieldValue.increment(event.xpToAdd)});
       } catch (e) {
-        printLog("Error updating XP in Firestore: $e");
+        print("Error updating XP in Firestore: $e");
       }
     }
   }
-Future<void> _onAuthCheckRequested(
+
+  Future<void> _onAuthCheckRequested(
     AuthCheckRequested event,
     Emitter<AuthState> emit,
   ) async {
@@ -249,7 +250,7 @@ Future<void> _onAuthCheckRequested(
         try {
           await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
         } catch (e) {
-          printLog("Error setting web persistence: $e");
+          print("Error setting web persistence: $e");
           // Continue execution even if this fails
         }
       }
@@ -262,14 +263,14 @@ Future<void> _onAuthCheckRequested(
         try {
           await firebaseUser.reload();
         } catch (e) {
-          printLog("Error reloading user: $e");
+          print("Error reloading user: $e");
           // If reload fails (network), we might still want to try loading the cached user
         }
 
         // B. Check Verification & Load Data
         if (firebaseUser.emailVerified) {
           UserModel? user = await authService.getCurrentUser();
-          
+
           if (user != null) {
             // C. Sync Google Photo if missing
             if ((user.photoUrl == null || user.photoUrl!.isEmpty) &&
@@ -292,7 +293,7 @@ Future<void> _onAuthCheckRequested(
         }
       }
     } catch (e) {
-      printLog("CRITICAL AUTH CHECK ERROR: $e");
+      print("CRITICAL AUTH CHECK ERROR: $e");
       // Fallthrough to Unauthenticated so the app loads for guests
     }
 
@@ -417,7 +418,7 @@ Future<void> _onAuthCheckRequested(
             .doc(currentUser.id)
             .update({'lessonsCompleted': newTotal});
       } catch (e) {
-        printLog("Error incrementing lessons: $e");
+        print("Error incrementing lessons: $e");
       }
     }
   }
@@ -538,7 +539,7 @@ Future<void> _onAuthCheckRequested(
               'targetLanguages': updatedTargetLanguages,
             });
       } catch (e) {
-        printLog("Error updating language history: $e");
+        print("Error updating language history: $e");
       }
     }
   }
@@ -561,7 +562,7 @@ Future<void> _onAuthCheckRequested(
             .doc(currentUser.id)
             .update({'languageLevels': updatedLevels});
       } catch (e) {
-        printLog("Error updating language level: $e");
+        print("Error updating language level: $e");
       }
     }
   }
@@ -607,7 +608,7 @@ Future<void> _onAuthCheckRequested(
           }
         }
       } catch (e) {
-        printLog("Error updating profile: $e");
+        print("Error updating profile: $e");
       }
     }
   }
@@ -684,7 +685,7 @@ Future<void> _onAuthCheckRequested(
               'lastLoginDate': Timestamp.fromDate(now),
             });
       } catch (e) {
-        printLog("Error updating streak: $e");
+        print("Error updating streak: $e");
       }
     }
     return updatedUser;
@@ -713,7 +714,7 @@ Future<void> _onAuthCheckRequested(
       try {
         await _userService.addFriend(event.friendId);
       } catch (e) {
-        printLog("Error adding friend: $e");
+        print("Error adding friend: $e");
         // Optional: Revert state here if persistence fails
       }
     }
@@ -737,7 +738,7 @@ Future<void> _onAuthCheckRequested(
       try {
         await _userService.removeFriend(event.friendId);
       } catch (e) {
-        printLog("Error removing friend: $e");
+        print("Error removing friend: $e");
       }
     }
   }
@@ -762,7 +763,7 @@ Future<void> _onAuthCheckRequested(
       try {
         await _userService.followUser(event.targetUserId);
       } catch (e) {
-        printLog("Error following user: $e");
+        print("Error following user: $e");
       }
     }
   }
@@ -785,7 +786,7 @@ Future<void> _onAuthCheckRequested(
       try {
         await _userService.unfollowUser(event.targetUserId);
       } catch (e) {
-        printLog("Error unfollowing user: $e");
+        print("Error unfollowing user: $e");
       }
     }
   }
@@ -821,7 +822,7 @@ Future<void> _onAuthCheckRequested(
       try {
         await _userService.blockUser(event.targetUserId);
       } catch (e) {
-        printLog("Error blocking user: $e");
+        print("Error blocking user: $e");
       }
     }
   }
@@ -844,7 +845,7 @@ Future<void> _onAuthCheckRequested(
       try {
         await _userService.unblockUser(event.targetUserId);
       } catch (e) {
-        printLog("Error unblocking user: $e");
+        print("Error unblocking user: $e");
       }
     }
   }

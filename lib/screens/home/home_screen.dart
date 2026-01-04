@@ -458,7 +458,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                   mainAxisAlignment: .center,
                                   children: [
                                     CircularProgressIndicator(),
-                                    Text('Loading lesson'),
+                                    SizedBox(height: 5),
+                                    Text('Loading lessons'),
                                   ],
                                 ),
                               );

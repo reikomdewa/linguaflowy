@@ -11,7 +11,7 @@ class CourseService {
   }) async {
     try {
       final String path = 'assets/course_videos/$languageCode.json';
-      // printLog("DEBUG: Loading course file: $path");
+      // print("DEBUG: Loading course file: $path");
 
       final String jsonString = await rootBundle.loadString(path);
       final List<dynamic> jsonList = jsonDecode(jsonString);
@@ -53,7 +53,7 @@ class CourseService {
 
       return filtered;
     } catch (e) {
-      printLog("ERROR: Could not load course videos. Details: $e");
+      print("ERROR: Could not load course videos. Details: $e");
       return [];
     }
   }

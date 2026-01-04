@@ -60,21 +60,21 @@
 //           ],
 //           note: "Contact us for any questions on your order.",
 //           onSuccess: (Map params) async {
-//             printLog("onSuccess: $params");
+//             print("onSuccess: $params");
 //             await _upgradeUserToPremium();
 //             if (context.mounted) {
 //               Navigator.pop(context); // Close PayPal View
 //             }
 //           },
 //           onError: (error) {
-//             printLog("onError: $error");
+//             print("onError: $error");
 //             if (mounted) Navigator.pop(context);
 //             ScaffoldMessenger.of(
 //               context,
 //             ).showSnackBar(SnackBar(content: Text("Payment failed: $error")));
 //           },
 //           onCancel: () {
-//             printLog('cancelled:');
+//             print('cancelled:');
 //             if (mounted) Navigator.pop(context);
 //           },
 //         ),
@@ -108,7 +108,7 @@
 //         Navigator.pop(context);
 //       }
 //     } catch (e) {
-//       printLog("Upgrade Error: $e");
+//       print("Upgrade Error: $e");
 //       if (mounted) {
 //         ScaffoldMessenger.of(context).showSnackBar(
 //           const SnackBar(

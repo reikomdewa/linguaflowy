@@ -283,7 +283,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
         }
       }
     } catch (e) {
-      printLog("Validation error: $e");
+      print("Validation error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -308,7 +308,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
             .firstWhere((w) => w != null && w > 0)
             .timeout(const Duration(seconds: 2));
       } catch (_) {
-        printLog("Timeout waiting for video width");
+        print("Timeout waiting for video width");
         return null;
       }
 
@@ -388,7 +388,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
                 dirPath,
               );
             } catch (e) {
-              printLog("Skipping thumbnail: $e");
+              print("Skipping thumbnail: $e");
             }
           }
 
@@ -417,7 +417,7 @@ class _ImportDialogContentState extends State<_ImportDialogContent>
             finalContent = await _selectedSubtitleFile!.readAsString();
           }
         } catch (e) {
-          printLog("Error parsing transcript: $e");
+          print("Error parsing transcript: $e");
           finalContent = await _selectedSubtitleFile!.readAsString();
         }
       } catch (e) {

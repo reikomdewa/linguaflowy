@@ -24,7 +24,7 @@ class LessonService {
           .map((doc) => LessonModel.fromMap(doc.data(), doc.id))
           .toList();
     } catch (e) {
-      printLog("Firestore Error (Initial Fetch): $e");
+      print("Firestore Error (Initial Fetch): $e");
       return [];
     }
   }
@@ -37,16 +37,18 @@ class LessonService {
     int limit = 20,
   }) async {
     try {
-      // Since Python saves 'createdAt' as a String, we must use the String 
+      // Since Python saves 'createdAt' as a String, we must use the String
       // format in startAfter to match the Firestore index.
-      final String lastDateString = lastLesson.createdAt.toUtc().toIso8601String();
+      final String lastDateString = lastLesson.createdAt
+          .toUtc()
+          .toIso8601String();
 
       final snapshot = await _firestore
           .collection('lessons')
           .where('userId', isEqualTo: userId)
           .where('language', isEqualTo: languageCode)
           .orderBy('createdAt', descending: true)
-          .startAfter([lastDateString]) 
+          .startAfter([lastDateString])
           .limit(limit)
           .get();
 
@@ -54,7 +56,7 @@ class LessonService {
           .map((doc) => LessonModel.fromMap(doc.data(), doc.id))
           .toList();
     } catch (e) {
-      printLog("Firestore Error (Pagination): $e");
+      print("Firestore Error (Pagination): $e");
       return [];
     }
   }
@@ -69,7 +71,9 @@ class LessonService {
     try {
       if (userIds.isEmpty) return [];
 
-      final String lastDateString = lastLesson.createdAt.toUtc().toIso8601String();
+      final String lastDateString = lastLesson.createdAt
+          .toUtc()
+          .toIso8601String();
 
       final snapshot = await _firestore
           .collection('lessons')
@@ -84,7 +88,7 @@ class LessonService {
           .map((doc) => LessonModel.fromMap(doc.data(), doc.id))
           .toList();
     } catch (e) {
-      printLog("Firestore Error (Unified Pagination): $e");
+      print("Firestore Error (Unified Pagination): $e");
       return [];
     }
   }
@@ -143,12 +147,22 @@ class LessonService {
           .collection('lessons')
           .where('language', isEqualTo: languageCode)
           .where('genre', isEqualTo: genreKey)
-          .where('userId', whereIn: ['system', 'system_native', 'system_course', 'system_audiobook'])
+          .where(
+            'userId',
+            whereIn: [
+              'system',
+              'system_native',
+              'system_course',
+              'system_audiobook',
+            ],
+          )
           .orderBy('createdAt', descending: true);
 
       if (lastLesson != null) {
         // Use ISO String cursor for Python-generated data
-        final String lastDateString = lastLesson.createdAt.toUtc().toIso8601String();
+        final String lastDateString = lastLesson.createdAt
+            .toUtc()
+            .toIso8601String();
         query = query.startAfter([lastDateString]);
       }
 
@@ -158,7 +172,7 @@ class LessonService {
         return LessonModel.fromMap(doc.data(), doc.id);
       }).toList();
     } catch (e) {
-      printLog("Genre Fetch Error ($genreKey): $e");
+      print("Genre Fetch Error ($genreKey): $e");
       return [];
     }
   }

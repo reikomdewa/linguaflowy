@@ -223,7 +223,7 @@ class HybridLessonService {
       for (var doc in snapshot.docs) {
         try {
           final data = doc.data();
-          // DO NOT print(data) or printLog(data) here!
+          // DO NOT print(data) or print(data) here!
           // Printing the raw map is what causes the Stack Overflow.
 
           final lesson = _mapJsonToLesson(

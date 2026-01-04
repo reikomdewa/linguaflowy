@@ -26,7 +26,7 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
     Emitter<QuizState> emit,
   ) async {
     if (state.status == QuizStatus.loading) {
-      printLog("QuizBloc: Already loading. Ignoring duplicate request.");
+      print("QuizBloc: Already loading. Ignoring duplicate request.");
       return;
     }
 
@@ -59,7 +59,7 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
         ),
       );
     } catch (e) {
-      printLog("Quiz Bloc Error: $e");
+      print("Quiz Bloc Error: $e");
       emit(
         state.copyWith(
           status: QuizStatus.error,
@@ -111,7 +111,7 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
         ),
       );
     } catch (e) {
-      printLog("Error parsing unit questions: $e");
+      print("Error parsing unit questions: $e");
       emit(
         state.copyWith(
           status: QuizStatus.error,

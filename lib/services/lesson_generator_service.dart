@@ -77,7 +77,7 @@ class LessonGeneratorService {
       // 5. Map to Model
       return LessonAIContent.fromJson(data);
     } catch (e) {
-      printLog("Lesson Plan Generation Error: $e");
+      print("Lesson Plan Generation Error: $e");
       // Return fallback content so the app doesn't crash
       return _getFallbackContent();
     }

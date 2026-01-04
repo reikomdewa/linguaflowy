@@ -135,6 +135,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
   bool _isLimitDialogOpen = false;
+  bool _hidePlayerForDialog = false; //
 
   @override
   void initState() {
@@ -198,9 +199,12 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
   }
 
   void _showGuestBlockingDialog() {
+    // Hide the iframe so it doesn't block the dialog
+    setState(() => _hidePlayerForDialog = true);
+
     showDialog(
       context: context,
-      barrierDismissible: false, // Cannot click away
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text("Guest Limit Reached"),
         content: const Text(
@@ -208,7 +212,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
         ),
         actions: [
           TextButton(
-            onPressed: () => context.go('/'), // Go Home
+            onPressed: () => context.go('/'),
             child: const Text("Go Home"),
           ),
           FilledButton(
@@ -1317,6 +1321,9 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     _pauseMedia();
 
     if (isGuest) {
+      // 1. Hide Player
+      setState(() => _hidePlayerForDialog = true);
+
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -1326,7 +1333,11 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () {
+                // 2. Restore Player on Cancel
+                setState(() => _hidePlayerForDialog = false);
+                Navigator.pop(ctx);
+              },
               child: const Text("Cancel"),
             ),
             FilledButton(
@@ -2327,6 +2338,17 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
   }
 
   Widget _buildSharedPlayer() {
+    // --- FIX: If dialog is open, hide iframe completely ---
+    if (_hidePlayerForDialog) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Icon(Icons.lock, color: Colors.white54, size: 50),
+        ),
+      );
+    }
+    // -----------------------------------------------------
+
     Widget playerWidget;
 
     if (_isLocalMedia && _localVideoController != null) {
@@ -2335,19 +2357,15 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
         controls: NoVideoControls,
       );
     } else if (kIsWeb && _webYoutubeController != null) {
-      // --- WEB PLAYER WIDGET FIX ---
       playerWidget = SizedBox(
-        width: double.infinity, // Force full width
-        height: double.infinity, // Force full height
+        width: double.infinity,
+        height: double.infinity,
         child: web.YoutubePlayer(
           controller: _webYoutubeController!,
-          // We don't strictly need aspectRatio here because the parent defines it,
-          // but keeping it ensures the iframe internal calculation is correct.
           aspectRatio: 16 / 9,
         ),
       );
     } else if (!kIsWeb && _mobileYoutubeController != null) {
-      // --- MOBILE PLAYER WIDGET ---
       playerWidget = mobile.YoutubePlayer(
         controller: _mobileYoutubeController!,
         showVideoProgressIndicator: false,
