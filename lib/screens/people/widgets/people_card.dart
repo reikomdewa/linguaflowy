@@ -90,20 +90,21 @@ class PeopleCard extends StatelessWidget {
           ),
         ),
         // Streak Badge
-        Positioned(
-          top: 4,
-          left: 4,
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: user.streakDays > 0 ? primaryColor : Colors.transparent,
-              shape: BoxShape.circle,
+        if (user.isPremium)
+          Positioned(
+            top: 4,
+            left: 4,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: user.streakDays > 0 ? primaryColor : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: user.streakDays > 0
+                  ? const Icon(Icons.flash_on, color: Colors.white, size: 12)
+                  : const SizedBox.shrink(),
             ),
-            child: user.streakDays > 0
-                ? const Icon(Icons.flash_on, color: Colors.white, size: 12)
-                : const SizedBox.shrink(),
           ),
-        ),
       ],
     );
   }
