@@ -9,17 +9,9 @@ class Env {
   static const String paypalClientId = String.fromEnvironment(
     'PAYPAL_CLIENT_ID',
   );
-  static const String livekitUrl = String.fromEnvironment('LIVEKIT_URL');
-  static const String liveApikey = String.fromEnvironment('LIVEKIT_API_KEY');
-  static const String liveApiSecret = String.fromEnvironment(
-    'LIVEKIT_API_SECRET',
-  );
 
   // Add a helper to check if keys are missing during development
   static void validate() {
-    if (livekitUrl.isEmpty) {
-      throw Exception('Missing LIVEKIT_URL. Did you forget --dart-define?');
-    }
     if (geminiApiKey.isEmpty) {
       throw Exception(
         'Missing GEMINI_KEY. Did you forget to add --dart-define?',

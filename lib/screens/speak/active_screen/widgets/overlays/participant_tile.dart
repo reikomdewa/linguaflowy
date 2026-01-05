@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -6,7 +7,7 @@ import 'package:linguaflow/models/speak/room_member.dart';
 class ParticipantTile extends StatefulWidget {
   final Participant participant;
   final bool isFullScreen;
-  final BoxFit fit;
+  final BoxFit fit; // This is a standard Flutter BoxFit
   final VoidCallback? onTap;
 
   const ParticipantTile({
@@ -22,14 +23,19 @@ class ParticipantTile extends StatefulWidget {
 }
 
 class _ParticipantTileState extends State<ParticipantTile> {
-  // Listen to Manager to catch Pause/Unpause events immediately
   final RoomGlobalManager _manager = RoomGlobalManager();
+  
+  // We track the current video track ID to detect legitimate changes
+  String? _currentTrackSid;
 
   @override
   void initState() {
     super.initState();
     widget.participant.addListener(_onParticipantChanged);
     _manager.addListener(_onManagerChanged);
+    
+    // Initialize immediately to prevent "Black Flash"
+    _updateTrackState();
   }
 
   @override
@@ -38,6 +44,11 @@ class _ParticipantTileState extends State<ParticipantTile> {
     if (oldWidget.participant != widget.participant) {
       oldWidget.participant.removeListener(_onParticipantChanged);
       widget.participant.addListener(_onParticipantChanged);
+      _updateTrackState();
+    }
+    // Re-evaluate track choice if we enter/exit full screen
+    if (oldWidget.isFullScreen != widget.isFullScreen) {
+      _updateTrackState();
     }
   }
 
@@ -49,41 +60,102 @@ class _ParticipantTileState extends State<ParticipantTile> {
   }
 
   void _onParticipantChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      _updateTrackState();
+      setState(() {});
+    }
   }
 
   void _onManagerChanged() {
     if (mounted) setState(() {});
   }
 
+  void _updateTrackState() {
+    final pub = _getBestVideoTrack();
+    if (pub?.sid != _currentTrackSid) {
+      _currentTrackSid = pub?.sid;
+      // We don't need to force a setState here if called from build, 
+      // but if called from listeners, the setState in _onParticipantChanged handles it.
+    }
+  }
+
+  /// ROBUST TRACK SELECTION LOGIC
+  /// Prioritizes screen share and prevents flickering to camera
+  TrackPublication? _getBestVideoTrack() {
+    final participant = widget.participant;
+
+    // 1. Try to find a Screen Share track
+    try {
+      final screenSharePub = participant.videoTrackPublications.firstWhere(
+        (pub) => pub.source == TrackSource.screenShareVideo,
+      );
+
+      // FIX: If we are in full screen, OR if the track is active, use it.
+      // We are more lenient here: even if 'muted' is true momentarily, we stick
+      // to the screen share track to avoid the UI flipping back and forth.
+      if (widget.isFullScreen || 
+         (screenSharePub.subscribed && screenSharePub.track != null)) {
+        return screenSharePub;
+      }
+    } catch (_) {
+      // No screen share found
+    }
+
+    // 2. Fallback to Camera
+    try {
+      final cameraPub = participant.videoTrackPublications.firstWhere(
+        (pub) => pub.source == TrackSource.camera,
+      );
+      if (cameraPub.subscribed && !cameraPub.muted) {
+        return cameraPub;
+      }
+    } catch (_) {
+      // No camera found
+    }
+
+    // 3. Fallback to first available video
+    return participant.videoTrackPublications.firstOrNull;
+  }
+
   @override
   Widget build(BuildContext context) {
     final roomData = _manager.roomData;
     final participant = widget.participant;
+    final videoPub = _getBestVideoTrack();
+    
+    // Ensure we have a valid track object before trying to render
+    final isVideoActive = videoPub != null && videoPub.track != null;
 
-    // --- 1. ROBUST HOST CHECK ---
+    // --- LOGIC TO RESOLVE VIDEO FIT ---
+    // We must strictly return VideoViewFit, not BoxFit.
+    VideoViewFit rendererFit;
+    
+    if (videoPub?.source == TrackSource.screenShareVideo) {
+      // For screen share:
+      // - Full Screen: Use contain (so we see the whole screen, e.g. text/code)
+      // - Small Tile: Use cover (so it fills the box nicely)
+      rendererFit = widget.isFullScreen ? VideoViewFit.contain : VideoViewFit.cover;
+    } else {
+      // For camera/other:
+      // Convert the widget's incoming BoxFit preference to VideoViewFit
+      rendererFit = (widget.fit == BoxFit.contain) 
+          ? VideoViewFit.contain 
+          : VideoViewFit.cover;
+    }
+
+    // --- HOST & DISPLAY NAME LOGIC ---
     bool isHost = false;
     RoomMember? matchedMember;
 
     if (roomData != null) {
-      // Strategy A: Direct UID Match (Correct)
       if (participant.identity == roomData.hostId) {
         isHost = true;
-      }
-      // Strategy B: Lookup Member to check ID
-      else if (roomData.members.isNotEmpty) {
+      } else if (roomData.members.isNotEmpty) {
         try {
-          // Try finding by UID
           matchedMember = roomData.members.firstWhere(
-            (m) => m.uid == participant.identity,
-            orElse: () => roomData.members.firstWhere(
-              // Fallback: Try finding by Display Name (Legacy/ID Mismatch Fix)
-              (m) =>
-                  m.displayName == participant.identity ||
-                  m.displayName == participant.name,
-            ),
+            (m) => m.uid == participant.identity || 
+                   m.displayName == participant.identity,
           );
-
           if (matchedMember != null && matchedMember.uid == roomData.hostId) {
             isHost = true;
           }
@@ -91,222 +163,104 @@ class _ParticipantTileState extends State<ParticipantTile> {
       }
     }
 
-    // --- 2. PAUSE STATE ---
-    final bool isRoomPaused = roomData?.isPrivate ?? false;
-    final bool showPauseOverlay = isRoomPaused && isHost;
-
-    // --- 3. RESOLVE DISPLAY DATA ---
-    String displayName = "";
-    String? avatarUrl;
-
-    if (roomData != null) {
-      if (isHost) {
-        displayName = roomData.hostName ?? "Host";
-        avatarUrl = roomData.hostAvatarUrl;
-      } else if (matchedMember != null) {
-        displayName = matchedMember.displayName ?? "Member";
-        avatarUrl = matchedMember.avatarUrl;
-      }
-    }
-
-    // Fallbacks
-    if (displayName.isEmpty || displayName == "Guest") {
-      displayName = participant.name.isNotEmpty
-          ? participant.name
-          : participant.identity;
-    }
-    if (participant is LocalParticipant) {
-      displayName = "$displayName (You)";
-    }
-
-    // --- 4. VIDEO STATE ---
-    TrackPublication? videoPub;
-    if (participant.videoTrackPublications.isNotEmpty) {
-      videoPub = participant.videoTrackPublications.first;
-    }
-    final isVideoActive =
-        videoPub != null &&
-        videoPub.subscribed &&
-        videoPub.track != null &&
-        !videoPub.muted;
-    final isMicOn = participant.isMicrophoneEnabled();
-
-    // --- 5. SAFE AREA ---
-    final double topBadgePadding = widget.isFullScreen
-        ? MediaQuery.of(context).padding.top + 12
-        : 6.0;
-    final double leftBadgePadding = widget.isFullScreen ? 16.0 : 6.0;
+    String displayName = matchedMember?.displayName ?? 
+        (participant.name.isNotEmpty ? participant.name : participant.identity);
+    if (participant is LocalParticipant) displayName += " (You)";
+    final String? avatarUrl = matchedMember?.avatarUrl;
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey[800],
+        color: Colors.grey[900],
         borderRadius: widget.isFullScreen ? null : BorderRadius.circular(12),
-        border: widget.isFullScreen
-            ? null
-            : Border.all(
-                color: participant.isSpeaking
-                    ? Colors.greenAccent
-                    : Colors.transparent,
-                width: participant.isSpeaking ? 3 : 0,
-              ),
+        border: (!widget.isFullScreen && participant.isSpeaking)
+            ? Border.all(color: Colors.greenAccent, width: 3)
+            : null,
       ),
       child: ClipRRect(
-        borderRadius: widget.isFullScreen
-            ? BorderRadius.zero
+        borderRadius: widget.isFullScreen 
+            ? BorderRadius.zero 
             : BorderRadius.circular(10),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // A. VIDEO / AVATAR
+            // A. VIDEO LAYER
             if (isVideoActive)
               VideoTrackRenderer(
-                videoPub.track as VideoTrack,
-                fit: widget.fit == BoxFit.contain
-                    ? VideoViewFit.contain
-                    : VideoViewFit.cover,
+                videoPub!.track as VideoTrack,
+                // CRITICAL FIX: Use SID as key.
+                // Do NOT use a counter/random key. This keeps the renderer alive
+                // even when the parent widget rebuilds.
+                key: ValueKey(videoPub.sid),
+                fit: rendererFit,
               )
             else
+              // B. FALLBACK / AVATAR LAYER
               Container(
-                color: Colors.grey[900],
+                color: Colors.grey[850],
                 child: Center(
-                  child: avatarUrl != null
-                      ? CircleAvatar(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (avatarUrl != null)
+                        CircleAvatar(
                           radius: widget.isFullScreen ? 60 : 25,
                           backgroundImage: NetworkImage(avatarUrl),
                         )
-                      : const Icon(
-                          Icons.person,
-                          color: Colors.white24,
-                          size: 40,
+                      else
+                        const Icon(
+                          Icons.person, 
+                          color: Colors.white24, 
+                          size: 40
                         ),
-                ),
-              ),
-
-            // B. PAUSE OVERLAY (Host Only)
-            if (showPauseOverlay)
-              Container(
-                color: Colors.black.withOpacity(0.75),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.pause_circle_filled_rounded,
-                        color: Colors.amber,
-                        size: widget.isFullScreen ? 60 : 32,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "HOST PAUSED",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: widget.isFullScreen ? 18 : 11,
-                          letterSpacing: 1.2,
-                          shadows: const [
-                            Shadow(
-                              blurRadius: 4,
-                              color: Colors.black,
-                              offset: Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
               ),
 
-            // C. NAME BAR
+            // C. NAME TAG
             Positioned(
-              bottom: widget.isFullScreen
-                  ? 50
-                  : 5, // Moved up slightly for a better look
-              left: 5, // Anchored to left
-              // REMOVED: right: 0 (This stops it from stretching full width)
+              bottom: widget.isFullScreen ? 50 : 5,
+              left: 5,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.black54.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(4), // Rounded corners
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(4),
                 ),
-                // Constrain width so long names still truncate with ellipsis
                 constraints: BoxConstraints(
-                  maxWidth: widget.isFullScreen
-                      ? MediaQuery.of(context).size.width * 0.7
-                      : 100,
+                  maxWidth: widget.isFullScreen ? 300 : 100
                 ),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min, // Shrink wrap the row
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Flexible(
                       child: Text(
                         displayName,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+                          color: Colors.white, 
+                          fontSize: 12
                         ),
                       ),
                     ),
-
-                    // If you want the mic icon back, uncomment this:
-                    const SizedBox(width: 4),
-                    if (widget.isFullScreen)
+                    if (widget.isFullScreen) ...[
+                      const SizedBox(width: 4),
                       Icon(
-                        isMicOn ? Icons.mic : Icons.mic_off,
+                        participant.isMicrophoneEnabled() 
+                            ? Icons.mic 
+                            : Icons.mic_off,
                         size: 14,
-                        color: isMicOn ? Colors.greenAccent : Colors.redAccent,
+                        color: participant.isMicrophoneEnabled() 
+                            ? Colors.greenAccent 
+                            : Colors.redAccent,
                       ),
+                    ]
                   ],
                 ),
               ),
             ),
-            if (!widget.isFullScreen)
-              Positioned(
-                right: 2,
-                top: 2,
-                child: Icon(
-                  isMicOn ? Icons.mic : Icons.mic_off,
-                  size: 16,
-                  color: isMicOn ? Colors.green : Colors.red,
-                ),
-              ),
 
-            // D. HOST BADGE
-            if (isHost)
-              Positioned(
-                top: topBadgePadding,
-                left: leftBadgePadding,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black54.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(4),
-                    // boxShadow: [
-                    //   BoxShadow(
-                    //     color: Colors.black.withOpacity(0.4),
-                    //     blurRadius: 4,
-                    //     offset: const Offset(0, 2),
-                    //   ),
-                    // ],
-                  ),
-                  child: const Text(
-                    "HOST",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-
-            // E. TOUCH
+            // D. TOUCH HANDLER
             if (widget.onTap != null)
               Positioned.fill(
                 child: Material(

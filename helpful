@@ -3,5 +3,3 @@ The script above handles Tatoeba and Archive.org. For 5fish (which is the best f
 Pattern: https://5fish.mobi/us/search?q=[Language Name]
 Action: When a user selects a rare language like "Alur", you can show a button "Listen to 5fish Audio" that opens this URL in a WebView or Browser. It is the most reliable way to give them access to 50+ hours of audio without complex scraping.
 
-
-wss://linguaflow-7eemmnrq.livekit.cloud

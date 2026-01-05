@@ -4,9 +4,9 @@ import subprocess
 import os
 
 # --- 1. CONFIGURATION (Update these values) ---
-NEW_LIVEKIT_URL = "wss://linguaflow-dev-coc00fgm.livekit.cloud"
-NEW_LIVEKIT_API_KEY = "API6C5BUWD28NMh"
-NEW_LIVEKIT_API_SECRET = "5SE5TVytIq8z6SwASEi26LPoUnB7wiEBz5eecAq16nt"
+NEW_LIVEKIT_URL = "wss://linguaflowy-rth2eg9w.livekit.cloud"
+NEW_LIVEKIT_API_KEY = "API8Lqy3iGy7fGS"
+NEW_LIVEKIT_API_SECRET = "Z7nG0jfi0KLedAXO4Mm4s3IixCKk372OUfItLcWDe8vB"
 SERVICE_ACCOUNT_PATH = "../serviceAccountKey.json"
 
 def update_firebase():

@@ -3,7 +3,7 @@ import 'package:firebase_remote_config/firebase_remote_config.dart';
 class RemoteConfigUtils {
   static const String _livekitUrlKey = 'livekit_url';
   static const String _fallbackLivekitUrl =
-      'wss://fallback.livekit.cloud';
+      'wss://linguaflowy-rth2eg9w.livekit.cloud';
 
   /// Fetches LiveKit URL from Firebase Remote Config
   /// Safe to call at app start or before joining a room

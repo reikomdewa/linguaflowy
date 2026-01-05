@@ -50,16 +50,16 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
           <!-- 2. LiveKit Foreground Service (KEEPS APP ALIVE) -->
-       <service android:name="com.livekit.flutter.LiveKitService"
-                android:foregroundServiceType="microphone|camera"
-                android:exported="false" />
+      <service android:name="com.livekit.flutter.LiveKitService"
+         android:foregroundServiceType="microphone|camera|mediaProjection"
+         android:exported="false" />
                 <service 
     android:name="io.livekit.android.LiveKitForegroundService"
     android:foregroundServiceType="mediaProjection"
     android:exported="false" />
     <service 
     android:name="de.julianassmann.flutter_background.IsolateHolderService" 
-    android:foregroundServiceType="mediaProjection" 
+    android:foregroundServiceType="mediaProjection"
     android:enabled="true" 
     android:exported="false" />
         <activity
@@ -103,8 +103,8 @@
     <category android:name="android.intent.category.DEFAULT" />
 </intent-filter>
         </activity>
-        <service android:name="com.ryanheise.audioservice.AudioService"
-    android:foregroundServiceType="mediaPlayback"
+       <service android:name="com.ryanheise.audioservice.AudioService"
+    android:foregroundServiceType="mediaPlayback|mediaProjection"
     android:exported="true">
     <intent-filter>
         <action android:name="android.media.browse.MediaBrowserService" />

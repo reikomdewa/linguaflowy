@@ -27,3 +27,9 @@
 -dontwarn com.google.android.play.core.splitinstall.**
 -dontwarn com.google.android.play.core.tasks.**
 -dontwarn com.google.android.play.core.**
+
+#livekit
+-keep class io.flutter.plugin.** { *; }
+-keep class com.cloudwebrtc.** { *; }
+-keep class livekit.** { *; }
+-keep class org.webrtc.** { *; }

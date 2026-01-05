@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -9,6 +10,7 @@ import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
 import 'package:linguaflow/blocs/speak/room/room_event.dart';
 import 'package:linguaflow/core/env.dart';
 import 'package:linguaflow/screens/speak/active_screen/managers/room_global_manager.dart';
+import 'package:linguaflow/screens/speak/utils/remote_config_utils.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 // --- BLOC IMPORTS ---
@@ -356,7 +358,9 @@ class _LiveNotificationBannerState extends State<LiveNotificationBanner>
     );
 
     try {
-      const liveKitUrl = Env.livekitUrl;
+          final liveKitUrl = await RemoteConfigUtils.getLiveKitUrl(
+        forceRefresh: true,
+      );
 
       final currentUser = firebase_auth.FirebaseAuth.instance.currentUser;
       final username = currentUser?.displayName ?? "Guest";
