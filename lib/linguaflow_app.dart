@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:linguaflow/core/globals.dart';
 import 'package:linguaflow/core/theme/app_theme.dart';
 
 // CONFIG
@@ -122,7 +123,7 @@ class _LinguaflowAppViewState extends State<LinguaflowAppView> {
         return MaterialApp.router(
           // 6. Use the router configuration from our instance
           routerConfig: _appRouter.router,
-          
+              scaffoldMessengerKey: rootScaffoldMessengerKey,
           title: 'LinguaFlow',
           debugShowCheckedModeBanner: false,
 

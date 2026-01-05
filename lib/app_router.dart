@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'; // Required for kIsWeb
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:upgrader/upgrader.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 // GLOBALS
 import 'package:linguaflow/core/globals.dart'; 
@@ -43,12 +43,12 @@ class AppRouter {
   AppRouter(this.authBloc);
 
   late final GoRouter router = GoRouter(
-    navigatorKey: navigatorKey, // Ensure this is the GlobalKey form globals.dart
+    navigatorKey: navigatorKey, // From globals.dart
     initialLocation: '/',
 
     // 1. REFRESH LISTENABLE
-    // This connects GoRouter to the AuthBloc. When the state changes,
-    // the redirect logic is re-evaluated immediately.
+    // This makes the Router "Reactive". It will re-run the redirect logic
+    // whenever the AuthBloc state changes (e.g. Loading -> Authenticated).
     refreshListenable: GoRouterRefreshStream(authBloc.stream),
 
     // 2. REDIRECT LOGIC
@@ -56,48 +56,57 @@ class AppRouter {
       final authState = authBloc.state;
       final String location = state.uri.toString();
 
-      // Status Checks
+      // Check Status
       final bool isLoggedIn = authState is AuthAuthenticated;
       final bool isInitializing = authState is AuthInitial || authState is AuthLoading;
       final bool isLoggingIn = location == '/login';
       final bool isPlacementTest = location.startsWith('/placement-test');
 
-      // A. Handling Splash Screen & Initialization
-      // If we are still loading the user, we DO NOT redirect yet.
-      // This prevents the Home Screen from mounting and firing queries with null User.
+      // A. WAIT FOR AUTH INITIALIZATION
+      // If we are still checking if the user is logged in, DO NOT load the UI yet.
+      // This prevents "Permission Denied" crashes on startup.
       if (isInitializing) {
-        return null; 
+        return null; // Stay on Splash / Current Screen
       }
-      
-      // Once we know the state (LoggedIn or Unauthenticated), remove native splash
+
+      // Once initialized, remove the native splash screen
       FlutterNativeSplash.remove();
 
-      // B. Unauthenticated User Logic
+      // B. LOGGED OUT USERS
       if (!isLoggedIn) {
-        // Allow access to Login and Placement Test
+        // 1. Always allow Login page and Placement Test
         if (isLoggingIn || isPlacementTest) {
-          return null;
+          return null; 
         }
-        // Redirect everything else to Login
+
+        // 2. WEB GUEST MODE (FIX)
+        // If on Web, we allow guests to browse the app (Home, etc.)
+        // without being forced to login.
+        if (kIsWeb) {
+          return null; 
+        }
+
+        // 3. MOBILE FORCED LOGIN
+        // If on Mobile, force them to login (unless you want guests there too).
         return '/login';
       }
 
-      // C. Authenticated User Logic
-      // If user is logged in but trying to go to login page, send to Home
+      // C. LOGGED IN USERS
+      // If user is already logged in but on the Login page, send them Home.
       if (isLoggedIn && isLoggingIn) {
         return '/';
       }
 
-      // D. Admin Route Protection
+      // D. ADMIN PROTECTION
+      // (Optional) Add check here if you have an isAdmin flag in your state
       if (location.startsWith('/admin')) {
-         // You can add specific Admin checks here if your AuthState has an isAdmin field
          // if (!authState.isAdmin) return '/';
       }
 
-      return null; // No redirect needed, proceed to route
+      return null; // Allow navigation
     },
 
-    // 3. ROUTE DEFINITIONS
+    // 3. ROUTES
     routes: [
       // =========================================================
       // ROOT / MAIN TABS
@@ -209,11 +218,20 @@ class AppRouter {
         },
       ),
 
-      GoRoute(
+  GoRoute(
         path: '/premium',
         builder: (context, state) {
-          final bool? extraIsPremium = state.extra as bool?;
-          return PremiumScreen(isPremium: extraIsPremium ?? false);
+          // 1. Get the Source of Truth (AuthBloc)
+          final authState = context.read<AuthBloc>().state;
+
+          // 2. Check if user is logged in
+          if (authState is AuthAuthenticated) {
+            // 3. Pass the FULL User object to the screen
+            return PremiumScreen(user: authState.user);
+          }
+
+          // 4. Fallback if not logged in
+          return const LoginScreen();
         },
       ),
 

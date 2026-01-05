@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import 'package:linguaflow/core/env.dart';
 import 'package:linguaflow/screens/speak/utils/remote_config_utils.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -478,7 +479,6 @@ class RoomCard extends StatelessWidget {
     if (currentUser == null) return;
 
     // --- 1. BAN CHECK ---
-    // Ensure your ChatRoom model has `bannedUserIds` and `joinRequests` fields.
     if (roomData.bannedUserIds.contains(currentUser.uid)) {
       // Check if already requested
       final hasRequested = roomData.joinRequests.any(
@@ -553,6 +553,7 @@ class RoomCard extends StatelessWidget {
 
       // C. Connect LiveKit
       final livekitRoom = Room();
+      // Force refresh config in case URLs changed
       final livekitUrl = await RemoteConfigUtils.getLiveKitUrl(
         forceRefresh: true,
       );
@@ -566,10 +567,58 @@ class RoomCard extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error joining room: $e")));
+        Navigator.pop(context); // Close loading dialog
+
+        final errorStr = e.toString().toLowerCase();
+
+        // --- CHECK FOR LIMIT EXCEEDED ERROR ---
+        if (errorStr.contains("limit exceeded") ||
+            errorStr.contains("connectexception")) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              icon: const Icon(
+                Icons.diamond_outlined,
+                size: 48,
+                color: Colors.blue,
+              ),
+              title: const Text("Support Live Chat"),
+              content: const Text(
+                "Live chat is currently unavailable due to high server maintenance costs.\n\n"
+                "Please upgrade to Premium to help support this feature and unlock unlimited access.",
+                textAlign: TextAlign.center,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("Close"),
+                ),
+                FilledButton.icon(
+                  icon: const Icon(Icons.star),
+                  label: const Text("Upgrade to Pro"),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.amber[800], // Gold/Premium color
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+
+                    context.push('/premium');
+                  },
+                ),
+              ],
+            ),
+          );
+        } else {
+          // --- GENERIC ERROR ---
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Unable to join room. Please try again later."),
+              backgroundColor: Colors.red,
+            ),
+          );
+          debugPrint("Error joining room: $e");
+        }
       }
     }
   }

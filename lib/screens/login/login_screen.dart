@@ -9,6 +9,7 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/constants/terms_and_policies.dart';
+import 'package:linguaflow/core/globals.dart'; // Ensure this contains rootScaffoldMessengerKey
 
 // ==============================================================================
 // 1. THE WRAPPER (Mobile Only)
@@ -37,8 +38,6 @@ class LoginFormContent extends StatefulWidget {
 
 class _LoginFormContentState extends State<LoginFormContent> {
   // --- PERSISTENCE LAYER ---
-  // Static variables survive widget destruction/re-creation.
-  // This fixes the issue where data disappears if the app reloads the LoginScreen.
   static String _preservedEmail = '';
   static String _preservedPassword = '';
   static String _preservedName = '';
@@ -51,34 +50,28 @@ class _LoginFormContentState extends State<LoginFormContent> {
   final _formKey = GlobalKey<FormState>();
 
   bool _isLogin = true;
-  bool _acceptedTerms = false;
   bool _isPasswordVisible = false;
+  // Removed _acceptedTerms since we are implying consent
 
   @override
   void initState() {
     super.initState();
-    // 1. Initialize Controllers with Preserved Data
+    // 1. Initialize Controllers
     _emailController = TextEditingController(text: _preservedEmail);
     _passwordController = TextEditingController(text: _preservedPassword);
     _nameController = TextEditingController(text: _preservedName);
 
-    // 2. Add Listeners to update Preserved Data in real-time
-    _emailController.addListener(() {
-      _preservedEmail = _emailController.text;
-    });
-    _passwordController.addListener(() {
-      _preservedPassword = _passwordController.text;
-    });
-    _nameController.addListener(() {
-      _preservedName = _nameController.text;
-    });
+    // 2. Add Listeners
+    _emailController.addListener(() { _preservedEmail = _emailController.text; });
+    _passwordController.addListener(() { _preservedPassword = _passwordController.text; });
+    _nameController.addListener(() { _preservedName = _nameController.text; });
 
-    // 3. Check for missed errors (Screen Flicker Fix)
+    // 3. Check for missed errors
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final state = context.read<AuthBloc>().state;
       if (state is AuthError) {
-        _showErrorSnackBar(context, state);
+        _showErrorSnackBar(state);
       }
     });
   }
@@ -91,14 +84,15 @@ class _LoginFormContentState extends State<LoginFormContent> {
     super.dispose();
   }
 
-  // --- HELPER: Centralized Error Handling ---
-  void _showErrorSnackBar(BuildContext context, AuthError state) {
-    FocusScope.of(context).unfocus(); // Force Keyboard close
+  // --- HELPER: Centralized Error Handling using Global Key ---
+  void _showErrorSnackBar(AuthError state) {
+    FocusScope.of(context).unfocus(); 
 
     final bool isVerificationError = state.isVerificationError;
 
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
+    // FIX: Use global key to ensure it shows above everything
+    rootScaffoldMessengerKey.currentState?.clearSnackBars();
+    rootScaffoldMessengerKey.currentState?.showSnackBar(
       SnackBar(
         content: Text(state.message),
         backgroundColor: Colors.redAccent,
@@ -109,7 +103,6 @@ class _LoginFormContentState extends State<LoginFormContent> {
                 label: 'RESEND EMAIL',
                 textColor: Colors.white,
                 onPressed: () {
-                  // Use the Preserved/Current values to resend
                   final email = _emailController.text.trim();
                   final pass = _passwordController.text;
 
@@ -118,11 +111,9 @@ class _LoginFormContentState extends State<LoginFormContent> {
                       AuthResendVerificationEmail(email, pass),
                     );
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    rootScaffoldMessengerKey.currentState?.showSnackBar(
                       const SnackBar(
-                        content: Text(
-                          "Fields empty. Please re-enter credentials.",
-                        ),
+                        content: Text("Fields empty. Please re-enter credentials."),
                       ),
                     );
                   }
@@ -131,7 +122,9 @@ class _LoginFormContentState extends State<LoginFormContent> {
             : SnackBarAction(
                 label: 'OK',
                 textColor: Colors.white,
-                onPressed: () {},
+                onPressed: () {
+                   rootScaffoldMessengerKey.currentState?.hideCurrentSnackBar();
+                },
               ),
       ),
     );
@@ -141,14 +134,9 @@ class _LoginFormContentState extends State<LoginFormContent> {
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
-        // ---------------------------------------------------------------------
-        // 1. LOGIN SUCCESS (The missing part)
-        // ---------------------------------------------------------------------
+        // 1. LOGIN SUCCESS
         if (state is AuthAuthenticated) {
-          FocusScope.of(context).unfocus(); // Hide keyboard
-
-          // Logic: If we came from another screen (via AuthGuard), go back.
-          // If we opened this directly (e.g. from URL), go Home.
+          FocusScope.of(context).unfocus(); 
           if (context.canPop()) {
             context.pop();
           } else {
@@ -156,20 +144,16 @@ class _LoginFormContentState extends State<LoginFormContent> {
           }
         }
 
-        // ---------------------------------------------------------------------
         // 2. REGISTRATION SUCCESS / MESSAGES
-        // ---------------------------------------------------------------------
         if (state is AuthMessage) {
           FocusScope.of(context).unfocus();
 
-          // If registered successfully, switch UI to Login mode
           if (!_isLogin) {
-            setState(() {
-              _isLogin = true;
-            });
+            setState(() { _isLogin = true; });
           }
 
-          ScaffoldMessenger.of(context).showSnackBar(
+          // FIX: Use global key
+          rootScaffoldMessengerKey.currentState?.showSnackBar(
             SnackBar(
               content: Text(state.message),
               backgroundColor: Colors.green,
@@ -179,11 +163,9 @@ class _LoginFormContentState extends State<LoginFormContent> {
           );
         }
 
-        // ---------------------------------------------------------------------
         // 3. ERROR STATE
-        // ---------------------------------------------------------------------
         if (state is AuthError) {
-          _showErrorSnackBar(context, state);
+          _showErrorSnackBar(state);
         }
       },
       child: Center(
@@ -196,7 +178,7 @@ class _LoginFormContentState extends State<LoginFormContent> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // LOGO
-                if (!kIsWeb)
+                if (!kIsWeb) ...[
                   Image.asset(
                     'assets/images/linguaflow_logo_transparent.png',
                     height: 100.0,
@@ -204,20 +186,19 @@ class _LoginFormContentState extends State<LoginFormContent> {
                     errorBuilder: (context, error, stackTrace) =>
                         const Icon(Icons.language, size: 100),
                   ),
-
-                if (!kIsWeb)
                   const Text(
                     'LinguaFlow',
                     style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
-                if (!kIsWeb) const SizedBox(height: 8),
-                if (!kIsWeb)
+                  const SizedBox(height: 8),
                   const Text(
                     'Learning language the natural way',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
+                ],
+                
                 const Text(
                   'Login or Sign Up',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -225,9 +206,7 @@ class _LoginFormContentState extends State<LoginFormContent> {
                 ),
                 const SizedBox(height: 24),
 
-                // ---------------------------------------------------------
                 // NAME FIELD (Sign Up Only)
-                // ---------------------------------------------------------
                 if (!_isLogin) ...[
                   TextFormField(
                     controller: _nameController,
@@ -244,9 +223,7 @@ class _LoginFormContentState extends State<LoginFormContent> {
                   const SizedBox(height: 16),
                 ],
 
-                // ---------------------------------------------------------
                 // EMAIL FIELD
-                // ---------------------------------------------------------
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -265,9 +242,7 @@ class _LoginFormContentState extends State<LoginFormContent> {
                 ),
                 const SizedBox(height: 16),
 
-                // ---------------------------------------------------------
                 // PASSWORD FIELD
-                // ---------------------------------------------------------
                 TextFormField(
                   controller: _passwordController,
                   textInputAction: TextInputAction.done,
@@ -308,74 +283,56 @@ class _LoginFormContentState extends State<LoginFormContent> {
                 const SizedBox(height: 16),
 
                 // ---------------------------------------------------------
-                // TERMS AND CONDITIONS
+                // TERMS AND CONDITIONS (NO CHECKBOX - JUST TEXT)
                 // ---------------------------------------------------------
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      height: 24,
-                      width: 24,
-                      child: Checkbox(
-                        value: _acceptedTerms,
-                        onChanged: (val) {
-                          setState(() {
-                            _acceptedTerms = val ?? false;
-                          });
-                        },
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: RichText(
+                    textAlign: TextAlign.center,
+                    text: TextSpan(
+                      style: TextStyle(
+                        color: Theme.of(context).textTheme.bodyMedium?.color,
+                        fontSize: 12,
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: RichText(
-                        text: TextSpan(
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).textTheme.bodyMedium?.color,
-                            fontSize: 13,
+                      children: [
+                        const TextSpan(text: "By continuing, you agree to the "),
+                        TextSpan(
+                          text: "Terms & Conditions",
+                          style: const TextStyle(
+                            color: Colors.blue,
+                            fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.underline,
                           ),
-                          children: [
-                            const TextSpan(text: "I agree to the "),
-                            TextSpan(
-                              text: "Terms & Conditions",
-                              style: const TextStyle(
-                                color: Colors.blue,
-                                fontWeight: FontWeight.bold,
-                                decoration: TextDecoration.underline,
-                              ),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () {
-                                  _showLegalDialog(
-                                    context,
-                                    "Terms & Conditions",
-                                    TermsAndPolicies.termsOfService,
-                                  );
-                                },
-                            ),
-                            const TextSpan(text: " and "),
-                            TextSpan(
-                              text: "Privacy Policy",
-                              style: const TextStyle(
-                                color: Colors.blue,
-                                fontWeight: FontWeight.bold,
-                                decoration: TextDecoration.underline,
-                              ),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () {
-                                  _showLegalDialog(
-                                    context,
-                                    "Privacy Policy",
-                                    TermsAndPolicies.privacyPolicy,
-                                  );
-                                },
-                            ),
-                            const TextSpan(text: "."),
-                          ],
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () {
+                              _showLegalDialog(
+                                context,
+                                "Terms & Conditions",
+                                TermsAndPolicies.termsOfService,
+                              );
+                            },
                         ),
-                      ),
+                        const TextSpan(text: " and "),
+                        TextSpan(
+                          text: "Privacy Policy",
+                          style: const TextStyle(
+                            color: Colors.blue,
+                            fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.underline,
+                          ),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () {
+                              _showLegalDialog(
+                                context,
+                                "Privacy Policy",
+                                TermsAndPolicies.privacyPolicy,
+                              );
+                            },
+                        ),
+                        const TextSpan(text: "."),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
 
                 const SizedBox(height: 24),
@@ -400,12 +357,9 @@ class _LoginFormContentState extends State<LoginFormContent> {
 
                 const SizedBox(height: 16),
 
-                // ---------------------------------------------------------
                 // TOGGLE MODE
-                // ---------------------------------------------------------
                 TextButton(
                   onPressed: () {
-                    // Just toggle mode. DO NOT CLEAR CONTROLLERS.
                     setState(() {
                       _isLogin = !_isLogin;
                     });
@@ -436,19 +390,6 @@ class _LoginFormContentState extends State<LoginFormContent> {
                 OutlinedButton.icon(
                   onPressed: () {
                     FocusScope.of(context).unfocus();
-
-                    if (!_acceptedTerms) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            "Please accept the Terms & Privacy Policy to continue.",
-                          ),
-                          backgroundColor: Colors.orange,
-                        ),
-                      );
-                      return;
-                    }
-
                     context.read<AuthBloc>().add(AuthGoogleLoginRequested());
                   },
                   style: OutlinedButton.styleFrom(
@@ -491,18 +432,8 @@ class _LoginFormContentState extends State<LoginFormContent> {
   void _submitForm() {
     FocusScope.of(context).unfocus();
 
-    if (!_acceptedTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Please accept the Terms & Privacy Policy to continue.",
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
+    // No need to check _acceptedTerms anymore because it's implied by clicking.
+    
     if (_formKey.currentState!.validate()) {
       TextInput.finishAutofillContext();
 

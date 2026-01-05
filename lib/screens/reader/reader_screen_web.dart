@@ -1012,17 +1012,23 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
   }
 
   void _closeTranslationCard() {
-    if (_showCard) {
-      FocusManager.instance.primaryFocus?.unfocus();
-      _activeSelectionClearer?.call();
+    // Clear selection highlighting
+    _activeSelectionClearer?.call();
+
+    // Resume video if it was playing and we are closing the card
+    if (_wasPlayingBeforeCard && (_isVideo || _isAudio || _isYoutubeAudio)) {
+      _playMedia();
+      _wasPlayingBeforeCard = false;
+    }
+
+    // Reset state
+    if (mounted) {
       setState(() {
         _showCard = false;
         _activeSelectionClearer = null;
       });
-      if (_wasPlayingBeforeCard && (_isVideo || _isAudio || _isYoutubeAudio)) {
-        _playMedia();
-      }
-      _wasPlayingBeforeCard = false;
+      // Clear focus to hide keyboard on mobile if active
+      FocusManager.instance.primaryFocus?.unfocus();
     }
   }
 
@@ -1179,20 +1185,28 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     Offset pos, {
     required bool isPhrase,
   }) {
+    // 1. Pause Media if playing
     if (_isVideo || _isAudio || _isYoutubeAudio) {
       _wasPlayingBeforeCard = _isPlaying;
       if (_isPlaying) _pauseMedia();
     }
+
+    // 2. Stop TTS if active
     if (_isTtsPlaying) {
       _flutterTts.stop();
       setState(() => _isTtsPlaying = false);
     }
+
+    // 3. Speak the selected word immediately
     _flutterTts.speak(text);
+
+    // 4. Prepare Data
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final svc = context.read<TranslationService>();
     final String lemma = isPhrase ? text : LocalLemmatizer().getLemma(text);
+
+    // 5. Update State with Data
     setState(() {
-      _showCard = true;
       _selectedText = text;
       _selectedCleanId = cleanId;
       _selectedBaseForm = lemma;
@@ -1202,12 +1216,433 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
           .translate(text, user.nativeLanguage, widget.lesson.language)
           .then((v) => v ?? "");
     });
+
+    // 6. BRANCHING LOGIC
+    // If Web Desktop (and not fullscreen), show the DIALOG.
+    // Otherwise (Mobile or Fullscreen), show the OVERLAY.
+    if (kIsWeb && !_isFullScreen) {
+      _showWebTranslationDialog();
+    } else {
+      setState(() => _showCard = true);
+    }
   }
 
-  // [Include _buildTranslationOverlay, _checkLimitAndActivate, _logActivitySession, _updateWordStatus, etc.]
-  Widget _buildTranslationOverlay() {
+  void _showWebTranslationDialog() {
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final existing = _isSelectionPhrase ? null : _vocabulary[_selectedCleanId];
+    final int currentStatus = existing?.status ?? 0;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true, // Allow clicking outside to close
+      builder: (context) {
+        return PointerInterceptor(
+          // CRITICAL: Forces the dialog to render ABOVE the YouTube Iframe
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            contentPadding: const EdgeInsets.all(20),
+            titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+
+            // A. HEADER (Word + Audio)
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _selectedText,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.volume_up, color: Colors.blueAccent),
+                  onPressed: () => _flutterTts.speak(_selectedText),
+                ),
+              ],
+            ),
+
+            content: SizedBox(
+              width: 400, // Fixed width for desktop consistency
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(),
+                  const SizedBox(height: 10),
+
+                  // B. TRANSLATION
+                  FutureBuilder<String>(
+                    future: _cardTranslationFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Row(
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 10),
+                            Text("Translating..."),
+                          ],
+                        );
+                      }
+                      return Text(
+                        snapshot.data ?? "No translation available",
+                        style: const TextStyle(
+                          fontSize: 18,
+                          color: Colors.blueAccent,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 24),
+                  const Text(
+                    "Mark Status:",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // C. STATUS BUTTONS
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildDialogStatusButton(
+                        1,
+                        "New",
+                        Colors.red,
+                        currentStatus,
+                      ),
+                      _buildDialogStatusButton(
+                        3,
+                        "Learning",
+                        Colors.orange,
+                        currentStatus,
+                      ),
+                      _buildDialogStatusButton(
+                        5,
+                        "Known",
+                        Colors.green,
+                        currentStatus,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // D. ACTIONS (AI Explain + Close)
+            actions: [
+              TextButton.icon(
+                icon: const Icon(Icons.auto_awesome, size: 16),
+                label: const Text("AI Explain"),
+                onPressed: () {
+                  Navigator.pop(context); // Close dialog first
+                  // Trigger AI logic
+                  Gemini.instance
+                      .prompt(
+                        parts: [
+                          Part.text(
+                            "Explain '$_selectedText' in ${widget.lesson.language} for ${user.nativeLanguage} speaker",
+                          ),
+                        ],
+                      )
+                      .then((v) {
+                        if (v?.output != null && mounted) {
+                          showDialog(
+                            context: context,
+                            builder: (c) => AlertDialog(
+                              title: Text("Explanation: $_selectedText"),
+                              content: SingleChildScrollView(
+                                child: Text(v!.output!),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(c),
+                                  child: const Text("Close"),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                      });
+                },
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Close"),
+              ),
+            ],
+          ),
+        );
+      },
+    ).then((_) {
+      // Cleanup when dialog closes
+      _closeTranslationCard();
+    });
+  }
+
+  // Helper widget specifically for the Dialog buttons
+  Widget _buildDialogStatusButton(
+    int status,
+    String label,
+    Color color,
+    int currentStatus,
+  ) {
+    final bool isSelected = currentStatus == status;
+    return InkWell(
+      onTap: () async {
+        String translation = await _cardTranslationFuture ?? "";
+        _updateWordStatus(_selectedCleanId, _selectedText, translation, status);
+        Navigator.pop(context); // Close the dialog
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.2) : Colors.transparent,
+          border: Border.all(
+            color: isSelected ? color : Colors.grey.withOpacity(0.5),
+            width: 2,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSelected) Icon(Icons.check_circle, size: 16, color: color),
+            if (!isSelected)
+              Icon(Icons.circle_outlined, size: 16, color: Colors.grey),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? color : Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // 1. MAIN OVERLAY BUILDER (Fixed for Web Desktop)
+  // ===========================================================================
+  Widget _buildTranslationOverlay() {
+    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+
+    // Check if we have an existing status for this word
+    final existing = _isSelectionPhrase ? null : _vocabulary[_selectedCleanId];
+    final int currentStatus = existing?.status ?? 0;
+
+    // -------------------------------------------------------------------------
+    // A. DESKTOP WEB: MANUAL CARD BUILD
+    // We manually build a Positioned > PointerInterceptor card here because
+    // wrapping the pre-made FloatingTranslationCard (which returns Positioned)
+    // inside a PointerInterceptor is illegal and causes the card to disappear.
+    // -------------------------------------------------------------------------
+    if (kIsWeb && !_isFullScreen) {
+      // Calculate Position:
+      // Shift up by ~180px to show above the word.
+      // Clamp horizontally so it doesn't go off-screen.
+      final double cardWidth = 320;
+      final double top = _cardAnchor.dy - 180;
+      final double left = (_cardAnchor.dx - (cardWidth / 2)).clamp(
+        16.0,
+        MediaQuery.of(context).size.width - cardWidth - 16,
+      );
+
+      return Positioned(
+        top: top > 10 ? top : 10, // Ensure it doesn't clip top of screen
+        left: left,
+        child: PointerInterceptor(
+          // INTERCEPT: This is the specific fix that stops the YouTube iframe
+          // from "eating" the clicks or hiding the card.
+          intercepting: true,
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(12),
+            color: Theme.of(context).cardColor,
+            child: Container(
+              width: cardWidth,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. HEADER: Word + Audio
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _selectedText,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.volume_up,
+                          size: 24,
+                          color: Colors.blue,
+                        ),
+                        onPressed: () {
+                          _flutterTts.speak(_selectedText);
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 16),
+
+                  // 2. TRANSLATION CONTENT
+                  FutureBuilder<String>(
+                    future: _cardTranslationFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.0),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                "Translating...",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        return const Text(
+                          "Translation failed",
+                          style: TextStyle(color: Colors.red),
+                        );
+                      }
+                      return Text(
+                        snapshot.data ?? "No translation found",
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.blueAccent,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 3. STATUS BUTTONS (New, Learning, Known)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        _buildStatusButton(1, "New", Colors.red, currentStatus),
+                        const SizedBox(width: 8),
+                        _buildStatusButton(
+                          3,
+                          "Learning",
+                          Colors.orange,
+                          currentStatus,
+                        ),
+                        const SizedBox(width: 8),
+                        _buildStatusButton(
+                          5,
+                          "Known",
+                          Colors.green,
+                          currentStatus,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // 4. AI EXPLANATION BUTTON
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        // Close this card and trigger AI explanation logic
+                        // (Or implement a dialog here)
+                        Gemini.instance
+                            .prompt(
+                              parts: [
+                                Part.text(
+                                  "Explain '$_selectedText' in ${widget.lesson.language} for ${user.nativeLanguage} speaker",
+                                ),
+                              ],
+                            )
+                            .then((value) {
+                              if (mounted && value?.output != null) {
+                                // Simple alert for now, or update state to show explanation
+                                showDialog(
+                                  context: context,
+                                  builder: (c) => AlertDialog(
+                                    title: Text(
+                                      "AI Explanation: $_selectedText",
+                                    ),
+                                    content: SingleChildScrollView(
+                                      child: Text(value!.output!),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(c),
+                                        child: const Text("Close"),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            });
+                      },
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: const Text("AI Explain"),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // B. MOBILE / FULLSCREEN / NON-WEB FALLBACK
+    // Use the existing separate widgets for these cases
+    // -------------------------------------------------------------------------
     if (!_isFullScreen) {
       return FloatingTranslationCard(
         key: ValueKey(_selectedText),
@@ -1228,7 +1663,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
             .catchError((_) => "AI Error"),
         targetLanguage: widget.lesson.language,
         nativeLanguage: user.nativeLanguage,
-        currentStatus: existing?.status ?? 0,
+        currentStatus: currentStatus,
         anchorPosition: _cardAnchor,
         onUpdateStatus: (s, t) {
           _updateWordStatus(_selectedCleanId, _selectedText, t, s);
@@ -1237,6 +1672,8 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
         onClose: _closeTranslationCard,
       );
     }
+
+    // Fullscreen Mode
     return FullscreenTranslationCard(
       key: ValueKey("$_selectedText$_selectedCleanId"),
       originalText: _selectedText,
@@ -1254,11 +1691,70 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
           .catchError((_) => "AI Error"),
       targetLanguage: widget.lesson.language,
       nativeLanguage: user.nativeLanguage,
-      currentStatus: existing?.status ?? 0,
+      currentStatus: currentStatus,
       onUpdateStatus: (s, t) {
         _updateWordStatus(_selectedCleanId, _selectedText, t, s);
       },
       onClose: _closeTranslationCard,
+    );
+  }
+
+  // ===========================================================================
+  // 2. HELPER: STATUS BUTTON BUILDER
+  // ===========================================================================
+  Widget _buildStatusButton(
+    int status,
+    String label,
+    Color color,
+    int currentStatus,
+  ) {
+    final bool isSelected = currentStatus == status;
+
+    return InkWell(
+      onTap: () async {
+        // Wait for translation if it hasn't loaded, or use placeholder
+        String translation = "";
+        if (_cardTranslationFuture != null) {
+          translation = await _cardTranslationFuture!;
+        }
+
+        // Update Firestore & Local State
+        _updateWordStatus(_selectedCleanId, _selectedText, translation, status);
+
+        // Close card
+        _closeTranslationCard();
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.15) : Colors.transparent,
+          border: Border.all(
+            color: isSelected ? color : Colors.grey.withOpacity(0.5),
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSelected) ...[
+              Icon(Icons.check, size: 14, color: color),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected
+                    ? color
+                    : Theme.of(context).textTheme.bodyMedium?.color,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1789,108 +2285,126 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
   }
 
   // --- DESKTOP BODY (New Layout) ---
+  // --- 1. FIXED DESKTOP BODY ---
   Widget _buildDesktopBody(bool isDark) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        Expanded(
-          flex: 3,
-          child: Column(
-            children: [
-              Expanded(
-                flex: 4,
-                child: Container(
-                  color: Colors.black, // Background when video is hidden
-                  child: MouseRegion(
-                    onEnter: (_) => _showControlsOnInteraction(),
-                    onHover: (_) => _showControlsOnInteraction(),
-                    child: Stack(
-                      children: [
-                        // 1. VIDEO PLAYER (Hidden when dialog is open)
-                        // This prevents the Iframe from stealing input focus
-                        Center(
-                          child: AspectRatio(
-                            aspectRatio: 16 / 9,
-                            child: Visibility(
-                              visible:
-                                  !_isLimitDialogOpen, // Hide when dialog is open
-                              maintainState: true, // Keep video loaded
-                              maintainAnimation: true,
-                              maintainSize: true,
-                              child: _buildSharedPlayer(),
+        // A. Main Layout
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: Column(
+                children: [
+                  // VIDEO AREA
+                  Expanded(
+                    flex: 4,
+                    child: Container(
+                      color: Colors.black,
+                      child: MouseRegion(
+                        onEnter: (_) => _showControlsOnInteraction(),
+                        onHover: (_) => _showControlsOnInteraction(),
+                        child: Stack(
+                          children: [
+                            Center(
+                              child: AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: Visibility(
+                                  visible: !_isLimitDialogOpen,
+                                  maintainState: true,
+                                  maintainAnimation: true,
+                                  maintainSize: true,
+                                  child: _buildSharedPlayer(),
+                                ),
+                              ),
                             ),
-                          ),
+                            // Controls
+                            if (!_isLimitDialogOpen)
+                              IgnorePointer(
+                                ignoring: !_showControls,
+                                child: VideoControlsOverlay(
+                                  isPlaying: _isPlaying,
+                                  position:
+                                      (_isSeeking &&
+                                          _optimisticPosition != null)
+                                      ? _optimisticPosition!
+                                      : _currentPosition,
+                                  duration: _totalDuration,
+                                  showControls: _showControls,
+                                  onPlayPause: _isPlaying
+                                      ? _pauseMedia
+                                      : _playMedia,
+                                  onSeekRelative: _seekRelative,
+                                  onSeekTo: (d) =>
+                                      _seekToTime(d.inMilliseconds / 1000.0),
+                                  onToggleFullscreen: _toggleCustomFullScreen,
+                                ),
+                              ),
+                            if (_isLimitDialogOpen) _buildLimitDialogOverlay(),
+                          ],
                         ),
-
-                        // 2. CONTROLS (Only show if video is visible)
-                        if (!_isLimitDialogOpen)
-                          IgnorePointer(
-                            ignoring: !_showControls,
-                            child: VideoControlsOverlay(
-                              isPlaying: _isPlaying,
-                              position:
-                                  (_isSeeking && _optimisticPosition != null)
-                                  ? _optimisticPosition!
-                                  : _currentPosition,
-                              duration: _totalDuration,
-                              showControls: _showControls,
-                              onPlayPause: _isPlaying
-                                  ? _pauseMedia
-                                  : _playMedia,
-                              onSeekRelative: _seekRelative,
-                              onSeekTo: (d) =>
-                                  _seekToTime(d.inMilliseconds / 1000.0),
-                              onToggleFullscreen: _toggleCustomFullScreen,
-                            ),
-                          ),
-
-                        // 3. DIALOG OVERLAY (Top)
-                        if (_isLimitDialogOpen) _buildLimitDialogOverlay(),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-              // ... subtitle area ...
-              Expanded(
-                flex: 1,
-                child: Container(
-                  width: double.infinity,
-                  color: isDark
-                      ? const Color(0xFF121212)
-                      : const Color(0xFFF0F0F0),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 16,
+                  // SUBTITLE AREA
+                  Expanded(
+                    flex: 1,
+                    child: Container(
+                      width: double.infinity,
+                      color: isDark
+                          ? const Color(0xFF121212)
+                          : const Color(0xFFF0F0F0),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 16,
+                      ),
+                      alignment: Alignment.center,
+                      child: _buildDesktopSubtitleArea(isDark),
+                    ),
                   ),
-                  alignment: Alignment.center,
-                  child: _buildDesktopSubtitleArea(isDark),
-                ),
+                ],
               ),
-            ],
-          ),
-        ),
-        // ... sidebar ...
-        if (widget.lesson.seriesId != null)
-          Container(
-            width: 350,
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: isDark ? Colors.white12 : Colors.grey[300]!,
-                ),
-              ),
-              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
             ),
-            child: _buildDesktopPlaylistSidebar(isDark),
+            // SIDEBAR
+            if (widget.lesson.seriesId != null)
+              Container(
+                width: 350,
+                decoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(
+                      color: isDark ? Colors.white12 : Colors.grey[300]!,
+                    ),
+                  ),
+                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                ),
+                child: _buildDesktopPlaylistSidebar(isDark),
+              ),
+          ],
+        ),
+
+        // B. CLICK OUTSIDE TO CLOSE (With PointerInterceptor)
+        if (_showCard)
+          Positioned.fill(
+            child: PointerInterceptor(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _closeTranslationCard,
+                child: Container(color: Colors.transparent),
+              ),
+            ),
           ),
+
+        // C. THE TRANSLATION OVERLAY
+        if (_showCard && _cardTranslationFuture != null)
+          _buildTranslationOverlay(),
       ],
     );
   }
 
-  // --- DESKTOP SUBTITLE AREA ---
+  /// --- 3. FIXED SUBTITLE AREA ---
   Widget _buildDesktopSubtitleArea(bool isDark) {
-    // 1. Safety Check: If data isn't loaded yet, show a loader.
     if (_smartChunks.isEmpty) {
       return Center(
         child: Text(
@@ -1900,9 +2414,6 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
       );
     }
 
-    // 2. Logic: Which sentence to display?
-    // If _activeSentenceIndex is -1 (not started/silence), default to 0 (the first sentence).
-    // This ensures there is ALWAYS text for the user to click.
     int displayIndex = _activeSentenceIndex;
     if (displayIndex < 0 || displayIndex >= _smartChunks.length) {
       displayIndex = 0;
@@ -1911,97 +2422,16 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // The Interactive Text (Always Visible)
         InteractiveTextDisplay(
           text: _smartChunks[displayIndex],
-          sentenceIndex: displayIndex, // Use our safe 'displayIndex'
+          sentenceIndex: displayIndex,
           vocabulary: _vocabulary,
           language: widget.lesson.language,
           onWordTap: _handleWordTap,
           onPhraseSelected: _handlePhraseSelected,
-          isBigMode: true, // Large text for desktop
+          isBigMode: true,
           isListeningMode: false,
           isOverlay: false,
-        ),
-
-        const SizedBox(height: 24), // Added a bit more breathing room
-        // Translation Area (Only appears when a word is clicked)
-        // We use AnimatedOpacity so it doesn't jump around when appearing
-        AnimatedOpacity(
-          duration: const Duration(milliseconds: 200),
-          opacity: _showCard ? 1.0 : 0.0,
-          child: _showCard
-              ? Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.white10
-                          : Colors.blueAccent.withOpacity(0.2),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: FutureBuilder<String>(
-                    future: _cardTranslationFuture,
-                    builder: (context, snapshot) {
-                      String translationContent = "";
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        );
-                      } else if (snapshot.hasData) {
-                        translationContent = snapshot.data!;
-                      }
-
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _selectedText,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.arrow_forward,
-                            size: 16,
-                            color: isDark ? Colors.white54 : Colors.grey,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            translationContent,
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: isDark
-                                  ? Colors.blueAccent[100]
-                                  : Colors.blue[700],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                )
-              : const SizedBox(
-                  height: 48,
-                ), // Placeholder to keep layout stable if you prefer
         ),
       ],
     );

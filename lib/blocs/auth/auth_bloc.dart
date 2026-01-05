@@ -567,50 +567,134 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  Future<void> _onAuthUpdateUser(
+Future<void> _onAuthUpdateUser(
     AuthUpdateUser event,
     Emitter<AuthState> emit,
   ) async {
     if (state is AuthAuthenticated) {
       final currentUser = (state as AuthAuthenticated).user;
 
+      // 1. Update Local State (Optimistic UI Update)
+      // We use the event data if present, otherwise keep existing data.
       final updatedUser = currentUser.copyWith(
-        nativeLanguage: event.nativeLanguage ?? currentUser.nativeLanguage,
-        targetLanguages: event.targetLanguages ?? currentUser.targetLanguages,
-        displayName: event.displayName ?? currentUser.displayName,
-        photoUrl: event.photoUrl ?? currentUser.photoUrl,
+        displayName: event.displayName,
+        photoUrl: event.photoUrl,
+        username: event.username,
+        bio: event.bio,
+        birthDate: event.birthDate,
+        gender: event.gender,
+        city: event.city,
+        country: event.country,
+        countryCode: event.countryCode,
+        location: event.location,
+        nativeLanguage: event.nativeLanguage,
+        additionalNativeLanguages: event.additionalNativeLanguages,
+        targetLanguages: event.targetLanguages,
+        topics: event.topics,
+        learningGoal: event.learningGoal,
+        correctionStyle: event.correctionStyle,
+        communicationStyles: event.communicationStyles,
+        // If name changes, we update keywords locally too
+        searchKeywords: event.displayName != null 
+            ? _generateSearchKeywords(event.displayName!) 
+            : currentUser.searchKeywords,
       );
+
+      // Emit the new state immediately so the UI updates
       emit(AuthAuthenticated(updatedUser));
 
+      // 2. Prepare Firestore Updates
+      // We only add fields to the map if they were actually passed in the event.
+      final Map<String, dynamic> updates = {};
+
+      if (event.displayName != null) {
+        updates['displayName'] = event.displayName;
+        // Auto-update search keywords when name changes
+        updates['searchKeywords'] = _generateSearchKeywords(event.displayName!);
+      }
+      
+      if (event.photoUrl != null) updates['photoUrl'] = event.photoUrl;
+      if (event.username != null) updates['username'] = event.username;
+      if (event.bio != null) updates['bio'] = event.bio;
+      
+      // Demographics & Location
+      if (event.birthDate != null) updates['birthDate'] = Timestamp.fromDate(event.birthDate!);
+      if (event.gender != null) updates['gender'] = event.gender;
+      if (event.city != null) updates['city'] = event.city;
+      if (event.country != null) updates['country'] = event.country;
+      if (event.countryCode != null) updates['countryCode'] = event.countryCode;
+      if (event.location != null) updates['location'] = event.location; // GeoPoint
+
+      // Languages
+      if (event.nativeLanguage != null) updates['nativeLanguage'] = event.nativeLanguage;
+      if (event.additionalNativeLanguages != null) updates['additionalNativeLanguages'] = event.additionalNativeLanguages;
+      if (event.targetLanguages != null) updates['targetLanguages'] = event.targetLanguages;
+
+      // Learning Preferences
+      if (event.topics != null) updates['topics'] = event.topics;
+      if (event.learningGoal != null) updates['learningGoal'] = event.learningGoal;
+      if (event.correctionStyle != null) updates['correctionStyle'] = event.correctionStyle;
+      if (event.communicationStyles != null) updates['communicationStyles'] = event.communicationStyles;
+
+      // 3. Persist to Firestore & Firebase Auth
       try {
-        final updates = <String, dynamic>{};
-        if (event.nativeLanguage != null)
-          updates['nativeLanguage'] = event.nativeLanguage;
-        if (event.targetLanguages != null)
-          updates['targetLanguages'] = event.targetLanguages;
-        if (event.displayName != null)
-          updates['displayName'] = event.displayName;
-        if (event.photoUrl != null) updates['photoUrl'] = event.photoUrl;
+        if (updates.isNotEmpty) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.id)
+              .update(updates);
+        }
 
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.id)
-            .update(updates);
-
+        // Sync basic profile data to Firebase Auth (User Management)
         if (event.displayName != null || event.photoUrl != null) {
-          await FirebaseAuth.instance.currentUser?.updateDisplayName(
-            event.displayName,
-          );
-          if (event.photoUrl != null) {
-            await FirebaseAuth.instance.currentUser?.updatePhotoURL(
-              event.photoUrl,
-            );
+          final fbUser = FirebaseAuth.instance.currentUser;
+          if (fbUser != null) {
+            if (event.displayName != null) {
+              await fbUser.updateDisplayName(event.displayName);
+            }
+            if (event.photoUrl != null) {
+              await fbUser.updatePhotoURL(event.photoUrl);
+            }
           }
         }
       } catch (e) {
-        print("Error updating profile: $e");
+        print("Error updating user profile: $e");
+        // Optional: You could emit an AuthError here, or just log it.
+        // If you emit error, remember the UI has already optimistically updated.
       }
     }
+  }
+
+  // --- INTERNAL HELPER: Generate Search Keywords ---
+  // Generates substrings for partial matching in Firestore
+  List<String> _generateSearchKeywords(String name) {
+    List<String> keywords = [];
+    String lowerName = name.toLowerCase();
+    
+    // 1. Add incremental substrings (e.g., "A", "As", "Asa", "Asad")
+    String current = "";
+    for (int i = 0; i < lowerName.length; i++) {
+      current += lowerName[i];
+      keywords.add(current);
+    }
+
+    // 2. Add individual words (e.g., "Drissa" for "Asad Drissa")
+    final words = lowerName.split(' ');
+    for (var word in words) {
+      if (word.isNotEmpty && !keywords.contains(word)) {
+        keywords.add(word);
+        // Also add incremental substrings for the last name
+        String subWord = "";
+        for (int i = 0; i < word.length; i++) {
+          subWord += word[i];
+          if (!keywords.contains(subWord)) {
+            keywords.add(subWord);
+          }
+        }
+      }
+    }
+    
+    return keywords.toSet().toList(); // Remove duplicates
   }
 
   Future<void> _onAuthDeleteAccount(

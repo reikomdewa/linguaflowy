@@ -21,8 +21,8 @@ import 'package:linguaflow/utils/firebase_utils.dart';
 
 class PremiumScreen extends StatefulWidget {
   static const String routeName = 'premium';
-  final bool isPremium; // Changed to final
-  const PremiumScreen({required this.isPremium, Key? key}) : super(key: key);
+  final UserModel user;// Changed to final
+  const PremiumScreen({required this.user, Key? key}) : super(key: key);
 
   @override
   State<PremiumScreen> createState() => _PremiumScreenState();
@@ -30,9 +30,9 @@ class PremiumScreen extends StatefulWidget {
 
 class _PremiumScreenState extends State<PremiumScreen> {
   static const List prices = [
-    {'duration': 'Forever', 'price': '100', 'per': 'One time payment'},
-    {'duration': '6 months', 'price': '20', 'per': 'per 6 months'},
-    {'duration': '1 month', 'price': subscriptionPrice, 'per': 'per month'},
+    {'duration': '1 Year', 'price': '44.99', 'per': 'per year'},
+    {'duration': '6 months', 'price': '22.99', 'per': 'per 6 months'},
+    {'duration': '1 month', 'price': '9.99', 'per': 'per month'},
   ];
 
   static const List proBenefits = [
@@ -197,7 +197,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                                 }
                               });
                             },
-                            child: widget.isPremium
+                            child: widget.user.isPremium
                                 ? const Text('Upgrade')
                                 : const Text('Get Premium'),
                           ),
@@ -219,7 +219,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                       const SizedBox(height: 20),
 
                       // --- USER STATUS INFO ---
-                      if (widget.isPremium) ...[
+                      if (widget.user.isPremium) ...[
                         Text(
                           "You are a Pro Member",
                           style: AppStyles.titleStyleBig(
@@ -388,14 +388,14 @@ class _PremiumScreenState extends State<PremiumScreen> {
               ? CenteredView(
                   horizontalPadding: 500,
                   child: PremiumLockDialog(
-                    title: widget.isPremium ? "Upgrade" : null,
+                    title: widget.user.isPremium ? "Upgrade" : null,
                     onClose: () {
                       Navigator.pop(context);
                     },
                   ),
                 )
               : PremiumLockDialog(
-                  title: widget.isPremium ? "Upgrade" : null,
+                  title: widget.user.isPremium ? "Upgrade" : null,
                   onClose: () {
                     Navigator.pop(context);
                   },

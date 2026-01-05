@@ -191,6 +191,7 @@ class LanguageHelper {
       case 'ny': return '🇲🇼';
       case 'ff': return '🇸🇳';
       case 'zne': return '🇸🇸';
+       case 'ml': return '🇲🇱';
       default: return '🌍';
     }
   }

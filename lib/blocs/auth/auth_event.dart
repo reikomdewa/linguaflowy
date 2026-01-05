@@ -1,5 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart'; // Required for GeoPoint
 import 'package:equatable/equatable.dart';
-import 'package:linguaflow/models/user_model.dart'; // Import UserModel
 
 abstract class AuthEvent extends Equatable {
   const AuthEvent();
@@ -7,6 +7,8 @@ abstract class AuthEvent extends Equatable {
   @override
   List<Object?> get props => [];
 }
+
+// --- CORE AUTH EVENTS ---
 
 class AuthCheckRequested extends AuthEvent {}
 
@@ -54,6 +56,10 @@ class AuthResendVerificationEmail extends AuthEvent {
   List<Object> get props => [email, password];
 }
 
+class AuthDeleteAccount extends AuthEvent {}
+
+// --- GAMIFICATION & STATS EVENTS ---
+
 class AuthUpdateXP extends AuthEvent {
   final int xpToAdd;
 
@@ -74,7 +80,7 @@ class AuthUpdateListeningTime extends AuthEvent {
 
 class AuthIncrementLessonsCompleted extends AuthEvent {}
 
-class AuthDeleteAccount extends AuthEvent {}
+// --- LANGUAGE SETTINGS EVENTS ---
 
 class AuthTargetLanguageChanged extends AuthEvent {
   final String languageCode;
@@ -94,28 +100,61 @@ class AuthLanguageLevelChanged extends AuthEvent {
   List<Object> get props => [level];
 }
 
+// --- PROFILE UPDATE EVENT (FULL FIXED VERSION) ---
+
 class AuthUpdateUser extends AuthEvent {
+  // Identity & Bio
   final String? displayName;
   final String? photoUrl;
-  final String? nativeLanguage;
-  final List<String>? targetLanguages;
-  final String? bio; // Added to general update
-  final int? dailyGoalMinutes; // Added to general update
+  final String? username;
+  final String? bio;
+  
+  // Demographics & Location
+  final DateTime? birthDate;
+  final String? gender;
+  final String? city;
+  final String? country;
+  final String? countryCode;
+  final GeoPoint? location;
 
-  // You can keep this general update, or use specific events below
-  // For lists, specific events are usually better for clarity and array manipulation
+  // Languages
+  final String? nativeLanguage;
+  final List<String>? additionalNativeLanguages;
+  final List<String>? targetLanguages;
+
+  // Learning & Preferences
+  final List<String>? topics;
+  final String? learningGoal;
+  final String? correctionStyle;
+  final List<String>? communicationStyles;
+  
+  // Settings
+  final int? dailyGoalMinutes;
+
+  // Social Lists (Direct overwrite - usually better to use specific Add/Remove events below)
   final List<String>? friends;
   final List<String>? following;
   final List<String>? followers;
   final List<String>? blockedUsers;
 
-
   const AuthUpdateUser({
     this.displayName,
     this.photoUrl,
-    this.nativeLanguage,
-    this.targetLanguages,
+    this.username,
     this.bio,
+    this.birthDate,
+    this.gender,
+    this.city,
+    this.country,
+    this.countryCode,
+    this.location,
+    this.nativeLanguage,
+    this.additionalNativeLanguages,
+    this.targetLanguages,
+    this.topics,
+    this.learningGoal,
+    this.correctionStyle,
+    this.communicationStyles,
     this.dailyGoalMinutes,
     this.friends,
     this.following,
@@ -125,12 +164,33 @@ class AuthUpdateUser extends AuthEvent {
 
   @override
   List<Object?> get props => [
-    displayName, photoUrl, nativeLanguage, targetLanguages,
-    bio, dailyGoalMinutes, friends, following, followers, blockedUsers
-  ];
+        displayName,
+        photoUrl,
+        username,
+        bio,
+        birthDate,
+        gender,
+        city,
+        country,
+        countryCode,
+        location,
+        nativeLanguage,
+        additionalNativeLanguages,
+        targetLanguages,
+        topics,
+        learningGoal,
+        correctionStyle,
+        communicationStyles,
+        dailyGoalMinutes,
+        friends,
+        following,
+        followers,
+        blockedUsers,
+      ];
 }
 
-// --- NEW SOCIAL EVENTS ---
+// --- SPECIFIC SOCIAL EVENTS ---
+
 class AuthAddFriend extends AuthEvent {
   final String friendId;
   const AuthAddFriend(this.friendId);
