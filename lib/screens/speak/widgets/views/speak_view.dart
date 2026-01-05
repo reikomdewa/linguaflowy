@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:linguaflow/screens/people/people_screen.dart'; // Import your PeopleScreen
-import 'package:linguaflow/screens/speak/widgets/views/live_explore_tab.dart'; // The refactored rooms view
+import 'package:linguaflow/screens/people/people_screen.dart';
+import 'package:linguaflow/screens/speak/widgets/views/live_explore_tab.dart';
 
 class SpeakView extends StatefulWidget {
   const SpeakView({super.key});
@@ -12,42 +12,49 @@ class SpeakView extends StatefulWidget {
 class _SpeakViewState extends State<SpeakView> {
   @override
   Widget build(BuildContext context) {
-    // Colors
-    final Color bgDark = const Color(0xFF15161A);
-    // final Color primaryPink = const Color(0xFFE91E63);
+    // Access the current theme data
+    final theme = Theme.of(context);
+    final scaffoldBg = theme.scaffoldBackgroundColor;
+
+    // Use onSurface (Black in Light, White in Dark) for active text
+    final activeColor = theme.colorScheme.onSurface;
+    // Use hintColor (Grey) for inactive text
+    final inactiveColor = theme.hintColor;
 
     return DefaultTabController(
       length: 2,
-      initialIndex: 1, // Defaults to "Live" tab (optional)
+      initialIndex: 0, // Defaults to "Live" (Index 0)
       child: Scaffold(
-        backgroundColor: bgDark,
+        backgroundColor: scaffoldBg,
         appBar: AppBar(
-          backgroundColor: bgDark,
+          backgroundColor: scaffoldBg,
           elevation: 0,
-          toolbarHeight: 0, // Hides standard app bar title to save space
+          toolbarHeight: 0, // Hides standard app bar title area
           bottom: TabBar(
             indicatorColor: Colors.transparent,
             dividerColor: Colors.transparent,
-            // indicatorWeight: 3,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.grey,
+
+            // Theme Aware Colors
+            labelColor: activeColor,
+            unselectedLabelColor: inactiveColor,
+
+            // Text Styles
             labelStyle: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
+              fontWeight: FontWeight.w800, // Extra bold for active
+              fontSize: 22, // Larger header-like size
             ),
+            unselectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 22,
+            ),
+
             tabs: const [
-              Tab(text: "Live"), // The People Screen
-              Tab(text: "People"), // The Rooms/Tutors Screen
+              Tab(text: "Live"),
+              Tab(text: "People"),
             ],
           ),
         ),
-        body: const TabBarView(
-          children: [
-            // Left Tab
-            LiveExploreTab(),
-            PeopleScreen(), // Right Tab (The logic moved below)
-          ],
-        ),
+        body: const TabBarView(children: [LiveExploreTab(), PeopleScreen()]),
       ),
     );
   }

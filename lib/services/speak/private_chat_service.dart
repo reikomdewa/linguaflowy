@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Required for the fix
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:linguaflow/models/private_chat_models.dart';
 
 class PrivateChatService {
@@ -7,21 +7,25 @@ class PrivateChatService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // ==============================================================================
-  // 1. Get Inbox (FIXED: Handles Race Condition)
+  // HELPER: Generate Consistent Chat ID
+  // ==============================================================================
+  // Sorts IDs alphabetically so "UserA" + "UserB" always = "UserA_UserB"
+  String _getChatId(String id1, String id2) {
+    List<String> ids = [id1, id2];
+    ids.sort(); 
+    return ids.join('_');
+  }
+
+  // ==============================================================================
+  // 1. Get Inbox
   // ==============================================================================
   Stream<List<PrivateConversation>> getInbox(String myUserId) {
-    // We listen to Auth State. The Firestore query will ONLY run
-    // when 'user' is not null.
     return _auth.authStateChanges().asyncExpand((user) {
-      // 1. If Auth is not ready, return empty list (prevents Permission Denied)
-      if (user == null) {
-        return Stream.value([]);
-      }
+      if (user == null) return Stream.value([]);
 
-      // 2. Auth is ready, now we can safely query Firestore
       return _firestore
           .collection('private_chats')
-          .where('participants', arrayContains: user.uid) // Use auth uid to be safe
+          .where('participants', arrayContains: user.uid) 
           .orderBy('lastMessageTime', descending: true)
           .snapshots()
           .map((snapshot) {
@@ -33,7 +37,7 @@ class PrivateChatService {
   }
 
   // ==============================================================================
-  // 2. Get Messages (FIXED: Handles Race Condition)
+  // 2. Get Messages
   // ==============================================================================
   Stream<List<PrivateMessage>> getMessages(String chatId) {
     return _auth.authStateChanges().asyncExpand((user) {
@@ -55,17 +59,30 @@ class PrivateChatService {
 
   // ==============================================================================
   // 3. Send Message
-  // ==============================================================================
-  Future<void> sendMessage(String chatId, String senderId, String text) async {
+  Future<void> sendMessage({
+    required String chatId,
+    required String senderId,
+    required String text,
+    String? senderName,
+    String? senderPhoto,
+    String? otherName,
+    String? otherPhoto,
+  }) async {
     if (text.trim().isEmpty) return;
-    
-    // Safety check: Ensure user is actually logged in before writing
     if (_auth.currentUser == null) return;
 
     final timestamp = DateTime.now();
+    
+    // Ensure we have at least a fallback name
+    final safeSenderName = (senderName == null || senderName.isEmpty) ? 'User' : senderName;
+    final safeOtherName = (otherName == null || otherName.isEmpty) ? 'User' : otherName;
+
+    // Extract participants from ID (e.g. "userA_userB")
+    final participants = chatId.split('_');
+    final otherId = participants.firstWhere((id) => id != senderId, orElse: () => '');
 
     try {
-      // A. Add message to subcollection
+      // A. Write to Messages Subcollection
       await _firestore
           .collection('private_chats')
           .doc(chatId)
@@ -77,16 +94,35 @@ class PrivateChatService {
         'isRead': false,
       });
 
-      // B. Update the inbox preview
-      // Note: In a real app, unreadCount usually needs to be specific per user 
-      // (e.g. 'unreadCount_userId': increment), but keeping your logic simple here:
-      await _firestore.collection('private_chats').doc(chatId).update({
+      // B. Prepare Parent Document Data
+      // We explicitly build the participantData map
+      Map<String, dynamic> participantData = {
+        senderId: {
+          'name': safeSenderName, 
+          'photo': senderPhoto
+        },
+      };
+
+      // Only add the other user's data if we successfully identified their ID
+      if (otherId.isNotEmpty) {
+        participantData[otherId] = {
+          'name': safeOtherName, 
+          'photo': otherPhoto
+        };
+      }
+
+      // C. Update Parent Document (Inbox Preview)
+      await _firestore.collection('private_chats').doc(chatId).set({
+        'participants': participants,
         'lastMessage': text.trim(),
         'lastMessageTime': Timestamp.fromDate(timestamp),
         'lastSenderId': senderId,
         'isRead': false,
-        'unreadCount': FieldValue.increment(1), 
-      });
+        'unreadCount': FieldValue.increment(1),
+        // This ensures the names are saved to the document
+        'participantData': participantData, 
+      }, SetOptions(merge: true));
+      
     } catch (e) {
       print("Error sending message: $e");
       rethrow;
@@ -100,18 +136,19 @@ class PrivateChatService {
     if (_auth.currentUser == null) return;
 
     try {
+      // We only reset the count if we are NOT the last sender
+      // (Requires fetching the doc to check lastSenderId, but for simple UI we just reset)
       await _firestore.collection('private_chats').doc(chatId).update({
         'isRead': true,
         'unreadCount': 0,
       });
     } catch (e) {
-      // Ignore errors if doc doesn't exist
       print("Error marking as read: $e");
     }
   }
 
   // ==============================================================================
-  // 5. Start Chat
+  // 5. Start Chat (FIXED: Deterministic ID)
   // ==============================================================================
   Future<String> startChat({
     required String currentUserId,
@@ -121,30 +158,26 @@ class PrivateChatService {
     String? currentUserPhoto,
     String? otherUserPhoto,
   }) async {
-    
     if (_auth.currentUser == null) throw Exception("User must be logged in");
 
-    // A. Check if chat already exists
-    // Note: This logic is fine for small scale. For large scale, store a combined key "id1_id2"
-    final query = await _firestore
-        .collection('private_chats')
-        .where('participants', arrayContains: currentUserId)
-        .get();
+    // A. Generate ID: "user1_user2"
+    final chatId = _getChatId(currentUserId, otherUserId);
+    final chatDoc = _firestore.collection('private_chats').doc(chatId);
 
-    for (var doc in query.docs) {
-      final List<dynamic> participants = doc['participants'];
-      if (participants.contains(otherUserId)) {
-        return doc.id; // Found existing chat
-      }
+    // B. Check if it exists
+    final snapshot = await chatDoc.get();
+
+    if (snapshot.exists) {
+      return chatId; // Chat already exists, return ID
     }
 
-    // B. Create new chat if not found
-    final docRef = await _firestore.collection('private_chats').add({
+    // C. Create it if it doesn't exist
+    await chatDoc.set({
       'participants': [currentUserId, otherUserId],
-      'lastMessage': 'Started a conversation',
+      'lastMessage': 'Started conversation', // Initial text
       'lastMessageTime': FieldValue.serverTimestamp(),
       'lastSenderId': currentUserId,
-      'isRead': false,
+      'isRead': true,
       'unreadCount': 0,
       'participantData': {
         currentUserId: {
@@ -158,6 +191,6 @@ class PrivateChatService {
       }
     });
 
-    return docRef.id;
+    return chatId;
   }
 }

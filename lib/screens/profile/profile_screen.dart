@@ -93,7 +93,7 @@ class ProfileScreen extends StatelessWidget {
                                     ? user.displayName[0].toUpperCase()
                                     : '?',
                                 style: const TextStyle(
-                                  fontSize: 40,
+                                  fontSize: 30,
                                   color: Colors.white,
                                 ),
                               ),
@@ -107,7 +107,7 @@ class ProfileScreen extends StatelessWidget {
                                     Text(
                                       user.displayName,
                                       style: TextStyle(
-                                        fontSize: 22,
+                                        fontSize: 18,
                                         fontWeight: FontWeight.bold,
                                         color: textColor,
                                       ),
@@ -119,11 +119,13 @@ class ProfileScreen extends StatelessWidget {
                                         size: 20,
                                         color: subTextColor,
                                       ),
-                                      onPressed: () =>
-                                          ProfileDialogs.showEditNameDialog(
-                                            context,
-                                            user.displayName,
-                                          ),
+                                      onPressed: () {
+                                        // ProfileDialogs.showEditNameDialog(
+                                        //     context,
+                                        //     user.displayName,
+                                        //   );
+                                        context.push('/edit_profile');
+                                      },
                                       tooltip: "Edit Name",
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),

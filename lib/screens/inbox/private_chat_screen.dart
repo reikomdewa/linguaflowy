@@ -25,22 +25,43 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final PrivateChatService _service = PrivateChatService();
 
-  void _sendMessage(String myId) {
+// ... inside _PrivateChatScreenState
+
+  void _sendMessage(String myId, String myName, String? myPhoto) {
     if (_controller.text.trim().isEmpty) return;
-    _service.sendMessage(widget.chatId, myId, _controller.text);
+    
+    // Fallback if AuthBloc has an empty name
+    final validMyName = myName.isEmpty ? "User" : myName;
+
+    _service.sendMessage(
+      chatId: widget.chatId,
+      senderId: myId,
+      text: _controller.text,
+      senderName: validMyName, 
+      senderPhoto: myPhoto,
+      otherName: widget.otherUserName,
+      otherPhoto: widget.otherUserPhoto,
+    );
+    
     _controller.clear();
   }
+
   @override
   void initState() {
     super.initState();
     // CALL THIS: Clear the badge when screen opens
     PrivateChatService().markChatAsRead(widget.chatId);
   }
+
   @override
   Widget build(BuildContext context) {
     final authState = context.read<AuthBloc>().state;
     String myId = (authState as AuthAuthenticated).user.id;
-    
+
+    final myUser = (authState as AuthAuthenticated).user;
+    final myName = myUser.displayName;
+    final myPhoto = myUser.photoUrl;
+
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -111,23 +132,29 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
                 return ListView.builder(
                   reverse: true,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   itemCount: messages.length,
                   // Hides keyboard on scroll for better UX
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   itemBuilder: (context, index) {
                     final msg = messages[index];
                     final isMe = msg.senderId == myId;
 
                     return Align(
-                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      alignment: isMe
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
                       child: Container(
                         constraints: BoxConstraints(
                           maxWidth: MediaQuery.of(context).size.width * 0.75,
                         ),
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16, 
+                          horizontal: 16,
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
@@ -135,8 +162,12 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(20),
                             topRight: const Radius.circular(20),
-                            bottomLeft: isMe ? const Radius.circular(20) : Radius.zero,
-                            bottomRight: isMe ? Radius.zero : const Radius.circular(20),
+                            bottomLeft: isMe
+                                ? const Radius.circular(20)
+                                : Radius.zero,
+                            bottomRight: isMe
+                                ? Radius.zero
+                                : const Radius.circular(20),
                           ),
                         ),
                         child: Text(
@@ -172,9 +203,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         hintText: "Message...",
                         hintStyle: TextStyle(color: theme.hintColor),
                         filled: true,
-                        fillColor: theme.cardColor, // Matches Threads input style
+                        fillColor:
+                            theme.cardColor, // Matches Threads input style
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20, 
+                          horizontal: 20,
                           vertical: 12,
                         ),
                         border: OutlineInputBorder(
@@ -188,7 +220,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide(
-                            color: theme.dividerColor, 
+                            color: theme.dividerColor,
                             width: 1,
                           ),
                         ),
@@ -196,10 +228,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  
+
                   // Send Button
                   GestureDetector(
-                    onTap: () => _sendMessage(myId),
+                    onTap: () => _sendMessage(myId, myName, myPhoto),
                     child: CircleAvatar(
                       radius: 24,
                       backgroundColor: theme.primaryColor,

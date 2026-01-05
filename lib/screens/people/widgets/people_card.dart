@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:linguaflow/models/user_model.dart';
-import 'package:linguaflow/utils/language_helper.dart'; // Import Helper
+import 'package:linguaflow/utils/language_helper.dart';
 
 class PeopleCard extends StatelessWidget {
   final UserModel user;
@@ -13,25 +13,42 @@ class PeopleCard extends StatelessWidget {
     Key? key,
     required this.user,
     required this.onTap,
+    // Defaults are just fallbacks; normally passed by parent based on Theme
     this.cardColor = const Color(0xFF1E2025),
     this.primaryColor = const Color(0xFFE91E63),
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // --- THEME DATA ---
+    final theme = Theme.of(context);
+    final textColor =
+        theme.colorScheme.onSurface; // Black (Light), White (Dark)
+    final subTextColor = theme.hintColor; // Grey
+
     return InkWell(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(16),
+          // Optional: Add shadow in light mode for better visibility
+          boxShadow: theme.brightness == Brightness.light
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : null,
         ),
         padding: const EdgeInsets.all(12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 1. Avatar & Status
-            _buildAvatar(),
+            _buildAvatar(theme),
             const SizedBox(width: 12),
 
             // 2. Info Column
@@ -39,11 +56,11 @@ class PeopleCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeaderRow(),
+                  _buildHeaderRow(textColor, subTextColor),
                   const SizedBox(height: 6),
-                  _buildBio(),
+                  _buildBio(subTextColor),
                   const SizedBox(height: 12),
-                  _buildLanguagesRow(),
+                  _buildLanguagesRow(textColor, subTextColor),
                 ],
               ),
             ),
@@ -53,7 +70,7 @@ class PeopleCard extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatar() {
+  Widget _buildAvatar(ThemeData theme) {
     return Stack(
       children: [
         ClipRRect(
@@ -63,12 +80,12 @@ class PeopleCard extends StatelessWidget {
             width: 90,
             height: 90,
             fit: BoxFit.cover,
-            placeholder: (context, url) => Container(color: Colors.grey[800]),
+            placeholder: (context, url) => Container(color: theme.dividerColor),
             errorWidget: (context, url, error) => Container(
               width: 90,
               height: 90,
-              color: Colors.grey[800],
-              child: const Icon(Icons.person, color: Colors.white),
+              color: theme.dividerColor,
+              child: Icon(Icons.person, color: theme.hintColor),
             ),
           ),
         ),
@@ -91,7 +108,7 @@ class PeopleCard extends StatelessWidget {
     );
   }
 
-  Widget _buildHeaderRow() {
+  Widget _buildHeaderRow(Color textColor, Color subTextColor) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -103,8 +120,8 @@ class PeopleCard extends StatelessWidget {
                 user.age != null
                     ? "${user.displayName}, ${user.age}"
                     : user.displayName,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: textColor,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
@@ -115,7 +132,7 @@ class PeopleCard extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2.0),
                   child: Text(
                     user.fullLocation,
-                    style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    style: TextStyle(color: subTextColor, fontSize: 13),
                   ),
                 ),
             ],
@@ -142,25 +159,23 @@ class PeopleCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.blueGrey[800],
+              // Adaptive background for the badge
+              color: textColor.withOpacity(0.08),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
                 Text(
                   "${user.referenceCount}",
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: textColor,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(width: 4),
-                const Icon(
-                  Icons.format_quote,
-                  color: Colors.lightBlueAccent,
-                  size: 14,
-                ),
+                // Icon uses the primary color (HyperBlue/Pink)
+                Icon(Icons.format_quote, color: primaryColor, size: 14),
               ],
             ),
           ),
@@ -168,17 +183,17 @@ class PeopleCard extends StatelessWidget {
     );
   }
 
-  Widget _buildBio() {
+  Widget _buildBio(Color subTextColor) {
     if (user.bio == null || user.bio!.isEmpty) return const SizedBox.shrink();
     return Text(
       user.bio!,
-      style: TextStyle(color: Colors.grey[400], fontSize: 13, height: 1.3),
+      style: TextStyle(color: subTextColor, fontSize: 13, height: 1.3),
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
     );
   }
 
-  Widget _buildLanguagesRow() {
+  Widget _buildLanguagesRow(Color textColor, Color subTextColor) {
     return Row(
       children: [
         // Native
@@ -186,27 +201,32 @@ class PeopleCard extends StatelessWidget {
           "FLUENT",
           user.nativeLanguage,
           null,
-        ), // Native implies fluent
+          textColor,
+          subTextColor,
+        ),
         const SizedBox(width: 12),
 
-        // Target Language (Show Level!)
+        // Target Language
         if (user.targetLanguages.isNotEmpty)
-          // Look up the level in the map using the language code
           _buildLangBadge(
             "LEARNS",
             user.targetLanguages.first,
-            user.languageLevels[user
-                .targetLanguages
-                .first], // <--- GET LEVEL HERE
+            user.languageLevels[user.targetLanguages.first],
+            textColor,
+            subTextColor,
           ),
       ],
     );
   }
 
-  Widget _buildLangBadge(String label, String langCode, String? level) {
+  Widget _buildLangBadge(
+    String label,
+    String langCode,
+    String? level,
+    Color textColor,
+    Color subTextColor,
+  ) {
     final flag = LanguageHelper.getFlagEmoji(langCode);
-
-    // Simplifies "A1 - Newcomer" to just "A1" for the small card
     final shortLevel = level?.split(' ').first ?? "";
 
     return Row(
@@ -216,19 +236,18 @@ class PeopleCard extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: subTextColor, // Subtle label color (grey)
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.5,
               ),
             ),
-            // Show level if it exists (e.g. "A2")
             if (shortLevel.isNotEmpty)
               Text(
                 shortLevel,
                 style: TextStyle(
-                  color: Colors.blue,
+                  color: primaryColor, // Level in Accent Color
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                 ),

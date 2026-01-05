@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:linguaflow/screens/profile/edit_profile_screen.dart';
 import 'package:upgrader/upgrader.dart';
 
 // GLOBALS
-import 'package:linguaflow/core/globals.dart'; 
+import 'package:linguaflow/core/globals.dart';
 
 // BLOCS
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -58,7 +59,8 @@ class AppRouter {
 
       // Check Status
       final bool isLoggedIn = authState is AuthAuthenticated;
-      final bool isInitializing = authState is AuthInitial || authState is AuthLoading;
+      final bool isInitializing =
+          authState is AuthInitial || authState is AuthLoading;
       final bool isLoggingIn = location == '/login';
       final bool isPlacementTest = location.startsWith('/placement-test');
 
@@ -76,14 +78,14 @@ class AppRouter {
       if (!isLoggedIn) {
         // 1. Always allow Login page and Placement Test
         if (isLoggingIn || isPlacementTest) {
-          return null; 
+          return null;
         }
 
         // 2. WEB GUEST MODE (FIX)
         // If on Web, we allow guests to browse the app (Home, etc.)
         // without being forced to login.
         if (kIsWeb) {
-          return null; 
+          return null;
         }
 
         // 3. MOBILE FORCED LOGIN
@@ -100,7 +102,7 @@ class AppRouter {
       // D. ADMIN PROTECTION
       // (Optional) Add check here if you have an isAdmin flag in your state
       if (location.startsWith('/admin')) {
-         // if (!authState.isAdmin) return '/';
+        // if (!authState.isAdmin) return '/';
       }
 
       return null; // Allow navigation
@@ -218,7 +220,7 @@ class AppRouter {
         },
       ),
 
-  GoRoute(
+      GoRoute(
         path: '/premium',
         builder: (context, state) {
           // 1. Get the Source of Truth (AuthBloc)
@@ -236,6 +238,10 @@ class AppRouter {
       ),
 
       GoRoute(path: '/admin', builder: (context, state) => const AdminScreen()),
+      GoRoute(
+        path: '/edit_profile',
+        builder: (context, state) => const EditProfileScreen(),
+      ),
 
       // =========================================================
       // MEDIA & OTHERS

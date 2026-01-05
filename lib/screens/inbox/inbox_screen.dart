@@ -15,7 +15,6 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
-  // State to track selected chat on Desktop
   String? _selectedChatId;
   String? _selectedChatName;
   String? _selectedChatPhoto;
@@ -25,7 +24,6 @@ class _InboxScreenState extends State<InboxScreen> {
     final authState = context.read<AuthBloc>().state;
     final theme = Theme.of(context);
 
-    // 1. GUEST / NOT LOGGED IN HANDLING
     if (authState is! AuthAuthenticated || authState.isGuest) {
       return Scaffold(
         body: Center(
@@ -35,7 +33,6 @@ class _InboxScreenState extends State<InboxScreen> {
               const Icon(Icons.lock_person, size: 64, color: Colors.grey),
               const SizedBox(height: 16),
               const Text("Inbox is unavailable for guests"),
-              const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () => context.go('/login'),
                 child: const Text("Create Account"),
@@ -48,36 +45,22 @@ class _InboxScreenState extends State<InboxScreen> {
 
     final myUser = authState.user;
 
-    // Safety check
-    if (myUser.id.isEmpty) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
     return Scaffold(
-      // Only show main AppBar on Mobile. On Desktop, the list is just a sidebar.
       appBar: MediaQuery.of(context).size.width < 800
           ? AppBar(title: const Text("Messages"))
           : null,
       body: StreamBuilder<List<PrivateConversation>>(
+        // CRITICAL: Ensure this service method queries "participants array-contains myId"
         stream: PrivateChatService().getInbox(myUser.id),
         builder: (context, snapshot) {
-          // 2. LOADING
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // 3. ERROR
           if (snapshot.hasError) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              FocusScope.of(context).unfocus();
-            });
-            debugPrint("❌ Inbox Query Error: ${snapshot.error}");
-            return Center(
-              child: Text("Error loading chats: ${snapshot.error}"),
-            );
+            return Center(child: Text("Error: ${snapshot.error}"));
           }
 
-          // 4. EMPTY
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(
               child: Column(
@@ -97,39 +80,42 @@ class _InboxScreenState extends State<InboxScreen> {
 
           final chats = snapshot.data!;
 
-          // 5. RESPONSIVE LAYOUT
           return LayoutBuilder(
             builder: (context, constraints) {
               final isDesktop = constraints.maxWidth >= 800;
 
-              // The List Widget
               final Widget chatList = ListView.separated(
-                // On desktop, add top padding since we removed the AppBar
                 padding: isDesktop
                     ? const EdgeInsets.only(top: 10)
                     : EdgeInsets.zero,
                 itemCount: chats.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
+                separatorBuilder: (_, __) => const SizedBox.shrink(),
                 itemBuilder: (context, index) {
                   final chat = chats[index];
+
+                  // Identify the "Other User"
                   final otherId = chat.participants.firstWhere(
                     (id) => id != myUser.id,
-                    orElse: () => '',
+                    orElse: () =>
+                        chat.participants.first, // Fallback for self-chat
                   );
                   final otherData = chat.participantData[otherId] ?? {};
                   final name = otherData['name'] ?? 'User';
                   final photo = otherData['photo'];
 
+                  // Message Status Logic
                   final bool isLastMsgFromMe = chat.lastSenderId == myUser.id;
-                  final bool isRead = chat.isRead;
-                  final bool isUnread = !isLastMsgFromMe && !isRead;
+                  final bool isUnread = !isLastMsgFromMe && !chat.isRead;
 
-                  final bool isSelected = _selectedChatId == chat.id;
+                  // Format the subtitle text
+                  String subtitleText = chat.lastMessage;
+                  if (isLastMsgFromMe) {
+                    subtitleText = subtitleText;
+                  }
 
                   return ListTile(
                     key: ValueKey(chat.id),
-                    // Highlight selected item on Desktop
-                    selected: isDesktop && isSelected,
+                    selected: isDesktop && _selectedChatId == chat.id,
                     selectedTileColor: theme.colorScheme.primary.withOpacity(
                       0.1,
                     ),
@@ -146,7 +132,7 @@ class _InboxScreenState extends State<InboxScreen> {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
-                      chat.lastMessage,
+                      subtitleText,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -154,6 +140,10 @@ class _InboxScreenState extends State<InboxScreen> {
                             ? FontWeight.w800
                             : FontWeight.normal,
                         color: isUnread ? theme.primaryColor : theme.hintColor,
+                        // Italicize "You sent..." messages slightly to distinguish
+                        fontStyle: isLastMsgFromMe
+                            ? FontStyle.italic
+                            : FontStyle.normal,
                       ),
                     ),
                     trailing: isUnread
@@ -168,14 +158,12 @@ class _InboxScreenState extends State<InboxScreen> {
                         : null,
                     onTap: () {
                       if (isDesktop) {
-                        // Desktop: Update State
                         setState(() {
                           _selectedChatId = chat.id;
                           _selectedChatName = name;
                           _selectedChatPhoto = photo;
                         });
                       } else {
-                        // Mobile: Navigate
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -193,15 +181,12 @@ class _InboxScreenState extends State<InboxScreen> {
               );
 
               if (isDesktop) {
-                // --- DESKTOP SPLIT VIEW ---
                 return Row(
                   children: [
-                    // Left Panel (List)
                     SizedBox(
-                      width: 350, // Fixed width like WhatsApp Web
+                      width: 350,
                       child: Column(
                         children: [
-                          // Custom Header for Left Panel
                           Container(
                             height: kToolbarHeight,
                             alignment: Alignment.centerLeft,
@@ -221,12 +206,9 @@ class _InboxScreenState extends State<InboxScreen> {
                       ),
                     ),
                     const VerticalDivider(width: 1),
-                    // Right Panel (Chat)
                     Expanded(
                       child: _selectedChatId != null
                           ? PrivateChatScreen(
-                              // KEY IS CRITICAL: Forces Flutter to rebuild
-                              // the widget when switching chats
                               key: ValueKey(_selectedChatId),
                               chatId: _selectedChatId!,
                               otherUserName: _selectedChatName ?? "Chat",
@@ -237,7 +219,6 @@ class _InboxScreenState extends State<InboxScreen> {
                   ],
                 );
               } else {
-                // --- MOBILE VIEW ---
                 return chatList;
               }
             },
@@ -247,7 +228,6 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
-  // Placeholder when no chat is selected on Desktop
   Widget _buildDesktopPlaceholder(ThemeData theme) {
     return Container(
       color: theme.brightness == Brightness.dark

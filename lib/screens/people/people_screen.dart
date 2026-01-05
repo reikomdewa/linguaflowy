@@ -4,8 +4,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
+import 'package:linguaflow/blocs/speak/room/room_bloc.dart';
+import 'package:linguaflow/blocs/speak/room/room_state.dart';
+import 'package:linguaflow/models/private_chat_models.dart';
 import 'package:linguaflow/models/user_model.dart';
+import 'package:linguaflow/screens/inbox/inbox_screen.dart';
 import 'package:linguaflow/services/people_service.dart';
+import 'package:linguaflow/services/speak/private_chat_service.dart';
+import 'package:linguaflow/utils/auth_guard.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/screens/people/widgets/people_card.dart';
 import 'package:linguaflow/screens/people/profile_details_screen.dart';
@@ -34,17 +40,12 @@ class _PeopleScreenState extends State<PeopleScreen>
 
   // Filter UI State
   bool _isFilterMenuVisible = true;
-  
+
   // Active Filters
   bool _filterOnlineOnly = false;
   bool _filterHasReviews = false;
   String? _filterTopic;
   String _selectedLanguageCode = 'en';
-
-  // Theme Colors
-  final Color _bgDark = const Color(0xFF15161A);
-  final Color _primaryPink = const Color(0xFFE91E63);
-  final Color _cardColor = const Color(0xFF1E2025);
 
   @override
   void initState() {
@@ -73,11 +74,11 @@ class _PeopleScreenState extends State<PeopleScreen>
     final state = context.read<AuthBloc>().state;
     if (state is AuthAuthenticated) {
       final user = state.user;
-      
+
       setState(() {
         _currentUserId = user.id;
         _blockedUserIds = user.blockedUsers;
-        
+
         // Default to current -> first target -> native -> en
         if (user.currentLanguage.isNotEmpty) {
           _selectedLanguageCode = user.currentLanguage;
@@ -87,14 +88,14 @@ class _PeopleScreenState extends State<PeopleScreen>
           _selectedLanguageCode = 'en';
         }
       });
-      
+
       _loadUsersForTab();
     }
   }
 
   Future<void> _loadUsersForTab() async {
     if (_currentUserId == null) return;
-    
+
     // Only show loading spinner on initial fetch
     if (_allFetchedUsers.isEmpty) setState(() => _isLoading = true);
 
@@ -102,7 +103,8 @@ class _PeopleScreenState extends State<PeopleScreen>
     try {
       if (_tabController.index == 1) {
         // Nearby Logic
-        final currentUser = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+        final currentUser =
+            (context.read<AuthBloc>().state as AuthAuthenticated).user;
         fetchedUsers = await _peopleService.getNearbyUsers(
           currentUserId: _currentUserId!,
           myCountryCode: currentUser.countryCode ?? 'US',
@@ -124,7 +126,6 @@ class _PeopleScreenState extends State<PeopleScreen>
         _allFetchedUsers = fetchedUsers;
         _isLoading = false;
       });
-      // Important: Apply filters immediately after fetching data
       _applyFilters();
     }
   }
@@ -136,24 +137,31 @@ class _PeopleScreenState extends State<PeopleScreen>
         // 1. Language Filter
         bool matchesLanguage = false;
         final filterCode = _selectedLanguageCode.toLowerCase();
-        
+
         // Match Native
-        if (user.nativeLanguage.toLowerCase() == filterCode) matchesLanguage = true;
-        if (user.additionalNativeLanguages.any((l) => l.toLowerCase() == filterCode)) matchesLanguage = true;
+        if (user.nativeLanguage.toLowerCase() == filterCode)
+          matchesLanguage = true;
+        if (user.additionalNativeLanguages.any(
+          (l) => l.toLowerCase() == filterCode,
+        ))
+          matchesLanguage = true;
         // Match Target (Learning)
-        if (user.targetLanguages.any((l) => l.toLowerCase() == filterCode)) matchesLanguage = true;
+        if (user.targetLanguages.any((l) => l.toLowerCase() == filterCode))
+          matchesLanguage = true;
 
         if (!matchesLanguage) return false;
 
         // 2. Online Filter
         if (_filterOnlineOnly && !user.isOnline) return false;
-        
+
         // 3. Reviews Filter
         if (_filterHasReviews && user.references.isEmpty) return false;
 
         // 4. Topic Filter
         if (_filterTopic != null) {
-          bool hasTopic = user.topics.any((t) => t.toLowerCase() == _filterTopic!.toLowerCase());
+          bool hasTopic = user.topics.any(
+            (t) => t.toLowerCase() == _filterTopic!.toLowerCase(),
+          );
           if (!hasTopic) return false;
         }
 
@@ -174,15 +182,107 @@ class _PeopleScreenState extends State<PeopleScreen>
 
   // --- BOTTOM SHEETS ---
 
+  // REUSABLE SHEET BUILDER
+  void _showLanguageSheet({
+    required String title,
+    required Function(String code, String name) onLanguageSelected,
+  }) {
+    final theme = Theme.of(context);
+    final entries = LanguageHelper.availableLanguages.entries.toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.cardColor, // Theme aware
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, controller) => SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 15,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, color: theme.hintColor),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: theme.dividerColor),
+
+              Expanded(
+                child: ListView.separated(
+                  controller: controller,
+                  itemCount: entries.length,
+                  padding: const EdgeInsets.only(bottom: 20),
+                  separatorBuilder: (_, __) =>
+                      Divider(color: theme.dividerColor, height: 1),
+                  itemBuilder: (context, index) {
+                    final entry = entries[index];
+                    final code = entry.key;
+                    final name = entry.value;
+                    final flag = LanguageHelper.getFlagEmoji(code);
+
+                    final isSelected = _selectedLanguageCode == code;
+
+                    return ListTile(
+                      leading: Text(flag, style: const TextStyle(fontSize: 24)),
+                      title: Text(
+                        name,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 16,
+                        ),
+                      ),
+                      trailing: isSelected
+                          ? Icon(
+                              Icons.check,
+                              color: theme.colorScheme.secondary,
+                            )
+                          : null,
+                      onTap: () => onLanguageSelected(code, name),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // 1. VIEW FILTER SHEET (User's Languages Only)
   void _showLanguageFilterSheet() {
+    final theme = Theme.of(context);
     final state = context.read<AuthBloc>().state;
     List<String> userLanguages = ['en'];
-    
+
     if (state is AuthAuthenticated) {
-      // Build Unique List: Current + Native + Targets
       final Set<String> unique = {};
-      if (state.user.currentLanguage.isNotEmpty) unique.add(state.user.currentLanguage);
+      if (state.user.currentLanguage.isNotEmpty)
+        unique.add(state.user.currentLanguage);
       unique.add(state.user.nativeLanguage);
       unique.addAll(state.user.targetLanguages);
       userLanguages = unique.toList();
@@ -190,10 +290,12 @@ class _PeopleScreenState extends State<PeopleScreen>
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: _cardColor,
+      backgroundColor: theme.cardColor, // Theme aware
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Wrap(
           children: [
@@ -203,7 +305,14 @@ class _PeopleScreenState extends State<PeopleScreen>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("Filter by Language", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    "Filter by Language",
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   Wrap(
                     spacing: 10,
@@ -213,16 +322,30 @@ class _PeopleScreenState extends State<PeopleScreen>
                       return ActionChip(
                         avatar: Text(LanguageHelper.getFlagEmoji(code)),
                         label: Text(LanguageHelper.getLanguageName(code)),
-                        backgroundColor: isSelected ? _primaryPink : Colors.black12,
-                        labelStyle: const TextStyle(color: Colors.white),
+                        // Theme colors for Chip
+                        backgroundColor: isSelected
+                            ? theme.colorScheme.secondary
+                            : theme.scaffoldBackgroundColor,
+                        side: BorderSide(
+                          color: isSelected
+                              ? Colors.transparent
+                              : theme.dividerColor,
+                        ),
+                        labelStyle: TextStyle(
+                          color: isSelected
+                              ? Colors.white
+                              : theme.colorScheme.onSurface,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
                         onPressed: () {
-                          // Change Filter Locally
                           setState(() => _selectedLanguageCode = code);
                           _applyFilters();
                           Navigator.pop(context);
-                          
-                          // Optional: Sync back to Bloc
-                          context.read<AuthBloc>().add(AuthTargetLanguageChanged(code));
+                          context.read<AuthBloc>().add(
+                            AuthTargetLanguageChanged(code),
+                          );
                         },
                       );
                     }).toList(),
@@ -235,10 +358,13 @@ class _PeopleScreenState extends State<PeopleScreen>
                         Navigator.pop(context);
                         _showAddLanguageSheet();
                       },
-                      icon: Icon(Icons.add, color: _primaryPink),
-                      label: Text("Start learning a new language", style: TextStyle(color: _primaryPink)),
+                      icon: Icon(Icons.add, color: theme.colorScheme.secondary),
+                      label: Text(
+                        "Start learning a new language",
+                        style: TextStyle(color: theme.colorScheme.secondary),
+                      ),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -248,88 +374,36 @@ class _PeopleScreenState extends State<PeopleScreen>
     );
   }
 
-  // 2. ADD LANGUAGE SHEET (All Languages, Helper Order)
+  // 2. ADD LANGUAGE SHEET
   void _showAddLanguageSheet() {
-    // Use Helper order directly
-    final entries = LanguageHelper.availableLanguages.entries.toList();
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: _cardColor,
-      isScrollControlled: true, 
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.5, // 50% Initial Height
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (_, controller) => SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text("Add New Language", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: () => Navigator.pop(context)),
-                  ],
-                ),
-              ),
-              const Divider(height: 1, color: Colors.white12),
-              
-              Expanded(
-                child: ListView.separated(
-                  controller: controller, // Enables Dragging
-                  itemCount: entries.length,
-                  padding: const EdgeInsets.only(bottom: 20),
-                  separatorBuilder: (_, __) => const Divider(color: Colors.white12, height: 1),
-                  itemBuilder: (context, index) {
-                    final entry = entries[index];
-                    final code = entry.key;
-                    final name = entry.value;
-                    final flag = LanguageHelper.getFlagEmoji(code);
-                    
-                    final isSelected = _selectedLanguageCode == code;
-
-                    return ListTile(
-                      leading: Text(flag, style: const TextStyle(fontSize: 24)),
-                      title: Text(name, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                      trailing: isSelected ? Icon(Icons.check, color: _primaryPink) : null,
-                      onTap: () {
-                        // 1. Update Backend
-                        context.read<AuthBloc>().add(AuthTargetLanguageChanged(code));
-                        
-                        // 2. Update UI Filter
-                        setState(() => _selectedLanguageCode = code);
-                        _applyFilters();
-                        
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Switched to $name")));
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    _showLanguageSheet(
+      title: "Add New Language",
+      onLanguageSelected: (code, name) {
+        context.read<AuthBloc>().add(AuthTargetLanguageChanged(code));
+        setState(() => _selectedLanguageCode = code);
+        _applyFilters();
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Added $name to your languages!")),
+        );
+      },
     );
   }
 
   void _showTopicFilterSheet() {
+    final theme = Theme.of(context);
     final Set<String> allTopics = {};
     for (var u in _allFetchedUsers) {
       allTopics.addAll(u.topics);
     }
-    
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: _cardColor,
+      backgroundColor: theme.cardColor,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Wrap(
           children: [
@@ -339,12 +413,22 @@ class _PeopleScreenState extends State<PeopleScreen>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("Filter by Topic", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    "Filter by Topic",
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   if (allTopics.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20),
-                      child: Text("No topics found in this list.", style: TextStyle(color: Colors.grey)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Text(
+                        "No topics found in this list.",
+                        style: TextStyle(color: theme.hintColor),
+                      ),
                     )
                   else
                     Wrap(
@@ -353,26 +437,50 @@ class _PeopleScreenState extends State<PeopleScreen>
                       children: [
                         ActionChip(
                           label: const Text("All Topics"),
-                          backgroundColor: _filterTopic == null ? _primaryPink : Colors.black12,
-                          labelStyle: const TextStyle(color: Colors.white),
+                          backgroundColor: _filterTopic == null
+                              ? theme.colorScheme.secondary
+                              : theme.scaffoldBackgroundColor,
+                          side: BorderSide(
+                            color: _filterTopic == null
+                                ? Colors.transparent
+                                : theme.dividerColor,
+                          ),
+                          labelStyle: TextStyle(
+                            color: _filterTopic == null
+                                ? Colors.white
+                                : theme.colorScheme.onSurface,
+                          ),
                           onPressed: () {
                             setState(() => _filterTopic = null);
                             _applyFilters();
                             Navigator.pop(context);
                           },
                         ),
-                        ...allTopics.map((topic) => ActionChip(
-                          label: Text(topic),
-                          backgroundColor: _filterTopic == topic ? _primaryPink : Colors.black12,
-                          labelStyle: const TextStyle(color: Colors.white),
-                          onPressed: () {
-                            setState(() => _filterTopic = topic);
-                            _applyFilters();
-                            Navigator.pop(context);
-                          },
-                        ))
+                        ...allTopics.map(
+                          (topic) => ActionChip(
+                            label: Text(topic),
+                            backgroundColor: _filterTopic == topic
+                                ? theme.colorScheme.secondary
+                                : theme.scaffoldBackgroundColor,
+                            side: BorderSide(
+                              color: _filterTopic == topic
+                                  ? Colors.transparent
+                                  : theme.dividerColor,
+                            ),
+                            labelStyle: TextStyle(
+                              color: _filterTopic == topic
+                                  ? Colors.white
+                                  : theme.colorScheme.onSurface,
+                            ),
+                            onPressed: () {
+                              setState(() => _filterTopic = topic);
+                              _applyFilters();
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ),
                       ],
-                    )
+                    ),
                 ],
               ),
             ),
@@ -383,7 +491,7 @@ class _PeopleScreenState extends State<PeopleScreen>
   }
 
   // --- SCROLL & NAVIGATION ---
-  
+
   void _onScrollNotification(UserScrollNotification notification) {
     if (notification.direction == ScrollDirection.forward) {
       if (!_isFilterMenuVisible) setState(() => _isFilterMenuVisible = true);
@@ -395,16 +503,18 @@ class _PeopleScreenState extends State<PeopleScreen>
   void _navigateToProfile(UserModel user) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => ProfileDetailsScreen(user: user),
-      ),
+      MaterialPageRoute(builder: (context) => ProfileDetailsScreen(user: user)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+    final theme = Theme.of(context);
+    final authState = context.watch<AuthBloc>().state;
+    final currentUser = (authState is AuthAuthenticated)
+        ? authState.user
+        : null;
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is AuthAuthenticated) {
@@ -416,11 +526,12 @@ class _PeopleScreenState extends State<PeopleScreen>
         }
       },
       child: Scaffold(
-        backgroundColor: _bgDark,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        floatingActionButton: _buildFab(context, currentUser),
         body: Column(
           children: [
-            _buildCustomTabBar(),
-            
+            _buildCustomTabBar(theme),
+
             // Animated Filters
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
@@ -428,38 +539,40 @@ class _PeopleScreenState extends State<PeopleScreen>
               curve: Curves.easeInOut,
               child: SingleChildScrollView(
                 physics: const NeverScrollableScrollPhysics(),
-                child: SizedBox(
-                  height: 55.0,
-                  child: _buildFilters(),
-                ),
+                child: SizedBox(height: 55.0, child: _buildFilters(theme)),
               ),
             ),
 
             // Content
             Expanded(
               child: _isLoading
-                  ? Center(child: CircularProgressIndicator(color: _primaryPink))
+                  ? Center(
+                      child: CircularProgressIndicator(
+                        color: theme.colorScheme.secondary,
+                      ),
+                    )
                   : _visibleUsers.isEmpty
-                      ? _buildEmptyState()
-                      : NotificationListener<UserScrollNotification>(
-                          onNotification: (notification) {
-                            _onScrollNotification(notification);
-                            return true;
-                          },
-                          child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 80),
-                            itemCount: _visibleUsers.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 16),
-                            itemBuilder: (context, index) {
-                              return PeopleCard(
-                                user: _visibleUsers[index],
-                                onTap: () => _navigateToProfile(_visibleUsers[index]),
-                                cardColor: _cardColor,
-                                primaryColor: _primaryPink,
-                              );
-                            },
-                          ),
-                        ),
+                  ? _buildEmptyState(theme)
+                  : NotificationListener<UserScrollNotification>(
+                      onNotification: (notification) {
+                        _onScrollNotification(notification);
+                        return true;
+                      },
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 80),
+                        itemCount: _visibleUsers.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          return PeopleCard(
+                            user: _visibleUsers[index],
+                            onTap: () =>
+                                _navigateToProfile(_visibleUsers[index]),
+                            cardColor: theme.cardColor,
+                            primaryColor: theme.colorScheme.secondary,
+                          );
+                        },
+                      ),
+                    ),
             ),
           ],
         ),
@@ -468,21 +581,73 @@ class _PeopleScreenState extends State<PeopleScreen>
   }
 
   // --- WIDGETS ---
+  Widget _buildFab(BuildContext context, dynamic currentUser) {
+    final theme = Theme.of(context);
+    return BlocBuilder<RoomBloc, RoomState>(
+      builder: (context, state) {
+        final isInRoom = state.activeChatRoom != null;
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (currentUser != null) ...[
+              const SizedBox(height: 16),
+              FloatingActionButton(
+                heroTag: 'msg_people',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const InboxScreen()),
+                ),
+                child: StreamBuilder<List<PrivateConversation>>(
+                  stream: PrivateChatService().getInbox(currentUser.id),
+                  builder: (context, snapshot) {
+                    int unread = 0;
+                    if (snapshot.hasData) {
+                      for (var c in snapshot.data!)
+                        if (c.lastSenderId != currentUser.id)
+                          unread += c.unreadCount;
+                    }
+                    return Badge(
+                      isLabelVisible: unread > 0,
+                      label: Text(unread > 99 ? '99+' : '$unread'),
+                      backgroundColor: Colors.red,
+                      offset: const Offset(4, -4),
+                      child: Icon(
+                        isInRoom
+                            ? Icons.chat_bubble_outline_rounded
+                            : Icons.message_rounded,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
 
-  Widget _buildCustomTabBar() {
+  Widget _buildCustomTabBar(ThemeData theme) {
     return Container(
-      color: _bgDark,
+      color: theme.scaffoldBackgroundColor,
       child: Container(
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.white12, width: 1)),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: theme.dividerColor, width: 1),
+          ),
         ),
         child: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
+          indicatorColor: theme.colorScheme.onSurface,
           indicatorWeight: 2,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.grey,
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          labelColor: theme.colorScheme.onSurface,
+          unselectedLabelColor: theme.hintColor,
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
           tabs: const [
             Tab(text: "All"),
             Tab(text: "Nearby"),
@@ -492,12 +657,13 @@ class _PeopleScreenState extends State<PeopleScreen>
     );
   }
 
-  Widget _buildFilters() {
+  Widget _buildFilters(ThemeData theme) {
     final langName = LanguageHelper.getLanguageName(_selectedLanguageCode);
     final flag = LanguageHelper.getFlagEmoji(_selectedLanguageCode);
+    final activeColor = theme.colorScheme.secondary;
 
     return Container(
-      color: _bgDark,
+      color: theme.scaffoldBackgroundColor,
       alignment: Alignment.centerLeft,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -507,38 +673,88 @@ class _PeopleScreenState extends State<PeopleScreen>
             GestureDetector(
               onTap: _showLanguageFilterSheet,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.white12,
-                  border: Border.all(color: _primaryPink),
+                  color: theme.cardColor,
+                  border: Border.all(color: activeColor),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(children: [
-                  Text(flag, style: const TextStyle(fontSize: 16)),
-                  const SizedBox(width: 6),
-                  Text(langName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 16),
-                ]),
+                child: Row(
+                  children: [
+                    Text(flag, style: const TextStyle(fontSize: 16)),
+                    const SizedBox(width: 6),
+                    Text(
+                      langName,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.keyboard_arrow_down,
+                      color: theme.colorScheme.onSurface,
+                      size: 16,
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 8),
-            
-            _buildFilterChip(label: _filterTopic ?? "Topics", icon: Icons.tag, isSelected: _filterTopic != null, onTap: _showTopicFilterSheet),
+
+            _buildFilterChip(
+              theme,
+              label: _filterTopic ?? "Topics",
+              icon: Icons.tag,
+              isSelected: _filterTopic != null,
+              onTap: _showTopicFilterSheet,
+            ),
             const SizedBox(width: 8),
-            _buildFilterChip(label: "Reviews", icon: Icons.star_border, isSelected: _filterHasReviews, onTap: _toggleReviewsFilter),
+            _buildFilterChip(
+              theme,
+              label: "Reviews",
+              icon: Icons.star_border,
+              isSelected: _filterHasReviews,
+              onTap: _toggleReviewsFilter,
+            ),
             const SizedBox(width: 8),
-            _buildFilterChip(label: "Online", icon: Icons.circle, iconColor: _filterOnlineOnly ? Colors.greenAccent : Colors.green, isSelected: _filterOnlineOnly, onTap: _toggleOnlineFilter),
-            
-            const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: SizedBox(height: 24, child: VerticalDivider(width: 1, color: Colors.white24))),
-            
+            _buildFilterChip(
+              theme,
+              label: "Online",
+              icon: Icons.circle,
+              iconColor: _filterOnlineOnly ? Colors.greenAccent : Colors.green,
+              isSelected: _filterOnlineOnly,
+              onTap: _toggleOnlineFilter,
+            ),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: SizedBox(
+                height: 24,
+                child: VerticalDivider(width: 1, color: theme.dividerColor),
+              ),
+            ),
+
             GestureDetector(
               onTap: _showAddLanguageSheet,
-              child: Row(children: [
-                Icon(Icons.add, color: _primaryPink, size: 20),
-                const SizedBox(width: 4),
-                Text("Add language", style: TextStyle(color: _primaryPink, fontWeight: FontWeight.w600, fontSize: 15)),
-              ]),
+              child: Row(
+                children: [
+                  Icon(Icons.add, color: activeColor, size: 20),
+                  const SizedBox(width: 4),
+                  Text(
+                    "Add language",
+                    style: TextStyle(
+                      color: activeColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -546,67 +762,81 @@ class _PeopleScreenState extends State<PeopleScreen>
     );
   }
 
-  Widget _buildFilterChip({
-    required String label, 
-    required VoidCallback onTap, 
-    IconData? icon, 
+  Widget _buildFilterChip(
+    ThemeData theme, {
+    required String label,
+    required VoidCallback onTap,
+    IconData? icon,
     Color? iconColor,
     bool isSelected = false,
   }) {
+    final activeColor = theme.colorScheme.secondary;
+    final inactiveColor = theme.colorScheme.onSurface;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white12 : Colors.transparent,
-          border: Border.all(color: isSelected ? _primaryPink : Colors.white30),
+          color: isSelected ? activeColor.withOpacity(0.1) : Colors.transparent,
+          border: Border.all(
+            color: isSelected ? activeColor : theme.dividerColor,
+          ),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Row(children: [
-          if (icon != null) ...[
-            Icon(icon, size: 14, color: iconColor ?? (isSelected ? _primaryPink : Colors.white)),
-            const SizedBox(width: 6)
+        child: Row(
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 14,
+                color: iconColor ?? (isSelected ? activeColor : inactiveColor),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? activeColor : inactiveColor,
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+            if (!isSelected) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.keyboard_arrow_down, color: theme.hintColor, size: 16),
+            ],
           ],
-          Text(
-            label, 
-            style: TextStyle(
-              color: isSelected ? _primaryPink : Colors.white, 
-              fontWeight: FontWeight.w500, 
-              fontSize: 13
-            )
-          ),
-          if (!isSelected) ...[
-             const SizedBox(width: 4),
-             const Icon(Icons.keyboard_arrow_down, color: Colors.grey, size: 16),
-          ]
-        ]),
+        ),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(ThemeData theme) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.filter_list_off, size: 60, color: Colors.grey[700]),
+          Icon(Icons.filter_list_off, size: 60, color: theme.hintColor),
           const SizedBox(height: 16),
           Text(
-            _allFetchedUsers.isEmpty ? "No users found." : "No users match your filters.", 
-            style: TextStyle(color: Colors.grey[500])
+            _allFetchedUsers.isEmpty
+                ? "No users found."
+                : "No users match your filters.",
+            style: TextStyle(color: theme.hintColor),
           ),
           if (_allFetchedUsers.isNotEmpty)
-             TextButton(
-               onPressed: () {
-                 setState(() {
-                   _filterOnlineOnly = false;
-                   _filterHasReviews = false;
-                   _filterTopic = null;
-                 });
-                 _applyFilters();
-               },
-               child: const Text("Clear Filters"),
-             )
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _filterOnlineOnly = false;
+                  _filterHasReviews = false;
+                  _filterTopic = null;
+                });
+                _applyFilters();
+              },
+              child: const Text("Clear Filters"),
+            ),
         ],
       ),
     );
