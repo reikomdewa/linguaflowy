@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
@@ -25,54 +26,59 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final PrivateChatService _service = PrivateChatService();
 
-// ... inside _PrivateChatScreenState
-
-  void _sendMessage(String myId, String myName, String? myPhoto) {
-    if (_controller.text.trim().isEmpty) return;
-    
-    // Fallback if AuthBloc has an empty name
-    final validMyName = myName.isEmpty ? "User" : myName;
-
-    _service.sendMessage(
-      chatId: widget.chatId,
-      senderId: myId,
-      text: _controller.text,
-      senderName: validMyName, 
-      senderPhoto: myPhoto,
-      otherName: widget.otherUserName,
-      otherPhoto: widget.otherUserPhoto,
-    );
-    
-    _controller.clear();
-  }
+  // We need to store myId to check message ownership
+  String? _myId;
 
   @override
   void initState() {
     super.initState();
-    // CALL THIS: Clear the badge when screen opens
-    PrivateChatService().markChatAsRead(widget.chatId);
+    // 1. Get Current User ID safely
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      _myId = authState.user.id;
+      // 2. Mark messages as read (This triggers Blue Ticks for the sender)
+      _service.markChatAsRead(widget.chatId, _myId!);
+    }
+  }
+
+  void _sendMessage() {
+    if (_controller.text.trim().isEmpty) return;
+
+    // Get latest user details from Bloc
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return;
+
+    final myUser = authState.user;
+
+    // Fallback for empty name
+    final validMyName = myUser.displayName.isEmpty
+        ? "User"
+        : myUser.displayName;
+
+    _service.sendMessage(
+      chatId: widget.chatId,
+      senderId: myUser.id,
+      text: _controller.text,
+      // 3. Pass Metadata
+      senderName: validMyName,
+      senderPhoto: myUser.photoUrl,
+      otherName: widget.otherUserName,
+      otherPhoto: widget.otherUserPhoto,
+    );
+
+    _controller.clear();
+  }
+
+  String _formatTime(DateTime dt) {
+    final hour = dt.hour.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    return "$hour:$minute";
   }
 
   @override
   Widget build(BuildContext context) {
-    final authState = context.read<AuthBloc>().state;
-    String myId = (authState as AuthAuthenticated).user.id;
-
-    final myUser = (authState as AuthAuthenticated).user;
-    final myName = myUser.displayName;
-    final myPhoto = myUser.photoUrl;
-
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
-    // Determine colors based on your specific Theme definition
-    // My Bubble: Primary Color (Black in Light, White in Dark)
-    final myBubbleColor = theme.primaryColor;
-    final myTextColor = isDark ? Colors.black : Colors.white;
-
-    // Other Bubble: Card Color
-    final otherBubbleColor = theme.cardColor;
-    final otherTextColor = theme.textTheme.bodyLarge?.color;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -81,17 +87,23 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
         titleSpacing: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: theme.iconTheme.color),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Row(
           children: [
             CircleAvatar(
               radius: 18,
               backgroundColor: theme.dividerColor,
               backgroundImage: widget.otherUserPhoto != null
-                  ? NetworkImage(widget.otherUserPhoto!)
+                  ? CachedNetworkImageProvider(widget.otherUserPhoto!)
                   : null,
               child: widget.otherUserPhoto == null
                   ? Text(
-                      widget.otherUserName[0].toUpperCase(),
+                      widget.otherUserName.isNotEmpty
+                          ? widget.otherUserName[0].toUpperCase()
+                          : "?",
                       style: TextStyle(color: theme.primaryColor),
                     )
                   : null,
@@ -111,7 +123,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       ),
       body: Column(
         children: [
-          // MESSAGE LIST
+          // --- MESSAGE LIST ---
           Expanded(
             child: StreamBuilder<List<PrivateMessage>>(
               stream: _service.getMessages(widget.chatId),
@@ -120,6 +132,21 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final messages = snapshot.data!;
+                   // Check if there are any messages NOT sent by me that are unread
+                // We use _myId safely here
+                if (_myId != null && messages.isNotEmpty) {
+                  final hasUnreadMessages = messages.any((msg) => 
+                      msg.senderId != _myId && !msg.isRead
+                  );
+
+                  if (hasUnreadMessages) {
+                    // We must delay the write operation until after the build phase
+                    // to avoid "setState() or markNeedsBuild() called during build" errors.
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _service.markChatAsRead(widget.chatId, _myId!);
+                    });
+                  }
+                }
 
                 if (messages.isEmpty) {
                   return Center(
@@ -137,54 +164,18 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                     vertical: 8,
                   ),
                   itemCount: messages.length,
-                  // Hides keyboard on scroll for better UX
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   itemBuilder: (context, index) {
                     final msg = messages[index];
-                    final isMe = msg.senderId == myId;
-
-                    return Align(
-                      alignment: isMe
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Container(
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.75,
-                        ),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isMe ? myBubbleColor : otherBubbleColor,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(20),
-                            topRight: const Radius.circular(20),
-                            bottomLeft: isMe
-                                ? const Radius.circular(20)
-                                : Radius.zero,
-                            bottomRight: isMe
-                                ? Radius.zero
-                                : const Radius.circular(20),
-                          ),
-                        ),
-                        child: Text(
-                          msg.text,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: isMe ? myTextColor : otherTextColor,
-                          ),
-                        ),
-                      ),
-                    );
+                    return _buildMessageBubble(msg, theme, isDark);
                   },
                 );
               },
             ),
           ),
 
-          // INPUT AREA (In Safe Area)
+          // --- INPUT AREA ---
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -203,8 +194,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         hintText: "Message...",
                         hintStyle: TextStyle(color: theme.hintColor),
                         filled: true,
-                        fillColor:
-                            theme.cardColor, // Matches Threads input style
+                        fillColor: theme.cardColor,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 20,
                           vertical: 12,
@@ -231,7 +221,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
                   // Send Button
                   GestureDetector(
-                    onTap: () => _sendMessage(myId, myName, myPhoto),
+                    onTap: _sendMessage,
                     child: CircleAvatar(
                       radius: 24,
                       backgroundColor: theme.primaryColor,
@@ -247,6 +237,84 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // --- BUBBLE BUILDER ---
+  Widget _buildMessageBubble(PrivateMessage msg, ThemeData theme, bool isDark) {
+    // Check sender using stored ID
+    final isMe = msg.senderId == _myId;
+
+    // Theme-Aware Colors
+    final myBubbleColor = theme.primaryColor;
+    final otherBubbleColor = theme.cardColor;
+
+    final myTextColor = isDark ? Colors.black : Colors.white;
+    final otherTextColor = theme.textTheme.bodyLarge?.color;
+
+    // Meta Color (Time)
+    final metaColor = isMe
+        ? (isDark ? Colors.black54 : Colors.white70)
+        : theme.hintColor;
+
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+        ),
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+        decoration: BoxDecoration(
+          color: isMe ? myBubbleColor : otherBubbleColor,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: isMe ? const Radius.circular(16) : Radius.zero,
+            bottomRight: isMe ? Radius.zero : const Radius.circular(16),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 1. Text
+            Text(
+              msg.text,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: isMe ? myTextColor : otherTextColor,
+                fontSize: 16,
+              ),
+            ),
+
+            const SizedBox(height: 2),
+
+            // 2. Metadata Row (Time + Ticks)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _formatTime(msg.createdAt),
+                  style: TextStyle(fontSize: 11, color: metaColor),
+                ),
+
+                // Show ticks only if I sent the message
+                if (isMe) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.done_all,
+                    size: 16,
+                    // FIX: Use bright colors so it's visible in both modes
+                    color: msg.isRead
+                        ? (isDark ? Colors.lightBlueAccent : Colors.blue)
+                        : metaColor,
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

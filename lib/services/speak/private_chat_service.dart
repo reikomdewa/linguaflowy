@@ -132,18 +132,38 @@ class PrivateChatService {
   // ==============================================================================
   // 4. Mark Chat as Read
   // ==============================================================================
-  Future<void> markChatAsRead(String chatId) async {
+ // ==============================================================================
+  // 4. Mark Chat & Messages as Read (FIXED)
+  // ==============================================================================
+  Future<void> markChatAsRead(String chatId, String myUserId) async {
     if (_auth.currentUser == null) return;
 
     try {
-      // We only reset the count if we are NOT the last sender
-      // (Requires fetching the doc to check lastSenderId, but for simple UI we just reset)
+      // 1. Reset Inbox Counter (Parent Doc)
       await _firestore.collection('private_chats').doc(chatId).update({
         'isRead': true,
         'unreadCount': 0,
       });
+
+      // 2. Mark specific messages as read
+      final querySnapshot = await _firestore
+          .collection('private_chats')
+          .doc(chatId)
+          .collection('messages')
+          .where('senderId', isNotEqualTo: myUserId) // Incoming messages only
+          .where('isRead', isEqualTo: false)         // Unread messages only
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        final batch = _firestore.batch();
+        for (var doc in querySnapshot.docs) {
+          // FIX: Use .reference instead of .ref
+          batch.update(doc.reference, {'isRead': true});
+        }
+        await batch.commit();
+      }
     } catch (e) {
-      print("Error marking as read: $e");
+      print("Error marking messages read: $e");
     }
   }
 
