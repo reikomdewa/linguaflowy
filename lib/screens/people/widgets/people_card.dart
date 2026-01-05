@@ -33,7 +33,7 @@ class PeopleCard extends StatelessWidget {
             // 1. Avatar & Status
             _buildAvatar(),
             const SizedBox(width: 12),
-            
+
             // 2. Info Column
             Expanded(
               child: Column(
@@ -46,7 +46,7 @@ class PeopleCard extends StatelessWidget {
                   _buildLanguagesRow(),
                 ],
               ),
-            )
+            ),
           ],
         ),
       ),
@@ -65,7 +65,8 @@ class PeopleCard extends StatelessWidget {
             fit: BoxFit.cover,
             placeholder: (context, url) => Container(color: Colors.grey[800]),
             errorWidget: (context, url, error) => Container(
-              width: 90, height: 90,
+              width: 90,
+              height: 90,
               color: Colors.grey[800],
               child: const Icon(Icons.person, color: Colors.white),
             ),
@@ -73,16 +74,17 @@ class PeopleCard extends StatelessWidget {
         ),
         // Streak Badge
         Positioned(
-          top: 4, left: 4,
+          top: 4,
+          left: 4,
           child: Container(
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               color: user.streakDays > 0 ? primaryColor : Colors.transparent,
               shape: BoxShape.circle,
             ),
-            child: user.streakDays > 0 
-              ? const Icon(Icons.flash_on, color: Colors.white, size: 12)
-              : const SizedBox.shrink(),
+            child: user.streakDays > 0
+                ? const Icon(Icons.flash_on, color: Colors.white, size: 12)
+                : const SizedBox.shrink(),
           ),
         ),
       ],
@@ -98,9 +100,13 @@ class PeopleCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                user.age != null ? "${user.displayName}, ${user.age}" : user.displayName,
+                user.age != null
+                    ? "${user.displayName}, ${user.age}"
+                    : user.displayName,
                 style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -119,18 +125,42 @@ class PeopleCard extends StatelessWidget {
         if (user.isNewUser)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(color: Colors.teal, borderRadius: BorderRadius.circular(4)),
-            child: const Text("NEW", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+            decoration: BoxDecoration(
+              color: Colors.teal,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              "NEW",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           )
         else if (user.referenceCount > 0)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: Colors.blueGrey[800], borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: Colors.blueGrey[800],
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Row(
               children: [
-                Text("${user.referenceCount}", style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                Text(
+                  "${user.referenceCount}",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(width: 4),
-                const Icon(Icons.format_quote, color: Colors.lightBlueAccent, size: 14),
+                const Icon(
+                  Icons.format_quote,
+                  color: Colors.lightBlueAccent,
+                  size: 14,
+                ),
               ],
             ),
           ),
@@ -151,23 +181,59 @@ class PeopleCard extends StatelessWidget {
   Widget _buildLanguagesRow() {
     return Row(
       children: [
-        _buildLangBadge("FLUENT", user.nativeLanguage),
+        // Native
+        _buildLangBadge(
+          "FLUENT",
+          user.nativeLanguage,
+          null,
+        ), // Native implies fluent
         const SizedBox(width: 12),
+
+        // Target Language (Show Level!)
         if (user.targetLanguages.isNotEmpty)
-          _buildLangBadge("LEARNS", user.targetLanguages.first),
+          // Look up the level in the map using the language code
+          _buildLangBadge(
+            "LEARNS",
+            user.targetLanguages.first,
+            user.languageLevels[user
+                .targetLanguages
+                .first], // <--- GET LEVEL HERE
+          ),
       ],
     );
   }
 
-  Widget _buildLangBadge(String label, String langCode) {
-    // USE LANGUAGE HELPER HERE
+  Widget _buildLangBadge(String label, String langCode, String? level) {
     final flag = LanguageHelper.getFlagEmoji(langCode);
-    
+
+    // Simplifies "A1 - Newcomer" to just "A1" for the small card
+    final shortLevel = level?.split(' ').first ?? "";
+
     return Row(
       children: [
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+            // Show level if it exists (e.g. "A2")
+            if (shortLevel.isNotEmpty)
+              Text(
+                shortLevel,
+                style: TextStyle(
+                  color: Colors.blue,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+          ],
         ),
         const SizedBox(width: 6),
         Text(flag, style: const TextStyle(fontSize: 18)),

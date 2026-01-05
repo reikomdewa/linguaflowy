@@ -22,9 +22,9 @@ class SpeakHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      padding: const EdgeInsets.only(left: 16.0, right: 16),
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 200),
         child: isSearching
@@ -59,8 +59,9 @@ class SpeakHeader extends StatelessWidget {
                 children: [
                   Text(
                     'Practice Speaking',
-                    style: theme.textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.search_rounded),
