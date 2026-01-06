@@ -742,6 +742,8 @@ class _ReaderScreenState extends State<ReaderScreen>
         _seekToTime(_activeTranscript[next].start);
         _playMedia();
       }
+      // FIX: Don't auto-play TTS when navigating in sentence mode
+      // User must explicitly press play button
     }
   }
 
@@ -759,6 +761,8 @@ class _ReaderScreenState extends State<ReaderScreen>
         _seekToTime(_activeTranscript[prev].start);
         _playMedia();
       }
+      // FIX: Don't auto-play TTS when navigating in sentence mode
+      // User must explicitly press play button
     }
   }
 
@@ -770,7 +774,14 @@ class _ReaderScreenState extends State<ReaderScreen>
         _playMedia();
       }
     } else {
-      _speakSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex);
+      // FIX: For text lessons in sentence mode, play current sentence only
+      if (_activeSentenceIndex >= 0 &&
+          _activeSentenceIndex < _smartChunks.length) {
+        _speakSentence(
+          _smartChunks[_activeSentenceIndex],
+          _activeSentenceIndex,
+        );
+      }
     }
   }
 
@@ -789,8 +800,19 @@ class _ReaderScreenState extends State<ReaderScreen>
         }
       }
     } else {
-      _goToNextSentence();
-      _speakSentence(_smartChunks[_activeSentenceIndex], _activeSentenceIndex);
+      // FIX: For text lessons, advance to next sentence and play it
+      if (_activeSentenceIndex < _smartChunks.length - 1) {
+        _handleSwipeMarking(_activeSentenceIndex);
+        setState(() {
+          _activeSentenceIndex++;
+          _resetTranslationState();
+        });
+        // Play the new sentence
+        _speakSentence(
+          _smartChunks[_activeSentenceIndex],
+          _activeSentenceIndex,
+        );
+      }
     }
   }
 
@@ -809,12 +831,20 @@ class _ReaderScreenState extends State<ReaderScreen>
         }
       }
     } else {
-      _isTtsPlaying
-          ? _flutterTts.stop()
-          : _speakSentence(
-              _smartChunks[_activeSentenceIndex],
-              _activeSentenceIndex,
-            );
+      // FIX: For text lessons, stop or play current sentence only
+      if (_isTtsPlaying) {
+        _flutterTts.stop();
+        setState(() => _isTtsPlaying = false);
+      } else {
+        // Play current sentence without auto-advance in sentence mode
+        if (_activeSentenceIndex >= 0 &&
+            _activeSentenceIndex < _smartChunks.length) {
+          _speakSentence(
+            _smartChunks[_activeSentenceIndex],
+            _activeSentenceIndex,
+          );
+        }
+      }
     }
   }
 
@@ -822,9 +852,11 @@ class _ReaderScreenState extends State<ReaderScreen>
     await _flutterTts.setLanguage(widget.lesson.language);
     await _flutterTts.setSpeechRate(_ttsSpeed);
     _flutterTts.setCompletionHandler(() {
+      // FIX: Check if in sentence mode before auto-advancing
       if (!_isSentenceMode) {
         _playNextTtsSentence();
       } else {
+        // In sentence mode, just stop playing after current sentence
         setState(() => _isTtsPlaying = false);
       }
     });
@@ -847,7 +879,10 @@ class _ReaderScreenState extends State<ReaderScreen>
       _activeSentenceIndex = index;
       _isTtsPlaying = true;
     });
-    if (!_isSentenceMode) _scrollToActiveLine(index);
+    // FIX: Don't scroll in sentence mode (user is already focused on this sentence)
+    if (!_isSentenceMode) {
+      _scrollToActiveLine(index);
+    }
     await _flutterTts.speak(text);
   }
 
