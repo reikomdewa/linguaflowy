@@ -1,0 +1,19 @@
+[build]
+  # Overrides the "hugo" command with a dummy command
+  command = "echo 'No build step required'"
+  
+  # Tells Netlify where your functions live
+  functions = "netlify/functions"
+  
+  # (Optional) prevents publishing your entire source code as a static site
+  publish = "."
+
+# --- ADD THIS SECTION BELOW ---
+
+[functions]
+  node_bundler = "esbuild"
+
+[functions.scheduled]
+  # IMPORTANT: The name "cleanup_rooms" MUST match your filename (cleanup_rooms.js)
+  # "0 0 * * *" means: Run every day at midnight
+  cleanup_rooms = "0 0 * * *"

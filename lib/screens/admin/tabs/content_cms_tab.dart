@@ -1,0 +1,647 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:linguaflow/utils/language_helper.dart'; // Make sure this import path is correct
+
+class ContentCMSTab extends StatefulWidget {
+  const ContentCMSTab({super.key});
+
+  @override
+  State<ContentCMSTab> createState() => _ContentCMSTabState();
+}
+
+class _ContentCMSTabState extends State<ContentCMSTab> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchText = "";
+
+  // Open the Editor Dialog
+  void _openEditor(BuildContext context, [DocumentSnapshot? doc]) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _LessonEditorDialog(doc: doc),
+    );
+  }
+
+  void _deleteLesson(String docId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Lesson?"),
+        content: const Text("This cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              FirebaseFirestore.instance
+                  .collection('lessons')
+                  .doc(docId)
+                  .delete();
+              Navigator.pop(ctx);
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- REPAIR TOOL ---
+  Future<void> _fixOldData() async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(content: Text("Updating database indexes...")),
+    );
+
+    final collection = FirebaseFirestore.instance.collection('lessons');
+    final snapshot = await collection.get();
+
+    int count = 0;
+    final batch = FirebaseFirestore.instance.batch();
+
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      if (data['title'] != null) {
+        batch.update(doc.reference, {
+          'title_lower': data['title'].toString().toLowerCase().trim(),
+        });
+        count++;
+      }
+      if (count % 400 == 0) await batch.commit();
+    }
+    await batch.commit();
+    messenger.showSnackBar(SnackBar(content: Text("Fixed $count lessons!")));
+  }
+
+  // --- SEARCH LOGIC ---
+  Stream<QuerySnapshot> _getStream() {
+    CollectionReference lessonsRef = FirebaseFirestore.instance.collection(
+      'lessons',
+    );
+
+    if (_searchText.isEmpty) {
+      return lessonsRef
+          .orderBy('createdAt', descending: true)
+          .limit(50)
+          .snapshots();
+    } else {
+      final searchLower = _searchText.toLowerCase();
+      return lessonsRef.orderBy('title_lower').startAt([searchLower]).endAt([
+        '$searchLower\uf8ff',
+      ]).snapshots();
+    }
+  }
+
+  Future<void> _searchById() async {
+    if (_searchCtrl.text.isEmpty) return;
+    setState(() => _searchText = "___ID_SEARCH_MODE___");
+
+    final docRef = FirebaseFirestore.instance
+        .collection('lessons')
+        .doc(_searchCtrl.text.trim());
+    final snapshot = await docRef.get();
+
+    if (!mounted) return;
+
+    if (snapshot.exists) {
+      _openEditor(context, snapshot);
+      _searchCtrl.clear();
+      setState(() => _searchText = "");
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No lesson found with that exact ID.")),
+      );
+      _searchCtrl.clear();
+      setState(() => _searchText = "");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.small(
+            heroTag: "fix_btn",
+            onPressed: _fixOldData,
+            backgroundColor: Colors.grey,
+            child: const Icon(Icons.build, color: Colors.white),
+          ),
+          const SizedBox(height: 10),
+          FloatingActionButton.extended(
+            heroTag: "add_btn",
+            onPressed: () => _openEditor(context),
+            backgroundColor: Colors.amber,
+            icon: const Icon(Icons.add, color: Colors.black),
+            label: const Text(
+              "Add Lesson",
+              style: TextStyle(color: Colors.black),
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                hintText: "Search Title (e.g. 'candide')...",
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_searchText.isNotEmpty &&
+                        _searchText != "___ID_SEARCH_MODE___")
+                      IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _searchText = "");
+                        },
+                      ),
+                    Tooltip(
+                      message: "Find by Exact ID",
+                      child: IconButton(
+                        icon: const Icon(Icons.tag, color: Colors.blue),
+                        onPressed: _searchById,
+                      ),
+                    ),
+                  ],
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: isDark ? Colors.white10 : Colors.grey[100],
+              ),
+              onChanged: (val) => setState(() => _searchText = val),
+            ),
+          ),
+          Expanded(
+            child: _searchText == "___ID_SEARCH_MODE___"
+                ? const Center(child: CircularProgressIndicator())
+                : StreamBuilder<QuerySnapshot>(
+                    stream: _getStream(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Center(child: Text("Error: ${snapshot.error}"));
+                      }
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.search_off,
+                                size: 48,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                _searchText.isEmpty
+                                    ? "No lessons found."
+                                    : "No matches for '$_searchText'",
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 80),
+                        itemCount: snapshot.data!.docs.length,
+                        itemBuilder: (context, index) {
+                          final doc = snapshot.data!.docs[index];
+                          final data = doc.data() as Map<String, dynamic>;
+
+                          final title = data['title'] ?? 'Untitled';
+                          final langCode = data['language'] ?? 'en';
+                          final diff = data['difficulty'] ?? 'unknown';
+
+                          // USE HELPER FOR FLAG
+                          final flag = LanguageHelper.getFlagEmoji(langCode);
+
+                          return Card(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 4,
+                            ),
+                            child: ListTile(
+                              leading: Container(
+                                width: 40,
+                                height: 40,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.white10
+                                      : Colors.grey[200],
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  flag,
+                                  style: const TextStyle(fontSize: 24),
+                                ),
+                              ),
+                              title: Text(
+                                title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: SelectableText(
+                                "$diff • ${doc.id}",
+                                maxLines: 1,
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.blue,
+                                    ),
+                                    onPressed: () => _openEditor(context, doc),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () => _deleteLesson(doc.id),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// EDITOR DIALOG
+// -----------------------------------------------------------------------------
+class _LessonEditorDialog extends StatefulWidget {
+  final DocumentSnapshot? doc;
+  const _LessonEditorDialog({this.doc});
+
+  @override
+  State<_LessonEditorDialog> createState() => _LessonEditorDialogState();
+}
+
+class _LessonEditorDialogState extends State<_LessonEditorDialog> {
+  final _formKey = GlobalKey<FormState>();
+
+  late TextEditingController _titleCtrl;
+  late TextEditingController _contentCtrl;
+  late TextEditingController _videoUrlCtrl;
+  late TextEditingController _imageUrlCtrl;
+  late TextEditingController _jsonTranscriptCtrl;
+
+  String _language = 'en'; // Default
+  String _difficulty = 'intermediate';
+
+  @override
+  void initState() {
+    super.initState();
+    final data = widget.doc?.data() as Map<String, dynamic>?;
+
+    _titleCtrl = TextEditingController(text: data?['title'] ?? '');
+    _contentCtrl = TextEditingController(text: data?['content'] ?? '');
+    _videoUrlCtrl = TextEditingController(text: data?['videoUrl'] ?? '');
+    _imageUrlCtrl = TextEditingController(text: data?['imageUrl'] ?? '');
+    _difficulty = data?['difficulty'] ?? 'intermediate';
+
+    // USE HELPER TO RESOLVE LANGUAGE CODE (Safe handling)
+    String rawLang = data?['language'] ?? 'en';
+    _language = LanguageHelper.getLangCode(rawLang);
+
+    if (data != null &&
+        data['transcript'] != null &&
+        data['transcript'] is List) {
+      try {
+        const encoder = JsonEncoder.withIndent('  ');
+        _jsonTranscriptCtrl = TextEditingController(
+          text: encoder.convert(data['transcript']),
+        );
+      } catch (e) {
+        _jsonTranscriptCtrl = TextEditingController(text: "[]");
+      }
+    } else {
+      _jsonTranscriptCtrl = TextEditingController(text: "[]");
+    }
+  }
+
+  void _convertSubtitleFormat() {
+    final text = _jsonTranscriptCtrl.text;
+    if (text.isEmpty) return;
+    try {
+      final List<Map<String, dynamic>> parsed = [];
+      final RegExp timeReg = RegExp(
+        r'(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})',
+      );
+      final blocks = text.split(RegExp(r'\n\s*\n'));
+
+      for (var block in blocks) {
+        final match = timeReg.firstMatch(block);
+        if (match != null) {
+          final startStr = match.group(1)!;
+          final endStr = match.group(2)!;
+          final lines = block.split('\n');
+          String content = "";
+          bool foundTime = false;
+          for (var line in lines) {
+            if (line.contains('-->')) {
+              foundTime = true;
+              continue;
+            }
+            if (foundTime) {
+              String cleanLine = line.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+              if (cleanLine.isNotEmpty &&
+                  !RegExp(r'^\d+$').hasMatch(cleanLine)) {
+                content += "$cleanLine ";
+              }
+            }
+          }
+          if (content.isNotEmpty) {
+            parsed.add({
+              "start": _parseTime(startStr),
+              "end": _parseTime(endStr),
+              "text": content.trim(),
+            });
+          }
+        }
+      }
+      if (parsed.isNotEmpty) {
+        const encoder = JsonEncoder.withIndent('  ');
+        setState(() {
+          _jsonTranscriptCtrl.text = encoder.convert(parsed);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Converted ${parsed.length} lines!")),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not find timestamps.")),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
+  }
+
+  double _parseTime(String timeStr) {
+    timeStr = timeStr.replaceAll(',', '.');
+    final parts = timeStr.split(':');
+    return (double.parse(parts[0]) * 3600) +
+        (double.parse(parts[1]) * 60) +
+        double.parse(parts[2]);
+  }
+
+  void _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    List<String> sentences = _contentCtrl.text
+        .split(RegExp(r'(?<=[.!?])\s+'))
+        .where((s) => s.trim().isNotEmpty)
+        .toList();
+
+    List<dynamic> transcriptList = [];
+    try {
+      transcriptList = jsonDecode(_jsonTranscriptCtrl.text);
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Invalid JSON Transcript.")));
+      return;
+    }
+
+    final title = _titleCtrl.text.trim();
+
+    final Map<String, dynamic> data = {
+      'title': title,
+      'title_lower': title.toLowerCase(),
+      'content': _contentCtrl.text.trim(),
+      'videoUrl': _videoUrlCtrl.text.trim().isEmpty
+          ? null
+          : _videoUrlCtrl.text.trim(),
+      'imageUrl': _imageUrlCtrl.text.trim().isEmpty
+          ? null
+          : _imageUrlCtrl.text.trim(),
+      'language': _language, // This comes from LanguageHelper data
+      'difficulty': _difficulty,
+      'sentences': sentences,
+      'transcript': transcriptList,
+      'isFavorite': false,
+      'progress': 0,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (widget.doc == null) {
+      data['createdAt'] = FieldValue.serverTimestamp();
+      data['userId'] = 'admin';
+      String? customId;
+      if (_videoUrlCtrl.text.contains("youtu")) {
+        try {
+          String? videoId;
+          if (_videoUrlCtrl.text.contains("v=")) {
+            videoId = _videoUrlCtrl.text.split('v=')[1].split('&')[0];
+          } else if (_videoUrlCtrl.text.contains("youtu.be/")) {
+            videoId = _videoUrlCtrl.text.split('youtu.be/')[1];
+          }
+          if (videoId != null) customId = "yt_$videoId";
+        } catch (_) {}
+      }
+      if (customId != null) {
+        await FirebaseFirestore.instance
+            .collection('lessons')
+            .doc(customId)
+            .set(data);
+      } else {
+        await FirebaseFirestore.instance.collection('lessons').add(data);
+      }
+    } else {
+      await widget.doc!.reference.update(data);
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Sort languages so they appear nicely in the dropdown
+    final sortedLanguages = LanguageHelper.availableLanguages.entries.toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+
+    return Dialog(
+      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      insetPadding: const EdgeInsets.all(10),
+      child: Container(
+        width: 600,
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    widget.doc == null ? "Add Lesson" : "Edit Lesson",
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const Divider(),
+              Expanded(
+                child: ListView(
+                  children: [
+                    TextFormField(
+                      controller: _titleCtrl,
+                      decoration: const InputDecoration(labelText: "Title"),
+                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 15),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _videoUrlCtrl,
+                            decoration: const InputDecoration(
+                              labelText: "YouTube URL",
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+
+                        // --- UPDATED LANGUAGE DROPDOWN USING HELPER ---
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue: _language,
+                            decoration: const InputDecoration(
+                              labelText: "Language",
+                            ),
+                            isExpanded: true,
+                            items: sortedLanguages.map((entry) {
+                              final code = entry.key;
+                              final name = entry.value;
+                              final flag = LanguageHelper.getFlagEmoji(code);
+                              return DropdownMenuItem(
+                                value: code,
+                                child: Text(
+                                  "$flag $name",
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (v) => setState(() => _language = v!),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                    DropdownButtonFormField<String>(
+                      initialValue: _difficulty,
+                      decoration: const InputDecoration(
+                        labelText: "Difficulty",
+                      ),
+                      items: ['beginner', 'intermediate', 'advanced']
+                          .map(
+                            (l) => DropdownMenuItem(value: l, child: Text(l)),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _difficulty = v!),
+                    ),
+                    const SizedBox(height: 15),
+                    TextFormField(
+                      controller: _imageUrlCtrl,
+                      decoration: const InputDecoration(labelText: "Image URL"),
+                    ),
+                    const SizedBox(height: 15),
+                    TextFormField(
+                      controller: _contentCtrl,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: "Full Content",
+                        alignLabelWithHint: true,
+                      ),
+                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Transcript (JSON)",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        TextButton(
+                          onPressed: _convertSubtitleFormat,
+                          child: const Text("Convert SRT"),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      color: isDark ? Colors.black26 : Colors.grey[100],
+                      child: TextFormField(
+                        controller: _jsonTranscriptCtrl,
+                        maxLines: 6,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: const Text("Save Lesson"),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

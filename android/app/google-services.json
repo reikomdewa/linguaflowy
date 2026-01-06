@@ -1,0 +1,62 @@
+{
+  "project_info": {
+    "project_number": "171340794740",
+    "project_id": "lingua-flowy",
+    "storage_bucket": "lingua-flowy.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:171340794740:android:ca6bfc1cefd95b31643a21",
+        "android_client_info": {
+          "package_name": "com.reikom.linguaflow"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "171340794740-r68eappc1o7s0d89tl2s59ffcfucjpao.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.reikom.linguaflow",
+            "certificate_hash": "19f0e08008d5c554696cb7973d78f90b6e75cd64"
+          }
+        },
+        {
+          "client_id": "171340794740-ukebf9pi3p3dcdp1pd7daju8gtldsnmp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.reikom.linguaflow",
+            "certificate_hash": "915c6b820cf9bd0df286cfc396c54f3a0040d9d8"
+          }
+        },
+        {
+          "client_id": "171340794740-cf60kh5rrv16eukghhf4560eg2tkmf6e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC-wRBs-0x3Nn1ws-iaxKHRiyK2NpPtnMI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "171340794740-cf60kh5rrv16eukghhf4560eg2tkmf6e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "171340794740-ar15ji16fnekohhhulunjgjc3net1a3m.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.reikom.linguaflow"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

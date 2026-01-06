@@ -1,0 +1,185 @@
+name: linguaflow
+description: "Learning naturally"
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.1.2+12
+
+environment:
+  sdk: ^3.10.4
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+   # State Management
+  flutter_bloc: ^9.1.1
+  equatable: ^2.0.5
+  
+  firebase_core: ^4.2.1
+  firebase_auth: ^6.1.2
+  cloud_firestore: ^6.1.0
+  firebase_storage: ^13.0.4
+  firebase_messaging: ^16.0.4
+  cloud_functions: ^6.0.5
+  google_sign_in: ^7.2.0
+  permission_handler: ^12.0.0+1 
+  intl_phone_field: ^3.2.0
+  country_code_picker: ^3.3.0
+  intl: ^0.20.2
+  flutter_html: ^3.0.0
+  swipe_to: ^1.0.6
+  font_awesome_flutter: ^10.8.0
+  image_picker: ^1.1.2
+  file_picker: ^10.3.7
+  video_player_media_kit: ^2.0.0
+  media_kit: ^1.2.3
+  media_kit_libs_video: ^1.0.7
+  uuid: ^4.5.1
+  livekit_client: ^2.0.0
+  flutter_background: ^1.3.0+1
+  
+    # Verify latest version
+  flutter_chat_types: ^3.6.2  # Data Models
+  upgrader: ^12.3.0
+  flutter_secure_storage: ^10.0.0
+ 
+
+  video_compress: ^3.1.4
+  
+  # Translation
+  translator: ^1.0.4+1
+  
+  # Local Storage
+  shared_preferences: ^2.2.2
+  path: ^1.9.1
+  flutter_paypal_payment: ^1.0.8
+  
+  # UI
+  flutter_svg: ^2.0.9
+  cached_network_image: ^3.3.1
+  youtube_player_flutter: ^9.1.3
+  http: ^1.2.0
+  logging: ^1.2.0
+  flutter_tts: ^4.2.3
+  flutter_gemini: ^3.0.0
+  google_generative_ai: ^0.4.7
+  flutter_markdown_plus: ^1.0.5
+  webview_flutter: ^4.13.0
+  webview_flutter_web: ^0.2.3+4
+  html_unescape: ^2.0.0
+  audio_session: ^0.2.2
+  xml: ^6.3.0
+  url_launcher: ^6.3.2
+  fl_chart: ^1.1.1
+  pointer_interceptor: ^0.10.1
+  device_info_plus: ^12.3.0
+  package_info_plus: ^9.0.0
+  path_provider: ^2.1.5
+  share_plus: ^12.0.1
+  speech_to_text: ^7.3.0
+  just_audio: ^0.10.5
+  just_audio_background: ^0.0.1-beta.17
+  rxdart: ^0.28.0
+  crypto: ^3.0.7
+  scrollable_positioned_list: ^0.3.8
+  receive_sharing_intent:
+    git:
+      url: https://github.com/KasemJaffer/receive_sharing_intent
+      ref: 2cea396843cd3ab1b5ec4334be4233864637874e
+
+  html: ^0.15.6
+  
+
+  bloc: any
+  youtube_explode_dart: ^3.0.5
+  dotted_border: ^3.1.0
+  youtube_player_iframe: ^5.2.2
+  timeago: ^3.7.1
+  go_router: ^17.0.1
+  firebase_remote_config: ^6.1.3
+
+ 
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+  flutter_native_splash: ^2.4.7
+
+
+flutter_native_splash:
+  color: "#121212"  
+  image: assets/images/linguaflow_logo_400_transparent.png
+  web: false  
+  android_12:
+    image: assets/images/linguaflow_logo_400_transparent.png 
+    color: "#121212"
+
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # To add assets to your application, add an assets section, like this:
+  assets:
+    #media
+     - assets/images/linguaflow_logo.png
+     - assets/images/linguaflow_logo_transparent.png
+     - assets/dictionaries/
+
+  
+  # An image asset can be specified in either of two ways:
+  
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package

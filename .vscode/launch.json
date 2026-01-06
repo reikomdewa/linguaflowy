@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Linguaflow (Dev)",
+            "request": "launch",
+            "type": "dart",
+            "toolArgs": [
+                "--dart-define=YOUTUBE_API_KEY=AIzaSyCWKNkb50EHSnPJZbwFGbh4xx9NlK5r6do",
+                "--dart-define=GEMINI_API_KEY=AIzaSyD5-q5gPXbFA3L-87Qkr98GWKcFxA2yTI4",
+                "--dart-define=PAYPAL_CLIENT_ID=ARsgXsuoKClAN3faRo5oHntfLaw5ozfVlc3S9faHW6GRw3CXONs3VXYEDevfVgzEtJdv7AAGdHFlsx7E",
+                "--dart-define=PAYPAL_SECRET_KEY=EEQBQRt3FANR0jGTPrsX9GPcKLqQBRX95cM-6_weBWwmlAUe83iBY8x9mALL_pf69dkEap60Z1qJaUBx",
+                "--dart-define=ELEVEN_LABS_API_KEY=sk_c3d2fbf0d4761d742e2ea3359d4c8e52fd5f20bf2bec28d6",
+        
+            ]
+        },
+        {
+            "name": "Linguaflow (Profile Mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile",
+            "toolArgs": [
+                 "--dart-define=YOUTUBE_API_KEY=AIzaSyCWKNkb50EHSnPJZbwFGbh4xx9NlK5r6do",
+                "--dart-define=GEMINI_API_KEY=AIzaSyD5-q5gPXbFA3L-87Qkr98GWKcFxA2yTI4",
+                "--dart-define=PAYPAL_CLIENT_ID=ARsgXsuoKClAN3faRo5oHntfLaw5ozfVlc3S9faHW6GRw3CXONs3VXYEDevfVgzEtJdv7AAGdHFlsx7E",
+                "--dart-define=PAYPAL_SECRET_KEY=EEQBQRt3FANR0jGTPrsX9GPcKLqQBRX95cM-6_weBWwmlAUe83iBY8x9mALL_pf69dkEap60Z1qJaUBx",
+                 "--dart-define=ELEVEN_LABS_API_KEY=sk_c3d2fbf0d4761d742e2ea3359d4c8e52fd5f20bf2bec28d6",
+      
+            ]
+        },
+       
+    ]
+}
