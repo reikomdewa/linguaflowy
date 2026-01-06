@@ -152,13 +152,8 @@ flutter:
     #courses
      - assets/guided_courses/
      - assets/native_videos/
-     - assets/text_lessons/
-     - assets/beginner_books/
-     - assets/graded_readers/
      - assets/course_videos/
-     - assets/audio_library/
      - assets/storybooks_lessons/
-     - assets/youtube_audio_library/
     
     #media
      - assets/images/linguaflow_logo.png
