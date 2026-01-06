@@ -263,8 +263,9 @@ class AppRouter {
       ),
     ],
 
-    errorBuilder: (context, state) =>
-        const Scaffold(body: Center(child: Text("Page not found"))),
+    errorBuilder: (context, state) => Scaffold(
+      body: Center(child: Text("Page Not Found: ${state.uri.toString()}")),
+    ),
   );
 }
 
