@@ -8,6 +8,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
+import 'package:linguaflow/blocs/settings/tts_voice_bloc.dart';
 import 'package:linguaflow/services/elevenlabs_tts_service.dart';
 import 'package:linguaflow/services/local_lemmatizer.dart';
 import 'package:linguaflow/utils/language_helper.dart';
@@ -147,10 +148,9 @@ class _ReaderScreenState extends State<ReaderScreen>
   StreamSubscription? _vocabSubscription;
   // XP Reward Constants
   static const int xpPerMinuteRead = 2; // Passive engagement
-  @override
+   @override
   void initState() {
     super.initState();
-
     _authBloc = context.read<AuthBloc>();
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -160,9 +160,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     _determineMediaType();
 
     _activeTranscript = widget.lesson.transcript;
-    final hasSubtitleUrl =
-        widget.lesson.subtitleUrl != null &&
-        widget.lesson.subtitleUrl!.isNotEmpty;
+    final hasSubtitleUrl = widget.lesson.subtitleUrl != null && widget.lesson.subtitleUrl!.isNotEmpty;
 
     if (hasSubtitleUrl && _activeTranscript.isEmpty) {
       _initializeLocalContent();
@@ -307,43 +305,42 @@ class _ReaderScreenState extends State<ReaderScreen>
     _initializeMedia();
   }
 
-  void _initializeMedia() async {
-    // 1. Setup Standard TTS Defaults
-    await _flutterTts.setLanguage(widget.lesson.language);
-    await _flutterTts.setSpeechRate(_ttsSpeed);
-
-    // --- DEBUGGING VOICE SELECTION ---
+ Future<void> _applySavedVoice() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-
-      // Step A: Check Input Language
-
-      // Step B: Resolve Code
-      final String cleanLangCode = LanguageHelper.getLangCode(
-        widget.lesson.language,
-      );
-
-      // Step C: Construct Keys
+      
+      // 1. Resolve Code (e.g., "Spanish" -> "es")
+      final String cleanLangCode = LanguageHelper.getLangCode(widget.lesson.language);
+      
+      // 2. Construct Keys
       final String nameKey = 'tts_voice_name_$cleanLangCode';
       final String localeKey = 'tts_voice_locale_$cleanLangCode';
 
-      // Step D: Load Values
+      // 3. Load Values
       final savedVoiceName = prefs.getString(nameKey);
       final savedVoiceLocale = prefs.getString(localeKey);
 
-      // Step E: Apply Voice
+      // 4. Apply Voice
       if (savedVoiceName != null && savedVoiceLocale != null) {
-        // Note: setVoice returns void or Future, we await it.
+        // print("Applying Voice: $savedVoiceName ($savedVoiceLocale)");
         await _flutterTts.setVoice({
           "name": savedVoiceName,
           "locale": savedVoiceLocale,
         });
+      }
+    } catch (e) {
+      debugPrint("Error applying saved voice: $e");
+    }
+  }
+ void _initializeMedia() async {
+    // 1. Setup Standard TTS Defaults (Language FIRST)
+    await _flutterTts.setLanguage(widget.lesson.language);
+    await _flutterTts.setSpeechRate(_ttsSpeed);
 
-        // Optional: specific check for iOS vs Android if needed later
-      } else {}
-    } catch (e) {}
+    // 2. Apply the custom voice (MUST be after setLanguage)
+    await _applySavedVoice(); 
 
-    // 2. Define Unified Completion Handler
+    // 3. Define Unified Completion Handler
     void onCompleteHandler() {
       if (mounted) {
         if (_isPlayingStandalone) {
@@ -370,28 +367,30 @@ class _ReaderScreenState extends State<ReaderScreen>
       }
     }
 
-    // 3. Attach Handlers
+    // 4. Attach Handlers
     _flutterTts.setCompletionHandler(onCompleteHandler);
     _elevenLabsService.setCompletionHandler(onCompleteHandler);
 
-    // 4. Init Video if needed
+    // 5. Init Video if needed
     if (_isVideo || _isAudio || _isYoutubeAudio) {
       _initPlayerController();
+    } else {
+      // Direct text lesson initialization
+       _initPlayerController(); 
     }
   }
 
-  void _initPlayerController() {
-    final url = widget.lesson.videoUrl!;
+ void _initPlayerController() {
+    final url = widget.lesson.videoUrl ?? ""; // Handle null safety
     bool isNetwork = url.toLowerCase().startsWith('http');
-    bool isYoutube =
-        url.toLowerCase().contains('youtube.com') ||
-        url.toLowerCase().contains('youtu.be');
+    bool isYoutube = url.toLowerCase().contains('youtube.com') || url.toLowerCase().contains('youtu.be');
 
-    if (isYoutube) {
+    if (isYoutube && url.isNotEmpty) {
       _initializeYoutubePlayer(url);
-    } else if (!isNetwork) {
+    } else if (!isNetwork && url.isNotEmpty) {
       _initializeLocalMediaPlayer(url);
     } else {
+      // This is hit for pure text lessons OR streaming audio
       _initializeTts();
     }
   }
@@ -972,16 +971,18 @@ class _ReaderScreenState extends State<ReaderScreen>
       }
     }
   }
-
-  void _initializeTts() async {
+ void _initializeTts() async {
+    // Setting language here resets the voice, so we must re-apply the voice immediately after
     await _flutterTts.setLanguage(widget.lesson.language);
     await _flutterTts.setSpeechRate(_ttsSpeed);
+    
+    // RE-APPLY VOICE HERE
+    await _applySavedVoice(); 
+
     _flutterTts.setCompletionHandler(() {
-      // FIX: Check if in sentence mode before auto-advancing
       if (!_isSentenceMode) {
         _playNextTtsSentence();
       } else {
-        // In sentence mode, just stop playing after current sentence
         setState(() => _isTtsPlaying = false);
       }
     });
@@ -1044,7 +1045,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   // --- UNIFIED SPEAKING LOGIC ---
-  // --- UNIFIED SPEAKING LOGIC (With Cost Optimization) ---
+// --- UNIFIED SPEAKING LOGIC (With Fix for Voice Reverting) ---
   Future<void> _unifiedSpeak(String text) async {
     // 1. Stop all current audio engines
     // Note: We don't await here to make UI feel snappier
@@ -1131,6 +1132,12 @@ class _ReaderScreenState extends State<ReaderScreen>
       );
     }
     // --------------------
+
+    // --- CRITICAL FIX START ---
+    // Explicitly re-apply the saved voice before speaking.
+    // This fixes the bug where flutter_tts reverts to default after the first usage.
+    await _applySavedVoice();
+    // --- CRITICAL FIX END ---
 
     await _flutterTts.speak(text);
   }
@@ -1994,317 +2001,326 @@ class _ReaderScreenState extends State<ReaderScreen>
       transcript: _activeTranscript,
     );
 
-    return Theme(
-      data: themeData,
-      child: Directionality(
-        textDirection: LanguageHelper.isRTL(widget.lesson.language)
-            ? TextDirection.rtl
-            : TextDirection.ltr,
-        child: Scaffold(
-          resizeToAvoidBottomInset: false,
-          appBar: AppBar(
-            title: Text(widget.lesson.title),
-            actions: [
-              IconButton(
-                icon: Icon(
-                  _isListeningMode ? Icons.hearing : Icons.hearing_disabled,
-                ),
-                onPressed: () =>
-                    setState(() => _isListeningMode = !_isListeningMode),
-              ),
-              if (!(_isVideo || _isAudio || _isYoutubeAudio) &&
-                  !_isSentenceMode)
+    return BlocListener<TtsVoiceBloc, TtsVoiceState>(
+      listener: (context, state) {
+        // If the selected voice changes in the settings (TtsVoiceBloc),
+        // Immediately apply it to the ReaderScreen's local TTS instance.
+        if (state.selectedVoice != null) {
+          _applySavedVoice();
+        }
+      },
+      child: Theme(
+        data: themeData,
+        child: Directionality(
+          textDirection: LanguageHelper.isRTL(widget.lesson.language)
+              ? TextDirection.rtl
+              : TextDirection.ltr,
+          child: Scaffold(
+            resizeToAvoidBottomInset: false,
+            appBar: AppBar(
+              title: Text(widget.lesson.title),
+              actions: [
                 IconButton(
                   icon: Icon(
-                    _isPlaying || _isTtsPlaying
-                        ? Icons.pause
-                        : Icons.play_arrow,
+                    _isListeningMode ? Icons.hearing : Icons.hearing_disabled,
                   ),
-                  onPressed: _toggleTtsFullLesson,
+                  onPressed: () =>
+                      setState(() => _isListeningMode = !_isListeningMode),
                 ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'toggle_swipe') {
-                    setState(() => _autoMarkOnSwipe = !_autoMarkOnSwipe);
-                    final user =
-                        (context.read<AuthBloc>().state as AuthAuthenticated)
-                            .user;
-                    FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user.id)
-                        .collection('preferences')
-                        .doc('reader')
-                        .set({
-                          'autoMarkOnSwipe': _autoMarkOnSwipe,
-                        }, SetOptions(merge: true));
-                  } else if (value == 'toggle_cc') {
-                    _toggleSubtitles();
-                  } else if (value == 'show_tutorial') {
-                    // --- NEW: Handle the tutorial click ---
-                    _showTutorial();
-                  }
-                },
-                itemBuilder: (context) => [
-                  // --- NEW: Add the Tutorial Option at the top ---
-                  PopupMenuItem(
-                    value: 'show_tutorial',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.help_outline,
-                          color: Theme.of(context).iconTheme.color,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text('How to use'),
-                      ],
+                if (!(_isVideo || _isAudio || _isYoutubeAudio) &&
+                    !_isSentenceMode)
+                  IconButton(
+                    icon: Icon(
+                      _isPlaying || _isTtsPlaying
+                          ? Icons.pause
+                          : Icons.play_arrow,
                     ),
+                    onPressed: _toggleTtsFullLesson,
                   ),
-                  const PopupMenuItem(
-                    height: 1,
-                    enabled: false,
-                    child: Divider(),
-                  ),
-                  // ----------------------------------------------
-                  PopupMenuItem(
-                    value: 'toggle_swipe',
-                    child: Row(
-                      children: [
-                        Icon(
-                          _autoMarkOnSwipe
-                              ? Icons.check_box
-                              : Icons.check_box_outline_blank,
-                          color: Theme.of(context).iconTheme.color,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text('Auto-mark on swipe'),
-                      ],
-                    ),
-                  ),
-                  if (_isVideo || _isAudio || _isYoutubeAudio)
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'toggle_swipe') {
+                      setState(() => _autoMarkOnSwipe = !_autoMarkOnSwipe);
+                      final user =
+                          (context.read<AuthBloc>().state as AuthAuthenticated)
+                              .user;
+                      FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(user.id)
+                          .collection('preferences')
+                          .doc('reader')
+                          .set({
+                            'autoMarkOnSwipe': _autoMarkOnSwipe,
+                          }, SetOptions(merge: true));
+                    } else if (value == 'toggle_cc') {
+                      _toggleSubtitles();
+                    } else if (value == 'show_tutorial') {
+                      // --- NEW: Handle the tutorial click ---
+                      _showTutorial();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    // --- NEW: Add the Tutorial Option at the top ---
                     PopupMenuItem(
-                      value: 'toggle_cc',
+                      value: 'show_tutorial',
                       child: Row(
                         children: [
                           Icon(
-                            _showSubtitles
-                                ? Icons.closed_caption
-                                : Icons.closed_caption_off,
+                            Icons.help_outline,
                             color: Theme.of(context).iconTheme.color,
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            _showSubtitles ? 'Hide Captions' : 'Show Captions',
-                          ),
+                          const Text('How to use'),
                         ],
                       ),
                     ),
-                ],
-              ),
-            ],
-          ),
-          body: SafeArea(
-            child: Stack(
-              children: [
-                Column(
-                  children: [
+                    const PopupMenuItem(
+                      height: 1,
+                      enabled: false,
+                      child: Divider(),
+                    ),
+                    // ----------------------------------------------
+                    PopupMenuItem(
+                      value: 'toggle_swipe',
+                      child: Row(
+                        children: [
+                          Icon(
+                            _autoMarkOnSwipe
+                                ? Icons.check_box
+                                : Icons.check_box_outline_blank,
+                            color: Theme.of(context).iconTheme.color,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('Auto-mark on swipe'),
+                        ],
+                      ),
+                    ),
                     if (_isVideo || _isAudio || _isYoutubeAudio)
-                      Container(
-                        width: double.infinity,
-                        color: Colors.black,
-                        child: _isYoutubeAudio
-                            ? Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SizedBox(
-                                    height: 1,
-                                    child: IndexedStack(
-                                      index: 0,
+                      PopupMenuItem(
+                        value: 'toggle_cc',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _showSubtitles
+                                  ? Icons.closed_caption
+                                  : Icons.closed_caption_off,
+                              color: Theme.of(context).iconTheme.color,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _showSubtitles ? 'Hide Captions' : 'Show Captions',
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+            body: SafeArea(
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                      if (_isVideo || _isAudio || _isYoutubeAudio)
+                        Container(
+                          width: double.infinity,
+                          color: Colors.black,
+                          child: _isYoutubeAudio
+                              ? Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      height: 1,
+                                      child: IndexedStack(
+                                        index: 0,
+                                        children: [
+                                          _buildSharedPlayer(),
+                                          Container(color: Colors.black),
+                                        ],
+                                      ),
+                                    ),
+                                    _buildYoutubeAudioControls(),
+                                  ],
+                                )
+                              : _isAudio
+                              ? ReaderMediaHeader(
+                                  isInitializing: _isInitializingMedia,
+                                  isAudio: true,
+                                  isLocalMedia: _isLocalMedia,
+                                  localVideoController: null,
+                                  localPlayer: _localPlayer,
+                                  youtubeController: _youtubeController,
+                                  onToggleFullscreen: _toggleCustomFullScreen,
+                                )
+                              : AspectRatio(
+                                  aspectRatio: 16 / 9,
+                                  child: GestureDetector(
+                                    onTap: _toggleControls,
+                                    onVerticalDragEnd: (details) {
+                                      if (details.primaryVelocity != null &&
+                                          details.primaryVelocity! < -400) {
+                                        _toggleCustomFullScreen();
+                                      }
+                                    },
+                                    child: Stack(
                                       children: [
                                         _buildSharedPlayer(),
-                                        Container(color: Colors.black),
+                                        VideoControlsOverlay(
+                                          isPlaying: _isPlaying,
+                                          position:
+                                              (_isSeeking &&
+                                                  _optimisticPosition != null)
+                                              ? _optimisticPosition!
+                                              : (_isLocalMedia &&
+                                                        _localPlayer != null
+                                                    ? _localPlayer!.state.position
+                                                    : (_youtubeController
+                                                              ?.value
+                                                              .position ??
+                                                          Duration.zero)),
+                                          duration:
+                                              _isLocalMedia &&
+                                                  _localPlayer != null
+                                              ? _localPlayer!.state.duration
+                                              : (_youtubeController
+                                                        ?.metadata
+                                                        .duration ??
+                                                    Duration.zero),
+                                          showControls: _showControls,
+                                          onPlayPause: _isPlaying
+                                              ? _pauseMedia
+                                              : _playMedia,
+                                          onSeekRelative: _seekRelative,
+                                          onSeekTo: (d) => _seekToTime(
+                                            d.inMilliseconds / 1000.0,
+                                          ),
+                                          onToggleFullscreen:
+                                              _toggleCustomFullScreen,
+                                        ),
                                       ],
                                     ),
                                   ),
-                                  _buildYoutubeAudioControls(),
-                                ],
-                              )
-                            : _isAudio
-                            ? ReaderMediaHeader(
-                                isInitializing: _isInitializingMedia,
-                                isAudio: true,
-                                isLocalMedia: _isLocalMedia,
-                                localVideoController: null,
-                                localPlayer: _localPlayer,
-                                youtubeController: _youtubeController,
-                                onToggleFullscreen: _toggleCustomFullScreen,
-                              )
-                            : AspectRatio(
-                                aspectRatio: 16 / 9,
-                                child: GestureDetector(
-                                  onTap: _toggleControls,
-                                  onVerticalDragEnd: (details) {
-                                    if (details.primaryVelocity != null &&
-                                        details.primaryVelocity! < -400) {
-                                      _toggleCustomFullScreen();
-                                    }
-                                  },
-                                  child: Stack(
-                                    children: [
-                                      _buildSharedPlayer(),
-                                      VideoControlsOverlay(
-                                        isPlaying: _isPlaying,
-                                        position:
-                                            (_isSeeking &&
-                                                _optimisticPosition != null)
-                                            ? _optimisticPosition!
-                                            : (_isLocalMedia &&
-                                                      _localPlayer != null
-                                                  ? _localPlayer!.state.position
-                                                  : (_youtubeController
-                                                            ?.value
-                                                            .position ??
-                                                        Duration.zero)),
-                                        duration:
-                                            _isLocalMedia &&
-                                                _localPlayer != null
-                                            ? _localPlayer!.state.duration
-                                            : (_youtubeController
-                                                      ?.metadata
-                                                      .duration ??
-                                                  Duration.zero),
-                                        showControls: _showControls,
-                                        onPlayPause: _isPlaying
-                                            ? _pauseMedia
-                                            : _playMedia,
-                                        onSeekRelative: _seekRelative,
-                                        onSeekTo: (d) => _seekToTime(
-                                          d.inMilliseconds / 1000.0,
-                                        ),
-                                        onToggleFullscreen:
-                                            _toggleCustomFullScreen,
-                                      ),
-                                    ],
-                                  ),
                                 ),
-                              ),
-                      ),
-                    if (_isCheckingLimit || _isParsingSubtitles)
-                      const LinearProgressIndicator(minHeight: 2),
-                    Expanded(
-                      child: _isParsingSubtitles
-                          ? const Center(child: Text("Loading content..."))
-                          : _isSentenceMode
-                          ? Listener(
-                              onPointerDown: (event) {
-                                _dragStartX = event.position.dx;
-                                _dragStartY = event.position.dy;
-                                _dragStartTime = DateTime.now();
-                              },
-                              onPointerUp: (event) {
-                                final dx = event.position.dx - _dragStartX;
-                                final dy = event.position.dy - _dragStartY;
-                                final duration = DateTime.now()
-                                    .difference(_dragStartTime)
-                                    .inMilliseconds;
-
-                                if (duration < 300 &&
-                                    dx.abs() > 50 &&
-                                    dy.abs() < 40) {
-                                  if (dx < 0) {
-                                    _goToNextSentence(); // Swipe Left
-                                  } else {
-                                    _goToPrevSentence(); // Swipe Right
+                        ),
+                      if (_isCheckingLimit || _isParsingSubtitles)
+                        const LinearProgressIndicator(minHeight: 2),
+                      Expanded(
+                        child: _isParsingSubtitles
+                            ? const Center(child: Text("Loading content..."))
+                            : _isSentenceMode
+                            ? Listener(
+                                onPointerDown: (event) {
+                                  _dragStartX = event.position.dx;
+                                  _dragStartY = event.position.dy;
+                                  _dragStartTime = DateTime.now();
+                                },
+                                onPointerUp: (event) {
+                                  final dx = event.position.dx - _dragStartX;
+                                  final dy = event.position.dy - _dragStartY;
+                                  final duration = DateTime.now()
+                                      .difference(_dragStartTime)
+                                      .inMilliseconds;
+      
+                                  if (duration < 300 &&
+                                      dx.abs() > 50 &&
+                                      dy.abs() < 40) {
+                                    if (dx < 0) {
+                                      _goToNextSentence(); // Swipe Left
+                                    } else {
+                                      _goToPrevSentence(); // Swipe Right
+                                    }
                                   }
-                                }
-                              },
-                              child: SentenceModeView(
-                                chunks: _smartChunks,
-                                activeIndex: _activeSentenceIndex,
+                                },
+                                child: SentenceModeView(
+                                  chunks: _smartChunks,
+                                  activeIndex: _activeSentenceIndex,
+                                  vocabulary: _vocabulary,
+                                  language: widget.lesson.language,
+                                  isVideo:
+                                      _isVideo || _isAudio || _isYoutubeAudio,
+                                  isPlaying:
+                                      _isPlaying || _isPlayingSingleSentence,
+                                  isTtsPlaying: _isTtsPlaying,
+                                  onTogglePlayback: _togglePlayback,
+                                  onPlayFromStartContinuous:
+                                      _playFromStartContinuous,
+                                  onPlayContinuous: _playNextContinuous,
+                                  onNext: _goToNextSentence,
+                                  onPrev: _goToPrevSentence,
+                                  onWordTap: _handleWordTap,
+                                  onPhraseSelected: _handlePhraseSelected,
+                                  isLoadingTranslation: _isLoadingTranslation,
+                                  googleTranslation: _googleTranslation,
+                                  myMemoryTranslation: _myMemoryTranslation,
+                                  showError: _showError,
+                                  onRetryTranslation: _handleTranslationToggle,
+                                  onTranslateRequest: _handleTranslationToggle,
+                                  isListeningMode: _isListeningMode,
+                                  onComplete: _markLessonAsComplete,
+                                  lessonTitle: widget.lesson.title,
+                                  wordsLearnedCount: _sessionWordsLearned.length,
+                                  xpEarned: currentXp,
+                                ),
+                              )
+                            : ParagraphModeView(
+                                lesson: displayLesson,
+                                bookPages: _bookPages,
+                                activeSentenceIndex: _activeSentenceIndex,
+                                currentPage: _currentPage,
                                 vocabulary: _vocabulary,
-                                language: widget.lesson.language,
-                                isVideo:
-                                    _isVideo || _isAudio || _isYoutubeAudio,
-                                isPlaying:
-                                    _isPlaying || _isPlayingSingleSentence,
-                                isTtsPlaying: _isTtsPlaying,
-                                onTogglePlayback: _togglePlayback,
-                                onPlayFromStartContinuous:
-                                    _playFromStartContinuous,
-                                onPlayContinuous: _playNextContinuous,
-                                onNext: _goToNextSentence,
-                                onPrev: _goToPrevSentence,
+                                isVideo: _isVideo || _isAudio || _isYoutubeAudio,
+                                listScrollController: _listScrollController,
+                                pageController: _pageController,
+                                onPageChanged: (i) =>
+                                    setState(() => _currentPage = i),
+                                onSentenceTap: (i) {
+                                  if ((_isVideo || _isAudio || _isYoutubeAudio) &&
+                                      i < _activeTranscript.length) {
+                                    _seekToTime(_activeTranscript[i].start);
+                                    _playMedia();
+                                  } else {
+                                    _speakSentence(_smartChunks[i], i);
+                                  }
+                                },
+                                onVideoSeek: (t) => _seekToTime(t),
                                 onWordTap: _handleWordTap,
                                 onPhraseSelected: _handlePhraseSelected,
-                                isLoadingTranslation: _isLoadingTranslation,
-                                googleTranslation: _googleTranslation,
-                                myMemoryTranslation: _myMemoryTranslation,
-                                showError: _showError,
-                                onRetryTranslation: _handleTranslationToggle,
-                                onTranslateRequest: _handleTranslationToggle,
                                 isListeningMode: _isListeningMode,
+                                itemKeys: _itemKeys,
                                 onComplete: _markLessonAsComplete,
-                                lessonTitle: widget.lesson.title,
                                 wordsLearnedCount: _sessionWordsLearned.length,
                                 xpEarned: currentXp,
                               ),
-                            )
-                          : ParagraphModeView(
-                              lesson: displayLesson,
-                              bookPages: _bookPages,
-                              activeSentenceIndex: _activeSentenceIndex,
-                              currentPage: _currentPage,
-                              vocabulary: _vocabulary,
-                              isVideo: _isVideo || _isAudio || _isYoutubeAudio,
-                              listScrollController: _listScrollController,
-                              pageController: _pageController,
-                              onPageChanged: (i) =>
-                                  setState(() => _currentPage = i),
-                              onSentenceTap: (i) {
-                                if ((_isVideo || _isAudio || _isYoutubeAudio) &&
-                                    i < _activeTranscript.length) {
-                                  _seekToTime(_activeTranscript[i].start);
-                                  _playMedia();
-                                } else {
-                                  _speakSentence(_smartChunks[i], i);
-                                }
-                              },
-                              onVideoSeek: (t) => _seekToTime(t),
-                              onWordTap: _handleWordTap,
-                              onPhraseSelected: _handlePhraseSelected,
-                              isListeningMode: _isListeningMode,
-                              itemKeys: _itemKeys,
-                              onComplete: _markLessonAsComplete,
-                              wordsLearnedCount: _sessionWordsLearned.length,
-                              xpEarned: currentXp,
-                            ),
-                    ),
-                  ],
-                ),
-                Positioned(
-                  bottom: 24,
-                  right: 24,
-                  child: FloatingActionButton(
-                    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                    onPressed: () =>
-                        setState(() => _isSentenceMode = !_isSentenceMode),
-                    child: Icon(
-                      _isSentenceMode ? Icons.menu_book : Icons.short_text,
+                      ),
+                    ],
+                  ),
+                  Positioned(
+                    bottom: 24,
+                    right: 24,
+                    child: FloatingActionButton(
+                      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                      onPressed: () =>
+                          setState(() => _isSentenceMode = !_isSentenceMode),
+                      child: Icon(
+                        _isSentenceMode ? Icons.menu_book : Icons.short_text,
+                      ),
                     ),
                   ),
-                ),
-                if (_showCard && !_isFullScreen)
-                  Positioned.fill(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _closeTranslationCard,
-                      child: Container(color: Colors.transparent),
+                  if (_showCard && !_isFullScreen)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _closeTranslationCard,
+                        child: Container(color: Colors.transparent),
+                      ),
                     ),
-                  ),
-                if (_showCard &&
-                    _cardTranslationFuture != null &&
-                    !_isFullScreen)
-                  _buildTranslationOverlay(),
-              ],
+                  if (_showCard &&
+                      _cardTranslationFuture != null &&
+                      !_isFullScreen)
+                    _buildTranslationOverlay(),
+                ],
+              ),
             ),
           ),
         ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:linguaflow/screens/home/home_screen.dart';
 import 'package:linguaflow/screens/profile/edit_profile_screen.dart';
 import 'package:upgrader/upgrader.dart';
 
@@ -121,16 +122,29 @@ class AppRouter {
         routes: [
           // READER: /lesson/123
           GoRoute(
-            path: 'lesson/:id',
+            path: 'lesson/:id', // Result: /lesson/123
+            name: 'lesson', // Naming routes helps avoid typo bugs
             builder: (context, state) {
-              final lessonId = state.pathParameters['id']!;
+              // Safety check: ensure ID exists
+              final lessonId = state.pathParameters['id'];
               final extra = state.extra as LessonModel?;
+
+              if (lessonId == null || lessonId.isEmpty) {
+                // If somehow we got here without an ID, go home
+                return const HomeScreen();
+              }
+
               return ReaderScreenWrapper(
                 lessonId: lessonId,
                 initialLesson: extra,
               );
             },
           ),
+
+          // 2. THE FIX: Handle missing ID (Prevent 404)
+          // If the app restarts and loses the ID, causing the URL to be just '/lesson',
+          // this will catch it and redirect the user Home instead of crashing.
+          GoRoute(path: 'lesson', redirect: (context, state) => '/'),
 
           // QUIZ: /quiz/abc
           GoRoute(
@@ -264,7 +278,18 @@ class AppRouter {
     ],
 
     errorBuilder: (context, state) => Scaffold(
-      body: Center(child: Text("Page Not Found: ${state.uri.toString()}")),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text("Page not found"),
+            ElevatedButton(
+              onPressed: () => context.go('/'),
+              child: const Text("Go Home"),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 }

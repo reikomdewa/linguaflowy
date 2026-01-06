@@ -1,13 +1,14 @@
 import 'dart:convert';
-import 'dart:async'; // Added missing explicit async import usually needed for Future
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:linguaflow/utils/language_helper.dart';
 import 'package:linguaflow/widgets/gemini_formatted_text.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-// Add the markdown import
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+// 1. ADD THIS IMPORT
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FullscreenTranslationCard extends StatefulWidget {
   final String originalText;
@@ -55,17 +56,66 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
     super.initState();
     _initTts();
     _loadCombinedTranslations();
-    _loadRootTranslation(); // <--- Fetch meaning for the root word
+    _loadRootTranslation();
   }
 
+  // ---------------------------------------------------------------------------
+  // 2. HELPER: Apply the Saved Voice from Preferences
+  // ---------------------------------------------------------------------------
+  Future<void> _applySavedVoice() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Resolve Code (e.g., "Spanish" -> "es")
+      final String cleanLangCode = LanguageHelper.getLangCode(widget.targetLanguage);
+      
+      // Construct Keys
+      final String nameKey = 'tts_voice_name_$cleanLangCode';
+      final String localeKey = 'tts_voice_locale_$cleanLangCode';
+
+      // Load Values
+      final savedVoiceName = prefs.getString(nameKey);
+      final savedVoiceLocale = prefs.getString(localeKey);
+
+      // Apply Voice
+      if (savedVoiceName != null && savedVoiceLocale != null) {
+        await _cardTts.setVoice({
+          "name": savedVoiceName,
+          "locale": savedVoiceLocale,
+        });
+      }
+    } catch (e) {
+      debugPrint("Fullscreen TTS Error: $e");
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. UPDATED INIT TTS
+  // ---------------------------------------------------------------------------
   void _initTts() async {
     await _cardTts.setLanguage(widget.targetLanguage);
     await _cardTts.setSpeechRate(0.5);
+    // Apply voice AFTER setting language
+    await _applySavedVoice();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. UPDATED SPEAK FUNCTION
+  // ---------------------------------------------------------------------------
+  Future<void> _speakText() async {
+    // Re-apply voice before speaking to prevent reverting to default
+    await _applySavedVoice();
+    await _cardTts.speak(widget.originalText);
   }
 
   @override
   void dispose() {
     _cardTts.stop();
+     // Clear the webview controller to help GC
+    if (_webViewController != null) {
+      _webViewController!.clearCache();
+      _webViewController = null;
+    }
     super.dispose();
   }
 
@@ -292,7 +342,8 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.volume_up, color: Colors.blue),
-                        onPressed: () => _cardTts.speak(widget.originalText),
+                        // 5. USE UPDATED SPEAK FUNCTION
+                        onPressed: _speakText, 
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
@@ -329,7 +380,8 @@ class _FullscreenTranslationCardState extends State<FullscreenTranslationCard> {
       ),
     );
   }
-
+  
+  // ... [Rest of your build methods remain exactly the same] ...
   Widget _buildBodyContent(String flag) {
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),

@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 // MODELS
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
+import 'package:linguaflow/blocs/auth/auth_bloc.dart'; // Import AuthBloc
+import 'package:linguaflow/blocs/auth/auth_state.dart';
 
 // SCREENS
 import 'package:linguaflow/screens/reader/reader_screen.dart'; // Mobile
@@ -44,7 +46,7 @@ class _ReaderScreenWrapperState extends State<ReaderScreenWrapper> {
   Future<void> _findOrFetchLesson() async {
     setState(() => _isLoading = true);
 
-    // 1. Try Bloc Memory first
+    // 1. Try Bloc Memory first (Fastest)
     final lessonState = context.read<LessonBloc>().state;
     if (lessonState is LessonLoaded) {
       try {
@@ -54,18 +56,40 @@ class _ReaderScreenWrapperState extends State<ReaderScreenWrapper> {
           _isLoading = false;
         });
         return;
-      } catch (_) {}
+      } catch (_) {
+        // Not found in memory, continue to fetch
+      }
     }
 
-    // 2. Fetch from Firestore if not in memory (Deep Link)
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('lessons')
-          .doc(widget.lessonId)
-          .get();
+      DocumentSnapshot? doc;
 
-      if (doc.exists && doc.data() != null) {
-        final fetchedLesson = LessonModel.fromMap(doc.data()!, doc.id);
+      // 2. Try Global 'lessons' collection
+      final globalRef = FirebaseFirestore.instance.collection('lessons').doc(widget.lessonId);
+      final globalDoc = await globalRef.get();
+
+      if (globalDoc.exists) {
+        doc = globalDoc;
+      } else {
+        // 3. Try User's Private 'lessons' collection (Fallback for user-generated/YouTube)
+        final authState = context.read<AuthBloc>().state;
+        if (authState is AuthAuthenticated) {
+          final userRef = FirebaseFirestore.instance
+              .collection('users')
+              .doc(authState.user.id)
+              .collection('lessons') // Or 'library', depending on your DB structure
+              .doc(widget.lessonId);
+          
+          final userDoc = await userRef.get();
+          if (userDoc.exists) {
+            doc = userDoc;
+          }
+        }
+      }
+
+      // 4. Process Result
+      if (doc != null && doc.exists && doc.data() != null) {
+        final fetchedLesson = LessonModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
         if (mounted) {
           setState(() {
             _lesson = fetchedLesson;
@@ -73,10 +97,12 @@ class _ReaderScreenWrapperState extends State<ReaderScreenWrapper> {
           });
         }
       } else {
+        debugPrint("❌ Lesson ID ${widget.lessonId} not found in Global or User DB.");
         if (mounted) setState(() { _error = "Lesson not found"; _isLoading = false; });
       }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _isLoading = false; });
+      debugPrint("❌ Error fetching lesson: $e");
+      if (mounted) setState(() { _error = "Error loading lesson"; _isLoading = false; });
     }
   }
 
@@ -94,25 +120,38 @@ class _ReaderScreenWrapperState extends State<ReaderScreenWrapper> {
       return Scaffold(
         appBar: AppBar(),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
-              Text(_error ?? "Lesson not found"),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => context.go('/'),
-                child: const Text("Go Home"),
-              )
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.broken_image_outlined, size: 64, color: Colors.grey),
+                const SizedBox(height: 16),
+                Text(
+                  _error ?? "Lesson could not be loaded.",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    // Use replace to avoid stacking error pages
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/');
+                    }
+                  },
+                  child: const Text("Go Back"),
+                )
+              ],
+            ),
           ),
         ),
       );
     }
 
-    // 3. SUCCESS - DECIDE WHICH SCREEN TO SHOW
-    // This is where we handle the logic you asked for:
+    // 3. SUCCESS
     if (kIsWeb) {
       return ReaderScreenWeb(lesson: _lesson!);
     } else {

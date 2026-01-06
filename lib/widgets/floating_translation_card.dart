@@ -6,9 +6,9 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:linguaflow/widgets/gemini_formatted_text.dart';
 import 'package:linguaflow/utils/language_helper.dart';
-// Add the markdown import
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
-// since when words are tapping the audio is downloaded automatically. Make the floating card use that cached version. 
+import 'package:shared_preferences/shared_preferences.dart';
+
 class FloatingTranslationCard extends StatefulWidget {
   final String originalText;
   final String? baseForm;
@@ -153,9 +153,45 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // 2. HELPER: Apply the Saved Voice from Preferences
+  // ---------------------------------------------------------------------------
+  Future<void> _applySavedVoice() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Resolve Code (e.g., "Spanish" -> "es")
+      final String cleanLangCode = LanguageHelper.getLangCode(widget.targetLanguage);
+      
+      // Construct Keys
+      final String nameKey = 'tts_voice_name_$cleanLangCode';
+      final String localeKey = 'tts_voice_locale_$cleanLangCode';
+
+      // Load Values
+      final savedVoiceName = prefs.getString(nameKey);
+      final savedVoiceLocale = prefs.getString(localeKey);
+
+      // Apply Voice
+      if (savedVoiceName != null && savedVoiceLocale != null) {
+        await _cardTts.setVoice({
+          "name": savedVoiceName,
+          "locale": savedVoiceLocale,
+        });
+      }
+    } catch (e) {
+      debugPrint("Card TTS Error: $e");
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. UPDATED INIT TTS
+  // ---------------------------------------------------------------------------
   void _initTts() async {
-    await _cardTts.setLanguage(widget.targetLanguage);
     await _cardTts.setSpeechRate(0.5);
+    // Note: We don't call setLanguage here blindly, because calling it 
+    // without immediately setting the voice can cause the default voice to stick.
+    // We handle the full setup sequence in _speakWord.
+
     await _cardTts.setIosAudioCategory(IosTextToSpeechAudioCategory.playback, [
       IosTextToSpeechAudioCategoryOptions.allowBluetooth,
       IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
@@ -163,8 +199,21 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     ], IosTextToSpeechAudioMode.voicePrompt);
   }
 
-  void _speakWord() {
-    _cardTts.speak(widget.originalText);
+  // ---------------------------------------------------------------------------
+  // 4. ROBUST SPEAK FUNCTION (FIXED)
+  // ---------------------------------------------------------------------------
+  Future<void> _speakWord() async {
+    // 1. Stop any current speech to prevent overlap/errors
+    await _cardTts.stop();
+
+    // 2. Set Language explicitly (this resets voice on the engine side)
+    await _cardTts.setLanguage(widget.targetLanguage);
+    
+    // 3. Re-apply the specific voice choice immediately after setting language
+    await _applySavedVoice();
+
+    // 4. Finally, speak
+    await _cardTts.speak(widget.originalText);
   }
 
   @override
@@ -438,6 +487,7 @@ class _FloatingTranslationCardState extends State<FloatingTranslationCard> {
     );
   }
 
+  // ... [The rest of your build methods remain exactly the same] ...
   Widget _buildBodyContent(String flagAsset) {
     Widget metadata = Padding(
       padding: const EdgeInsets.all(16),
