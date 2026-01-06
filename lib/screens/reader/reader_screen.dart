@@ -79,6 +79,11 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _isSeeking = false;
   bool _isPlayingSingleSentence = false;
 
+  // --- Swipe Gesture Tracking ---
+  double _dragStartX = 0.0;
+  double _dragStartY = 0.0;
+  DateTime _dragStartTime = DateTime.now();
+
   // Optimistic Seek State
   Duration? _optimisticPosition;
   Timer? _seekResetTimer;
@@ -1560,10 +1565,13 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (_isFullScreen && (_isVideo || _isAudio || _isYoutubeAudio)) {
       return _buildFullscreenMedia();
     }
+
+    // Calculate XP for display
     const int baseXP = 50;
     const int bonusPerWord = 10;
     int currentXp = (baseXP + (_sessionWordsLearned.length * bonusPerWord))
         .clamp(50, 200);
+
     final settings = context.watch<SettingsBloc>().state;
     final themeData = Theme.of(context).copyWith(
       scaffoldBackgroundColor: settings.readerTheme == ReaderTheme.dark
@@ -1768,35 +1776,68 @@ class _ReaderScreenState extends State<ReaderScreen>
                       child: _isParsingSubtitles
                           ? const Center(child: Text("Loading content..."))
                           : _isSentenceMode
-                          ? SentenceModeView(
-                              chunks: _smartChunks,
-                              activeIndex: _activeSentenceIndex,
-                              vocabulary: _vocabulary,
-                              language: widget.lesson.language,
-                              isVideo: _isVideo || _isAudio || _isYoutubeAudio,
-                              isPlaying: _isPlaying || _isPlayingSingleSentence,
-                              isTtsPlaying: _isTtsPlaying,
-                              onTogglePlayback: _togglePlayback,
-                              onPlayFromStartContinuous:
-                                  _playFromStartContinuous,
-                              onPlayContinuous: _playNextContinuous,
-                              onNext: _goToNextSentence,
-                              onPrev: _goToPrevSentence,
-                              onWordTap: _handleWordTap,
-                              onPhraseSelected: _handlePhraseSelected,
-                              isLoadingTranslation: _isLoadingTranslation,
-                              googleTranslation: _googleTranslation,
-                              myMemoryTranslation: _myMemoryTranslation,
-                              showError: _showError,
-                              onRetryTranslation: _handleTranslationToggle,
-                              onTranslateRequest: _handleTranslationToggle,
-                              isListeningMode: _isListeningMode,
-                              // Pass the completion handler
-                              onComplete: _markLessonAsComplete,
-                              lessonTitle: widget.lesson.title,
-                              wordsLearnedCount: _sessionWordsLearned.length,
-                              xpEarned: currentXp,
+                          // --- FIX: Use Listener instead of GestureDetector ---
+                          ? Listener(
+                              onPointerDown: (event) {
+                                // 1. Record start point and time
+                                _dragStartX = event.position.dx;
+                                _dragStartY = event.position.dy;
+                                _dragStartTime = DateTime.now();
+                              },
+                              onPointerUp: (event) {
+                                // 2. Calculate movement
+                                final dx = event.position.dx - _dragStartX;
+                                final dy = event.position.dy - _dragStartY;
+                                final duration = DateTime.now()
+                                    .difference(_dragStartTime)
+                                    .inMilliseconds;
+
+                                // 3. LOGIC:
+                                // - Time < 300ms: Ensures it's a "flick", not a slow "drag-to-select".
+                                // - DX > 50: Ensures it's a significant swipe.
+                                // - DY < 30: Ensures it's horizontal, not scrolling up/down.
+                                if (duration < 300 &&
+                                    dx.abs() > 50 &&
+                                    dy.abs() < 40) {
+                                  if (dx < 0) {
+                                    _goToNextSentence(); // Swipe Left
+                                  } else {
+                                    _goToPrevSentence(); // Swipe Right
+                                  }
+                                }
+                              },
+                              child: SentenceModeView(
+                                chunks: _smartChunks,
+                                activeIndex: _activeSentenceIndex,
+                                vocabulary: _vocabulary,
+                                language: widget.lesson.language,
+                                isVideo:
+                                    _isVideo || _isAudio || _isYoutubeAudio,
+                                isPlaying:
+                                    _isPlaying || _isPlayingSingleSentence,
+                                isTtsPlaying: _isTtsPlaying,
+                                onTogglePlayback: _togglePlayback,
+                                onPlayFromStartContinuous:
+                                    _playFromStartContinuous,
+                                onPlayContinuous: _playNextContinuous,
+                                onNext: _goToNextSentence,
+                                onPrev: _goToPrevSentence,
+                                onWordTap: _handleWordTap,
+                                onPhraseSelected: _handlePhraseSelected,
+                                isLoadingTranslation: _isLoadingTranslation,
+                                googleTranslation: _googleTranslation,
+                                myMemoryTranslation: _myMemoryTranslation,
+                                showError: _showError,
+                                onRetryTranslation: _handleTranslationToggle,
+                                onTranslateRequest: _handleTranslationToggle,
+                                isListeningMode: _isListeningMode,
+                                onComplete: _markLessonAsComplete,
+                                lessonTitle: widget.lesson.title,
+                                wordsLearnedCount: _sessionWordsLearned.length,
+                                xpEarned: currentXp,
+                              ),
                             )
+                          // ----------------------------------------------------
                           : ParagraphModeView(
                               lesson: displayLesson,
                               bookPages: _bookPages,
@@ -1822,7 +1863,6 @@ class _ReaderScreenState extends State<ReaderScreen>
                               onPhraseSelected: _handlePhraseSelected,
                               isListeningMode: _isListeningMode,
                               itemKeys: _itemKeys,
-                              // Pass the completion handler
                               onComplete: _markLessonAsComplete,
                               wordsLearnedCount: _sessionWordsLearned.length,
                               xpEarned: currentXp,
