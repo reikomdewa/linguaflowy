@@ -1433,7 +1433,8 @@ class _ReaderScreenState extends State<ReaderScreen>
       );
     }
   }
-void _showTutorial() {
+
+  void _showTutorial() {
     showDialog(
       context: context,
       builder: (context) {
@@ -1441,7 +1442,9 @@ void _showTutorial() {
         return StatefulBuilder(
           builder: (context, setState) {
             return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: Container(
                 height: 450,
                 padding: const EdgeInsets.all(24),
@@ -1454,27 +1457,32 @@ void _showTutorial() {
                           _buildTutorialSlide(
                             icon: Icons.touch_app,
                             title: "Tap to Translate",
-                            description: "Tap any word to see its translation. \n\nPremium users see detailed definitions and base forms instantly.",
+                            description:
+                                "Tap any word to see its translation. \n\nPremium users see detailed definitions and base forms instantly.",
                           ),
                           _buildTutorialSlide(
                             icon: Icons.swipe,
                             title: "Select Phrases",
-                            description: "Drag your finger across multiple words to translate a whole phrase or idiom.",
+                            description:
+                                "Drag your finger across multiple words to translate a whole phrase or idiom.",
                           ),
                           _buildTutorialSlide(
                             icon: Icons.signal_cellular_alt,
                             title: "Rank Your Vocabulary",
-                            description: "After tapping a word, change its status (New → Learning → Mastered). \n\nThe color changes to track your progress!",
+                            description:
+                                "After tapping a word, change its status (New → Learning → Mastered). \n\nThe color changes to track your progress!",
                           ),
                           _buildTutorialSlide(
                             icon: Icons.compare_arrows, // Or Icons.swipe_left
                             title: "Navigate & Swipe",
-                            description: "In Sentence Mode, swipe Left/Right to change sentences.\n\nIn Paragraph Mode, scroll naturally like a book.",
+                            description:
+                                "In Sentence Mode, swipe Left/Right to change sentences.\n\nIn Paragraph Mode, scroll naturally like a book.",
                           ),
-                           _buildTutorialSlide(
+                          _buildTutorialSlide(
                             icon: Icons.menu_book,
                             title: "Switch Modes",
-                            description: "Use the button in the bottom right to switch between:\n\n📖 Paragraph Mode (Reading)\n📝 Sentence Mode (Focus)",
+                            description:
+                                "Use the button in the bottom right to switch between:\n\n📖 Paragraph Mode (Reading)\n📝 Sentence Mode (Focus)",
                           ),
                         ],
                       ),
@@ -1488,7 +1496,9 @@ void _showTutorial() {
                           child: const Text("Close"),
                         ),
                         SmoothPageIndicator(
-                            controller: controller, count: 5), // Optional: needs package or just use simple dots
+                          controller: controller,
+                          count: 5,
+                        ), // Optional: needs package or just use simple dots
                         IconButton(
                           icon: const Icon(Icons.arrow_forward),
                           onPressed: () {
@@ -1515,7 +1525,11 @@ void _showTutorial() {
   }
 
   // Helper for the slides
-  Widget _buildTutorialSlide({required IconData icon, required String title, required String description}) {
+  Widget _buildTutorialSlide({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -1525,7 +1539,10 @@ void _showTutorial() {
           child: Icon(icon, size: 40, color: Theme.of(context).primaryColor),
         ),
         const SizedBox(height: 24),
-        Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 16),
         Text(
           description,
@@ -1535,22 +1552,28 @@ void _showTutorial() {
       ],
     );
   }
-  
+
   // Quick fix for the indicator if you don't have the package:
-  Widget SmoothPageIndicator({required PageController controller, required int count}) {
+  Widget SmoothPageIndicator({
+    required PageController controller,
+    required int count,
+  }) {
     return Row(
-      children: List.generate(count, (index) => 
-        Container(
+      children: List.generate(
+        count,
+        (index) => Container(
           margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: 8, height: 8,
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: Colors.grey.withOpacity(0.5),
           ),
-        )
+        ),
       ),
     );
   }
+
   // --- FULLSCREEN LOGIC ---
   Widget _buildSharedPlayer() {
     Widget playerWidget;
@@ -1767,12 +1790,14 @@ void _showTutorial() {
                 },
                 itemBuilder: (context) => [
                   // --- NEW: Add the Tutorial Option at the top ---
-                   PopupMenuItem(
+                  PopupMenuItem(
                     value: 'show_tutorial',
                     child: Row(
                       children: [
-                        Icon(Icons.help_outline, 
-                          color: Theme.of(context).iconTheme.color),
+                        Icon(
+                          Icons.help_outline,
+                          color: Theme.of(context).iconTheme.color,
+                        ),
                         const SizedBox(width: 8),
                         const Text('How to use'),
                       ],
@@ -1848,61 +1873,64 @@ void _showTutorial() {
                                 ],
                               )
                             : _isAudio
-                                ? ReaderMediaHeader(
-                                    isInitializing: _isInitializingMedia,
-                                    isAudio: true,
-                                    isLocalMedia: _isLocalMedia,
-                                    localVideoController: null,
-                                    localPlayer: _localPlayer,
-                                    youtubeController: _youtubeController,
-                                    onToggleFullscreen: _toggleCustomFullScreen,
-                                  )
-                                : AspectRatio(
-                                    aspectRatio: 16 / 9,
-                                    child: GestureDetector(
-                                      onTap: _toggleControls,
-                                      onVerticalDragEnd: (details) {
-                                        if (details.primaryVelocity != null &&
-                                            details.primaryVelocity! < -400) {
-                                          _toggleCustomFullScreen();
-                                        }
-                                      },
-                                      child: Stack(
-                                        children: [
-                                          _buildSharedPlayer(),
-                                          VideoControlsOverlay(
-                                            isPlaying: _isPlaying,
-                                            position: (_isSeeking &&
-                                                    _optimisticPosition != null)
-                                                ? _optimisticPosition!
-                                                : (_isLocalMedia &&
-                                                        _localPlayer != null
-                                                    ? _localPlayer!
-                                                        .state.position
-                                                    : (_youtubeController
-                                                            ?.value.position ??
+                            ? ReaderMediaHeader(
+                                isInitializing: _isInitializingMedia,
+                                isAudio: true,
+                                isLocalMedia: _isLocalMedia,
+                                localVideoController: null,
+                                localPlayer: _localPlayer,
+                                youtubeController: _youtubeController,
+                                onToggleFullscreen: _toggleCustomFullScreen,
+                              )
+                            : AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: GestureDetector(
+                                  onTap: _toggleControls,
+                                  onVerticalDragEnd: (details) {
+                                    if (details.primaryVelocity != null &&
+                                        details.primaryVelocity! < -400) {
+                                      _toggleCustomFullScreen();
+                                    }
+                                  },
+                                  child: Stack(
+                                    children: [
+                                      _buildSharedPlayer(),
+                                      VideoControlsOverlay(
+                                        isPlaying: _isPlaying,
+                                        position:
+                                            (_isSeeking &&
+                                                _optimisticPosition != null)
+                                            ? _optimisticPosition!
+                                            : (_isLocalMedia &&
+                                                      _localPlayer != null
+                                                  ? _localPlayer!.state.position
+                                                  : (_youtubeController
+                                                            ?.value
+                                                            .position ??
                                                         Duration.zero)),
-                                            duration: _isLocalMedia &&
-                                                    _localPlayer != null
-                                                ? _localPlayer!.state.duration
-                                                : (_youtubeController
-                                                        ?.metadata.duration ??
-                                                    Duration.zero),
-                                            showControls: _showControls,
-                                            onPlayPause: _isPlaying
-                                                ? _pauseMedia
-                                                : _playMedia,
-                                            onSeekRelative: _seekRelative,
-                                            onSeekTo: (d) => _seekToTime(
-                                              d.inMilliseconds / 1000.0,
-                                            ),
-                                            onToggleFullscreen:
-                                                _toggleCustomFullScreen,
-                                          ),
-                                        ],
+                                        duration:
+                                            _isLocalMedia &&
+                                                _localPlayer != null
+                                            ? _localPlayer!.state.duration
+                                            : (_youtubeController
+                                                      ?.metadata
+                                                      .duration ??
+                                                  Duration.zero),
+                                        showControls: _showControls,
+                                        onPlayPause: _isPlaying
+                                            ? _pauseMedia
+                                            : _playMedia,
+                                        onSeekRelative: _seekRelative,
+                                        onSeekTo: (d) => _seekToTime(
+                                          d.inMilliseconds / 1000.0,
+                                        ),
+                                        onToggleFullscreen:
+                                            _toggleCustomFullScreen,
                                       ),
-                                    ),
+                                    ],
                                   ),
+                                ),
+                              ),
                       ),
                     if (_isCheckingLimit || _isParsingSubtitles)
                       const LinearProgressIndicator(minHeight: 2),
@@ -1910,96 +1938,89 @@ void _showTutorial() {
                       child: _isParsingSubtitles
                           ? const Center(child: Text("Loading content..."))
                           : _isSentenceMode
-                              ? Listener(
-                                  onPointerDown: (event) {
-                                    _dragStartX = event.position.dx;
-                                    _dragStartY = event.position.dy;
-                                    _dragStartTime = DateTime.now();
-                                  },
-                                  onPointerUp: (event) {
-                                    final dx = event.position.dx - _dragStartX;
-                                    final dy = event.position.dy - _dragStartY;
-                                    final duration = DateTime.now()
-                                        .difference(_dragStartTime)
-                                        .inMilliseconds;
+                          ? Listener(
+                              onPointerDown: (event) {
+                                _dragStartX = event.position.dx;
+                                _dragStartY = event.position.dy;
+                                _dragStartTime = DateTime.now();
+                              },
+                              onPointerUp: (event) {
+                                final dx = event.position.dx - _dragStartX;
+                                final dy = event.position.dy - _dragStartY;
+                                final duration = DateTime.now()
+                                    .difference(_dragStartTime)
+                                    .inMilliseconds;
 
-                                    if (duration < 300 &&
-                                        dx.abs() > 50 &&
-                                        dy.abs() < 40) {
-                                      if (dx < 0) {
-                                        _goToNextSentence(); // Swipe Left
-                                      } else {
-                                        _goToPrevSentence(); // Swipe Right
-                                      }
-                                    }
-                                  },
-                                  child: SentenceModeView(
-                                    chunks: _smartChunks,
-                                    activeIndex: _activeSentenceIndex,
-                                    vocabulary: _vocabulary,
-                                    language: widget.lesson.language,
-                                    isVideo:
-                                        _isVideo || _isAudio || _isYoutubeAudio,
-                                    isPlaying:
-                                        _isPlaying || _isPlayingSingleSentence,
-                                    isTtsPlaying: _isTtsPlaying,
-                                    onTogglePlayback: _togglePlayback,
-                                    onPlayFromStartContinuous:
-                                        _playFromStartContinuous,
-                                    onPlayContinuous: _playNextContinuous,
-                                    onNext: _goToNextSentence,
-                                    onPrev: _goToPrevSentence,
-                                    onWordTap: _handleWordTap,
-                                    onPhraseSelected: _handlePhraseSelected,
-                                    isLoadingTranslation: _isLoadingTranslation,
-                                    googleTranslation: _googleTranslation,
-                                    myMemoryTranslation: _myMemoryTranslation,
-                                    showError: _showError,
-                                    onRetryTranslation:
-                                        _handleTranslationToggle,
-                                    onTranslateRequest:
-                                        _handleTranslationToggle,
-                                    isListeningMode: _isListeningMode,
-                                    onComplete: _markLessonAsComplete,
-                                    lessonTitle: widget.lesson.title,
-                                    wordsLearnedCount:
-                                        _sessionWordsLearned.length,
-                                    xpEarned: currentXp,
-                                  ),
-                                )
-                              : ParagraphModeView(
-                                  lesson: displayLesson,
-                                  bookPages: _bookPages,
-                                  activeSentenceIndex: _activeSentenceIndex,
-                                  currentPage: _currentPage,
-                                  vocabulary: _vocabulary,
-                                  isVideo:
-                                      _isVideo || _isAudio || _isYoutubeAudio,
-                                  listScrollController: _listScrollController,
-                                  pageController: _pageController,
-                                  onPageChanged: (i) =>
-                                      setState(() => _currentPage = i),
-                                  onSentenceTap: (i) {
-                                    if ((_isVideo ||
-                                            _isAudio ||
-                                            _isYoutubeAudio) &&
-                                        i < _activeTranscript.length) {
-                                      _seekToTime(_activeTranscript[i].start);
-                                      _playMedia();
-                                    } else {
-                                      _speakSentence(_smartChunks[i], i);
-                                    }
-                                  },
-                                  onVideoSeek: (t) => _seekToTime(t),
-                                  onWordTap: _handleWordTap,
-                                  onPhraseSelected: _handlePhraseSelected,
-                                  isListeningMode: _isListeningMode,
-                                  itemKeys: _itemKeys,
-                                  onComplete: _markLessonAsComplete,
-                                  wordsLearnedCount:
-                                      _sessionWordsLearned.length,
-                                  xpEarned: currentXp,
-                                ),
+                                if (duration < 300 &&
+                                    dx.abs() > 50 &&
+                                    dy.abs() < 40) {
+                                  if (dx < 0) {
+                                    _goToNextSentence(); // Swipe Left
+                                  } else {
+                                    _goToPrevSentence(); // Swipe Right
+                                  }
+                                }
+                              },
+                              child: SentenceModeView(
+                                chunks: _smartChunks,
+                                activeIndex: _activeSentenceIndex,
+                                vocabulary: _vocabulary,
+                                language: widget.lesson.language,
+                                isVideo:
+                                    _isVideo || _isAudio || _isYoutubeAudio,
+                                isPlaying:
+                                    _isPlaying || _isPlayingSingleSentence,
+                                isTtsPlaying: _isTtsPlaying,
+                                onTogglePlayback: _togglePlayback,
+                                onPlayFromStartContinuous:
+                                    _playFromStartContinuous,
+                                onPlayContinuous: _playNextContinuous,
+                                onNext: _goToNextSentence,
+                                onPrev: _goToPrevSentence,
+                                onWordTap: _handleWordTap,
+                                onPhraseSelected: _handlePhraseSelected,
+                                isLoadingTranslation: _isLoadingTranslation,
+                                googleTranslation: _googleTranslation,
+                                myMemoryTranslation: _myMemoryTranslation,
+                                showError: _showError,
+                                onRetryTranslation: _handleTranslationToggle,
+                                onTranslateRequest: _handleTranslationToggle,
+                                isListeningMode: _isListeningMode,
+                                onComplete: _markLessonAsComplete,
+                                lessonTitle: widget.lesson.title,
+                                wordsLearnedCount: _sessionWordsLearned.length,
+                                xpEarned: currentXp,
+                              ),
+                            )
+                          : ParagraphModeView(
+                              lesson: displayLesson,
+                              bookPages: _bookPages,
+                              activeSentenceIndex: _activeSentenceIndex,
+                              currentPage: _currentPage,
+                              vocabulary: _vocabulary,
+                              isVideo: _isVideo || _isAudio || _isYoutubeAudio,
+                              listScrollController: _listScrollController,
+                              pageController: _pageController,
+                              onPageChanged: (i) =>
+                                  setState(() => _currentPage = i),
+                              onSentenceTap: (i) {
+                                if ((_isVideo || _isAudio || _isYoutubeAudio) &&
+                                    i < _activeTranscript.length) {
+                                  _seekToTime(_activeTranscript[i].start);
+                                  _playMedia();
+                                } else {
+                                  _speakSentence(_smartChunks[i], i);
+                                }
+                              },
+                              onVideoSeek: (t) => _seekToTime(t),
+                              onWordTap: _handleWordTap,
+                              onPhraseSelected: _handlePhraseSelected,
+                              isListeningMode: _isListeningMode,
+                              itemKeys: _itemKeys,
+                              onComplete: _markLessonAsComplete,
+                              wordsLearnedCount: _sessionWordsLearned.length,
+                              xpEarned: currentXp,
+                            ),
                     ),
                   ],
                 ),
@@ -2012,7 +2033,6 @@ void _showTutorial() {
                         setState(() => _isSentenceMode = !_isSentenceMode),
                     child: Icon(
                       _isSentenceMode ? Icons.menu_book : Icons.short_text,
-                      color: Colors.white,
                     ),
                   ),
                 ),
