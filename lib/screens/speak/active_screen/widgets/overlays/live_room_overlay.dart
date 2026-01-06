@@ -109,6 +109,7 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
     // REMOVED: if (mounted) setState(() {}); <--- This caused unnecessary double rebuilds
     if (mounted) setState(() {}); // Keep one, but ensure it doesn't conflict
   }
+
   void _resetUIState() {
     _isChatOpen = false;
     _isSettingsOpen = false;
@@ -124,7 +125,8 @@ class _LiveRoomOverlayState extends State<LiveRoomOverlay> {
     _isReportOpen = false;
     _isJoinRequestsOpen = false;
   }
-void _resolveSpotlight(String? spotlightId) {
+
+  void _resolveSpotlight(String? spotlightId) {
     // 1. If spotlight is removed (null)
     if (spotlightId == null) {
       if (_currentSpotlightId != null) {
@@ -137,15 +139,15 @@ void _resolveSpotlight(String? spotlightId) {
     }
 
     // 2. CHECK: Only proceed if the Spotlight ID is DIFFERENT from what we last saw.
-    // This prevents "refreshing" the view (re-opening full screen) just because 
+    // This prevents "refreshing" the view (re-opening full screen) just because
     // the room paused or member count changed.
     if (spotlightId == _currentSpotlightId) {
-      return; 
+      return;
     }
 
     // 3. New Spotlight Detected
     _currentSpotlightId = spotlightId;
-    
+
     final room = RoomGlobalManager().livekitRoom;
     if (room == null) return;
 
@@ -153,7 +155,7 @@ void _resolveSpotlight(String? spotlightId) {
     // Check Local
     if (room.localParticipant?.identity == spotlightId) {
       foundUser = room.localParticipant;
-    } 
+    }
     // Check Remote
     else {
       try {
@@ -230,10 +232,10 @@ void _resolveSpotlight(String? spotlightId) {
       ..on<RoomDisconnectedEvent>((_) => RoomGlobalManager().leaveRoom());
   }
 
- void _refreshParticipants() {
+  void _refreshParticipants() {
     final room = RoomGlobalManager().livekitRoom;
     if (room == null) return;
-    
+
     // FIX: Explicitly type the list as <Participant> so Dart knows what it contains
     final List<Participant> newParticipants = [
       if (room.localParticipant != null) room.localParticipant!,
@@ -243,7 +245,9 @@ void _resolveSpotlight(String? spotlightId) {
     // Check if the selected participant (menu open) is still in the room
     if (_selectedParticipant != null) {
       // Now 'p' is correctly identified as a Participant, so .identity works
-      final stillExists = newParticipants.any((p) => p.identity == _selectedParticipant!.identity);
+      final stillExists = newParticipants.any(
+        (p) => p.identity == _selectedParticipant!.identity,
+      );
       if (!stillExists) {
         // If the user I was looking at left (or got banned), close the menu
         _selectedParticipant = null;
@@ -252,10 +256,12 @@ void _resolveSpotlight(String? spotlightId) {
 
     // Check if full screen participant still exists
     if (_fullScreenParticipant != null) {
-       final stillExists = newParticipants.any((p) => p.identity == _fullScreenParticipant!.identity);
-       if (!stillExists) {
-         _fullScreenParticipant = null;
-       }
+      final stillExists = newParticipants.any(
+        (p) => p.identity == _fullScreenParticipant!.identity,
+      );
+      if (!stillExists) {
+        _fullScreenParticipant = null;
+      }
     }
 
     if (mounted) {
@@ -263,7 +269,7 @@ void _resolveSpotlight(String? spotlightId) {
         _participants = newParticipants;
       });
     }
-    
+
     if (_currentSpotlightId != null) _resolveSpotlight(_currentSpotlightId);
   }
 
@@ -363,12 +369,27 @@ void _resolveSpotlight(String? spotlightId) {
                   participant: _fullScreenParticipant!,
                 ),
                 Positioned(
+                  // Tip: 40 might be hidden behind the notch on some phones.
+                  // Consider using: MediaQuery.of(context).padding.top + 10
                   top: 40,
                   left: 20,
                   child: Material(
                     type: MaterialType.transparency,
                     child: IconButton(
-                      icon: const Icon(Icons.close, size: 30),
+                      // 1. Make the Icon White
+                      icon: const Icon(
+                        Icons.close,
+                        size: 30,
+                        color: Colors.white,
+                      ),
+
+                      // 2. Add the nice semi-transparent black background
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black.withOpacity(0.5),
+                        shape:
+                            const CircleBorder(), // Ensures it is a perfect circle
+                      ),
+
                       onPressed: () =>
                           setState(() => _fullScreenParticipant = null),
                     ),
@@ -634,7 +655,7 @@ void _resolveSpotlight(String? spotlightId) {
         ],
 
         // PARTICIPANT OPTIONS
-      // PARTICIPANT OPTIONS
+        // PARTICIPANT OPTIONS
         if (_selectedParticipant != null && manager.isExpanded) ...[
           Positioned.fill(
             child: GestureDetector(
@@ -648,14 +669,14 @@ void _resolveSpotlight(String? spotlightId) {
             currentSpotlightId: _currentSpotlightId,
             roomData: manager.roomData!,
             onClose: () => setState(() => _selectedParticipant = null),
-            
+
             onSetFullScreen: (p) {
               setState(() {
                 _fullScreenParticipant = p;
                 _selectedParticipant = null;
               });
             },
-            
+
             onToggleSpotlight: (userId) {
               context.read<RoomBloc>().add(
                 ToggleSpotlightEvent(
@@ -664,7 +685,7 @@ void _resolveSpotlight(String? spotlightId) {
                 ),
               );
             },
-            
+
             // --- CRITICAL FIX: BAN LOGIC HERE ---
             onKickUser: (userId) {
               debugPrint("Processing BAN for userId: $userId");
