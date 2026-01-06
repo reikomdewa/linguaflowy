@@ -1434,6 +1434,146 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
+  void _showTutorial() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final PageController controller = PageController();
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Container(
+                height: 450,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: PageView(
+                        controller: controller,
+                        children: [
+                          _buildTutorialSlide(
+                            icon: Icons.touch_app,
+                            title: "Tap to Translate",
+                            description:
+                                "Tap any word to see its translation. \n\nPremium users see detailed definitions and base forms instantly.",
+                          ),
+                          _buildTutorialSlide(
+                            icon: Icons.swipe,
+                            title: "Select Phrases",
+                            description:
+                                "Drag your finger across multiple words to translate a whole phrase or idiom.",
+                          ),
+                          _buildTutorialSlide(
+                            icon: Icons.signal_cellular_alt,
+                            title: "Rank Your Vocabulary",
+                            description:
+                                "After tapping a word, change its status (New → Learning → Mastered). \n\nThe color changes to track your progress!",
+                          ),
+                          _buildTutorialSlide(
+                            icon: Icons.compare_arrows, // Or Icons.swipe_left
+                            title: "Navigate & Swipe",
+                            description:
+                                "In Sentence Mode, swipe Left/Right to change sentences.\n\nIn Paragraph Mode, scroll naturally like a book.",
+                          ),
+                          _buildTutorialSlide(
+                            icon: Icons.menu_book,
+                            title: "Switch Modes",
+                            description:
+                                "Use the button in the bottom right to switch between:\n\n📖 Paragraph Mode (Reading)\n📝 Sentence Mode (Focus)",
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("Close"),
+                        ),
+                        SmoothPageIndicator(
+                          controller: controller,
+                          count: 5,
+                        ), // Optional: needs package or just use simple dots
+                        IconButton(
+                          icon: const Icon(Icons.arrow_forward),
+                          onPressed: () {
+                            if (controller.page! < 4) {
+                              controller.nextPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            } else {
+                              Navigator.pop(context);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Helper for the slides
+  Widget _buildTutorialSlide({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        CircleAvatar(
+          radius: 40,
+          backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+          child: Icon(icon, size: 40, color: Theme.of(context).primaryColor),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          description,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 16, height: 1.5),
+        ),
+      ],
+    );
+  }
+
+  // Quick fix for the indicator if you don't have the package:
+  Widget SmoothPageIndicator({
+    required PageController controller,
+    required int count,
+  }) {
+    return Row(
+      children: List.generate(
+        count,
+        (index) => Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.grey.withOpacity(0.5),
+          ),
+        ),
+      ),
+    );
+  }
+
   // --- FULLSCREEN LOGIC ---
   Widget _buildSharedPlayer() {
     Widget playerWidget;
@@ -1566,7 +1706,6 @@ class _ReaderScreenState extends State<ReaderScreen>
       return _buildFullscreenMedia();
     }
 
-    // Calculate XP for display
     const int baseXP = 50;
     const int bonusPerWord = 10;
     int currentXp = (baseXP + (_sessionWordsLearned.length * bonusPerWord))
@@ -1644,9 +1783,32 @@ class _ReaderScreenState extends State<ReaderScreen>
                         }, SetOptions(merge: true));
                   } else if (value == 'toggle_cc') {
                     _toggleSubtitles();
+                  } else if (value == 'show_tutorial') {
+                    // --- NEW: Handle the tutorial click ---
+                    _showTutorial();
                   }
                 },
                 itemBuilder: (context) => [
+                  // --- NEW: Add the Tutorial Option at the top ---
+                  PopupMenuItem(
+                    value: 'show_tutorial',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.help_outline,
+                          color: Theme.of(context).iconTheme.color,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('How to use'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    height: 1,
+                    enabled: false,
+                    child: Divider(),
+                  ),
+                  // ----------------------------------------------
                   PopupMenuItem(
                     value: 'toggle_swipe',
                     child: Row(
@@ -1776,26 +1938,19 @@ class _ReaderScreenState extends State<ReaderScreen>
                       child: _isParsingSubtitles
                           ? const Center(child: Text("Loading content..."))
                           : _isSentenceMode
-                          // --- FIX: Use Listener instead of GestureDetector ---
                           ? Listener(
                               onPointerDown: (event) {
-                                // 1. Record start point and time
                                 _dragStartX = event.position.dx;
                                 _dragStartY = event.position.dy;
                                 _dragStartTime = DateTime.now();
                               },
                               onPointerUp: (event) {
-                                // 2. Calculate movement
                                 final dx = event.position.dx - _dragStartX;
                                 final dy = event.position.dy - _dragStartY;
                                 final duration = DateTime.now()
                                     .difference(_dragStartTime)
                                     .inMilliseconds;
 
-                                // 3. LOGIC:
-                                // - Time < 300ms: Ensures it's a "flick", not a slow "drag-to-select".
-                                // - DX > 50: Ensures it's a significant swipe.
-                                // - DY < 30: Ensures it's horizontal, not scrolling up/down.
                                 if (duration < 300 &&
                                     dx.abs() > 50 &&
                                     dy.abs() < 40) {
@@ -1837,7 +1992,6 @@ class _ReaderScreenState extends State<ReaderScreen>
                                 xpEarned: currentXp,
                               ),
                             )
-                          // ----------------------------------------------------
                           : ParagraphModeView(
                               lesson: displayLesson,
                               bookPages: _bookPages,
