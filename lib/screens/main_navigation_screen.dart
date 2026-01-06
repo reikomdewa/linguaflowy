@@ -175,7 +175,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           icon: const Icon(Icons.admin_panel_settings_outlined),
           activeIcon: const Icon(Icons.admin_panel_settings_rounded),
           label: 'Admin',
-          showOnMobile: false,
+          showOnMobile: true,
         ),
       );
     }

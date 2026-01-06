@@ -1,10 +1,12 @@
+// lib/services/eleven_labs_tts_service.dart
 import 'dart:convert';
 import 'dart:io';
-import 'package:crypto/crypto.dart'; // Required for MD5 Caching
+import 'package:crypto/crypto.dart'; // Add crypto: ^3.0.3 to pubspec.yaml
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart'; // Required for Crash Fix
+import 'package:just_audio_background/just_audio_background.dart'; // Add this package
+import 'package:linguaflow/utils/language_helper.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:linguaflow/core/env.dart';
 
@@ -12,22 +14,22 @@ class ElevenLabsTtsService {
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlaying = false;
   Function? _onComplete;
-  
-  // ElevenLabs Configuration
+  int _currentRequestId =
+      0; // Tracks the active request to prevent race conditions
+
   static const String apiKey = Env.elevenLabsApiKey;
-  
-  // Map languages to best ElevenLabs voices (multilingual model)
+
   static const Map<String, String> voiceMap = {
-    'en': 'EXAVITQu4vr4xnSDxMaL', // Rachel
-    'es': 'VR6AewLTigWG4xSOukaG', // Arnold
-    'fr': 'XB0fDUnXU5powFXDhCwa', // Charlotte
-    'de': 'pNInz6obpgDQGcFmaJgB', // Adam
-    'it': 'ErXwobaYiN019PkySvjV', // Antoni
-    'pt': 'yoZ06aMxZJJ28mfd3POQ', // Sam
-    'ja': 'IKne3meq5aSn9XLyUdCD', // Kazuha
-    'ko': '21m00Tcm4TlvDq8ikWAM', // Rachel (Multilingual)
-    'zh': 'XrExE9yKIg1WjnnlVkGX', // Matilda
-    'ar': 'TxGEqnHWrfWFTfGW9XjX', // Josh
+    'en': 'EXAVITQu4vr4xnSDxMaL',
+    'es': 'VR6AewLTigWG4xSOukaG',
+    'fr': 'XB0fDUnXU5powFXDhCwa',
+    'de': 'pNInz6obpgDQGcFmaJgB',
+    'it': 'ErXwobaYiN019PkySvjV',
+    'pt': 'yoZ06aMxZJJ28mfd3POQ',
+    'ja': 'IKne3meq5aSn9XLyUdCD',
+    'ko': '21m00Tcm4TlvDq8ikWAM',
+    'zh': 'XrExE9yKIg1WjnnlVkGX',
+    'ar': 'TxGEqnHWrfWFTfGW9XjX',
   };
 
   ElevenLabsTtsService() {
@@ -40,38 +42,48 @@ class ElevenLabsTtsService {
   }
 
   Future<void> speak(String text, String languageCode) async {
-    if (apiKey.isEmpty) {
-      debugPrint('❌ ElevenLabs: API Key is empty!');
-      return;
-    }
+    if (apiKey.isEmpty) return;
+
+    _currentRequestId++;
+    final int myRequestId = _currentRequestId;
 
     try {
       _isPlaying = true;
-      final voiceId = voiceMap[languageCode] ?? voiceMap['en']!;
-      
-      // --- CACHING LOGIC START ---
-      // 1. Create a unique, safe filename based on Content + Voice
-      final String safeId = md5.convert(utf8.encode("$text-$voiceId")).toString();
+
+      // --- FIX: USE LANGUAGE HELPER ---
+      // 1. Resolve the code (e.g., 'fr-FR' -> 'fr', 'French' -> 'fr')
+      String resolvedCode = LanguageHelper.getLangCode(languageCode);
+
+      // 2. Select Voice (Fallback to 'en' if specific code not in OUR map)
+      final voiceId = voiceMap[resolvedCode] ?? voiceMap['en']!;
+
+      debugPrint(
+        "🗣️ ElevenLabs: Input: '$languageCode' -> Resolved: '$resolvedCode' -> VoiceID: $voiceId",
+      );
+      // ------------------------------------
+
+      // --- CACHING LOGIC ---
+      final String safeId = md5
+          .convert(utf8.encode("$text-$voiceId"))
+          .toString();
       final tempDir = await getTemporaryDirectory();
       final File cacheFile = File('${tempDir.path}/tts_$safeId.mp3');
 
-      // 2. Check if file already exists locally
       if (await cacheFile.exists()) {
-        debugPrint("♻️ ElevenLabs: Cache HIT! Playing local file (0 Cost).");
-        await _playFile(cacheFile, text);
-        return; // EXIT FUNCTION - No API Call made
+        if (myRequestId != _currentRequestId) return;
+        debugPrint("♻️ ElevenLabs: Cache HIT!");
+        await _playFile(cacheFile, text, myRequestId);
+        return;
       }
-      // ---------------------------
+      // ---------------------
 
-      debugPrint("☁️ ElevenLabs: Cache MISS. Calling API...");
-      final uri = Uri.parse('https://api.elevenlabs.io/v1/text-to-speech/$voiceId');
+      final uri = Uri.parse(
+        'https://api.elevenlabs.io/v1/text-to-speech/$voiceId',
+      );
 
       final response = await http.post(
         uri,
-        headers: {
-          'xi-api-key': apiKey,
-          'Content-Type': 'application/json',
-        },
+        headers: {'xi-api-key': apiKey, 'Content-Type': 'application/json'},
         body: jsonEncode({
           'text': text,
           'model_id': 'eleven_multilingual_v2',
@@ -80,58 +92,66 @@ class ElevenLabsTtsService {
             'similarity_boost': 0.75,
             'style': 0.0,
             'use_speaker_boost': true,
-          }
+          },
         }),
       );
 
+      if (myRequestId != _currentRequestId) return;
+
       if (response.statusCode == 200) {
         final bytes = response.bodyBytes;
-        
-        // 3. Save to the unique cache filename
         await cacheFile.writeAsBytes(bytes);
-        debugPrint('💾 ElevenLabs: File downloaded and cached.');
-        
-        await _playFile(cacheFile, text);
+        await _playFile(cacheFile, text, myRequestId);
       } else {
         _isPlaying = false;
-        // Log the actual error from ElevenLabs (e.g., quota_exceeded)
-        debugPrint('❌ ElevenLabs API Error Body: ${response.body}');
-        throw Exception('ElevenLabs API Error: ${response.statusCode} - ${response.body}');
+        debugPrint('❌ ElevenLabs API Error: ${response.body}');
+        return;
       }
     } catch (e) {
-      _isPlaying = false;
-      debugPrint('❌ ElevenLabs Service Error: $e');
+      if (myRequestId == _currentRequestId) {
+        _isPlaying = false;
+        debugPrint('❌ ElevenLabs Service Error: $e');
+        rethrow;
+      }
+    }
+  }
+
+  Future<void> _playFile(File file, String text, int requestId) async {
+    // Final check before playing
+    if (requestId != _currentRequestId) return;
+
+    try {
+      final source = AudioSource.file(
+        file.path,
+        tag: MediaItem(
+          id: 'elevenlabs_${file.path.hashCode}',
+          title: 'Pronunciation',
+          artist: 'ElevenLabs',
+          extras: {'text': text},
+        ),
+      );
+
+      await _audioPlayer.setAudioSource(source);
+      await _audioPlayer.play();
+    } catch (e) {
+      // Ignore interruption errors caused by rapid switching
+      if (e.toString().contains("interrupted") || e.toString().contains("-10"))
+        return;
       rethrow;
     }
   }
 
-  // Helper to play the file safely with MediaItem tag
-  Future<void> _playFile(File file, String text) async {
-    final source = AudioSource.file(
-      file.path,
-      // --- CRITICAL FIX: Add MediaItem tag for just_audio_background ---
-      tag: MediaItem(
-        id: 'elevenlabs_${file.path.hashCode}', // Unique ID based on path
-        title: 'Pronunciation',
-        artist: 'ElevenLabs',
-        extras: {'text': text},
-      ),
-    );
-
-    await _audioPlayer.setAudioSource(source);
-    await _audioPlayer.play();
-  }
-
   Future<void> stop() async {
-    await _audioPlayer.stop();
+    _currentRequestId++; // Invalidate pending downloads
+    if (_audioPlayer.playing) {
+      await _audioPlayer.stop();
+    }
     _isPlaying = false;
   }
 
   void setCompletionHandler(Function() handler) {
     _onComplete = handler;
   }
-
-  bool get isPlaying => _isPlaying;
 
   Future<void> dispose() async {
     await _audioPlayer.dispose();

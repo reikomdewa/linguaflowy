@@ -131,7 +131,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _isLoadingTranslation = false;
   bool _showError = false;
   bool _isCheckingLimit = false;
-
+  static const int _dailyCharLimit = 5000;
   // --- Card State ---
   bool _showCard = false;
   String _selectedText = "";
@@ -196,6 +196,65 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
+ Future<bool> _consumePremiumCredits(int textLength) async {
+    final state = context.read<AuthBloc>().state;
+    if (state is! AuthAuthenticated) return false;
+    final user = state.user;
+
+    // 1. Premium Users: Always True
+    if (user.isPremium) {
+      debugPrint("💎 DEBUG: User is Premium. Unlimited access.");
+      return true;
+    }
+
+    final todayStr = DateTime.now().toIso8601String().split('T').first;
+    final userUsageRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.id)
+        .collection('usage')
+        .doc('premium_tts_daily');
+
+    try {
+      return await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final snapshot = await transaction.get(userUsageRef);
+        
+        int currentUsage = 0;
+
+        if (snapshot.exists) {
+          final data = snapshot.data() as Map<String, dynamic>;
+          if (data['date'] == todayStr) {
+            currentUsage = data['chars_used'] ?? 0;
+          }
+        }
+
+        int newTotal = currentUsage + textLength;
+
+        debugPrint("📊 CREDIT CHECK:");
+        debugPrint("   Used Today: $currentUsage");
+        debugPrint("   Requesting: $textLength");
+        debugPrint("   Limit:      $_dailyCharLimit");
+
+        // 2. Check Limit
+        if (newTotal <= _dailyCharLimit) {
+          transaction.set(userUsageRef, {
+            'date': todayStr,
+            'chars_used': newTotal,
+            'last_updated': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+          
+          debugPrint("✅ APPROVED. New Total: $newTotal/$_dailyCharLimit");
+          return true;
+        } else {
+          debugPrint("⛔ DENIED. Limit Exceeded ($newTotal > $_dailyCharLimit). Switching to Standard TTS.");
+          return false;
+        }
+      });
+    } catch (e) {
+      debugPrint("❌ Error checking credits: $e");
+      return false; 
+    }
+  }
+
   void _determineMediaType() {
     final bool isYoutubeUrl =
         widget.lesson.videoUrl != null &&
@@ -251,15 +310,12 @@ class _ReaderScreenState extends State<ReaderScreen>
     _initializeMedia();
   }
 
-  void _initializeMedia() async {
-    // 1. Setup Standard TTS
+void _initializeMedia() async {
     await _flutterTts.setLanguage(widget.lesson.language);
     await _flutterTts.setSpeechRate(_ttsSpeed);
 
-    // 2. Define Unified Completion Handler
     void onCompleteHandler() {
       if (mounted) {
-        // Stop if we are just playing a single word (Don't auto-advance)
         if (_isPlayingStandalone) {
            setState(() {
              _isPlayingStandalone = false;
@@ -270,7 +326,12 @@ class _ReaderScreenState extends State<ReaderScreen>
         }
 
         if (!_isSentenceMode) {
-          _playNextTtsSentence();
+          // Keep the delay to prevent "Loading Interrupted" errors
+          Future.delayed(const Duration(milliseconds: 600), () {
+            if (mounted && _isTtsPlaying) {
+               _playNextTtsSentence();
+            }
+          });
         } else {
           setState(() { 
             _isTtsPlaying = false;
@@ -283,98 +344,15 @@ class _ReaderScreenState extends State<ReaderScreen>
     _flutterTts.setCompletionHandler(onCompleteHandler);
     _elevenLabsService.setCompletionHandler(onCompleteHandler);
 
-    // 3. Check Premium Permissions for ALL lesson types (Video, Audio, Text)
-    // We await this so the flag is ready when the user taps their first word.
-    await _checkPremiumTtsEligibility(); 
+    // Note: We do NOT call _checkPremiumTtsEligibility here anymore.
+    // The check happens per-click in _consumePremiumCredits.
 
-    // 4. Initialize Video/Audio Player if needed
     if (_isVideo || _isAudio || _isYoutubeAudio) {
       _initPlayerController();
     }
   }
 
-  Future<void> _checkPremiumTtsEligibility() async {
-    debugPrint("🔍 DEBUG: _checkPremiumTtsEligibility START");
 
-    final state = context.read<AuthBloc>().state;
-    if (state is! AuthAuthenticated) {
-      debugPrint("❌ DEBUG: User not authenticated.");
-      return;
-    }
-
-    final user = state.user;
-    debugPrint("🔍 DEBUG: User ID: ${user.id}, Is Premium: ${user.isPremium}");
-
-    // Case 1: Premium User
-    if (user.isPremium) {
-      debugPrint("✅ DEBUG: User is Premium. Enabling Premium Voice.");
-      if (mounted) setState(() => _usePremiumVoice = true);
-      return;
-    }
-
-    // Case 2: Free User - Check DB
-    debugPrint("🔍 DEBUG: User is Free. Checking Firestore limits...");
-    final todayStr = DateTime.now().toIso8601String().split('T').first;
-    final userUsageRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.id)
-        .collection('usage')
-        .doc('premium_tts_daily');
-
-    try {
-      final allowed = await FirebaseFirestore.instance.runTransaction((
-        transaction,
-      ) async {
-        final snapshot = await transaction.get(userUsageRef);
-
-        if (!snapshot.exists) {
-          debugPrint("✨ DEBUG: First time usage today.");
-          transaction.set(userUsageRef, {
-            'date': todayStr,
-            'lessons_used': [widget.lesson.id],
-          });
-          return true;
-        }
-
-        final data = snapshot.data() as Map<String, dynamic>;
-        final lastDate = data['date'] ?? '';
-        final List<dynamic> usedLessons = data['lessons_used'] ?? [];
-        debugPrint("🔍 DEBUG: DB Data -> Date: $lastDate, Used: $usedLessons");
-
-        if (lastDate != todayStr) {
-          debugPrint("✨ DEBUG: New day detected. Resetting limit.");
-          transaction.set(userUsageRef, {
-            'date': todayStr,
-            'lessons_used': [widget.lesson.id],
-          });
-          return true;
-        } else {
-          if (usedLessons.contains(widget.lesson.id)) {
-            debugPrint("✅ DEBUG: Lesson already unlocked today.");
-            return true;
-          }
-          if (usedLessons.isEmpty) {
-            debugPrint("✅ DEBUG: Limit not reached. Unlocking.");
-            transaction.update(userUsageRef, {
-              'lessons_used': FieldValue.arrayUnion([widget.lesson.id]),
-            });
-            return true;
-          }
-          debugPrint("⛔ DEBUG: Daily limit reached.");
-          return false;
-        }
-      });
-
-      debugPrint("🔍 DEBUG: Transaction result (Allowed?): $allowed");
-
-      if (mounted) {
-        setState(() => _usePremiumVoice = allowed);
-      }
-    } catch (e) {
-      debugPrint("❌ DEBUG: Firestore Transaction Error: $e");
-      if (mounted) setState(() => _usePremiumVoice = false);
-    }
-  }
 
   void _initPlayerController() {
     final url = widget.lesson.videoUrl!;
@@ -1039,34 +1017,28 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  // --- UNIFIED SPEAKING LOGIC ---
-// --- UNIFIED SPEAKING LOGIC (With Cost Optimization) ---
-  Future<void> _unifiedSpeak(String text) async {
+// --- UNIFIED SPEAKING LOGIC ---
+ Future<void> _unifiedSpeak(String text) async {
     // 1. Stop all current audio engines
-    await Future.wait([
-      _flutterTts.stop(),
-      _elevenLabsService.stop(),
-    ]);
+    _flutterTts.stop();
+    _elevenLabsService.stop();
 
-    // --- COST OPTIMIZATION: Logic Filter ---
-    // Check if text is a single word (no spaces).
-    bool isSingleWord = !text.trim().contains(' ');
+    // Configuration: Always use premium (set to true to enable single words)
+    bool shouldSkipPremium = false; 
 
-    // RULE: If we are in "Standalone" mode (user tapped a specific word) 
-    // AND it is a single word, skip Premium to save credits.
-    // We only want to spend credits on Sentences (intonation) or Phrases.
-    bool shouldSkipPremium = _isPlayingStandalone && isSingleWord;
+    // 2. CHECK CREDITS
+    bool hasCredits = false;
     
-    // Debug log to see decision
-    if (shouldSkipPremium) {
-      debugPrint("💰 DEBUG: Saving Cost. Single word detected -> Using Standard TTS.");
+    // Logic Fix: We don't check _usePremiumVoice here anymore.
+    // We only check if the API hasn't crashed (_elevenLabsFailed).
+    if (!_elevenLabsFailed && !shouldSkipPremium) {
+       // This function handles "Is Premium User?" AND "Has Free Credits?" logic
+       hasCredits = await _consumePremiumCredits(text.length);
     }
-    // ---------------------------------------
 
-    // 2. Check Premium Eligibility
-    // We use the flag we calculated in _initializeMedia
-    if (_usePremiumVoice && !_elevenLabsFailed && !shouldSkipPremium) {
-      debugPrint("🚀 DEBUG: Playing via ElevenLabs...");
+    // 3. Try Premium (If Credits Allowed)
+    if (hasCredits) {
+      debugPrint("🚀 DEBUG: Playing via ElevenLabs (${text.length} chars)...");
       setState(() => _isPremiumTtsLoading = true);
 
       try {
@@ -1080,16 +1052,43 @@ class _ReaderScreenState extends State<ReaderScreen>
         if (mounted) {
           setState(() {
             _isPremiumTtsLoading = false;
-            _usePremiumVoice = false; 
           });
-          // Quiet fallback - no snackbar to avoid UI clutter during fallback
         }
       }
     }
 
-    // 3. Fallback to Standard TTS (Free)
+    // 4. Fallback to Standard TTS (Free)
     debugPrint("🤖 DEBUG: Playing via Standard TTS...");
     if (mounted) setState(() => _isPremiumTtsLoading = false);
+
+    // --- UPSELL LOGIC ---
+    final authState = context.read<AuthBloc>().state;
+    bool isUserPremium = (authState is AuthAuthenticated) && authState.user.isPremium;
+
+    // Show upgrade prompt ONLY if:
+    // 1. We were denied credits (hasCredits == false)
+    // 2. User is NOT actually premium
+    // 3. API is technically healthy (it was just a limit denial)
+    if (!hasCredits && !isUserPremium && !_elevenLabsFailed && mounted) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Daily limit reached! (${text.length} chars needed). Upgrade for unlimited.",
+            style: const TextStyle(color: Colors.white),
+          ),
+          backgroundColor: Colors.indigo,
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'UPGRADE',
+            textColor: Colors.amber,
+            onPressed: () => _showLimitDialog(),
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+
     await _flutterTts.speak(text);
   }
 
