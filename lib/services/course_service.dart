@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/utils/logger.dart';
 
 class CourseService {
   Future<List<LessonModel>> getCourseLessons({

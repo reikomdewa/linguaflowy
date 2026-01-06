@@ -5,7 +5,6 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/core/env.dart';
 import 'package:linguaflow/models/quiz_model.dart';
-import 'package:linguaflow/utils/logger.dart';
 
 enum QuizPromptType { placementTest, dailyPractice, topicSpecific }
 

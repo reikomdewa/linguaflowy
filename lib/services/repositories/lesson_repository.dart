@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // <--- ADD THIS
 import 'package:flutter/foundation.dart';
 import 'package:linguaflow/services/home_feed_cache_service.dart';
-import 'package:linguaflow/utils/logger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/lesson_service.dart';

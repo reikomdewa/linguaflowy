@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:linguaflow/models/user_model.dart';
-import 'package:linguaflow/utils/logger.dart'; // Assuming you have this
 
 class UserService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;

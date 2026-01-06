@@ -2,7 +2,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/services/repositories/lesson_repository.dart';
 import 'package:linguaflow/services/gemini_service.dart';
-import 'package:linguaflow/utils/logger.dart';
 import 'lesson_event.dart';
 import 'lesson_state.dart';
 

@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/utils/logger.dart';
 
 class LessonService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;

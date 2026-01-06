@@ -1,7 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:linguaflow/models/quiz_model.dart';
 import 'package:linguaflow/services/quiz_service.dart';
-import 'package:linguaflow/utils/logger.dart';
 
 part 'quiz_event.dart';
 part 'quiz_state.dart';

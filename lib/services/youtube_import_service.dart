@@ -2,7 +2,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:linguaflow/models/transcript_line.dart';
-import 'package:linguaflow/utils/logger.dart';
 import 'package:xml/xml.dart' as xml;
 
 class YoutubeParser {

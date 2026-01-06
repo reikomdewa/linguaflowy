@@ -6,7 +6,6 @@ import 'package:just_audio_background/just_audio_background.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart'; // 3. Import AuthBloc
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/utils/logger.dart';
 
 // --- MANAGER (SINGLETON) ---
 class AudioGlobalManager extends ChangeNotifier {

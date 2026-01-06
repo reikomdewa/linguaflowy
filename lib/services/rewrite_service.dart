@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/models/lesson_model.dart';
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/gemini_service.dart';
-import 'package:linguaflow/utils/logger.dart';
 import 'package:uuid/uuid.dart';
 
 class RewriteService {

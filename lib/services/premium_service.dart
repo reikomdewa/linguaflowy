@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
-import 'package:linguaflow/utils/logger.dart';
 
 class PremiumService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/utils/logger.dart';
 import 'package:uuid/uuid.dart';
 
 class GeminiService {

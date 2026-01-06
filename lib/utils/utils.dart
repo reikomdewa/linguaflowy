@@ -5,11 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:linguaflow/constants/constants.dart';
-import 'package:linguaflow/utils/logger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-export 'logger.dart';
 export '../screens/home/utils/lesson_card_utils.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';

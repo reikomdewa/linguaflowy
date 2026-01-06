@@ -4,7 +4,6 @@ import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
 import 'package:linguaflow/models/lesson_model.dart';
-import 'package:linguaflow/utils/logger.dart';
 // Import the new widget created in the previous step
 import 'package:linguaflow/widgets/youtube_extractor_view.dart';
 

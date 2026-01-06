@@ -8,7 +8,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:linguaflow/models/user_model.dart';
 import 'package:linguaflow/services/auth_service.dart';
-import 'package:linguaflow/utils/logger.dart';
 import 'package:linguaflow/utils/firebase_utils.dart'; // Assuming this is correct
 import 'package:linguaflow/services/user_service.dart';
 // ADD THIS IMPORT

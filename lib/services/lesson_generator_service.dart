@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:linguaflow/models/lesson_content.dart';
-import 'package:linguaflow/utils/logger.dart';
 
 class LessonGeneratorService {
   // No constructor needed. We rely on the global Gemini.instance

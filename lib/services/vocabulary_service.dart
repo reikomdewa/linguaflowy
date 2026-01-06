@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/models/vocabulary_item.dart';
-import 'package:linguaflow/utils/logger.dart';
 
 class VocabularyService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
