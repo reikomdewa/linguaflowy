@@ -8,9 +8,9 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
+import 'package:linguaflow/services/elevenlabs_tts_service.dart';
 import 'package:linguaflow/services/local_lemmatizer.dart';
 import 'package:linguaflow/utils/language_helper.dart';
-import 'package:linguaflow/utils/utils.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -78,7 +78,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _isPlaying = false;
   bool _isSeeking = false;
   bool _isPlayingSingleSentence = false;
-
+  bool _isPlayingStandalone = false;
   // --- Swipe Gesture Tracking ---
   double _dragStartX = 0.0;
   double _dragStartY = 0.0;
@@ -104,9 +104,16 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   // --- TTS ---
   final FlutterTts _flutterTts = FlutterTts();
+  final ElevenLabsTtsService _elevenLabsService = ElevenLabsTtsService();
+
   bool _isTtsPlaying = false;
   final double _ttsSpeed = 0.5;
 
+  bool _usePremiumVoice = false;
+  bool _isPremiumTtsLoading = false;
+
+  // Track failures separately to avoid retrying broken APIs
+  bool _elevenLabsFailed = false;
   // --- Scroll & Text ---
   final ScrollController _listScrollController = ScrollController();
   int _activeSentenceIndex = -1;
@@ -138,10 +145,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   String? _selectedBaseForm;
   StreamSubscription? _vocabSubscription;
   // XP Reward Constants
-  static const int xpPerWordLookup = 5;
-  static const int xpPerWordLearned = 20; // When status moves from 0 to > 0
   static const int xpPerMinuteRead = 2; // Passive engagement
-  static const int xpPerLessonComplete = 100;
   @override
   void initState() {
     super.initState();
@@ -247,18 +251,128 @@ class _ReaderScreenState extends State<ReaderScreen>
     _initializeMedia();
   }
 
-  void _initializeMedia() {
-    // --- FIX START: Always set TTS language immediately ---
-    // This ensures that even in Video/Audio mode, tapping a word
-    // works correctly on the very first try.
-    _flutterTts.setLanguage(widget.lesson.language);
-    // --- FIX END ---
+  void _initializeMedia() async {
+    // 1. Setup Standard TTS
+    await _flutterTts.setLanguage(widget.lesson.language);
+    await _flutterTts.setSpeechRate(_ttsSpeed);
 
-    if ((_isVideo || _isAudio || _isYoutubeAudio) &&
-        widget.lesson.videoUrl != null) {
+    // 2. Define Unified Completion Handler
+    void onCompleteHandler() {
+      if (mounted) {
+        // Stop if we are just playing a single word (Don't auto-advance)
+        if (_isPlayingStandalone) {
+           setState(() {
+             _isPlayingStandalone = false;
+             _isPremiumTtsLoading = false;
+             _isTtsPlaying = false; 
+           });
+           return; 
+        }
+
+        if (!_isSentenceMode) {
+          _playNextTtsSentence();
+        } else {
+          setState(() { 
+            _isTtsPlaying = false;
+            _isPlayingSingleSentence = false;
+          });
+        }
+      }
+    }
+
+    _flutterTts.setCompletionHandler(onCompleteHandler);
+    _elevenLabsService.setCompletionHandler(onCompleteHandler);
+
+    // 3. Check Premium Permissions for ALL lesson types (Video, Audio, Text)
+    // We await this so the flag is ready when the user taps their first word.
+    await _checkPremiumTtsEligibility(); 
+
+    // 4. Initialize Video/Audio Player if needed
+    if (_isVideo || _isAudio || _isYoutubeAudio) {
       _initPlayerController();
-    } else {
-      _initializeTts();
+    }
+  }
+
+  Future<void> _checkPremiumTtsEligibility() async {
+    debugPrint("🔍 DEBUG: _checkPremiumTtsEligibility START");
+
+    final state = context.read<AuthBloc>().state;
+    if (state is! AuthAuthenticated) {
+      debugPrint("❌ DEBUG: User not authenticated.");
+      return;
+    }
+
+    final user = state.user;
+    debugPrint("🔍 DEBUG: User ID: ${user.id}, Is Premium: ${user.isPremium}");
+
+    // Case 1: Premium User
+    if (user.isPremium) {
+      debugPrint("✅ DEBUG: User is Premium. Enabling Premium Voice.");
+      if (mounted) setState(() => _usePremiumVoice = true);
+      return;
+    }
+
+    // Case 2: Free User - Check DB
+    debugPrint("🔍 DEBUG: User is Free. Checking Firestore limits...");
+    final todayStr = DateTime.now().toIso8601String().split('T').first;
+    final userUsageRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.id)
+        .collection('usage')
+        .doc('premium_tts_daily');
+
+    try {
+      final allowed = await FirebaseFirestore.instance.runTransaction((
+        transaction,
+      ) async {
+        final snapshot = await transaction.get(userUsageRef);
+
+        if (!snapshot.exists) {
+          debugPrint("✨ DEBUG: First time usage today.");
+          transaction.set(userUsageRef, {
+            'date': todayStr,
+            'lessons_used': [widget.lesson.id],
+          });
+          return true;
+        }
+
+        final data = snapshot.data() as Map<String, dynamic>;
+        final lastDate = data['date'] ?? '';
+        final List<dynamic> usedLessons = data['lessons_used'] ?? [];
+        debugPrint("🔍 DEBUG: DB Data -> Date: $lastDate, Used: $usedLessons");
+
+        if (lastDate != todayStr) {
+          debugPrint("✨ DEBUG: New day detected. Resetting limit.");
+          transaction.set(userUsageRef, {
+            'date': todayStr,
+            'lessons_used': [widget.lesson.id],
+          });
+          return true;
+        } else {
+          if (usedLessons.contains(widget.lesson.id)) {
+            debugPrint("✅ DEBUG: Lesson already unlocked today.");
+            return true;
+          }
+          if (usedLessons.isEmpty) {
+            debugPrint("✅ DEBUG: Limit not reached. Unlocking.");
+            transaction.update(userUsageRef, {
+              'lessons_used': FieldValue.arrayUnion([widget.lesson.id]),
+            });
+            return true;
+          }
+          debugPrint("⛔ DEBUG: Daily limit reached.");
+          return false;
+        }
+      });
+
+      debugPrint("🔍 DEBUG: Transaction result (Allowed?): $allowed");
+
+      if (mounted) {
+        setState(() => _usePremiumVoice = allowed);
+      }
+    } catch (e) {
+      debugPrint("❌ DEBUG: Firestore Transaction Error: $e");
+      if (mounted) setState(() => _usePremiumVoice = false);
     }
   }
 
@@ -313,6 +427,8 @@ class _ReaderScreenState extends State<ReaderScreen>
 
     // 6. Stop TTS & Dispose Controllers
     _flutterTts.stop();
+    _flutterTts.stop();
+    _elevenLabsService.dispose();
     _pageController.dispose();
     _listScrollController.dispose();
 
@@ -816,8 +932,9 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  void _togglePlayback() {
+  void _togglePlayback() async {
     if (_isVideo || _isAudio || _isYoutubeAudio) {
+      // --- Existing Video Logic ---
       if (_isPlaying) {
         _pauseMedia();
         setState(() => _isPlayingSingleSentence = false);
@@ -831,18 +948,22 @@ class _ReaderScreenState extends State<ReaderScreen>
         }
       }
     } else {
-      // FIX: For text lessons, stop or play current sentence only
-      if (_isTtsPlaying) {
-        _flutterTts.stop();
-        setState(() => _isTtsPlaying = false);
+      // --- Text Mode TTS Logic ---
+      if (_isTtsPlaying || _isPremiumTtsLoading) {
+        // STOP command
+        await Future.wait([_flutterTts.stop(), _elevenLabsService.stop()]);
+
+        setState(() {
+          _isTtsPlaying = false;
+          _isPremiumTtsLoading = false;
+        });
       } else {
-        // Play current sentence without auto-advance in sentence mode
-        if (_activeSentenceIndex >= 0 &&
-            _activeSentenceIndex < _smartChunks.length) {
-          _speakSentence(
-            _smartChunks[_activeSentenceIndex],
-            _activeSentenceIndex,
-          );
+        // PLAY command
+        int startIndex = (_activeSentenceIndex == -1)
+            ? 0
+            : _activeSentenceIndex;
+        if (startIndex < _smartChunks.length) {
+          _speakSentence(_smartChunks[startIndex], startIndex);
         }
       }
     }
@@ -876,14 +997,17 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   Future<void> _speakSentence(String text, int index) async {
     setState(() {
+      _isPlayingStandalone =
+          false; // <--- FIX: Ensure this is FALSE for sentences
       _activeSentenceIndex = index;
       _isTtsPlaying = true;
     });
-    // FIX: Don't scroll in sentence mode (user is already focused on this sentence)
+
     if (!_isSentenceMode) {
       _scrollToActiveLine(index);
     }
-    await _flutterTts.speak(text);
+
+    await _unifiedSpeak(text);
   }
 
   void _toggleTtsFullLesson() async {
@@ -913,6 +1037,60 @@ class _ReaderScreenState extends State<ReaderScreen>
       }
       _wasPlayingBeforeCard = false;
     }
+  }
+
+  // --- UNIFIED SPEAKING LOGIC ---
+// --- UNIFIED SPEAKING LOGIC (With Cost Optimization) ---
+  Future<void> _unifiedSpeak(String text) async {
+    // 1. Stop all current audio engines
+    await Future.wait([
+      _flutterTts.stop(),
+      _elevenLabsService.stop(),
+    ]);
+
+    // --- COST OPTIMIZATION: Logic Filter ---
+    // Check if text is a single word (no spaces).
+    bool isSingleWord = !text.trim().contains(' ');
+
+    // RULE: If we are in "Standalone" mode (user tapped a specific word) 
+    // AND it is a single word, skip Premium to save credits.
+    // We only want to spend credits on Sentences (intonation) or Phrases.
+    bool shouldSkipPremium = _isPlayingStandalone && isSingleWord;
+    
+    // Debug log to see decision
+    if (shouldSkipPremium) {
+      debugPrint("💰 DEBUG: Saving Cost. Single word detected -> Using Standard TTS.");
+    }
+    // ---------------------------------------
+
+    // 2. Check Premium Eligibility
+    // We use the flag we calculated in _initializeMedia
+    if (_usePremiumVoice && !_elevenLabsFailed && !shouldSkipPremium) {
+      debugPrint("🚀 DEBUG: Playing via ElevenLabs...");
+      setState(() => _isPremiumTtsLoading = true);
+
+      try {
+        await _elevenLabsService.speak(text, widget.lesson.language);
+        if (mounted) setState(() => _isPremiumTtsLoading = false);
+        return; // Success! ElevenLabs is playing.
+      } catch (e) {
+        debugPrint("❌ DEBUG: ElevenLabs Failed: $e");
+        _elevenLabsFailed = true; // Stop retrying for this session
+        
+        if (mounted) {
+          setState(() {
+            _isPremiumTtsLoading = false;
+            _usePremiumVoice = false; 
+          });
+          // Quiet fallback - no snackbar to avoid UI clutter during fallback
+        }
+      }
+    }
+
+    // 3. Fallback to Standard TTS (Free)
+    debugPrint("🤖 DEBUG: Playing via Standard TTS...");
+    if (mounted) setState(() => _isPremiumTtsLoading = false);
+    await _flutterTts.speak(text);
   }
 
   void _handleWordTap(String word, String cleanId, Offset pos) async {
@@ -1028,25 +1206,22 @@ class _ReaderScreenState extends State<ReaderScreen>
         _pauseMedia();
       }
     }
-    if (_isTtsPlaying) {
-      _flutterTts.stop();
-      setState(() => _isTtsPlaying = false);
-    }
-    _flutterTts.speak(text);
+
+    // --- FIX: Set flag to TRUE ---
+    setState(() => _isPlayingStandalone = true);
+    _unifiedSpeak(text);
+    // -----------------------------
 
     final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
     final svc = context.read<TranslationService>();
 
-    // --- NEW LOGIC: Get the Base Form ---
-    // If it's a phrase, we usually don't lemmatize, so default to text.
-    // If it's a word, look it up!
     final String lemma = isPhrase ? text : LocalLemmatizer().getLemma(text);
 
     setState(() {
       _showCard = true;
       _selectedText = text;
       _selectedCleanId = cleanId;
-      _selectedBaseForm = lemma; // <--- Store it here
+      _selectedBaseForm = lemma;
       _isSelectionPhrase = isPhrase;
       _cardAnchor = pos;
 

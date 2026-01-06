@@ -6,6 +6,8 @@ class Env {
   // static const String backendUrl = String.fromEnvironment('BACKEND_URL');
   static const String youtubeApiKey = String.fromEnvironment('YOUTUBE_API_KEY');
   static const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
+  static const String googleCloudApiKey = String.fromEnvironment('GOOGLE_CLOUD_API_KEY');
+  static const String elevenLabsApiKey = String.fromEnvironment('ELEVEN_LABS_API_KEY');
   static const String paypalClientId = String.fromEnvironment(
     'PAYPAL_CLIENT_ID',
   );
@@ -15,6 +17,11 @@ class Env {
     if (geminiApiKey.isEmpty) {
       throw Exception(
         'Missing GEMINI_KEY. Did you forget to add --dart-define?',
+      );
+    }
+      if (elevenLabsApiKey.isEmpty) {
+      throw Exception(
+        'Missing ELEVEN_LABS_KEY. Did you forget to add --dart-define?',
       );
     }
   }
