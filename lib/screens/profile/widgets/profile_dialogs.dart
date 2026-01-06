@@ -4,7 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/lesson/lesson_bloc.dart';
+import 'package:linguaflow/blocs/settings/eleven_labs_voice_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
+import 'package:linguaflow/blocs/settings/tts_voice_bloc.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 
 class ProfileDialogs {
@@ -106,7 +108,178 @@ class ProfileDialogs {
       ),
     );
   }
+  // --- HELPER: BEAUTIFY VOICE NAMES ---
+  static String _getFriendlyVoiceName(Map<String, String> voice) {
+    String rawName = voice['name'] ?? '';
+    String locale = voice['locale'] ?? '';
+    
+    // 1. Determine Quality (Network vs Local)
+    String quality = "Standard";
+    if (rawName.toLowerCase().contains("network") || rawName.toLowerCase().contains("online")) {
+      quality = "High Quality (Online)";
+    } else if (rawName.toLowerCase().contains("local") || rawName.toLowerCase().contains("offline")) {
+      quality = "Offline";
+    }
 
+    // 2. Determine Region (e.g., US, ES, MX)
+    String region = "";
+    List<String> localeParts = locale.split('-');
+    if (localeParts.length > 1) {
+      region = localeParts[1].toUpperCase(); // US, GB, ES
+    }
+
+    // 3. Try to generate a clean ID
+    // e.g., "es-us-x-sfb-network" -> "Voice SFB"
+    String shortId = rawName;
+    if (rawName.contains("-x-")) {
+      // Android convention often looks like: lang-region-x-id-quality
+      final parts = rawName.split('-x-');
+      if (parts.length > 1) {
+        // Take the part after -x- and before the next hyphen
+        String suffix = parts[1]; 
+        if (suffix.contains('-')) {
+          suffix = suffix.split('-')[0];
+        }
+        shortId = suffix.toUpperCase();
+      }
+    } else {
+      // Fallback for simple names
+      shortId = rawName.split('-').last;
+    }
+
+    // 4. Construct Final Name
+    // Example: "US - Voice SFB (High Quality)"
+    if (region.isNotEmpty) {
+      return "$region - Voice $shortId ($quality)";
+    }
+    return "Voice $shortId ($quality)";
+  }
+
+static void showVoiceSelectionDialog(BuildContext context, String langCode) {
+    context.read<TtsVoiceBloc>().add(LoadVoices(langCode));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Select Text-to-Speech Voice"),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: BlocBuilder<TtsVoiceBloc, TtsVoiceState>(
+            builder: (context, state) {
+              if (state.isLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              if (state.availableVoices.isEmpty) {
+                return const Text("No voices found for this language.");
+              }
+
+              return ListView.builder(
+                shrinkWrap: true,
+                itemCount: state.availableVoices.length,
+                itemBuilder: (context, index) {
+                  final voice = state.availableVoices[index];
+                  final isSelected = state.selectedVoice?['name'] == voice['name'];
+                  
+                  // USE THE HELPER HERE
+                  final String displayName = _getFriendlyVoiceName(voice);
+                  final bool isNetwork = displayName.contains("Online");
+
+                  return ListTile(
+                    leading: Icon(
+                      isNetwork ? Icons.cloud_queue : Icons.smartphone,
+                      color: isNetwork ? Colors.blue : Colors.grey,
+                    ),
+                    title: Text(
+                      displayName,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    // Show actual locale as subtitle (e.g. es-ES vs es-US)
+                    subtitle: Text(
+                      voice['locale'] ?? "", 
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                    trailing: isSelected 
+                      ? Icon(Icons.check_circle, color: Theme.of(context).primaryColor) 
+                      : null,
+                    onTap: () {
+                      context.read<TtsVoiceBloc>().add(ChangeVoice(voice));
+                      Navigator.pop(ctx);
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+        ],
+      ),
+    );
+  }
+
+   static void showPremiumVoiceDialog(BuildContext context, String langCode) {
+    context.read<ElevenLabsVoiceBloc>().add(LoadPremiumVoices(langCode));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.diamond, color: Colors.purple),
+            SizedBox(width: 8),
+            Text("Premium Voice"),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: BlocBuilder<ElevenLabsVoiceBloc, ElevenLabsVoiceState>(
+            builder: (context, state) {
+              if (state.isLoading) return const LinearProgressIndicator();
+
+              return ListView.builder(
+                shrinkWrap: true,
+                itemCount: state.voices.length,
+                itemBuilder: (context, index) {
+                  final voice = state.voices[index];
+                  final isSelected = state.selectedVoice?.id == voice.id;
+
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: isSelected ? Colors.purple : Colors.grey[200],
+                      child: Text(
+                        voice.gender == 'Male' ? 'M' : 'F',
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.grey[800],
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    title: Text(voice.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(voice.description),
+                    trailing: isSelected 
+                      ? const Icon(Icons.check_circle, color: Colors.purple) 
+                      : null,
+                    onTap: () {
+                      context.read<ElevenLabsVoiceBloc>().add(
+                        ChangePremiumVoice(voice, langCode)
+                      );
+                      Navigator.pop(ctx);
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Done"))],
+      ),
+    );
+  }
   // --- 3. SETTINGS: READER APPEARANCE ---
 
   static void showReaderThemeDialog(BuildContext context, ReaderTheme current) {

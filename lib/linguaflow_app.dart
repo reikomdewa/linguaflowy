@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:linguaflow/blocs/settings/eleven_labs_voice_bloc.dart';
+import 'package:linguaflow/blocs/settings/tts_voice_bloc.dart';
 import 'package:linguaflow/core/globals.dart';
 import 'package:linguaflow/core/theme/app_theme.dart';
 
@@ -63,20 +65,22 @@ class LinguaflowApp extends StatelessWidget {
       child: MultiBlocProvider(
         providers: [
           BlocProvider(
-            create: (context) => SettingsBloc()..add(LoadSettings()),
-          ),
-          // AUTH BLOC: Created here, starts checking auth immediately
-          BlocProvider(
             create: (context) => AuthBloc(
               context.read<AuthService>(),
               context.read<UserService>(),
             )..add(AuthCheckRequested()),
           ),
+
           BlocProvider<LessonBloc>(
             create: (context) => LessonBloc(
               geminiService: GeminiService(),
               lessonRepository: lessonRepository,
             ),
+          ),
+          BlocProvider(create: (context) => TtsVoiceBloc()),
+          BlocProvider(create: (context) => ElevenLabsVoiceBloc()),
+          BlocProvider(
+            create: (context) => SettingsBloc()..add(LoadSettings()),
           ),
           BlocProvider<QuizBloc>(create: (context) => QuizBloc()),
           BlocProvider<RoomBloc>(
@@ -123,7 +127,7 @@ class _LinguaflowAppViewState extends State<LinguaflowAppView> {
         return MaterialApp.router(
           // 6. Use the router configuration from our instance
           routerConfig: _appRouter.router,
-              scaffoldMessengerKey: rootScaffoldMessengerKey,
+          scaffoldMessengerKey: rootScaffoldMessengerKey,
           title: 'LinguaFlow',
           debugShowCheckedModeBanner: false,
 

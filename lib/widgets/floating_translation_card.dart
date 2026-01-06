@@ -8,7 +8,7 @@ import 'package:linguaflow/widgets/gemini_formatted_text.dart';
 import 'package:linguaflow/utils/language_helper.dart';
 // Add the markdown import
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
-
+// since when words are tapping the audio is downloaded automatically. Make the floating card use that cached version. 
 class FloatingTranslationCard extends StatefulWidget {
   final String originalText;
   final String? baseForm;

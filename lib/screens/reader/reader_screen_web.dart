@@ -1775,7 +1775,7 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
     }
   }
 
-  static const int _dailyLookupsLimit = 5;
+  static const int _dailyLookupsLimit = 500;
   Future<bool> _checkAndIncrementFreeLimit(String uid) async {
     final String todayStr = DateTime.now().toIso8601String().split('T').first;
     final DocumentReference usageRef = FirebaseFirestore.instance
@@ -1868,7 +1868,10 @@ class _ReaderScreenWebState extends State<ReaderScreenWeb>
         Positioned.fill(
           child: PointerInterceptor(
             child: PremiumLockDialog(
-              onClose: () => setState(() => _isLimitDialogOpen = false),
+              onClose: () => setState(() {
+                _isLimitDialogOpen = false;
+                Navigator.pop(context);
+              }),
               onSuccess: () {
                 setState(() => _isLimitDialogOpen = false);
               },

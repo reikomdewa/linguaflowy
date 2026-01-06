@@ -108,8 +108,10 @@
 </intent-filter>
         </activity>
        <service android:name="com.ryanheise.audioservice.AudioService"
-    android:foregroundServiceType="mediaPlayback|mediaProjection"
+    android:foregroundServiceType="mediaPlayback"
     android:exported="true">
+
+
     <intent-filter>
         <action android:name="android.media.browse.MediaBrowserService" />
     </intent-filter>

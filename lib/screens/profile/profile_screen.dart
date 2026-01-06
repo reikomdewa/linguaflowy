@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:linguaflow/blocs/auth/auth_bloc.dart';
 import 'package:linguaflow/blocs/auth/auth_event.dart';
 import 'package:linguaflow/blocs/auth/auth_state.dart';
+import 'package:linguaflow/blocs/settings/eleven_labs_voice_bloc.dart';
 import 'package:linguaflow/blocs/settings/settings_bloc.dart';
+import 'package:linguaflow/blocs/settings/tts_voice_bloc.dart';
 import 'package:linguaflow/constants/terms_and_policies.dart';
 import 'package:linguaflow/screens/profile/widgets/profile_data_exporter.dart';
 import 'package:linguaflow/services/home_feed_cache_service.dart';
@@ -186,6 +188,9 @@ class ProfileScreen extends StatelessWidget {
                             user.id,
                           ),
                         ),
+                        // --- NEW: TTS VOICE SELECTION ---
+                        _TtsVoiceTile(languageCode: user.currentLanguage),
+                        _PremiumVoiceTile(languageCode: user.currentLanguage),
                       ],
                     ),
 
@@ -518,5 +523,129 @@ class ProfileScreen extends StatelessWidget {
     if (scale == 1.0) return 'Medium';
     if (scale == 1.2) return 'Large';
     return 'Extra Large';
+  }
+}
+
+class _TtsVoiceTile extends StatefulWidget {
+  final String languageCode;
+
+  const _TtsVoiceTile({required this.languageCode});
+
+  @override
+  State<_TtsVoiceTile> createState() => _TtsVoiceTileState();
+}
+
+class _TtsVoiceTileState extends State<_TtsVoiceTile> {
+  @override
+  void initState() {
+    super.initState();
+    // Load voices for the current target language when this tile appears
+    context.read<TtsVoiceBloc>().add(LoadVoices(widget.languageCode));
+  }
+
+  @override
+  void didUpdateWidget(covariant _TtsVoiceTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reload if the user switches target languages while on this screen
+    if (oldWidget.languageCode != widget.languageCode) {
+      context.read<TtsVoiceBloc>().add(LoadVoices(widget.languageCode));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<TtsVoiceBloc, TtsVoiceState>(
+      builder: (context, state) {
+        String subtitle = "Standard Voice (Offline)";
+
+        if (state.isLoading) {
+          subtitle = "Loading voices...";
+        } else if (state.selectedVoice != null) {
+          // Clean up the selected voice name for the profile screen too
+          final raw = state.selectedVoice!['name'] ?? "";
+          if (raw.contains("network")) {
+            subtitle = "High Quality (Online)";
+          } else if (raw.contains("local")) {
+            subtitle = "Standard (Offline)";
+          } else {
+            subtitle = raw; // Fallback
+          }
+        }
+
+        return ListTile(
+          leading: const Icon(Icons.record_voice_over),
+          title: const Text('Text-to-Speech Voice'),
+          subtitle: Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+          onTap: () => ProfileDialogs.showVoiceSelectionDialog(
+            context,
+            widget.languageCode,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PremiumVoiceTile extends StatefulWidget {
+  final String languageCode;
+  const _PremiumVoiceTile({required this.languageCode});
+
+  @override
+  State<_PremiumVoiceTile> createState() => _PremiumVoiceTileState();
+}
+
+class _PremiumVoiceTileState extends State<_PremiumVoiceTile> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<ElevenLabsVoiceBloc>().add(
+      LoadPremiumVoices(widget.languageCode),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _PremiumVoiceTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.languageCode != widget.languageCode) {
+      context.read<ElevenLabsVoiceBloc>().add(
+        LoadPremiumVoices(widget.languageCode),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ElevenLabsVoiceBloc, ElevenLabsVoiceState>(
+      builder: (context, state) {
+        String subtitle = "Default AI Voice";
+        if (state.selectedVoice != null) {
+          subtitle =
+              "${state.selectedVoice!.name} (${state.selectedVoice!.description})";
+        }
+
+        return ListTile(
+          leading: const Icon(
+            Icons.record_voice_over,
+            color: Colors.purple,
+          ), // Distinct color
+          title: const Text('Premium AI Voice'),
+          subtitle: Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+          onTap: () => ProfileDialogs.showPremiumVoiceDialog(
+            context,
+            widget.languageCode,
+          ),
+        );
+      },
+    );
   }
 }
